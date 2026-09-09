@@ -25,6 +25,7 @@ async function _redesWrite(table,method,recordId,fields,maxTries){
 }
 
 function initRedes(){
+  if(window._DEMO_MODE&&!_redesDemo){redesDemoSeed();return;}
   redesPopulatePedidos();
   if(!_redesLoaded && !_redesDemo && _redesHasData()) redesLoad();
   else { renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle(); }
@@ -52,6 +53,7 @@ async function redesLoad(force){
 // ── Modo demo: datos de ejemplo (foco Instagram) para ver la sección viva sin conectar nada ──
 function redesDemoToggle(){ if(_redesDemo) redesDemoExit(); else redesDemoSeed(); }
 function redesDemoExit(){
+  if(window._DEMO_MODE){toast('La cuenta DEMO siempre usa datos simulados y seguros','info');return;}
   _redesDemo=false; _redesLoaded=false;
   state.socialPosts=[]; state.socialInteractions=[]; state.socialMetrics=[];
   state._socialPostsErr=false; state._socialIntErr=false;
@@ -1797,7 +1799,7 @@ async function redesDeletePost(){
   if(!confirm('¿Eliminar esta publicación? No se puede deshacer.')) return;
   const id=_redesEditId;
   try{
-    await airtableWrite('Social_Posts','DELETE',id,{});
+    await _redesWrite('Social_Posts','DELETE',id,{});
     state.socialPosts=(state.socialPosts||[]).filter(x=>x.id!==id);
     toast('Publicación eliminada','success'); redesCloseEdit(); renderRedesKpis(); redesApplyFilters(); renderRedesRecycle();
   }catch(e){toast('No se pudo eliminar: '+e.message,'error');}

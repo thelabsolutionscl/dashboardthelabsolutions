@@ -490,6 +490,12 @@ CAPACIDADES Y REGLAS:
     JV.history.push({role:'user',content:userText});
 
     const $typ=addMsg('j',''); $typ.classList.add('jvs-cursor');
+    if(window._DEMO_MODE){
+      await new Promise(r=>setTimeout(r,260));
+      const cl=(typeof state!=='undefined'&&state.clientes?state.clientes.length:0),co=(typeof state!=='undefined'&&state.cotizaciones?state.cotizaciones.length:0),pe=(typeof state!=='undefined'&&state.pedidos?state.pedidos.length:0);
+      const reply='Respuesta simulada en modo DEMO — no consumí tokens.\n\nEl CRM demo tiene '+cl+' clientes/leads, '+co+' cotizaciones y '+pe+' pedidos. Puedes pedirme que te ayude a navegar, revisar el pipeline o abrir un formulario; todos los cambios serán temporales.';
+      $typ.classList.remove('jvs-cursor');$typ.innerHTML=formatRichText(reply);JV.history.push({role:'assistant',content:reply});_kaiPersist();JV.busy=false;JV.thinking=false;setState('idle');return;
+    }
     // Si la llamada no llega a generar respuesta, quita el mensaje de usuario colgado:
     // dejarlo provocaría dos turnos 'user' seguidos y la API respondería 400.
     const popUser=()=>{ if(JV.history.length && JV.history[JV.history.length-1].role==='user') JV.history.pop(); };
@@ -620,6 +626,7 @@ CAPACIDADES Y REGLAS:
 
   // ─── TTS ───
   async function speak(text){
+    if(window._DEMO_MODE){setState('idle');return;}
     if(!text){ setState('idle'); maybeRelisten(); return; }
     const clean=text.replace(/[*_#`]/g,'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,'').trim();
     if(!clean){ setState('idle'); maybeRelisten(); return; }

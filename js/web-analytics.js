@@ -5,6 +5,7 @@ async function loadWebStats(){
   const panel=document.getElementById('webTrafficPanel');if(!panel)return;
   const cfg=getAdsConfig();
   const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+  if(window._DEMO_MODE){renderWebStats(getWebDemoData(days),days);return;}
   if(!cfg.endpoint){renderWebStats(getWebDemoData(days),days);return;}
   try{
     const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=web&days='+days+'&_t='+Date.now();

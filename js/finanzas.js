@@ -2425,6 +2425,16 @@ function renderFunnel(){
 
 // ── REMUNERACIONES SUELDOS & LIQUIDACIÓN ─────────────────────────────
 const REM_SUELDO_KEY='rem_sueldos_v1';
+function _remSueldoStorage(){return window._DEMO_MODE?sessionStorage:localStorage;}
+function _remPersonas(){
+  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  return window._DEMO_MODE?personas.filter(p=>p.id==='florencia'):personas;
+}
+function _remLoadSueldos(){
+  let sueldos;try{sueldos=JSON.parse(_remSueldoStorage().getItem(REM_SUELDO_KEY)||'{}');}catch(e){sueldos={};}
+  if(window._DEMO_MODE&&!sueldos['Florencia Cancino'])sueldos['Florencia Cancino']=500000;
+  return sueldos;
+}
 function remToggleSueldos(){
   const p=document.getElementById('remSueldoPanel');if(!p) return;
   const vis=p.style.display==='none';p.style.display=vis?'':'none';
@@ -2432,8 +2442,8 @@ function remToggleSueldos(){
 }
 function remRenderSueldoGrid(){
   const grid=document.getElementById('remSueldoGrid');if(!grid) return;
-  let sueldos;try{sueldos=JSON.parse(localStorage.getItem(REM_SUELDO_KEY)||'{}');}catch(e){sueldos={};}
-  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  const sueldos=_remLoadSueldos();
+  const personas=_remPersonas();
   if(!personas.length){grid.innerHTML='<div style="font-size:11px;color:var(--text3)">No hay integrantes configurados</div>';return;}
   grid.innerHTML=personas.map(p=>`<div class="field-group" style="margin:0">
     <label class="field-label" style="display:flex;align-items:center;gap:4px"><span>${p.avatar}</span> ${escapeHtml(p.nombre)}</label>
@@ -2441,17 +2451,17 @@ function remRenderSueldoGrid(){
   </div>`).join('');
 }
 function remSaveSueldos(){
-  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
-  const sueldos={};
+  const personas=_remPersonas();
+  const sueldos=_remLoadSueldos();
   personas.forEach(p=>{const id='rem-sueldo-'+p.nombre.replace(/\s/g,'_');const v=parseInt(document.getElementById(id)?.value)||0;if(v>0) sueldos[p.nombre]=v;});
-  localStorage.setItem(REM_SUELDO_KEY,JSON.stringify(sueldos));
-  toast('✓ Sueldos guardados','success');
+  _remSueldoStorage().setItem(REM_SUELDO_KEY,JSON.stringify(sueldos));
+  toast(window._DEMO_MODE?'✓ Sueldo DEMO guardado solo en esta sesión':'✓ Sueldos guardados','success');
   renderRemuneraciones();
 }
 function remRenderLiquidacion(totalNeto,totalComision){
   const liqBody=document.getElementById('remLiqBody');if(!liqBody) return;
-  let sueldos;try{sueldos=JSON.parse(localStorage.getItem(REM_SUELDO_KEY)||'{}');}catch(e){sueldos={};}
-  const personas=typeof PERSONAS!=='undefined'?PERSONAS:[];
+  const sueldos=_remLoadSueldos();
+  const personas=_remPersonas();
   const items=personas.map(p=>{
     const sueldo=sueldos[p.nombre]||0;
     const afp=Math.round(sueldo*0.10);

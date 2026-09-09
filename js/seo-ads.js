@@ -956,9 +956,16 @@ function testAdsEndpoint(){
 }
 // ─── Ads Campaign Management ────────────────────────────────
 var _adsPendingMutations;try{_adsPendingMutations=JSON.parse(localStorage.getItem('ads_pending_mutations')||'[]');}catch(e){_adsPendingMutations=[];}
+let _adsDemoQueueReady=false;
+function _adsEnsureDemoQueue(){
+  if(!window._DEMO_MODE||_adsDemoQueueReady)return;
+  try{_adsPendingMutations=JSON.parse(sessionStorage.getItem('ads_demo_pending_mutations')||'[]');}catch(e){_adsPendingMutations=[];}
+  _adsDemoQueueReady=true;
+}
 
 function savePendingToStorage(){
-  localStorage.setItem('ads_pending_mutations', JSON.stringify(_adsPendingMutations));
+  if(window._DEMO_MODE)sessionStorage.setItem('ads_demo_pending_mutations',JSON.stringify(_adsPendingMutations));
+  else localStorage.setItem('ads_pending_mutations', JSON.stringify(_adsPendingMutations));
 }
 
 function openCreateCampaign(){
@@ -1068,6 +1075,7 @@ function adsPresupuestoValido(nuevo,actual,nombre){
 
 // Encola una mutación reemplazando cualquier mutación pendiente equivalente (evita duplicados)
 function _adsQueueMutation(mutation){
+  _adsEnsureDemoQueue();
   const keyOf=m=>m.op+'|'+(m.id||'')+'|'+(m.op==='create'?((m.data&&m.data.nombre)||''):(m.op==='negative'||m.op==='pause_keyword')?((m.data&&m.data.termino)||'')+'|'+((m.data&&m.data.campana)||''):'');
   const k=keyOf(mutation);
   // Conserva las ya aplicadas; descarta una pendiente/enviada/errónea equivalente
@@ -1135,7 +1143,7 @@ function saveCampaignMutation(){
   }
   // Cascarón automático vía Make: crea la campaña real en Google Ads (pausada,
   // con la declaración UE); el Script 2 la completará al procesar esta orden.
-  if(op==='create'&&ADS_MAKE_SHELL.url){
+  if(op==='create'&&ADS_MAKE_SHELL.url&&!window._DEMO_MODE){
     const qs='?clave='+encodeURIComponent(ADS_MAKE_SHELL.clave)+'&nombre='+encodeURIComponent(data.nombre)+'&presupuesto='+(data.presupuesto||1000);
     fetch(ADS_MAKE_SHELL.url+qs,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({clave:ADS_MAKE_SHELL.clave,nombre:data.nombre,presupuesto:data.presupuesto||1000})})
       .then(r=>{if(r.ok)toast('✓ Cascarón pedido a Make — el Script 2 completará la campaña en su próxima corrida','success');else toast('Make respondió '+r.status+' al pedir el cascarón — si la campaña no aparece, créala a mano','info');})
@@ -1466,6 +1474,10 @@ async function adsDiagnostico(){
 }
 
 function sendAdsMutation(mutation){
+  if(window._DEMO_MODE){
+    mutation.status='demo';mutation.error='';savePendingToStorage();renderPendingMutations();
+    toast('Cambio simulado: no se envió nada a Google Ads','success');return;
+  }
   const cfg=getAdsConfig();
   if(!cfg.endpoint){mutation.status='error';mutation.error='No hay endpoint configurado';savePendingToStorage();renderPendingMutations();return;}
   if(!cfg.secret){mutation.status='error';mutation.error='Configura el secreto de mutaciones';savePendingToStorage();renderPendingMutations();return;}
@@ -1488,6 +1500,7 @@ function sendAdsMutation(mutation){
 
 // Sincroniza el estado de las mutaciones desde el servidor (Script 1) — refleja lo que el Script 2 aplicó
 async function syncMutationStatuses(){
+  if(window._DEMO_MODE)return;
   const cfg=getAdsConfig();
   if(!cfg.endpoint||!_adsPendingMutations.length) return;
   try{
@@ -1514,6 +1527,7 @@ async function syncMutationStatuses(){
 }
 
 function renderPendingMutations(){
+  _adsEnsureDemoQueue();
   const panel=document.getElementById('adsPendingPanel');
   const list=document.getElementById('adsPendingList');
   const badge=document.getElementById('adsPendingBadge');
@@ -1534,6 +1548,7 @@ function renderPendingMutations(){
   const stMap={
     pending:{c:'var(--warn)',t:'⏳ Pendiente'},
     enviado:{c:'var(--accent3)',t:'✓ En cola — esperando Script 2'},
+    demo:{c:'var(--success)',t:'✓ Simulado — no enviado'},
     error:{c:'var(--danger)',t:'❌ Error'}
   };
   list.innerHTML=visibles.map(m=>{
@@ -1593,9 +1608,10 @@ function retryAllErrors(){
 async function loadAdsData(){
   const cfg=getAdsConfig();
   const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
+  _adsEnsureDemoQueue();
   ['adsAgentBox','adsCapacidadBox','adsSuggestBox'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
   ['ads-kpi-gasto','ads-kpi-imp','ads-kpi-clics','ads-kpi-ctr','ads-kpi-cpc','ads-kpi-conv','ads-kpi-cpa','ads-kpi-roas'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='…';});
-  if(!cfg.endpoint){
+  if(window._DEMO_MODE||!cfg.endpoint){
     // Modo demo
     document.getElementById('adsCampaignsArea').innerHTML='<div class="loading-state" style="padding:20px 0"><div class="spinner"></div></div>';
     await new Promise(r=>setTimeout(r,600));
