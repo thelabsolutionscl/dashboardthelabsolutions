@@ -13959,6 +13959,18 @@ const AGENT_RESULT_PROFILES=Object.freeze({
   SUPPLIER_SEARCH_AGENT:{title:'Comparación de proveedores',area:'Abastecimiento',icon:'⌕',accent:'#f59e0b',focus:['Precio y MOQ','Entrega','Riesgo'],metricKeys:['precio','moq','entrega','proveedores','plazo']},
   KAI:{title:'Respuesta ejecutiva',area:'Asistente global',icon:'K',accent:'#00d4cc',focus:['Respuesta','Datos usados','Acción'],metricKeys:['pedidos','cotizaciones','clientes','total','atrasados']}
 });
+const AGENT_RESULT_LAYOUTS=Object.freeze({
+  SALES:['decision','Ventas'],QUOTE:['table','Comercial'],PRODUCTION:['steps','Producción'],
+  MANTENCION3D:['fleet','Taller'],AUDITOR_3D:['fleet','Taller'],QA:['checklist','QA'],
+  FOLLOWUP:['channels','Ventas'],CEO:['priorities','Dirección'],LEADGEN:['cards','Ventas'],
+  ONBOARDING:['timeline','Comercial'],FINANCE:['table','Finanzas'],REPCLIENTE:['channels','Comercial'],
+  CONTENT:['channels','Marketing'],ADS:['priorities','Marketing'],LINKEDIN:['channels','Ventas'],
+  SOCIAL_STRATEGIST:['table','Marketing'],CAPTION_AGENT:['channels','Marketing'],
+  COMMUNITY_AGENT:['decision','Marketing'],SOCIAL_ADS_AGENT:['priorities','Marketing'],
+  TREND_AGENT:['cards','Marketing'],REPORT_SOCIAL_AGENT:['priorities','Marketing'],
+  NEWSLETTER_AGENT:['channels','Marketing'],SUPPLIER:['table','Abastecimiento'],
+  SUPPLIER_SEARCH_AGENT:['table','Abastecimiento'],KAI:['decision','Dirección']
+});
 function _agentVisualId(ref){
   const key=String(ref||'').toUpperCase();
   if(AGENT_RESULT_PROFILES[key])return key;
@@ -13983,7 +13995,7 @@ function agentResultMeta(agentId,startedAt,extra){
   const elapsed=startedAt!=null?Math.max(0,Math.round(now-startedAt)):((extra&&extra.elapsedMs)||null);
   const policy=typeof agentAiPolicy==='function'?agentAiPolicy(id):{};
   const dataSource=(typeof state!=='undefined'&&state.loaded)?'CRM en vivo + consulta':'Consulta actual';
-  return Object.assign({agentId:id,demo:!!(typeof window!=='undefined'&&window._DEMO_MODE),usage,model:usage?.model||policy.model||'',elapsedMs:elapsed,dataSource},extra||{});
+  return Object.assign({agentId:id,demo:!!(typeof window!=='undefined'&&window._DEMO_MODE),usage,model:usage?.model||policy.model||'',elapsedMs:elapsed,dataSource,timestamp:new Date().toISOString()},extra||{});
 }
 function _agentCleanResult(raw){return String(raw||'').replace(/\[ITEMS\][\s\S]*?\[\/ITEMS\]/gi,'').replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/gi,'').replace(/\r/g,'').trim();}
 function _agentResultSummary(raw){
@@ -14043,10 +14055,11 @@ function _agentUsageHtml(meta){
   const u=meta?.usage,total=u?(u.total_tokens??((u.input_tokens||0)+(u.output_tokens||0)+(u.cache_creation_input_tokens||0)+(u.cache_read_input_tokens||0))):null;
   const model=_agentModelLabel(meta?.model||u?.model||'');
   let h=`<span class="avr-meta-pill">${escapeHtml(model)}</span>`;
-  if(total!=null)h+=`<span class="avr-meta-pill">${Number(total).toLocaleString('es-CL')} tokens</span><span class="avr-meta-pill" title="Costo estimado según tarifa de lista de Anthropic">${_agentCostLabel(u.cost_usd)}</span>`;
+  if(total!=null)h+=`<span class="avr-meta-pill" title="Tokens totales">${Number(total).toLocaleString('es-CL')} tokens</span><span class="avr-meta-pill" title="Entrada / salida">↓ ${Number(u.input_tokens||0).toLocaleString('es-CL')} · ↑ ${Number(u.output_tokens||0).toLocaleString('es-CL')}</span><span class="avr-meta-pill" title="Costo estimado según tarifa de lista de Anthropic">${_agentCostLabel(u.cost_usd)}</span>`;
   if(u?.cache_read_input_tokens)h+=`<span class="avr-meta-pill avr-cache">${Number(u.cache_read_input_tokens).toLocaleString('es-CL')} desde caché</span>`;
   if(meta?.elapsedMs!=null)h+=`<span class="avr-meta-pill">${(meta.elapsedMs/1000).toFixed(meta.elapsedMs<10000?1:0)} s</span>`;
   if(meta?.dataSource)h+=`<span class="avr-meta-pill">${escapeHtml(meta.dataSource)}</span>`;
+  if(meta?.timestamp)h+=`<span class="avr-meta-pill">${new Date(meta.timestamp).toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'})}</span>`;
   return h;
 }
 function _agentExtraVisual(agentId){
@@ -14058,6 +14071,93 @@ function _agentExtraVisual(agentId){
   const level=projected>cap?'over':projected>cap*.8?'near':'ok';
   return `<section class="avr-budget avr-budget-${level}"><div class="avr-budget-head"><div><span>TOPE MENSUAL NETO</span><strong>${formatCLP(cap)}</strong></div><div><span>PROYECCIÓN</span><strong>${formatCLP(projected)}</strong></div></div><div class="avr-budget-track"><i style="width:${pct}%"></i></div><div class="avr-budget-foot"><span>${formatCLP(spent)} gastados en ${days} días</span><b>${projected>cap?'Excede el tope en '+formatCLP(projected-cap):formatCLP(cap-projected)+' disponibles en la proyección'}</b></div></section>`;
 }
+let _agentVisualSeq=0;
+function _agentResultBlocks(raw){
+  const lines=_agentCleanResult(raw).split('\n'),blocks=[];let current={title:'Resumen',body:[]};
+  const push=()=>{if(current.body.some(x=>x.trim()))blocks.push(current);};
+  lines.forEach(line=>{
+    const plain=line.replace(/[*_`]/g,'').trim();
+    let m=plain.match(/^#{1,4}\s+(.+)$/)||plain.match(/^\d+[.)]\s+((?:whats?app|e-?mail|correo|instagram|linkedin|tiktok|reels?|facebook)[^:]{0,60})\s*:?[\s]*$/i)||plain.match(/^\d+[.)]\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s/&-]{2,60})\s*:?[\s]*$/)||plain.match(/^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ_\s/&-]{2,42}):\s*$/);
+    const inline=plain.match(/^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ_\s/&-]{2,42}):\s*(\S.+)$/);
+    if(inline&&!/(whats?app|e-?mail|correo|instagram|linkedin|tiktok|reels?|facebook|cuerpo|mensaje)/i.test(current.title)){push();current={title:inline[1].trim(),body:[inline[2]]};}
+    else if(inline)current.body.push(line);
+    else if(m){push();current={title:m[1].replace(/:$/,'').trim(),body:[]};}
+    else current.body.push(line);
+  });
+  push();return blocks;
+}
+function _agentMarkdownTables(raw){
+  const lines=_agentCleanResult(raw).split('\n'),tables=[];
+  for(let i=0;i<lines.length-1;i++){
+    if(!lines[i].includes('|')||!/^\s*\|?\s*:?-{3,}/.test(lines[i+1]))continue;
+    const cells=s=>s.trim().replace(/^\||\|$/g,'').split('|').map(x=>x.trim().replace(/[*_`]/g,''));
+    const headers=cells(lines[i]),rows=[];i+=2;
+    while(i<lines.length&&lines[i].includes('|')){const row=cells(lines[i]);if(row.some(Boolean))rows.push(row);i++;}
+    if(headers.length>1&&rows.length)tables.push({headers,rows});i--;
+  }
+  return tables;
+}
+function _agentTableVisual(raw){
+  const table=_agentMarkdownTables(raw)[0];if(!table)return'';
+  return `<section class="avr-special"><div class="avr-special-title">▦ DATOS PRINCIPALES</div><div class="avr-table-wrap"><table class="avr-table"><thead><tr>${table.headers.map(x=>`<th>${escapeHtml(x)}</th>`).join('')}</tr></thead><tbody>${table.rows.slice(0,8).map(r=>`<tr>${table.headers.map((_,i)=>`<td>${escapeHtml(r[i]||'—')}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`;
+}
+function _agentChannelVisual(raw){
+  const rx=/(whats?app|e-?mail|correo|instagram|linkedin|tiktok|reels?|facebook|cuerpo|mensaje)/i;
+  const blocks=_agentResultBlocks(raw).filter(b=>rx.test(b.title)&&b.body.join('\n').trim()).slice(0,6);
+  if(blocks.length<2)return'';
+  const gid='avrt'+(++_agentVisualSeq);
+  return `<section class="avr-special"><div class="avr-special-title">▤ VERSIONES LISTAS PARA USAR</div><div class="avr-tabs" role="tablist">${blocks.map((b,i)=>`<button type="button" role="tab" aria-selected="${i===0}" class="${i===0?'active':''}" data-avr-tab="${gid}-${i}" onclick="toggleAgentVisualTab(this)">${escapeHtml(b.title.replace(/_/g,' '))}</button>`).join('')}</div>${blocks.map((b,i)=>`<div role="tabpanel" id="${gid}-${i}" class="avr-tab-panel${i===0?' active':''}">${formatRichText(b.body.join('\n').trim())}</div>`).join('')}</section>`;
+}
+function toggleAgentVisualTab(btn){
+  const box=btn.closest('.avr-special');if(!box)return;
+  box.querySelectorAll('[data-avr-tab]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-selected',on?'true':'false');});
+  box.querySelectorAll('.avr-tab-panel').forEach(x=>x.classList.toggle('active',x.id===btn.dataset.avrTab));
+}
+window.toggleAgentVisualTab=toggleAgentVisualTab;
+function _agentChecklistVisual(raw){
+  const items=[];_agentCleanResult(raw).split('\n').forEach(line=>{const m=line.match(/^\s*[-*•]?\s*\[([ xX])\]\s*(.+)$/);if(m)items.push({done:m[1].toLowerCase()==='x',text:m[2].replace(/[*_`]/g,'').trim()});});
+  if(!items.length)return'';
+  const done=items.filter(x=>x.done).length,pct=Math.round(done/items.length*100);
+  return `<section class="avr-special"><div class="avr-check-head"><div><span>CHECKLIST PRE-DESPACHO</span><strong>${done}/${items.length} verificados</strong></div><b>${pct}%</b></div><div class="avr-progress" aria-label="${pct}% verificado"><i style="width:${pct}%"></i></div><div class="avr-check-list">${items.slice(0,10).map(x=>`<div class="${x.done?'done':''}"><span>${x.done?'✓':'○'}</span>${escapeHtml(x.text)}</div>`).join('')}</div></section>`;
+}
+function _agentStepVisual(raw,title){
+  const steps=[];_agentCleanResult(raw).split('\n').forEach(line=>{const m=line.trim().match(/^(?:\d+[.)]|[-*•])\s+(.{4,180})$/);if(m&&!/^\[/.test(m[1]))steps.push(m[1].replace(/[*_`]/g,'').trim());});
+  if(steps.length<2)return'';
+  return `<section class="avr-special"><div class="avr-special-title">→ ${escapeHtml(title||'RUTA RECOMENDADA')}</div><div class="avr-timeline">${steps.slice(0,7).map((x,i)=>`<div><b>${i+1}</b><span>${escapeHtml(x)}</span></div>`).join('')}</div></section>`;
+}
+function _agentCardsVisual(raw){
+  let blocks=_agentResultBlocks(raw).filter(b=>!/^(resumen|diagn[oó]stico)$/i.test(b.title)&&b.body.join('\n').trim());
+  if(blocks.length<2){blocks=[];let card=null;_agentCleanResult(raw).split('\n').forEach(line=>{const m=line.trim().match(/^\d+[.)]\s+(.{3,100})$/);if(m){if(card)blocks.push(card);card={title:m[1].replace(/[*_`]/g,''),body:[]};}else if(card&&line.trim())card.body.push(line);});if(card)blocks.push(card);}
+  blocks=blocks.slice(0,5);
+  if(blocks.length<2)return'';
+  return `<section class="avr-special"><div class="avr-special-title">◇ OPCIONES PRIORIZADAS</div><div class="avr-card-grid">${blocks.map((b,i)=>`<article><span>#${i+1}</span><strong>${escapeHtml(b.title.replace(/_/g,' '))}</strong><div>${formatRichText(b.body.join('\n').trim().slice(0,420))}</div></article>`).join('')}</div></section>`;
+}
+function _agentDecisionVisual(raw){
+  const wanted=/(score|servicio|decisor|intenci[oó]n|es lead|sentimiento|urgencia|siguiente|pr[oó]xima|resultado|estado)/i;
+  const facts=[];_agentResultBlocks(raw).forEach(b=>{const val=b.body.join('\n').trim().replace(/[*_`]/g,'');if(wanted.test(b.title)&&val&&val.length<180)facts.push({label:b.title,value:val});});
+  _agentCleanResult(raw).split('\n').forEach(line=>{const m=line.replace(/[*_`]/g,'').match(/^([^:]{2,32}):\s*(.{1,120})$/);if(m&&wanted.test(m[1])&&!facts.some(x=>x.label.toLowerCase()===m[1].toLowerCase()))facts.push({label:m[1],value:m[2]});});
+  if(!facts.length)return'';
+  return `<section class="avr-special"><div class="avr-special-title">◎ DECISIÓN COMERCIAL</div><div class="avr-facts">${facts.slice(0,6).map(x=>`<div><span>${escapeHtml(x.label.replace(/_/g,' '))}</span><strong>${escapeHtml(x.value)}</strong></div>`).join('')}</div></section>`;
+}
+function _agentActionVisual(raw,profile){
+  const actionRx=/(acci[oó]n|prioridad|pr[oó]ximo|siguiente|recomendaci[oó]n|urgente|calibraci[oó]n)/i,items=[];
+  _agentResultBlocks(raw).filter(b=>actionRx.test(b.title)).forEach(b=>b.body.forEach(line=>{const m=line.trim().match(/^(?:\d+[.)]|[-*•])\s+(.{5,220})$/);if(m)items.push(m[1].replace(/[*_`]/g,'').trim());}));
+  if(!items.length)return'';
+  const owner=(AGENT_RESULT_LAYOUTS[_agentVisualId(profile)]||[])[1]||'Equipo';
+  return `<section class="avr-actions"><div class="avr-special-title">✓ PRÓXIMOS PASOS</div>${items.slice(0,4).map((x,i)=>{const high=i===0||/(urgente|hoy|inmediat|cr[ií]tic|vencid|pausar)/i.test(x);return `<div class="avr-action-row"><span class="avr-action-priority ${high?'high':'normal'}">${high?'ALTA':'MEDIA'}</span><div><strong>${escapeHtml(x)}</strong><small>Responsable · ${escapeHtml(owner)}</small></div></div>`;}).join('')}</section>`;
+}
+function _agentSpecialVisual(id,raw){
+  const layout=(AGENT_RESULT_LAYOUTS[id]||[])[0]||'';let visual='';
+  if(layout==='channels')visual=_agentChannelVisual(raw);
+  else if(layout==='checklist')visual=_agentChecklistVisual(raw);
+  else if(layout==='timeline')visual=_agentStepVisual(raw,'CRONOLOGÍA Y RESPONSABLES');
+  else if(layout==='steps')visual=_agentStepVisual(raw,'SECUENCIA DE PRODUCCIÓN');
+  else if(layout==='table')visual=_agentTableVisual(raw);
+  else if(layout==='cards')visual=_agentCardsVisual(raw);
+  else if(layout==='decision')visual=_agentDecisionVisual(raw);
+  else if(layout==='fleet')visual=_agentCardsVisual(raw)||_agentStepVisual(raw,'PLAN DEL TALLER');
+  return visual+_agentActionVisual(raw,id);
+}
 function renderAgentResult(agentId,raw,meta){
   if(!raw||!String(raw).trim())return'';
   const id=_agentVisualId(agentId),p=_agentVisualProfile(id),clean=_agentCleanResult(raw),urg=_reportUrgency(clean);
@@ -14068,10 +14168,12 @@ function renderAgentResult(agentId,raw,meta){
     <header class="avr-hero">
       <div class="avr-top"><span class="avr-mark">${p.icon}</span><div class="avr-heading"><span>${escapeHtml(p.area)}</span><strong>${escapeHtml(p.title)}</strong></div><span class="avr-status avr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</span></div>
       <div class="avr-summary"><span>EN RESUMEN</span>${formatRichText(summary)}</div>
+      ${m.subject?`<div class="avr-subject" title="Contexto analizado">${escapeHtml(String(m.subject).split('\n')[0].slice(0,120))}</div>`:''}
       <div class="avr-meta">${_agentUsageHtml(m)}</div>
     </header>
     ${metricsHtml}
     ${_agentExtraVisual(id)}
+    ${_agentSpecialVisual(id,clean)}
     <div class="avr-focus" aria-label="Contenido principal">${p.focus.map((f,i)=>`<span><b>${i+1}</b>${escapeHtml(f)}</span>`).join('')}</div>
     <details class="avr-details"${m.expanded?' open':''}><summary><span>Ver análisis completo</span><small>datos, recomendaciones y mensajes</small></summary><div class="avr-details-body">${formatAgentReport(raw)}</div></details>
   </article>`;
@@ -16000,7 +16102,7 @@ async function runAgent(id){
   const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(id):Date.now();
   try{
     let _r=await callAgentClaude(id,cfg.sys+AGENT_TONE,fullInput);
-    const meta=typeof agentResultMeta==='function'?agentResultMeta(id,started):{};
+    const meta=typeof agentResultMeta==='function'?agentResultMeta(id,started,{subject:input}):{};
     try{AGENT_LOG.add(cfg.label,input,_r,meta);}catch(e){}
     try{ofCelebrate(cfg.label);}catch(e){}   // 🎉 reacción en la Oficina Virtual al completar
     const _oldIns=document.getElementById('qins_QUOTE');if(_oldIns) _oldIns.remove();
