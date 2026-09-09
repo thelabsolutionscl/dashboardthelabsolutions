@@ -154,7 +154,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
   const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId):Date.now();
   try{
     const result=await callAgentClaude(agentId,cfg.sys+AGENT_TONE,fullInput);
-    const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started):{};
+    const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started,{subject:contextText}):{};
     _agentInlineText=result;
     resultEl.className='agent-modal-result';
     resultEl._agentMeta=meta;
@@ -1386,7 +1386,7 @@ const AGENT_LOG={
   add(agent,input,output,meta){
     this._load();
     const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
-    const safeMeta=meta?{agentId:meta.agentId||(typeof _agentVisualId==='function'?_agentVisualId(agent):agent),demo:!!meta.demo,model:meta.model||meta.usage?.model||'',elapsedMs:meta.elapsedMs??null,dataSource:meta.dataSource||'',usage:meta.usage?{input_tokens:meta.usage.input_tokens||0,output_tokens:meta.usage.output_tokens||0,cache_creation_input_tokens:meta.usage.cache_creation_input_tokens||0,cache_read_input_tokens:meta.usage.cache_read_input_tokens||0,total_tokens:meta.usage.total_tokens||0,cost_usd:meta.usage.cost_usd||0}:null}:null;
+    const safeMeta=meta?{agentId:meta.agentId||(typeof _agentVisualId==='function'?_agentVisualId(agent):agent),demo:!!meta.demo,model:meta.model||meta.usage?.model||'',elapsedMs:meta.elapsedMs??null,dataSource:meta.dataSource||'',subject:String(meta.subject||input||'').split('\n')[0].slice(0,120),timestamp:meta.timestamp||new Date().toISOString(),usage:meta.usage?{input_tokens:meta.usage.input_tokens||0,output_tokens:meta.usage.output_tokens||0,cache_creation_input_tokens:meta.usage.cache_creation_input_tokens||0,cache_read_input_tokens:meta.usage.cache_read_input_tokens||0,total_tokens:meta.usage.total_tokens||0,cost_usd:meta.usage.cost_usd||0}:null}:null;
     const entry={id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'—',meta:safeMeta};
     // Comunicación entre agentes: si justo antes ejecutó otro agente distinto, es un handoff → el agente anterior camina a este departamento
     try{ const now=Date.now(); if(typeof ofLogComm==='function'){ if(_ofLastExec && _ofLastExec.label!==agent && now-_ofLastExec.t<120000) ofLogComm(_ofLastExec.label, agent); _ofLastExec={label:agent,t:now}; } }catch(e){}
