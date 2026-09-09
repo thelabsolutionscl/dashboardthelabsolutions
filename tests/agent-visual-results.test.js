@@ -32,7 +32,7 @@ test('cada oficio tiene una presentación visual explícita',()=>{
 test('el renderer conserva la salida completa y no vuelve a llamar a la IA',()=>{
   const block=HTML.slice(HTML.indexOf('function renderAgentResult'),HTML.indexOf('function renderKaiResult'));
   assert.match(block,/formatAgentReport\(raw\)/);
-  assert.match(block,/Ver análisis completo/);
+  assert.match(block,/INFORME COMPLETO/);
   assert.doesNotMatch(block,/callClaude|callAgentClaude|fetch\(/);
 });
 
@@ -107,8 +107,24 @@ test('la vista de agentes permite alternar entre Simplificado y Experto sin rege
   assert.match(setter,/localStorage\.setItem\(AGENT_VIEW_MODE_KEY/);
   assert.match(setter,/applyAgentViewMode\(\)/);
   assert.doesNotMatch(setter,/callClaude|callAgentClaude|fetch\(/);
-  assert.match(CSS,/\.agent-view-simple .*\.avr-special\{display:none/);
-  assert.match(CSS,/\.agent-view-expert .*avr-details/);
+  assert.match(HTML,/class="avr-simple-view"/);
+  assert.match(HTML,/class="avr-expert-view"/);
+  assert.match(CSS,/\.agent-view-expert \.agent-visual-result>\.avr-simple-view\{display:none/);
+  assert.match(CSS,/\.agent-view-expert \.agent-visual-result>\.avr-expert-view\{display:block/);
+  assert.match(CSS,/\.agent-view-simple \.agent-visual-result>\.avr-expert-view\{display:none/);
+  const apply=HTML.slice(HTML.indexOf('function applyAgentViewMode'),HTML.indexOf('function setAgentViewMode'));
+  assert.match(apply,/document\.body\.classList\.toggle\('agent-view-expert'/);
+  assert.doesNotMatch(HTML.slice(HTML.indexOf('function renderAgentResult'),HTML.indexOf('function renderKaiResult')),/<details class="avr-details"/);
+});
+
+test('el informe experto tiene jerarquía visual y conserva el contenido completo',()=>{
+  const render=HTML.slice(HTML.indexOf('function renderAgentResult'),HTML.indexOf('function renderKaiResult'));
+  assert.match(render,/INFORME COMPLETO/);
+  assert.match(render,/avr-expert-report/);
+  assert.match(render,/formatAgentReport\(raw\)/);
+  assert.match(CSS,/\.avr-expert-report \.agr-body\{display:grid;grid-template-columns:repeat\(2/);
+  assert.match(CSS,/\.avr-expert-content>\.avr-kpis \.avr-kpi::after/);
+  assert.match(CSS,/@media\(max-width:520px\)[\s\S]*\.avr-expert-report \.agr-body\{grid-template-columns:1fr/);
 });
 
 test('los resultados de la parrilla no se cortan ni usan scroll vertical interno',()=>{
