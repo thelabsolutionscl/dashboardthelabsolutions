@@ -100,6 +100,18 @@ test('KAI alterna entre respuesta simplificada e informe experto completo',()=>{
   assert.match(CSS,/\.kvr-expert-report \.agr-body\{grid-template-columns:1fr/);
 });
 
+test('la ventana de KAI aprovecha escritorio y se convierte en diálogo móvil optimizado',()=>{
+  const widget=HTML.slice(HTML.indexOf('<!-- ══ KAI'),HTML.indexOf('<!-- FAB -->'));
+  assert.match(widget,/width:min\(720px,calc\(100vw - 48px\)\)/);
+  assert.match(widget,/height:min\(780px,calc\(100dvh - 128px\)\)/);
+  assert.match(widget,/@media\(max-width:768px\)[\s\S]*inset:max\(8px,env\(safe-area-inset-top,0px\)\) 8px max\(8px,env\(safe-area-inset-bottom,0px\)\)/);
+  assert.match(widget,/#jvs-chips\{ flex-wrap:nowrap; overflow-x:auto/);
+  assert.match(widget,/\.jvs-panel-open #jvs-fab\{ opacity:0/);
+  assert.match(KAI,/openPanel\(\)[\s\S]*document\.documentElement\.classList\.add\('jvs-panel-open'\)/);
+  assert.match(KAI,/closePanel\(\)[\s\S]*document\.documentElement\.classList\.remove\('jvs-panel-open'\)/);
+  assert.match(CSS,/@media\(max-width:768px\)[\s\S]*\.jvs-msg\.jvs-rich \.avr-expert-report \.agr-body\{grid-template-columns:1fr\}/);
+});
+
 test('el costo usa input, output y ambas categorías de caché',()=>{
   const block=HTML.slice(HTML.indexOf('function _estimateClaudeCost'),HTML.indexOf('// Diagnóstico local'));
   for(const field of ['input_tokens','output_tokens','cache_creation_input_tokens','cache_read_input_tokens'])assert.match(block,new RegExp(field));

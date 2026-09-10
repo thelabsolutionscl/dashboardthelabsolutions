@@ -233,8 +233,8 @@ CAPACIDADES Y REGLAS:
       addMsg('a','Alertas: '+parts.join(' · '));
     }catch(e){}
   }
-  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); _ctxSuggest(); _kaiProactiveAlerts(); if(window.innerWidth>768) setTimeout(()=>$input.focus(),200); }
-  function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); stopListen(); JV.synth.cancel(); if(JV.ctrl){try{JV.ctrl.abort();}catch(e){}JV.ctrl=null;} JV.busy=false; JV.thinking=false; setState('idle'); }
+  function openPanel(){ JV.open=true; $panel.classList.add('jvs-open'); document.documentElement.classList.add('jvs-panel-open'); _ctxSuggest(); _kaiProactiveAlerts(); if(window.innerWidth>768) setTimeout(()=>$input.focus(),200); }
+  function closePanel(){ JV.open=false; $panel.classList.remove('jvs-open'); document.documentElement.classList.remove('jvs-panel-open'); stopListen(); JV.synth.cancel(); if(JV.ctrl){try{JV.ctrl.abort();}catch(e){}JV.ctrl=null;} JV.busy=false; JV.thinking=false; setState('idle'); }
   $fab.addEventListener('click',()=>{ JV.open?closePanel():openPanel(); });
   $close.addEventListener('click',closePanel);
 
