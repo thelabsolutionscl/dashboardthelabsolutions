@@ -557,10 +557,21 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .avr-expert-report .agr-sec-body{font-size:12.5px!important;line-height:1.6;}
 .avr-expert-report .agr-intro{padding:14px 16px!important;border-radius:11px!important;box-shadow:0 7px 18px rgba(0,0,0,.12);}
 .agent-card-view-switch{display:flex;align-items:center;justify-content:flex-end;gap:3px;min-height:31px;padding:3px 4px 3px 9px;border:1px solid var(--border);border-radius:9px;background:rgba(255,255,255,.018)}.agent-card-view-switch>span{margin-right:auto;color:var(--text3);font-size:8.5px;font-weight:800;letter-spacing:.75px;text-transform:uppercase}.agent-card-view-switch button{border:1px solid transparent;border-radius:6px;padding:5px 9px;background:transparent;color:var(--text3);font:700 9.5px/1 'DM Sans',sans-serif;cursor:pointer}.agent-card-view-switch button:hover{color:var(--text)}.agent-card-view-switch button.active{border-color:color-mix(in srgb,var(--avr-accent) 45%,var(--border));background:color-mix(in srgb,var(--avr-accent) 13%,transparent);color:var(--avr-accent);box-shadow:0 4px 12px rgba(0,0,0,.12)}.kvr-view-switch{border-color:rgba(0,212,204,.16);background:rgba(0,212,204,.025)}.kvr-view-switch>span{color:#5a8f8a}.kvr-view-switch button{color:#5a8f8a}.kvr-view-switch button.active{border-color:rgba(0,212,204,.35);background:rgba(0,212,204,.13);color:#00d4cc}
+.jvs-msg.jvs-rich .agent-card-view-switch{position:sticky;top:-1px;z-index:2;backdrop-filter:blur(12px);background:rgba(9,17,16,.92)}
+.jvs-msg.jvs-rich .avr-expert-report .agr-body{grid-template-columns:repeat(2,minmax(0,1fr))}
+.jvs-msg.jvs-rich .avr-expert-report .agr-head,.jvs-msg.jvs-rich .avr-expert-report .agr-intro{grid-column:1/-1}
 @media(max-width:900px){
   #tab-agentes #agentesGrid{grid-template-columns:1fr!important;}
   .agent-section-header{flex-direction:column;gap:10px;}
   .agent-header-actions{width:100%;margin-left:0;justify-content:space-between;}
+}
+@media(max-width:768px){
+  .jvs-msg.jvs-rich .agent-card-view-switch{position:static;backdrop-filter:none}
+  .jvs-msg.jvs-rich .avr-expert-report .agr-body{grid-template-columns:1fr}
+  .jvs-msg.jvs-rich .avr-expert-report .agr-head,.jvs-msg.jvs-rich .avr-expert-report .agr-intro{grid-column:1}
+  .jvs-msg.jvs-rich .avr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .jvs-msg.jvs-rich .avr-focus{grid-template-columns:1fr}
+  .jvs-msg.jvs-rich .avr-focus span{border-right:0;border-bottom:1px solid var(--border)}
 }
 @media(max-width:520px){
   .agent-header-actions{align-items:stretch;flex-direction:column;}
