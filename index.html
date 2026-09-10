@@ -14192,18 +14192,46 @@ function renderAgentResult(agentId,raw,meta){
     </section>
   </article>`;
 }
+function _kaiSimpleText(value){
+  return String(value||'')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g,'$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/[*_`~#]/g,'')
+    .replace(/^\s*(?:[-•]|\d+[.)])\s+/,'')
+    .replace(/\s+/g,' ').trim();
+}
+function _kaiSimpleClip(value,max){
+  const txt=_kaiSimpleText(value),limit=max||270;if(txt.length<=limit)return txt;
+  const cut=txt.slice(0,limit+1),sentence=Math.max(cut.lastIndexOf('. '),cut.lastIndexOf('! '),cut.lastIndexOf('? '));
+  return (sentence>Math.round(limit*.55)?cut.slice(0,sentence+1):cut.slice(0,limit).replace(/\s+\S*$/,'')).trim()+'…';
+}
+function _kaiSimpleSummary(raw){
+  const blocks=_agentResultBlocks(raw),preferred=blocks.find(b=>/(respuesta ejecutiva|en resumen|resumen|conclusi[oó]n|diagn[oó]stico)/i.test(b.title));
+  const lines=(preferred?preferred.body:_agentCleanResult(raw).split('\n')).map(x=>x.trim()).filter(x=>x&&!/^\|/.test(x)&&!/^[-*•]\s/.test(x)&&!/^\d+[.)]\s/.test(x)&&!/^#{1,4}\s/.test(x));
+  return _kaiSimpleClip(lines.slice(0,2).join(' '),300)||'Listo. Preparé una respuesta clara con lo más importante.';
+}
+function _kaiSimpleActions(raw){
+  const actionRx=/(pr[oó]xim|siguiente|acci[oó]n|prioridad|recomend|qu[eé] hacer|plan)/i,items=[];
+  _agentResultBlocks(raw).filter(b=>actionRx.test(b.title)).forEach(b=>b.body.forEach(line=>{
+    const clean=_kaiSimpleText(line);if(clean&&clean.length>3&&!/^\|/.test(line.trim()))items.push(clean);
+  }));
+  return [...new Set(items)].slice(0,3);
+}
 function renderKaiResult(raw,meta){
   const clean=_agentCleanResult(raw),m=agentResultMeta('KAI',null,Object.assign({compact:true},meta||{})),urg=_reportUrgency(clean),p=_agentVisualProfile('KAI');
-  const summary=_agentResultSummary(clean)||'Listo. Revisa el resultado y el siguiente paso recomendado.';
+  const summary=_kaiSimpleSummary(clean),actions=_kaiSimpleActions(clean);
   const metrics=_agentResultMetrics(clean,p),metaHtml=_agentUsageHtml(m);
   const metricsHtml=metrics.length?`<div class="avr-kpis">${metrics.map(x=>`<div class="avr-kpi"><span class="avr-kpi-icon">${x.icon}</span><div><div class="avr-kpi-label">${escapeHtml(x.label)}</div><div class="avr-kpi-value">${escapeHtml(x.value)}</div></div></div>`).join('')}</div>`:'';
+  const simpleMetrics=metrics.length?`<div class="kvr-key-data">${metrics.slice(0,3).map(x=>`<span><small>${escapeHtml(x.label)}</small><b>${escapeHtml(x.value)}</b></span>`).join('')}</div>`:'';
+  const actionsHtml=actions.length?`<div class="kvr-next"><span>QUÉ HACER AHORA</span>${actions.map((x,i)=>`<div><b>${i+1}</b><p>${escapeHtml(_kaiSimpleClip(x,145))}</p></div>`).join('')}</div>`:'';
   return `<div class="kai-visual-result agent-view-simple" style="--avr-accent:${p.accent}">
-    <div class="agent-card-view-switch kvr-view-switch" role="group" aria-label="Nivel de detalle de esta respuesta"><span>Vista</span><button type="button" class="active" data-card-view="simple" aria-pressed="true" onclick="setAgentCardViewMode(this,'simple')">Simple</button><button type="button" data-card-view="expert" aria-pressed="false" onclick="setAgentCardViewMode(this,'expert')">Experto</button></div>
+    <div class="agent-card-view-switch kvr-view-switch" role="group" aria-label="Nivel de detalle de esta respuesta"><button type="button" class="active" data-card-view="simple" aria-pressed="true" onclick="setAgentCardViewMode(this,'simple')">Simple</button><button type="button" data-card-view="expert" aria-pressed="false" onclick="setAgentCardViewMode(this,'expert')">Experto</button></div>
     <div class="kvr-simple-view">
       <div class="kvr-head"><span>KAI · RESPUESTA EJECUTIVA</span><b class="kvr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</b></div>
-      <div class="kvr-body">${formatRichText(summary)}</div>
-      ${metricsHtml}
-      <div class="avr-meta">${metaHtml}</div>
+      <div class="kvr-answer"><span>LO IMPORTANTE</span><p>${escapeHtml(summary)}</p></div>
+      ${simpleMetrics}
+      ${actionsHtml}
     </div>
     <section class="kvr-expert-view" aria-label="Informe completo de KAI">
       <div class="kvr-expert-head"><div><span>K</span><div><small>KAI · INFORME COMPLETO</small><strong>Análisis ejecutivo</strong></div></div><b class="kvr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</b></div>

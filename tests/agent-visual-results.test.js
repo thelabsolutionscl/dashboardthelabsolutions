@@ -95,9 +95,21 @@ test('KAI alterna entre respuesta simplificada e informe experto completo',()=>{
   assert.match(render,/kvr-view-switch/);
   assert.match(render,/data-card-view="simple"[^>]*>Simple</);
   assert.match(render,/data-card-view="expert"[^>]*>Experto</);
+  assert.doesNotMatch(render,/<span>Vista<\/span>/);
+  assert.match(render,/_kaiSimpleSummary\(clean\)/);
+  assert.match(render,/kvr-answer/);
+  assert.match(render,/kvr-next/);
   assert.match(CSS,/\.kai-visual-result\.agent-view-expert>\.kvr-simple-view\{display:none/);
   assert.match(CSS,/\.kai-visual-result\.agent-view-expert>\.kvr-expert-view\{display:flex/);
   assert.match(CSS,/\.kvr-expert-report \.agr-body\{grid-template-columns:1fr/);
+});
+
+test('el modo Simple de KAI elimina markdown crudo y limita las acciones',()=>{
+  const helpers=HTML.slice(HTML.indexOf('function _kaiSimpleText'),HTML.indexOf('function renderKaiResult'));
+  assert.ok(helpers.includes(".replace(/\\[([^\\]]+)\\]\\([^)]*\\)/g,'$1')"),'los enlaces markdown se convierten en texto');
+  assert.match(helpers,/slice\(0,3\)/);
+  assert.match(CSS,/\.kvr-view-switch\{width:max-content/);
+  assert.match(CSS,/\.jvs-msg\.jvs-rich \.agent-card-view-switch\.kvr-view-switch\{position:static/);
 });
 
 test('la ventana de KAI aprovecha escritorio y se convierte en diálogo móvil optimizado',()=>{
