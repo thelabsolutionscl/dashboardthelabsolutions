@@ -86,6 +86,20 @@ test('KAI también responde con panorama y acciones completas sin tokens en DEMO
   assert.match(ask,/DEMO · 0 tok · US\$0,00/);
 });
 
+test('KAI alterna entre respuesta simplificada e informe experto completo',()=>{
+  const render=HTML.slice(HTML.indexOf('function renderKaiResult'),HTML.indexOf('// Urgencia del reporte',HTML.indexOf('function renderKaiResult')));
+  assert.match(render,/kvr-simple-view/);
+  assert.match(render,/kvr-expert-view/);
+  assert.match(render,/KAI · INFORME COMPLETO/);
+  assert.match(render,/formatAgentReport\(raw\)/);
+  assert.match(render,/kvr-view-switch/);
+  assert.match(render,/data-card-view="simple"[^>]*>Simple</);
+  assert.match(render,/data-card-view="expert"[^>]*>Experto</);
+  assert.match(CSS,/\.kai-visual-result\.agent-view-expert>\.kvr-simple-view\{display:none/);
+  assert.match(CSS,/\.kai-visual-result\.agent-view-expert>\.kvr-expert-view\{display:flex/);
+  assert.match(CSS,/\.kvr-expert-report \.agr-body\{grid-template-columns:1fr/);
+});
+
 test('el costo usa input, output y ambas categorías de caché',()=>{
   const block=HTML.slice(HTML.indexOf('function _estimateClaudeCost'),HTML.indexOf('// Diagnóstico local'));
   for(const field of ['input_tokens','output_tokens','cache_creation_input_tokens','cache_read_input_tokens'])assert.match(block,new RegExp(field));
@@ -100,20 +114,16 @@ test('las acciones de QA piden confirmación y la vista responde en móvil',()=>
   assert.match(CSS,/\.avr-kpis\{grid-template-columns:repeat\(2/);
 });
 
-test('la vista de agentes permite alternar entre Simplificado y Experto sin regenerar',()=>{
-  assert.match(HTML,/data-agent-view-mode="simple"[^>]*>Simplificado</);
-  assert.match(HTML,/data-agent-view-mode="expert"[^>]*>Experto</);
-  const setter=HTML.slice(HTML.indexOf('function setAgentViewMode'),HTML.indexOf('// Nombre a mostrar',HTML.indexOf('function setAgentViewMode')));
-  assert.match(setter,/localStorage\.setItem\(AGENT_VIEW_MODE_KEY/);
-  assert.match(setter,/applyAgentViewMode\(\)/);
+test('cada tarjeta permite alternar entre Simple y Experto sin afectar las demás',()=>{
+  const setter=HTML.slice(HTML.indexOf('function setAgentCardViewMode'),HTML.indexOf('// Nombre a mostrar',HTML.indexOf('function setAgentCardViewMode')));
+  assert.match(setter,/closest\('\.agent-visual-result,\.kai-visual-result'\)/);
+  assert.match(setter,/card\.classList\.toggle\('agent-view-expert'/);
   assert.doesNotMatch(setter,/callClaude|callAgentClaude|fetch\(/);
   assert.match(HTML,/class="avr-simple-view"/);
   assert.match(HTML,/class="avr-expert-view"/);
-  assert.match(CSS,/\.agent-view-expert \.agent-visual-result>\.avr-simple-view\{display:none/);
-  assert.match(CSS,/\.agent-view-expert \.agent-visual-result>\.avr-expert-view\{display:block/);
-  assert.match(CSS,/\.agent-view-simple \.agent-visual-result>\.avr-expert-view\{display:none/);
-  const apply=HTML.slice(HTML.indexOf('function applyAgentViewMode'),HTML.indexOf('function setAgentViewMode'));
-  assert.match(apply,/document\.body\.classList\.toggle\('agent-view-expert'/);
+  assert.match(CSS,/\.agent-visual-result\.agent-view-expert>\.avr-simple-view\{display:none/);
+  assert.match(CSS,/\.agent-visual-result\.agent-view-expert>\.avr-expert-view\{display:block/);
+  assert.match(CSS,/\.agent-visual-result\.agent-view-simple>\.avr-expert-view\{display:none/);
   assert.doesNotMatch(HTML.slice(HTML.indexOf('function renderAgentResult'),HTML.indexOf('function renderKaiResult')),/<details class="avr-details"/);
 });
 
@@ -131,7 +141,7 @@ test('los resultados de la parrilla no se cortan ni usan scroll vertical interno
   assert.match(CSS,/#tab-agentes #agentesGrid\{grid-template-columns:repeat\(2/);
   assert.match(CSS,/#tab-agentes #agentesGrid \.ai-response\{max-height:none;overflow:visible/);
   assert.match(CSS,/@media\(max-width:900px\)[\s\S]*#tab-agentes #agentesGrid\{grid-template-columns:1fr!important/);
-  assert.match(HTML,/out\.scrollTop=0;applyAgentViewMode\(\)/);
+  assert.match(HTML,/out\.scrollTop=0;/);
 });
 
 test('las métricas visuales descartan horas y frases operativas falsas',()=>{

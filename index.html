@@ -42,7 +42,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body class="agent-view-simple">
+<body>
 <div class="site-bg" aria-hidden="true"><div class="site-bg-glow-a"></div><div class="site-bg-glow-b"></div><div class="site-bg-vignette"></div></div>
 <svg style="display:none" aria-hidden="true" id="svgIcons"><defs>
 <symbol id="icon-overview" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
@@ -1541,8 +1541,8 @@
   </div>
 
 <!-- AGENTES -->
-<div class="tab-panel pf agent-view-simple" id="tab-agentes">
-  <div class="section-header agent-section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div><div class="agent-header-actions"><div class="agent-view-switch" role="group" aria-label="Nivel de detalle de los resultados"><span>Vista</span><button type="button" class="active" data-agent-view-mode="simple" aria-pressed="true" onclick="setAgentViewMode('simple')">Simplificado</button><button type="button" data-agent-view-mode="expert" aria-pressed="false" onclick="setAgentViewMode('expert')">Experto</button></div><button class="btn btn-ghost btn-sm" onclick="AGENT_LOG.open()">📜 Historial</button></div></div>
+<div class="tab-panel pf" id="tab-agentes">
+  <div class="section-header agent-section-header"><div><div class="section-title">Centro de Agentes IA</div><div class="section-desc">Agentes inteligentes especializados que analizan tus datos en tiempo real y generan insights, reportes automáticos y propuestas de acción para tu negocio.</div></div><div class="agent-header-actions"><button class="btn btn-ghost btn-sm" onclick="AGENT_LOG.open()">📜 Historial</button></div></div>
 
   <!-- SUPPLIER SEARCH AGENT -->
   <div class="card" style="margin-bottom:20px;border-color:rgba(255,107,53,0.35);box-shadow:0 0 24px rgba(255,107,53,0.07)">
@@ -14166,7 +14166,8 @@ function renderAgentResult(agentId,raw,meta){
   const metrics=_agentResultMetrics(clean,p),m=agentResultMeta(id,null,meta||{}),compact=!!m.compact,layout=(AGENT_RESULT_LAYOUTS[id]||[])[0]||'general';
   const metricsHtml=metrics.length?`<div class="avr-kpis">${metrics.map(x=>`<div class="avr-kpi"><span class="avr-kpi-icon">${x.icon}</span><div><div class="avr-kpi-label">${escapeHtml(x.label)}</div><div class="avr-kpi-value">${escapeHtml(x.value)}</div></div></div>`).join('')}</div>`:'';
   const metaHtml=_agentUsageHtml(m),specialHtml=_agentExtraVisual(id)+_agentSpecialVisual(id,clean);
-  return `<article class="agent-visual-result avr-layout-${escapeHtml(layout)}${compact?' avr-compact':''}" style="--avr-accent:${p.accent}" data-agent="${escapeHtml(id)}">
+  return `<article class="agent-visual-result agent-view-simple avr-layout-${escapeHtml(layout)}${compact?' avr-compact':''}" style="--avr-accent:${p.accent}" data-agent="${escapeHtml(id)}">
+    <div class="agent-card-view-switch" role="group" aria-label="Nivel de detalle de este resultado"><span>Vista</span><button type="button" class="active" data-card-view="simple" aria-pressed="true" onclick="setAgentCardViewMode(this,'simple')">Simple</button><button type="button" data-card-view="expert" aria-pressed="false" onclick="setAgentCardViewMode(this,'expert')">Experto</button></div>
     <div class="avr-simple-view">
       <header class="avr-hero">
         <div class="avr-top"><span class="avr-mark">${p.icon}</span><div class="avr-heading"><span>${escapeHtml(p.area)}</span><strong>${escapeHtml(p.title)}</strong></div><span class="avr-status avr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</span></div>
@@ -14192,8 +14193,25 @@ function renderAgentResult(agentId,raw,meta){
   </article>`;
 }
 function renderKaiResult(raw,meta){
-  const m=agentResultMeta('KAI',null,Object.assign({compact:true},meta||{})),urg=_reportUrgency(raw);
-  return `<div class="kai-visual-result"><div class="kvr-head"><span>KAI · RESPUESTA EJECUTIVA</span><b class="kvr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</b></div><div class="kvr-body">${formatRichText(raw)}</div><div class="avr-meta">${_agentUsageHtml(m)}</div></div>`;
+  const clean=_agentCleanResult(raw),m=agentResultMeta('KAI',null,Object.assign({compact:true},meta||{})),urg=_reportUrgency(clean),p=_agentVisualProfile('KAI');
+  const summary=_agentResultSummary(clean)||'Listo. Revisa el resultado y el siguiente paso recomendado.';
+  const metrics=_agentResultMetrics(clean,p),metaHtml=_agentUsageHtml(m);
+  const metricsHtml=metrics.length?`<div class="avr-kpis">${metrics.map(x=>`<div class="avr-kpi"><span class="avr-kpi-icon">${x.icon}</span><div><div class="avr-kpi-label">${escapeHtml(x.label)}</div><div class="avr-kpi-value">${escapeHtml(x.value)}</div></div></div>`).join('')}</div>`:'';
+  return `<div class="kai-visual-result agent-view-simple" style="--avr-accent:${p.accent}">
+    <div class="agent-card-view-switch kvr-view-switch" role="group" aria-label="Nivel de detalle de esta respuesta"><span>Vista</span><button type="button" class="active" data-card-view="simple" aria-pressed="true" onclick="setAgentCardViewMode(this,'simple')">Simple</button><button type="button" data-card-view="expert" aria-pressed="false" onclick="setAgentCardViewMode(this,'expert')">Experto</button></div>
+    <div class="kvr-simple-view">
+      <div class="kvr-head"><span>KAI · RESPUESTA EJECUTIVA</span><b class="kvr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</b></div>
+      <div class="kvr-body">${formatRichText(summary)}</div>
+      ${metricsHtml}
+      <div class="avr-meta">${metaHtml}</div>
+    </div>
+    <section class="kvr-expert-view" aria-label="Informe completo de KAI">
+      <div class="kvr-expert-head"><div><span>K</span><div><small>KAI · INFORME COMPLETO</small><strong>Análisis ejecutivo</strong></div></div><b class="kvr-${urg.level}">${urg.icon} ${escapeHtml(urg.label)}</b></div>
+      ${metricsHtml}
+      <div class="avr-expert-report kvr-expert-report">${formatAgentReport(raw)}</div>
+      <div class="avr-meta">${metaHtml}</div>
+    </section>
+  </div>`;
 }
 // Urgencia del reporte a partir del texto (heurística): rojo = requiere acción ya,
 // ámbar = con observaciones, verde = todo en orden. Espeja el criterio del CEO_REPORT.
@@ -15970,23 +15988,14 @@ function showAgentCtx(id,btn){
   }else{box.style.display='none';btn.textContent='ver contexto ↓';}
 }
 
-const AGENT_VIEW_MODE_KEY='thelab_agent_view_mode';
-function getAgentViewMode(){
-  try{return localStorage.getItem(AGENT_VIEW_MODE_KEY)==='expert'?'expert':'simple';}catch(e){return'simple';}
+function setAgentCardViewMode(btn,mode){
+  const card=btn?.closest('.agent-visual-result,.kai-visual-result');if(!card)return;
+  const expert=mode==='expert';
+  card.classList.toggle('agent-view-simple',!expert);
+  card.classList.toggle('agent-view-expert',expert);
+  card.querySelectorAll('.agent-card-view-switch [data-card-view]').forEach(x=>{const on=x.dataset.cardView===(expert?'expert':'simple');x.classList.toggle('active',on);x.setAttribute('aria-pressed',on?'true':'false');});
 }
-function applyAgentViewMode(){
-  const mode=getAgentViewMode(),tab=document.getElementById('tab-agentes');if(!tab)return;
-  document.body.classList.toggle('agent-view-simple',mode==='simple');
-  document.body.classList.toggle('agent-view-expert',mode==='expert');
-  tab.classList.toggle('agent-view-simple',mode==='simple');
-  tab.classList.toggle('agent-view-expert',mode==='expert');
-  tab.querySelectorAll('[data-agent-view-mode]').forEach(btn=>{const on=btn.dataset.agentViewMode===mode;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',on?'true':'false');});
-}
-function setAgentViewMode(mode){
-  try{localStorage.setItem(AGENT_VIEW_MODE_KEY,mode==='expert'?'expert':'simple');}catch(e){}
-  applyAgentViewMode();
-}
-window.setAgentViewMode=setAgentViewMode;
+window.setAgentCardViewMode=setAgentCardViewMode;
 
 // Nombre a mostrar de un agente: "Rol - Personaje" (ej: "CEO - Elon Musk").
 // Si no tiene personaje asignado, cae al nombre de rol en español.
@@ -16020,7 +16029,6 @@ function renderAgentesGrid(){
       </div>
     </div>`;
   }).join('');
-  applyAgentViewMode();
 }
 
 // ── Popup "TRABAJANDO PARA TI" ─────────────────────────────────
@@ -16148,7 +16156,7 @@ async function runAgent(id){
         }
       }
     }
-    out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult(id,_r,meta):formatAgentReport(_r);out.scrollTop=0;applyAgentViewMode();
+    out._rawText=_r;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult(id,_r,meta):formatAgentReport(_r);out.scrollTop=0;
     // CTA: si la respuesta trae un mensaje enviable (WhatsApp/correo), ofrece enviarlo
     document.getElementById('cta_'+id)?.remove();
     const _ctaHtml=agentCtaButtonsHtml('out_'+id,_r);
