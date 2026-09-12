@@ -784,7 +784,7 @@ function renderMonitorGrid(){
             <div class="pbar ${isPrinting?'live':''}"><i id="pbar_${m.id}" style="width:${s.progress}%"></i></div>
           </div>
         </div>`:''}
-        <div style="display:flex;gap:6px;margin-top:8px">
+        <details class="op-telemetry"><summary>Temperaturas y telemetría</summary><div style="display:flex;gap:6px;margin-top:8px">
           <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
             <div style="font-size:10px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
             <div class="ptemp" id="phot_${m.id}" style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}°</div>
@@ -796,14 +796,15 @@ function renderMonitorGrid(){
             <div style="font-size:10px;color:var(--text3);margin-top:2px">${s.bed?.target>0?'→ '+s.bed.target+'°':'fría'}</div>
           </div>
         </div>
+        ${th.length>=2?`<div style="margin-top:8px;padding:6px 8px;background:var(--surface2);border-radius:7px">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Temperatura hotend</div>
+          <div id="pspark_${m.id}">${renderSparkline(th,'h','#ff6b35')}</div>
+        </div>`:''}
+        </details>
         ${isActive?`<div style="display:flex;gap:6px;margin-top:8px">
           ${isPrinting?`<button onclick="printerControl('${m.id}','pause')" style="flex:1;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.4);color:#ffaa00;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">⏸ Pausar</button>`:''}
           ${isPaused?`<button onclick="printerControl('${m.id}','resume')" style="flex:1;background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.4);color:#00d4aa;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">▶ Reanudar</button>`:''}
           <button onclick="printerControl('${m.id}','cancel')" style="flex:1;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.35);color:#ff4444;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">■ Cancelar</button>
-        </div>`:''}
-        ${th.length>=2?`<div style="margin-top:8px;padding:6px 8px;background:var(--surface2);border-radius:7px">
-          <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Temperatura hotend</div>
-          <div id="pspark_${m.id}">${renderSparkline(th,'h','#ff6b35')}</div>
         </div>`:''}
         <div class="pcard-iprow" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
           <span style="font-size:10px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
@@ -1469,8 +1470,8 @@ function closeAlertSettings(){document.getElementById('alertSettingsModal').styl
 
 // ── SORT & KIOSK ──────────────────────────────────────────────
 let _sortByState=true,_kioskMode=false;
-function stateOrder(s){return{printing:0,paused:1,error:2,apidown:3,complete:4,standby:5,offline:6,noip:7}[s]??8;}
-function sortedList(lista){if(!_sortByState)return lista;return[...lista].sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline'));}
+function stateOrder(s){return{error:0,shutdown:1,paused:2,apidown:3,printing:4,complete:5,standby:6,offline:7,noip:8}[s]??9;}
+function sortedList(lista){if(!_sortByState)return lista;return[...lista].sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline')||((_printerStatus[a.id]?.state==='printing'&&_printerStatus[b.id]?.state==='printing')?((_printerStatus[a.id].eta??Infinity)-(_printerStatus[b.id].eta??Infinity)):0));}
 function toggleSort(){_sortByState=!_sortByState;const btn=document.getElementById('btnSort');if(btn)btn.style.color=_sortByState?'var(--accent)':'var(--text3)';renderMonitorGrid();}
 function toggleKiosk(){
   _kioskMode=!_kioskMode;

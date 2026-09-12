@@ -39,6 +39,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=%%BUILD%%">
+<link rel="stylesheet" href="operativo-visual.css?v=%%BUILD%%">
+<script src="js/operativo-visual.js?v=%%BUILD%%" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -649,6 +651,7 @@
 </style>
 <div class="tab-panel active" id="tab-overview">
   <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button><div style="position:relative"><button class="btn btn-ghost btn-sm" onclick="openOvCustomize(event)" title="Personalizar overview" style="font-size:14px;line-height:1">⚙</button></div></div></div>
+  <section id="opToday" class="op-surface op-simple"></section>
   <!-- SALUDO DE LA MAÑANA: top 3 urgencias del día, 1 vez al día, descartable -->
   <div id="morningBrief" style="display:none;margin-bottom:18px;background:linear-gradient(135deg,rgba(0,212,204,0.09),rgba(0,212,204,0.02));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:14px 16px"></div>
   <div class="kpi-grid" id="kpiGrid">
@@ -852,6 +855,7 @@
 <!-- COTIZACIONES -->
 <div class="tab-panel pf" id="tab-cotizaciones">
   <div class="section-header"><div><div class="section-title">Cotizaciones</div><div class="section-desc">Crea y gestiona presupuestos para tus clientes. Controla estado, fechas de vencimiento y convierte cotizaciones aprobadas en pedidos con un clic.</div></div><button class="btn btn-primary btn-sm" onclick="startQuoteFlow()" title="Cotizador guiado paso a paso con KAI">💰 Cotizar con KAI</button></div>
+  <div id="opQuoteMetrics" class="op-metrics"></div><div class="op-toolbar"><button class="btn btn-primary btn-sm" onclick="switchTab('nueva-cot')">Nueva cotización</button><span id="opQuoteSelection"></span><button type="button" class="op-button" data-op="cot-filter" data-arg="all">Todas</button><input id="opQuoteSearch" type="search" placeholder="Buscar cliente, número o título…" aria-label="Buscar cotizaciones"></div><div id="opQuotes" class="op-records op-simple"></div><div id="opQuoteMore" class="op-simple op-more"></div>
   <!-- BANDEJA DE SEGUIMIENTOS: cotizaciones enviadas sin respuesta, listas para 1 clic -->
   <div class="card tray-collapsible collapsed" id="fuTrayCard" style="margin-bottom:20px;border-color:rgba(255,170,0,0.35);display:none">
     <div class="card-header" onclick="toggleTray('fuTrayCard')" style="cursor:pointer" title="Mostrar / ocultar">
@@ -873,7 +877,7 @@
     </div>
     <div id="cotToOrderList" class="tray-body" style="padding:2px 0 8px"></div>
   </div>
-  <div class="card">
+  <div class="card" id="opQuoteTable">
     <div class="card-header">
       <span class="card-title" id="cotTableTitle">Todas las Cotizaciones</span>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
@@ -905,6 +909,7 @@
 <!-- PEDIDOS -->
 <div class="tab-panel pf" id="tab-pedidos">
   <div class="section-header"><div><div class="section-title">Pedidos en Producción</div><div class="section-desc">Seguimiento completo de cada orden: estado de producción, fecha de entrega comprometida, control de calidad (QA) y equipo responsable.</div></div><button class="btn btn-ghost btn-sm drive-conn-btn" onclick="connectDrive()" title="Conecta Google Drive una vez por sesión: así las carpetas se crean solas al aprobar cotizaciones y puedes ver adjuntos sin volver a iniciar sesión">🔗 Conectar Drive</button></div>
+  <div id="opOrderMetrics" class="op-metrics op-simple"></div>
   <!-- POST-ENTREGA: pedidos despachados hace 3+ días listos para mensaje de satisfacción + reseña -->
   <div class="card" id="pdTrayCard" style="margin-bottom:20px;border-color:rgba(0,212,170,0.35);display:none">
     <div class="card-header">
@@ -916,6 +921,7 @@
   <div id="pdCsatBar" style="display:none;margin-bottom:16px"></div>
   <div id="reclamosCard" style="margin-bottom:16px"></div>
   <div id="pedidosFilterBar" style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-ghost btn-sm" onclick="filterPedidos('proximos',this)">Próximas entregas</button>
     <button class="btn btn-ghost btn-sm active-filter" onclick="filterPedidos('all',this)">Sin archivar</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('atrasados',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-warning"/></svg> Atrasados</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Confirmado',this)">Confirmados</button>
@@ -944,6 +950,7 @@
       <button id="btnVistaPlan" class="btn btn-ghost btn-sm" onclick="setPedidosView('planificacion')" style="padding:4px 12px;font-size:10px">Planificación</button>
     </div>
   </div>
+  <div id="opOrders" class="op-records op-simple"></div><div id="opOrderMore" class="op-simple op-more"></div>
   <div id="pedidosPlanificacion" style="display:none"></div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap sticky-head">
     <table><thead><tr>
@@ -3663,6 +3670,7 @@
   <div class="modal-card wide">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><div id="cdCrumb" style="font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.3px"><span style="cursor:pointer" onclick="closeClienteDetalle();switchTab('clientes')">Clientes</span> <span style="opacity:.55">›</span> <span style="color:var(--text2)" id="cdCrumbName"></span></div><div class="modal-title" id="cdNombre">—</div><div style="font-size:12px;color:var(--text2)" id="cdRol">—</div><div id="cdDescChip" style="margin-top:7px"></div><div id="cdFechaChip" style="margin-top:6px"></div></div><button onclick="closeClienteDetalle()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">✕</button></div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="cdBadges"></div>
+    <section id="opClient"></section>
     <div id="cdOnboarding" style="margin-bottom:14px"></div>
     <div id="cdTabs" style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto">
       <button class="cd-tab active" data-t="datos" onclick="cdTab('datos')">Datos</button>
@@ -4677,6 +4685,7 @@ function _reportarResultados(muts) {
       <span>Datos desactualizados (más de 24 h). Ejecuta el Script 2 en Google Ads o haz clic en "↺ Actualizar".</span>
     </div>
     <!-- KPIs Google Ads -->
+    <section id="opAds" class="op-surface" aria-live="polite"></section>
     <div id="adsKPIs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px">
       <div class="stat-card"><div class="stat-label">Gasto Total</div><div class="stat-value" id="ads-kpi-gasto" style="color:var(--accent)">—</div><div class="stat-sub" id="ads-kpi-periodo"></div></div>
       <div class="stat-card"><div class="stat-label">Impresiones</div><div class="stat-value" id="ads-kpi-imp">—</div><div class="stat-sub" id="ads-kpi-imp-trend"></div></div>
@@ -4874,6 +4883,7 @@ function _reportarResultados(muts) {
 
   <!-- ── RESUMEN ── -->
   <div id="fin-panel-resumen">
+    <section id="opFinance" class="op-surface"></section>
     <!-- Fila 1: Chart principal + donut canal -->
     <div class="data-grid" style="grid-template-columns:1.8fr 1fr;margin-bottom:14px">
       <div class="card">
@@ -5034,6 +5044,7 @@ function _reportarResultados(muts) {
 
   <!-- ── POR COBRAR ── -->
   <div id="fin-panel-cobrar" style="display:none">
+    <section id="opCollections" class="op-simple"></section>
     <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
       <div class="kpi-card orange">
         <div class="kpi-label">Por Cobrar + IVA (2025)</div>
@@ -8900,6 +8911,7 @@ function renderMorningBrief(){
 }
 
 function renderAccionesHoy(){
+  if(window.OP)OP.overview();
   const card=document.getElementById('accionesHoyCard'),list=document.getElementById('accionesHoyList');
   if(!card||!list)return;
   const today=new Date();today.setHours(0,0,0,0);
@@ -10048,6 +10060,7 @@ function openClienteDetalle(id){
   const _actTxt=_lastStr?`hace ${_diasAct} día${_diasAct===1?'':'s'}`:'sin registro';
   document.getElementById('cdCRM').innerHTML=[row('Etapa',f['Etapa venta']),row('Valoración','★'.repeat(val)+'☆'.repeat(5-val)),row('Industria',f['Industria / Rubro']),row('Últ. activ.',_actTxt+(_lastStr?` · ${_lastStr}`:'')),row('Cotiz./Ped.',`${_cliCots.length} / ${_cliPeds.length}`)].filter(Boolean).join('')||'<span style="color:var(--text3)">Sin datos</span>';
   const notasEl=document.getElementById('cdNotas');if(f['Notas internas']){notasEl.style.whiteSpace='normal';notasEl.innerHTML=formatRichText(f['Notas internas']);notasEl.style.color='var(--text2)';}else{notasEl.textContent='Sin notas';notasEl.style.color='var(--text3)';}
+  if(window.OP)OP.client(c,_cliCots,_cliPeds);
   cdCurrentId=id;
   renderClienteTimeline(id,f['Empresa']||''); cdCurrentEmpresa=f['Empresa']||'';
   _facFiltro='todas'; _facBuscar='';
@@ -10707,7 +10720,8 @@ function getSortedCotizaciones(){
 }
 function renderCotizaciones(skipAnalytics){
   const tbody=document.getElementById('cotsTableBodyFull');
-  const sorted=getSortedCotizaciones();
+  const sorted=window.OP?OP.filterQuotes(getSortedCotizaciones()):getSortedCotizaciones();
+  if(window.OP)OP.quotes(sorted);
   if(!sorted.length){
     const emptyMsg=isVendorMode()&&state.cotizaciones.length
       ?'<tr><td colspan="11"><div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg></div>Aún no tienes cotizaciones asignadas<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchTab(\'nueva-cot\')">➕ Nueva cotización</button></div></td></tr>'
@@ -11630,9 +11644,10 @@ function renderPedidos(filter){
   const basePedidos=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
   const archivados=basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Completado');
   const archivoCount=document.getElementById('pedidosArchivoCount');if(archivoCount)archivoCount.textContent=archivados.length;
-  let data=filter==='all'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'):filter==='atrasados'?basePedidos.filter(p=>pedidoAtrasado(p.fields)):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'&&(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
+  let data=filter==='all'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'):filter==='atrasados'?basePedidos.filter(p=>pedidoAtrasado(p.fields)):filter==='proximos'?basePedidos.filter(p=>{const d=p.fields['Fecha entrega'],n=d?Math.round((new Date(d+'T00:00:00')-today)/86400000):null;return n!==null&&n>=0&&n<=3&&!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']);}):filter==='qa_rechazado'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')!=='Completado'&&(p.fields['Resultado QA']||'')==='Rechazado'):filter==='qa_pendiente'?basePedidos.filter(p=>(p.fields['Estado pedido']||'')==='Listo para despacho'&&(p.fields['Resultado QA']||'Pendiente')!=='QA aprobado'):basePedidos.filter(p=>(p.fields['Estado pedido']||'')===filter);
   data=_pedApplySearchSort(data);
   _pedRowIds=data.map(p=>p.id);
+  if(window.OP)OP.orders(data,basePedidos);
   const tbody=document.getElementById('pedidosTableBody');if(!data.length){
     const emptyHtml=basePedidos.length
       ?'<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-search"/></svg></div>Ningún pedido coincide con la búsqueda o el filtro<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="resetPedidosView()">Ver todos los pedidos</button></div>'
@@ -15298,6 +15313,7 @@ document.addEventListener('visibilitychange',()=>{
 // ── KANBAN — actualizar setPedidosView con calendario ─────────────────
 // (reemplaza la función anterior con soporte de 3 vistas)
 function setPedidosView(mode){
+  if(window.OP)OP.mode('pedidos','expert');
   document.getElementById('pedidosTableWrap').style.display=mode==='tabla'?'':'none';
   document.getElementById('pedidosKanban').style.display=mode==='kanban'?'':'none';
   document.getElementById('pedidosCalendario').style.display=mode==='calendario'?'':'none';

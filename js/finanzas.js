@@ -120,6 +120,7 @@ function varPct(a,b){if(!a||!b)return null;return ((b-a)/a)*100;}
 
 /* ── Sub-tabs internos ── */
 function finSwitchTab(tab){
+  if(window.OP)OP.finance();
   finCurrentTab=tab;
   ['resumen','facturas','cobrar','prestamos','deudas','nueva','diario','aging','presupuesto'].forEach(t=>{
     document.getElementById('fin-panel-'+t).style.display=(t===tab)?'':'none';
@@ -261,6 +262,7 @@ function finFacturasFromAirtable(){
         canal:'DTE',
         cat:f['Estado Pago']||'Pendiente',
         _neto:neto,_iva:iva,_exento:exento,_total:total,
+        venc:f['Fecha Vencimiento']||null,fecha:fecha||null,
       };
     });
 }
@@ -356,6 +358,7 @@ function finVenc(r){
   return new Date(base+plazo*86400000);
 }
 function finRenderCobrar(){
+  if(window.OP)OP.collections();
   const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const hoy=Date.now();
@@ -1216,6 +1219,7 @@ function finSetupTooltip(){
 
 /* ── Init cuando se activa el tab ── */
 function finInit(){
+  if(window.OP)OP.finance();
   finRenderMensual();
   finInitKPIs();
   renderOverviewFinanzas();

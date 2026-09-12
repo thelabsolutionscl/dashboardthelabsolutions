@@ -214,9 +214,9 @@ function renderRedesPosts(){
         ${f['Pedido']?`<span class="badge badge-gray" style="font-size:8px">📦 ${escapeHtml(f['Pedido'])}</span>`:''}
         ${f['Agente']?`<span class="badge badge-gray" style="font-size:8px">${escapeHtml(f['Agente'])}</span>`:''}
       </div>
-      <div style="font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.5;max-height:120px;overflow:auto">${escapeHtml(copy||'(sin copy)')}</div>
+      <div class="op-post-excerpt">${escapeHtml(copy||'(sin copy)')}</div>
       ${f['Hashtags']?`<div style="font-size:11px;color:var(--accent);margin-top:5px">${escapeHtml(f['Hashtags'])}</div>`:''}
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${btns.join('')}</div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${btns[0]||''}<details class="op-post-actions"><summary>Más acciones</summary><div>${btns.slice(1).join('')}</div></details></div>
       </div>
     </div>`;
   }).join('');
@@ -474,7 +474,7 @@ function renderRedesCalendarGrid(){
     const fxHtml=fx.map(o=>{const c=_fxCol[o.type]||'#888';return `<div onclick="event.stopPropagation();redesPlanFecha('${(o.label||'').replace(/'/g,'')}')" title="${escapeHtml(o.type.charAt(0).toUpperCase()+o.type.slice(1)+': '+o.label+' — clic para planificar contenido')}" style="font-size:8.5px;font-weight:600;background:${c}1f;color:${c};border-radius:4px;padding:1px 4px;margin-bottom:2px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.emoji} ${escapeHtml(o.label)}</div>`;}).join('');
     const hasFer=fx.some(o=>o.type==='feriado');
     const chips=lst.map(p=>{const f=p.fields,red=f['Red']||'',c=REDES_COLOR[red]||'#888',txt=(f['Copy']||red||'').slice(0,22);
-      return `<div class="redes-cal-chip" draggable="true" ondragstart="redesDragStart(event,'${p.id}')" onclick="redesOpenEdit('${p.id}')" title="${escapeHtml((red||'—')+' · '+(f['Estado']||'')+' — clic para editar, arrastra para reprogramar')}" style="font-size:9px;background:${c}22;color:${c};border-left:3px solid ${c};border-radius:5px;padding:2px 5px;margin:2px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(txt)}</div>`;}).join('');
+      return `<div class="redes-cal-chip" draggable="true" ondragstart="redesDragStart(event,'${p.id}')" onclick="redesOpenEdit('${p.id}')" title="${escapeHtml((red||'—')+' · '+(f['Estado']||'')+' — clic para editar, arrastra para reprogramar')}" style="font-size:9px;background:${c}22;color:${c};border-left:3px solid ${c};border-radius:5px;padding:2px 5px;margin:2px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${operativoSocialThumb(f)}<span>${escapeHtml(txt)}</span><small>${escapeHtml(f['Estado']||f['Estado post']||'Borrador')}</small><button type="button" class="op-preview-button" onclick="event.stopPropagation();redesPreviewInsta('${p.id}')" aria-label="Vista previa de publicación">Ver</button></div>`;}).join('');
     cells+=`<div class="redes-cal-cell" ondragover="redesAllowDrop(event)" ondrop="redesDropOnDay(event,'${key}')" style="min-height:64px;border:1px solid ${key===todayKey?'var(--accent)':hasFer?'rgba(255,107,107,0.4)':'var(--border)'};border-radius:9px;padding:4px;background:var(--surface2)"><div style="font-size:10px;color:${key===todayKey?'var(--accent)':'var(--text3)'};text-align:right;font-weight:${key===todayKey?'700':'400'}">${day}</div>${fxHtml}${chips}</div>`;
   }
   el.innerHTML=_redesGapsHtml()+`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -1881,4 +1881,9 @@ async function redesRecycle(id){
     toast('Copia creada como borrador ✓','success'); renderRedesKpis(); redesApplyFilters();
     document.getElementById('redesPostsList')?.scrollIntoView({behavior:'smooth',block:'center'});
   }catch(e){toast('No se pudo reciclar: '+e.message,'error');}
+}
+
+function operativoSocialThumb(f){
+  const url=safeHref(f['Media URL']||'');
+  return url&&/^https?:/i.test(url)&&_redesIsImg(url)?`<img class="op-social-thumb" src="${url}" alt="" loading="lazy">`:'';
 }
