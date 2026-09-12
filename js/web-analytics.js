@@ -85,6 +85,7 @@ function getWebDemoData(days){
     paginas:[{ruta:'/',vistas:Math.round(v*0.34)},{ruta:'/servicios/impresion-3d',vistas:Math.round(v*0.14)},{ruta:'/servicios/volumetricos',vistas:Math.round(v*0.11)},{ruta:'/servicios/premiaciones',vistas:Math.round(v*0.09)},{ruta:'/contacto',vistas:Math.round(v*0.08)}]};
 }
 function renderAdsKPIs(data,days){
+  if(window.OP)OP.ads(data,days);
   const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
   const conv=data.conversiones||0,valConv=data.valor_conversion||0;
   const ctr=imp>0?(clics/imp*100):0;
