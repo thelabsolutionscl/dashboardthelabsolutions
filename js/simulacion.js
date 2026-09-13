@@ -498,8 +498,11 @@ function renderSimResultados(run){
       Úsalo para bajar de muchas ideas a pocas — la ganadora la eligen prototipos reales con fotos y botón de compra.
     </div>
   </div>
+  <div class="op-switch" role="group" aria-label="Detalle de los resultados"><button type="button" class="op-button" data-sim-mode="simple" aria-pressed="true">Simple</button><button type="button" class="op-button" data-sim-mode="expert" aria-pressed="false">Experto</button></div>
   ${_simCurvaPrecio(run)}
   ${orden.map(it=>_simCardConcepto(it, prev)).join('')}`;
+  let mode='simple';try{mode=localStorage.getItem('op_view_sim_result')||mode;}catch(e){}
+  simResultMode(mode);
 }
 
 function _simCardConcepto(it, prev){
@@ -544,12 +547,12 @@ function _simCardConcepto(it, prev){
         ${frenos.map(f=>`<div style="font-size:12.5px;line-height:1.5;padding:3px 0">• ${escapeHtml(f)}</div>`).join('')}
       </div>`:''}
 
-      ${it.comprador ? `<div style="margin-top:10px">
+      ${it.comprador ? `<div class="op-sim-extra" style="margin-top:10px">
         <div style="font-size:10.5px;font-weight:700;letter-spacing:.7px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Quién sí compra</div>
         <div style="font-size:12.5px;line-height:1.5">${escapeHtml(it.comprador)}</div>
       </div>`:''}
 
-      ${it.precioSugerido ? `<div style="margin-top:10px">
+      ${it.precioSugerido ? `<div class="op-sim-extra" style="margin-top:10px">
         <div style="font-size:10.5px;font-weight:700;letter-spacing:.7px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Precio sin objeción</div>
         <div style="font-size:12.5px;line-height:1.5">${escapeHtml(it.precioSugerido)}</div>
       </div>`:''}
@@ -720,3 +723,12 @@ function simBorrarHistorial(){
   renderSimHistorial();
   toast('Historial borrado','info');
 }
+
+function simResultMode(value){
+  const el=document.getElementById('simResultados');if(!el)return;
+  value=value==='expert'?'expert':'simple';el.dataset.simMode=value;
+  el.querySelectorAll('[data-sim-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.simMode===value)));
+  el.querySelectorAll('details').forEach(d=>{d.open=value==='expert';});
+  try{localStorage.setItem('op_view_sim_result',value);}catch(e){}
+}
+if(typeof document!=='undefined'&&typeof document.addEventListener==='function')document.addEventListener('click',e=>{const b=e.target.closest('[data-sim-mode]');if(b)simResultMode(b.dataset.simMode);});

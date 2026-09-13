@@ -784,7 +784,7 @@ function renderMonitorGrid(){
             <div class="pbar ${isPrinting?'live':''}"><i id="pbar_${m.id}" style="width:${s.progress}%"></i></div>
           </div>
         </div>`:''}
-        <details class="op-telemetry"><summary>Temperaturas y telemetría</summary><div style="display:flex;gap:6px;margin-top:8px">
+        <details class="op-telemetry" ${document.getElementById('tab-maquinas')?.dataset.opView==='expert'?'open':''}><summary>Temperaturas y telemetría</summary><div style="display:flex;gap:6px;margin-top:8px">
           <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
             <div style="font-size:10px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
             <div class="ptemp" id="phot_${m.id}" style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}°</div>
