@@ -56,14 +56,36 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-post-excerpt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;line-height:1.6;color:var(--text2);white-space:pre-wrap}
 .op-social-thumb{width:100%;height:72px;object-fit:cover;border-radius:5px;display:block;margin:4px 0}
 .redes-cal-chip small{display:block;font-size:10px;white-space:normal}.op-preview-button{font-size:11px;padding:3px 7px;min-height:28px;margin:3px 0}
-#tab-overview[data-op-view=simple] #morningBrief,#tab-overview[data-op-view=simple] #accionesHoyCard{display:none!important}
-#tab-overview[data-op-view=simple]>.ov-zone,#tab-overview[data-op-view=simple]>#ovSecCharts,#tab-overview[data-op-view=simple]>#ovSecAlertas{display:none!important}
+#tab-overview[data-op-view=simple] #morningBrief,#tab-overview[data-op-view=simple] #accionesHoyCard:not(.op-revealed){display:none!important}
+#tab-overview[data-op-view=simple]>.ov-zone:not(.op-revealed),#tab-overview[data-op-view=simple]>#ovSecCharts{display:none!important}
 [data-op-view=expert] .op-simple{display:none!important}
 #tab-cotizaciones[data-op-view=simple] #opQuoteTable,#tab-cotizaciones[data-op-view=simple] #cotAnalytics,#tab-cotizaciones[data-op-view=simple] #perdidasCard{display:none!important}
-#tab-pedidos[data-op-view=simple] #pedidosTableWrap,#tab-pedidos[data-op-view=simple] #pedidosKanban,#tab-pedidos[data-op-view=simple] #pedidosCalendario,#tab-pedidos[data-op-view=simple] #pedidosPlanificacion{display:none!important}
+#tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed){display:none!important}
 #tab-pedidos[data-op-view=simple] #pedidosBulkBar{display:none!important}
-#tab-finanzas[data-op-view=simple] #fin-panel-resumen>:not(#opFinance),#tab-finanzas[data-op-view=simple] #fin-panel-cobrar>:not(#opCollections){display:none!important}
+#tab-finanzas[data-op-view=simple] #fin-panel-resumen>:not(#opFinance):not(.op-revealed):not(.op-detail-close),#tab-finanzas[data-op-view=simple] #fin-panel-cobrar>:not(#opCollections):not(.op-revealed):not(.op-detail-close){display:none!important}
 #tab-pedidos .section-desc,#tab-cotizaciones .section-desc,#tab-finanzas .section-desc{max-width:740px;font-size:13px;line-height:1.6}
 #tab-pedidos[data-op-view=expert] td,#tab-cotizaciones[data-op-view=expert] td{font-size:13px}
 @media(max-width:760px){.op-surface{padding:16px}.op-metrics{grid-template-columns:1fr}.op-priority{display:grid;grid-template-columns:1fr auto;gap:5px 12px}.op-priority>strong{grid-column:2;grid-row:1/3;margin:0}.op-priority>p{min-height:0}.op-priority>b{grid-column:1/-1}.op-section-heading{align-items:flex-start;flex-wrap:wrap}.op-section-heading h2{font-size:20px}.op-records{grid-template-columns:1fr}.op-record{padding:16px}.op-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}.op-buckets .op-metric:first-child{grid-column:1/-1}.op-toolbar input{width:100%;min-width:0}.op-switch{margin-left:0}.op-drawer{padding:16px}.op-record header{flex-wrap:wrap}.op-record footer{flex-wrap:wrap}.op-record footer>button{min-height:42px}.op-metric>strong{font-size:25px}#opClient .op-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}#opClient .op-metric{padding:10px}#opClient .op-metric small{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.op-metric,.op-priority{transition:none}}
+
+/* El formato (tarjetas / kanban / calendario) es independiente del detalle. */
+#tab-pedidos[data-op-layout]:not([data-op-layout=tabla]) #opOrders,
+#tab-pedidos[data-op-layout]:not([data-op-layout=tabla]) #opOrderMore{display:none!important}
+.op-disclosure{margin:0 0 16px;border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0}
+.op-disclosure>summary{font-size:14px;color:var(--text2);cursor:pointer;padding:4px;line-height:1.5}
+.op-disclosure>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.op-disclosure[open]>summary{margin-bottom:12px}
+[data-op-view=expert] .op-disclosure{border:0;padding:0}
+[data-op-view=expert] .op-disclosure>summary{display:none}
+[data-op-view=simple] .op-expert-only{display:none!important}
+[data-op-view=expert] .op-post-excerpt{display:block;-webkit-line-clamp:unset}
+.op-client-list{margin-top:16px}
+.op-scope-note{font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5}
+.op-detail-close{margin:12px 0}
+#tab-clientes[data-op-view=simple] #clientesTableBody{font-size:13px}
+@media(max-width:760px){.op-disclosure{padding:10px}.op-disclosure .card{max-width:100%}.op-scope-note{font-size:12px}}
+
+#simResultados[data-sim-mode=simple] .op-sim-extra{display:none}
+#opReports li{font-size:14px;line-height:1.6;margin:8px 0}
+#tab-reporte[data-op-view=simple] #opReports{grid-column:1/-1}
+[data-op-view=expert] .op-telemetry>summary,[data-op-view=expert] .op-post-actions>summary{display:none}

@@ -216,7 +216,7 @@ function renderRedesPosts(){
       </div>
       <div class="op-post-excerpt">${escapeHtml(copy||'(sin copy)')}</div>
       ${f['Hashtags']?`<div style="font-size:11px;color:var(--accent);margin-top:5px">${escapeHtml(f['Hashtags'])}</div>`:''}
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${btns[0]||''}<details class="op-post-actions"><summary>Más acciones</summary><div>${btns.slice(1).join('')}</div></details></div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${btns[0]||''}<details class="op-post-actions" ${document.getElementById('tab-redes')?.dataset.opView==='expert'?'open':''}><summary>Más acciones</summary><div>${btns.slice(1).join('')}</div></details></div>
       </div>
     </div>`;
   }).join('');

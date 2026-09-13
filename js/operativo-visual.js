@@ -1,7 +1,7 @@
 /* Presentación operativa: usa registros existentes, sin llamadas IA ni escrituras CRM. */
 (function(global){
   'use strict';
-  const views=['overview','pedidos','cotizaciones','finanzas'];
+  const views=['overview','pedidos','cotizaciones','finanzas','clientes','maquinas','web','calendario','redes','reporte','equipo','newsletter'];
   const closed=['Despachado','Completado','Cancelado'];
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
   const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null};
@@ -23,6 +23,10 @@
   function mode(page,value){
     const el=$('tab-'+page);if(!el)return;
     value=value==='expert'?'expert':'simple';el.dataset.opView=value;
+    el.querySelectorAll('.op-revealed').forEach(n=>n.classList.remove('op-revealed'));
+    el.querySelectorAll('.op-detail-close').forEach(n=>n.remove());
+    el.querySelectorAll('details.op-disclosure,details.op-telemetry,details.op-post-actions').forEach(n=>{n.open=value==='expert';});
+    if(page==='pedidos'&&$('btnVistaTabla'))$('btnVistaTabla').textContent=value==='simple'?'Tarjetas':'Tabla';
     el.querySelectorAll('[data-op="mode"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.arg===page+':'+value)));
     try{localStorage.setItem('op_view_'+page,value);}catch(e){}
     if(page==='finanzas'&&value==='expert'&&typeof finDrawChart==='function')requestAnimationFrame(()=>finDrawChart());
@@ -33,6 +37,15 @@
       el.dataset.opReady='1';header.insertAdjacentHTML('beforeend',`<div class="op-switch" aria-label="Presentación de ${esc(page)}">${button('Simple','mode',page+':simple')}${button('Experto','mode',page+':expert')}</div>`);
       let value='simple';try{value=localStorage.getItem('op_view_'+page)||value;}catch(e){}mode(page,value);
     });
+  }
+  // Despliega la acción solicitada sin convertirla en una preferencia permanente.
+  function reveal(id){
+    const node=$(id),panel=node?.closest('.tab-panel');if(!node||!panel)return;
+    let top=node;while(top.parentElement&&top.parentElement!==panel&&!top.parentElement.id.startsWith('fin-panel-'))top=top.parentElement;
+    top.classList.add('op-revealed');
+    if(!top.id)top.id='opDetail-'+id;
+    if(!top.previousElementSibling?.classList.contains('op-detail-close'))top.insertAdjacentHTML('beforebegin',button('Cerrar detalle','close-detail',top.id,'op-detail-close op-simple'));
+    node.scrollIntoView({block:'center'});
   }
   function payment(p){
     const f=p.fields||{},total=Number(f['Monto total (CLP)']);
@@ -68,7 +81,7 @@
     const title=f['Alias / Título']||cot?.fields?.['Alias / Título']||f['N° Pedido']||'Pedido';
     const next=e==='Listo para despacho'&&f['Resultado QA']!=='QA aprobado'?'Revisar control de calidad':e==='Confirmado'?'Preparar producción':e==='En producción'?'Revisar avance y entrega':e==='Despachado'?'Revisar entrega y pago':e==='Cancelado'?'Pedido cancelado':'Consultar detalle';
     return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${pill(late?'Entrega atrasada':e,late?'danger':'neutral')}</header>
-      <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?dateText(f['Fecha entrega']):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
+      <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
       <div class="op-payment"><b>Pago</b> ${pill(pay.label,pay.tone)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
       ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span>${detail?'':button('Ver pedido','order',p.id,'op-primary')}</footer></article>`;
   }
@@ -167,21 +180,22 @@
     const b=e.target.closest('[data-op]');if(!b)return;
     const a=b.dataset.op,arg=b.dataset.arg||'';
     if(a==='mode'){const [page,value]=arg.split(':');mode(page,value);return;}
+    if(a==='close-detail'){const n=$(arg);n?.classList.remove('op-revealed');b.remove();return;}
     if(a==='ped-filter'){renderPedidos(arg);return;}
     if(a==='cot-filter'){selectCot(arg);return;}
     if(a==='aging'){ui.aging=arg;ui.limit=24;collections();return;}
     if(a==='order'||a==='quote'){openRecord(a,arg);return;}
     if(a==='close-drawer'){$('opDrawer')?.close();return;}
-    if(a==='today-orders'){if(!allowed('pedidos'))return;switchTab('pedidos');mode('pedidos','simple');renderPedidos(arg==='soon'?'proximos':arg);return;}
+    if(a==='today-orders'){if(!allowed('pedidos'))return;switchTab('pedidos');renderPedidos(arg==='soon'?'proximos':arg);return;}
     if(a==='today-quotes'){if(!allowed('cotizaciones'))return;switchTab('cotizaciones');selectCot(arg);return;}
     if(a==='today-aging'){ui.aging=arg;goFinance('cobrar');return;}
-    if(a==='all-actions'){mode('overview','expert');$('accionesHoyCard')?.scrollIntoView({block:'start',behavior:'smooth'});return;}
+    if(a==='all-actions'){reveal('accionesHoyCard');return;}
     if(a==='more-orders'){ui.limit+=24;renderPedidos();return;}
     if(a==='more-quotes'){ui.limit+=24;renderCotizaciones();return;}
     if(a==='more-aging'){ui.limit+=24;collections();return;}
     if(a==='finance-tab'){goFinance(arg);return;}
-    if(a==='payments'){goFinance('cobrar');mode('finanzas','expert');$('finFlujoCaja')?.scrollIntoView({block:'center'});return;}
-    if(a==='collection-detail'){mode('finanzas','expert');$('finCobranzaActions')?.scrollIntoView({block:'center'});return;}
+    if(a==='payments'){goFinance('cobrar');reveal('finFlujoCaja');return;}
+    if(a==='collection-detail'){reveal('finCobranzaActions');return;}
     if(a==='client'){if(!allowed('clientes'))return;openClienteDetalle(arg);return;}
     if(a==='client-tab'){if(!allowed('clientes'))return;cdTab(arg);return;}
     $('opDrawer')?.close();
@@ -189,11 +203,11 @@
     if(a==='edit-quote')openEditCot(arg);
     if(a==='qa'){const p=own(state.pedidos).find(p=>p.id===arg);if(p)openQAModal(arg,p.fields['N° Pedido']||'Pedido');}
     if(a==='ficha')openFichaModal(arg);
-    if(a==='order-payments'){switchTab('pedidos');mode('pedidos','expert');setPedidosView('tabla');const p=own(state.pedidos).find(p=>p.id===arg);const query=p?.fields['N° Pedido']||'';if($('pedidosSearch'))$('pedidosSearch').value=query;searchPedidos(query);renderPedidos(p?.fields['Estado pedido']==='Completado'?'Completado':'all');const row=document.querySelector(`#pedidosTableBody tr[data-id="${CSS.escape(arg)}"]`);row?.scrollIntoView({block:'center'});}
+    if(a==='order-payments'){switchTab('pedidos');setPedidosView('tabla');reveal('pedidosTableWrap');const p=own(state.pedidos).find(p=>p.id===arg);const query=p?.fields['N° Pedido']||'';if($('pedidosSearch'))$('pedidosSearch').value=query;searchPedidos(query);renderPedidos(p?.fields['Estado pedido']==='Completado'?'Completado':'all');const row=document.querySelector(`#pedidosTableBody tr[data-id="${CSS.escape(arg)}"]`);row?.scrollIntoView({block:'center'});}
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,quoteInfo,agingMatch,day,until,openRecord};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,quoteInfo,agingMatch,day,until,openRecord};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
