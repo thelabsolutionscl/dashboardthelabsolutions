@@ -93,3 +93,18 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 #tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed) :is(th,td):nth-child(5),
 #tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed) :is(th,td):nth-child(6){display:none}
 [data-ops]:focus-visible,.op-button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* Fixed menus and dialogs must share the viewport stacking context with navigation. */
+.main{z-index:auto}
+.modal-overlay{padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;align-items:safe center}
+.modal-overlay>.modal-card{flex-shrink:0;max-height:calc(100dvh - 24px);overscroll-behavior:contain}
+#clienteDetalleModal{padding:0;align-items:flex-start;overflow:hidden}
+#clienteDetalleModal>.modal-card{width:min(760px,100vw);height:100dvh;max-height:100dvh;max-width:100vw!important;margin:0;flex-shrink:0;overscroll-behavior:contain}
+#clienteDetalleModal>.modal-card>div:first-child{position:sticky;top:-24px;z-index:3;background:var(--surface);padding-top:12px;padding-bottom:12px}
+#clienteDetalleModal>.modal-card>div:last-child{position:sticky;bottom:-24px;background:var(--surface);padding:12px 0;z-index:3;flex-wrap:wrap}
+@media(max-width:760px){
+ #clienteDetalleModal>.modal-card{width:100vw!important;max-width:100vw!important;border-radius:0;padding:16px}
+ #clienteDetalleModal>.modal-card>div:first-child{top:-16px}
+ #clienteDetalleModal>.modal-card>div:last-child{bottom:-16px;position:static}
+ #opClient .op-metrics{grid-template-columns:1fr}
+}
