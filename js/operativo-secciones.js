@@ -5,10 +5,13 @@
   const esc=v=>escapeHtml(String(v??''));
   const permitted=page=>typeof AUTH!=='undefined'&&typeof RBAC!=='undefined'&&(RBAC.tabs[AUTH.getUser()?.role]||[]).includes(page);
   const cash=v=>v==null||v===''||!Number.isFinite(Number(v))?'Sin dato':formatCLP(Number(v));
-  let clientRows=[],clientLimit=24;
+  let clientRows=[],clientLimit=24,clientsInitialized=false;
   const action=(label,type,id)=>`<button type="button" class="op-button op-primary" data-ops="${type}" data-id="${esc(id||'')}">${esc(label)}</button>`;
   function fold(nodes,label){
-    nodes=nodes.filter(Boolean);if(!nodes.length||nodes[0].closest('details.op-disclosure'))return;
+    nodes=[...new Set(nodes.filter(Boolean))];if(!nodes.length||nodes[0].closest('details.op-disclosure'))return;
+    // Un grupo nunca debe trasladar contenido entre paneles o contenedores.
+    const parent=nodes[0].parentElement;
+    if(nodes.some(n=>n.parentElement!==parent)){nodes.forEach(n=>fold([n],label));return;}
     const box=document.createElement('details');box.className='op-disclosure';
     const summary=document.createElement('summary');summary.textContent=label;box.appendChild(summary);
     nodes[0].before(box);nodes.forEach(n=>box.appendChild(n));
@@ -73,32 +76,52 @@
   }
   function clients(rows){
     if(!permitted('clientes'))return;
-    if(rows!==undefined){clientRows=rows;clientLimit=24;}
-    else if(!clientRows.length&&typeof state!=='undefined'&&Array.isArray(state.clientes))clientRows=state.clientes;
+    if(rows!==undefined){clientRows=Array.isArray(rows)?rows:[];clientLimit=24;clientsInitialized=true;}
+    else if(!clientsInitialized&&typeof state!=='undefined'&&Array.isArray(state.clientes)){clientRows=state.clientes;clientsInitialized=true;}
     const el=$('opClients');if(!el)return;
     const visible=typeof isVendorMode==='function'&&isVendorMode()?clientRows.filter(vendorOwnsRecord):clientRows;
     const index=new Map();
     (state.cotizaciones||[]).forEach(q=>{
       if(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(q))return;
-      (Array.isArray(q.fields.Cliente)?q.fields.Cliente:[]).forEach(id=>{const n=index.get(id)||{sent:0,pending:0};if(q.fields['Estado cotización']==='Enviada')n.sent++;if(q.fields['Estado cotización']==='Solicitada')n.pending++;index.set(id,n);});
+      (Array.isArray(q.fields.Cliente)?q.fields.Cliente:[]).forEach(id=>{const n=index.get(id)||{sent:0,pending:0,open:0,purchases:0};if(q.fields['Estado cotización']==='Enviada')n.sent++;if(q.fields['Estado cotización']==='Solicitada')n.pending++;if(['Solicitada','Enviada','Negociación'].includes(q.fields['Estado cotización']))n.open++;index.set(id,n);});
+    });
+    (state.pedidos||[]).forEach(p=>{
+      if(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(p))return;
+      if(!['Despachado','Completado'].includes(p.fields?.['Estado pedido']))return;
+      (Array.isArray(p.fields.Cliente)?p.fields.Cliente:[]).forEach(id=>{const n=index.get(id)||{sent:0,pending:0,open:0,purchases:0};n.purchases++;index.set(id,n);});
     });
     const ranked=visible.map(c=>({c,info:clientInfo(c,index)})).sort((a,b)=>a.info.rank-b.info.rank);
     el.innerHTML=`<div class="op-section-heading"><div><h2>Próximas gestiones</h2><p>${ranked.length} clientes en la selección · prioridades según registros del CRM.</p></div></div><div class="op-records">${ranked.slice(0,clientLimit).map(({c,info})=>{
-      const f=c.fields||{};return `<article class="op-record"><header><div><h3>${esc(f.Empresa||f.Contacto||'Sin nombre')}</h3><p>${esc(f.Contacto||'Contacto sin registrar')}</p></div><span class="op-pill">${esc(f['Etapa venta']||'Sin etapa')}</span></header><p class="op-caption">${esc(info.reason)}</p><footer><span><small>Siguiente paso</small>${esc(info.next)}</span>${action('Ver cliente','client',c.id)}</footer></article>`;
+      const f=c.fields||{},activity=typeof _cliUltInteraccion==='function'?_cliUltInteraccion(c):null;
+      const last=activity&&Number.isFinite(activity.ts)?new Date(activity.ts).toLocaleDateString('es-CL'):'Sin registro';
+      const activityLabel=activity?.src==='ingreso'?'Ingreso al CRM':'Última cotización o pedido';
+      const count=index.get(c.id)||{sent:0,pending:0,open:0,purchases:0};
+      return `<article class="op-record"><header><div><h3>${esc(f.Empresa||f.Contacto||'Sin nombre')}</h3><p>${esc(f.Contacto||'Contacto sin registrar')}</p></div><span class="op-pill">${esc(f['Etapa venta']||'Sin etapa')}</span></header><p class="op-caption">${esc(info.reason)}</p><div class="op-facts"><div><span>${esc(activityLabel)}</span><b>${esc(last)}</b><small>${activity&&Number.isFinite(activity.dias)?esc(activity.dias===0?'Hoy':'Hace '+activity.dias+' días'):'Sin actividad registrada'}</small></div><div><span>Actividad comercial</span><b>${count.open} cotizaciones abiertas</b><small>${count.purchases} pedidos despachados o completados</small></div></div><footer><span><small>Siguiente paso</small>${esc(info.next)}</span>${action('Ver cliente','client',c.id)}</footer></article>`;
     }).join('')||'<p class="op-empty">No hay clientes en esta selección. Revisa la búsqueda y los filtros.</p>'}</div>${ranked.length>clientLimit?action('Ver más clientes','more-clients'):''}`;
   }
   function reportSummary(raw){
     const summary=typeof _kaiSimpleSummary==='function'?_kaiSimpleSummary(raw):'Consulta las conclusiones del reporte.';
-    const actions=typeof _kaiSimpleActions==='function'?_kaiSimpleActions(raw):[];
+    const actions=typeof _kaiSimpleActions==='function'?_kaiSimpleActions(raw).slice(0,3):[];
     return `<p class="op-caption">${esc(summary)}</p>${actions.length?`<h3>Próximas acciones</h3><ol>${actions.map(a=>`<li>${esc(a)}</li>`).join('')}</ol>`:''}<details class="op-disclosure"><summary>Leer informe completo</summary>${formatCeoReport(raw)}</details>`;
+  }
+  function reportDelta(current,previous,key,kind){
+    const read=v=>v==null||v===''||!Number.isFinite(Number(v))?null:Number(v);
+    let a=read(current?.[key]),b=read(previous?.[key]);
+    if(a===null||b===null)return 'Sin comparación disponible';
+    if(kind==='margin'){a=a<=1?a*100:a;b=b<=1?b*100:b;}
+    const delta=a-b;
+    if(delta===0)return 'Sin cambio respecto al reporte anterior';
+    const amount=kind==='cash'?cash(Math.abs(delta)):Math.abs(delta).toLocaleString('es-CL',{maximumFractionDigits:1});
+    return (delta>0?'+':'−')+amount+(kind==='margin'?' puntos porcentuales':'')+' vs. reporte anterior';
   }
   function reports(){
     if(!permitted('reporte'))return;
     const el=$('opReports');if(!el)return;
     const rows=[...(state.reportes||[])].sort((a,b)=>String(b.createdTime||'').localeCompare(String(a.createdTime||''))),r=rows[0];
     if(!r){el.innerHTML='<p class="op-empty">Aún no hay reportes. Genera el primero para revisar indicadores y conclusiones.</p>';return;}
-    const f=r.fields||{},mp=f['Margen promedio semana (%)'];
-    el.innerHTML=`<div class="op-section-heading"><div><span class="op-eyebrow">ÚLTIMO REPORTE REGISTRADO</span><h2>${esc(f.Semana||'Semana sin registrar')}</h2><p>${esc(f['Estado reporte']||'Estado sin registrar')}</p></div></div><div class="op-metrics"><div class="op-metric"><span>Revenue neto</span><strong>${esc(cash(f['Revenue semana (CLP)']))}</strong></div><div class="op-metric"><span>Pedidos despachados</span><strong>${esc(f['Pedidos despachados']??'Sin dato')}</strong></div><div class="op-metric"><span>Margen semanal</span><strong>${mp==null?'Sin dato':esc((Number(mp)<=1?Number(mp)*100:Number(mp)).toFixed(0)+'%')}</strong></div></div>${f['Resumen ejecutivo']?reportSummary(f['Resumen ejecutivo']):'<p class="op-caption">Este reporte no tiene conclusiones registradas.</p>'}`;
+    const f=r.fields||{},mp=f['Margen promedio semana (%)'],prev=rows[1]?.fields;
+    const margin=mp==null||mp===''||!Number.isFinite(Number(mp))?'Sin dato':(Number(mp)<=1?Number(mp)*100:Number(mp)).toFixed(0)+'%';
+    el.innerHTML=`<div class="op-section-heading"><div><span class="op-eyebrow">ÚLTIMO REPORTE REGISTRADO</span><h2>${esc(f.Semana||'Semana sin registrar')}</h2><p>${esc(f['Estado reporte']||'Estado sin registrar')}</p></div></div><div class="op-metrics"><div class="op-metric"><span>Revenue neto</span><strong>${esc(cash(f['Revenue semana (CLP)']))}</strong><small>${esc(reportDelta(f,prev,'Revenue semana (CLP)','cash'))}</small></div><div class="op-metric"><span>Pedidos despachados</span><strong>${esc(f['Pedidos despachados']??'Sin dato')}</strong><small>${esc(reportDelta(f,prev,'Pedidos despachados','count'))}</small></div><div class="op-metric"><span>Margen semanal</span><strong>${esc(margin)}</strong><small>${esc(reportDelta(f,prev,'Margen promedio semana (%)','margin'))}</small></div></div>${f['Resumen ejecutivo']?reportSummary(f['Resumen ejecutivo']):'<p class="op-caption">Este reporte no tiene conclusiones registradas.</p>'}`;
   }
   document.addEventListener('click',e=>{
     const b=e.target.closest('[data-ops]');if(!b)return;
