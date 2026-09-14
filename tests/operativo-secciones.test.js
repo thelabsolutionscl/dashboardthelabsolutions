@@ -120,3 +120,20 @@ test('Ads sigue mostrando la proyección si el almacenamiento no está disponibl
   const {ctx,op,node}=setup();ctx.localStorage.getItem=()=>{throw Error('Storage blocked');};
   op.ads({gasto:10000},7);assert.match(node('opAds').innerHTML,/Cierre mensual estimado/);
 });
+
+test('administrar pagos vuelve al formato anterior al cerrar el detalle',()=>{
+  const {ctx,op,node,click,writes}=setup();
+  ctx.state.pedidos=[rec('p',{'N° Pedido':'P-1','Estado pedido':'Confirmado'})];
+  ctx.switchTab=()=>{};ctx.searchPedidos=()=>{};ctx.renderPedidos=()=>{};
+  ctx.CSS={escape:s=>s};ctx.document.querySelector=()=>null;node('opDrawer').close=()=>{};
+  const panel=node('tab-pedidos'),table=node('pedidosTableWrap');
+  table.parentElement=panel;table.closest=()=>panel;
+  op.mode('pedidos','simple');ctx.setPedidosView('tarjetas');
+  const before=writes.length;
+  click('order-payments','p');
+  assert.equal(panel.dataset.opLayout,'tabla');assert.equal(panel.dataset.opView,'simple');
+  assert.equal(writes.length,before);
+  click('close-detail','pedidosTableWrap');
+  assert.equal(panel.dataset.opLayout,'tarjetas');assert.equal(panel.dataset.opView,'simple');
+  assert.equal(writes.length,before);
+});

@@ -48,7 +48,9 @@
     const node=$(id),saved=detailState.get(id);
     node?.classList.remove('op-revealed');
     node?.querySelectorAll('.op-revealed').forEach(n=>n.classList.remove('op-revealed'));
-    if(saved){saved.opened.forEach(n=>{n.open=false;});detailState.delete(id);if(restoreFocus)saved.trigger?.focus?.();}
+    if(saved){saved.opened.forEach(n=>{n.open=false;});detailState.delete(id);
+      if(saved.layout&&$('tab-pedidos')?.dataset.opLayout==='tabla'&&typeof setPedidosView==='function')setPedidosView(saved.layout,{persist:false});
+      if(restoreFocus)saved.trigger?.focus?.();}
     const close=node?.previousElementSibling;if(close?.classList.contains('op-detail-close'))close.remove();
   }
   function reveal(id){
@@ -222,7 +224,7 @@
     if(a==='edit-quote')openEditCot(arg);
     if(a==='qa'){const p=own(state.pedidos).find(p=>p.id===arg);if(p)openQAModal(arg,p.fields['N° Pedido']||'Pedido');}
     if(a==='ficha')openFichaModal(arg);
-    if(a==='order-payments'){switchTab('pedidos');setPedidosView('tabla',{persist:false});reveal('pedidosTableWrap');const p=own(state.pedidos).find(p=>p.id===arg);const query=p?.fields['N° Pedido']||'';if($('pedidosSearch'))$('pedidosSearch').value=query;searchPedidos(query);renderPedidos(p?.fields['Estado pedido']==='Completado'?'Completado':'all');const row=document.querySelector(`#pedidosTableBody tr[data-id="${CSS.escape(arg)}"]`);row?.scrollIntoView({block:'center'});}
+    if(a==='order-payments'){const layout=$('tab-pedidos')?.dataset.opLayout;switchTab('pedidos');setPedidosView('tabla',{persist:false});reveal('pedidosTableWrap');const saved=detailState.get('pedidosTableWrap');if(saved){saved.layout=layout;saved.trigger=ui.returnFocus;}const p=own(state.pedidos).find(p=>p.id===arg);const query=p?.fields['N° Pedido']||'';if($('pedidosSearch'))$('pedidosSearch').value=query;searchPedidos(query);renderPedidos(p?.fields['Estado pedido']==='Completado'?'Completado':'all');const row=document.querySelector(`#pedidosTableBody tr[data-id="${CSS.escape(arg)}"]`);row?.scrollIntoView({block:'center'});}
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
