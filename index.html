@@ -945,13 +945,14 @@
     <input id="pedidosSearch" type="search" placeholder="Buscar N° pedido o cliente…" oninput="searchPedidos(this.value)" aria-label="Buscar pedidos" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:6px 11px;min-width:210px;outline:none">
     <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')">⬇ CSV</button>
     <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px">
+      <button id="btnVistaTarjetas" class="btn btn-ghost btn-sm" onclick="setPedidosView('tarjetas')" style="padding:4px 12px;font-size:10px">Tarjetas</button>
       <button id="btnVistaTabla" class="btn btn-ghost btn-sm active-filter" onclick="setPedidosView('tabla')" style="padding:4px 12px;font-size:10px">Tabla</button>
       <button id="btnVistaKanban" class="btn btn-ghost btn-sm" onclick="setPedidosView('kanban')" style="padding:4px 12px;font-size:10px">Kanban</button>
       <button id="btnVistaCal" class="btn btn-ghost btn-sm" onclick="setPedidosView('calendario')" style="padding:4px 12px;font-size:10px">Calendario</button>
       <button id="btnVistaPlan" class="btn btn-ghost btn-sm" onclick="setPedidosView('planificacion')" style="padding:4px 12px;font-size:10px">Planificación</button>
     </div>
   </div>
-  <div id="opOrders" class="op-records op-simple"></div><div id="opOrderMore" class="op-simple op-more"></div>
+  <div id="opOrders" class="op-records"></div><div id="opOrderMore" class="op-more"></div>
   <div id="pedidosPlanificacion" style="display:none"></div>
   <div id="pedidosTableWrap" class="card"><div class="table-wrap sticky-head">
     <table><thead><tr>
@@ -15315,8 +15316,12 @@ document.addEventListener('visibilitychange',()=>{
 
 // ── KANBAN — actualizar setPedidosView con calendario ─────────────────
 // (reemplaza la función anterior con soporte de 3 vistas)
-function setPedidosView(mode){
+function setPedidosView(mode,options={}){
+  mode=['tarjetas','tabla','kanban','calendario','planificacion'].includes(mode)?mode:'tarjetas';
   document.getElementById('tab-pedidos').dataset.opLayout=mode;
+  if(options.persist!==false){try{localStorage.setItem('op_layout_pedidos',mode);}catch(e){}}
+  const cardsButton=document.getElementById('btnVistaTarjetas');if(cardsButton)cardsButton.classList.toggle('active-filter',mode==='tarjetas');
+  document.getElementById('tab-pedidos').querySelectorAll('[onclick^="setPedidosView("]').forEach(b=>b.setAttribute('aria-pressed',String(b.getAttribute('onclick')==="setPedidosView('"+mode+"')")));
   document.getElementById('pedidosTableWrap').style.display=mode==='tabla'?'':'none';
   document.getElementById('pedidosKanban').style.display=mode==='kanban'?'':'none';
   document.getElementById('pedidosCalendario').style.display=mode==='calendario'?'':'none';

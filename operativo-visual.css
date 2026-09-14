@@ -60,7 +60,6 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 #tab-overview[data-op-view=simple]>.ov-zone:not(.op-revealed),#tab-overview[data-op-view=simple]>#ovSecCharts{display:none!important}
 [data-op-view=expert] .op-simple{display:none!important}
 #tab-cotizaciones[data-op-view=simple] #opQuoteTable,#tab-cotizaciones[data-op-view=simple] #cotAnalytics,#tab-cotizaciones[data-op-view=simple] #perdidasCard{display:none!important}
-#tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed){display:none!important}
 #tab-pedidos[data-op-view=simple] #pedidosBulkBar{display:none!important}
 #tab-finanzas[data-op-view=simple] #fin-panel-resumen>:not(#opFinance):not(.op-revealed):not(.op-detail-close),#tab-finanzas[data-op-view=simple] #fin-panel-cobrar>:not(#opCollections):not(.op-revealed):not(.op-detail-close){display:none!important}
 #tab-pedidos .section-desc,#tab-cotizaciones .section-desc,#tab-finanzas .section-desc{max-width:740px;font-size:13px;line-height:1.6}
@@ -69,8 +68,8 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 @media(prefers-reduced-motion:reduce){.op-metric,.op-priority{transition:none}}
 
 /* El formato (tarjetas / kanban / calendario) es independiente del detalle. */
-#tab-pedidos[data-op-layout]:not([data-op-layout=tabla]) #opOrders,
-#tab-pedidos[data-op-layout]:not([data-op-layout=tabla]) #opOrderMore{display:none!important}
+#tab-pedidos:not([data-op-layout=tarjetas]) #opOrders,
+#tab-pedidos:not([data-op-layout=tarjetas]) #opOrderMore{display:none!important}
 .op-disclosure{margin:0 0 16px;border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0}
 .op-disclosure>summary{font-size:14px;color:var(--text2);cursor:pointer;padding:4px;line-height:1.5}
 .op-disclosure>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
@@ -89,3 +88,8 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 #opReports li{font-size:14px;line-height:1.6;margin:8px 0}
 #tab-reporte[data-op-view=simple] #opReports{grid-column:1/-1}
 [data-op-view=expert] .op-telemetry>summary,[data-op-view=expert] .op-post-actions>summary{display:none}
+
+/* El selector de formato conserva su significado en ambos niveles de detalle. */
+#tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed) :is(th,td):nth-child(5),
+#tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed) :is(th,td):nth-child(6){display:none}
+[data-ops]:focus-visible,.op-button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
