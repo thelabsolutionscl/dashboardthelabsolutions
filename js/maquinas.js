@@ -551,10 +551,10 @@ function fmtPrinterSeen(ts){
 function printerStateMeta(state){
   return({
     connecting:{label:'Conectando…',color:'#38bdf8',bg:'rgba(56,189,248,0.12)'},
-    printing:{label:'Imprimiendo',color:'#00d4aa',bg:'rgba(0,212,170,0.15)'},
+    printing:{label:'Imprimiendo',color:'#fb923c',bg:'rgba(251,146,60,0.15)'},
     paused:{label:'Pausado',color:'#ffaa00',bg:'rgba(255,170,0,0.15)'},
     error:{label:'Error',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
-    complete:{label:'Impresión finalizada',color:'#a78bfa',bg:'rgba(167,139,250,0.15)'},
+    complete:{label:'Impresión finalizada',color:'#34d399',bg:'rgba(52,211,153,0.15)'},
     cancelled:{label:'Impresión cancelada',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
     standby:{label:'En línea · libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},
     idle:{label:'En línea · libre',color:'var(--accent3)',bg:'rgba(0,212,170,0.08)'},

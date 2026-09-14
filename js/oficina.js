@@ -1337,7 +1337,7 @@ function _ofShade(hex,f){
 // Paleta única de estado (avatares 3D, dona y leyendas — coherencia total).
 // 'of-active' es AZUL para distinguirse de 'of-work' (antes #00d4cc vs #00d4aa eran
 // indistinguibles en leyendas/dona/chips, también para daltónicos — B-U6).
-const _OF_STATUS={'of-work':'#00d4aa','of-active':'#4da3ff','of-error':'#ff4444','of-off':'#7c8590'};
+const _OF_STATUS={'of-work':'#fb923c','of-active':'#4da3ff','of-error':'#ff4444','of-off':'#7c8590'};
 // Vocabulario ÚNICO de estados para leyendas/chips/dona/alertas (B-C6). Las tarjetas pueden
 // mostrar un sublabel más específico ("Atrasado", "Sin conexión"), pero el nombre del ESTADO
 // es siempre el mismo en toda la sección.

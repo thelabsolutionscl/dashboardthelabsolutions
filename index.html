@@ -40,6 +40,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=%%BUILD%%">
 <link rel="stylesheet" href="operativo-visual.css?v=%%BUILD%%">
+<link rel="stylesheet" href="semantic-colors.css?v=%%BUILD%%">
+<script src="js/semantic-colors.js?v=%%BUILD%%" defer></script>
 <script src="js/operativo-visual.js?v=%%BUILD%%" defer></script>
 <script src="js/operativo-secciones.js?v=%%BUILD%%" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
@@ -929,7 +931,7 @@
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('En producción',this)">En Prod.</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Listo para despacho',this)">Listos</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Despachado',this)">Despachados</button>
-    <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Completado',this)" title="Pedidos completados y archivados">📦 Archivo <span id="pedidosArchivoCount" class="badge badge-gray" style="margin-left:3px">0</span></button>
+    <button class="btn btn-ghost btn-sm" onclick="filterPedidos('Completado',this)" title="Pedidos completados y archivados">📦 Archivo <span id="pedidosArchivoCount" class="badge badge-green" style="margin-left:3px">0</span></button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('qa_pendiente',this)" style="border-color:rgba(255,170,0,0.3);color:var(--warn)" title="Listos para despacho sin QA aprobado">QA pendiente</button>
     <button class="btn btn-ghost btn-sm" onclick="filterPedidos('qa_rechazado',this)" style="border-color:rgba(255,68,68,0.3);color:var(--danger)" title="Pedidos con QA rechazado">QA rechazado</button>
     <div id="pedidosBulkBar" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
@@ -8613,7 +8615,7 @@ function setMargenPiso(){
 }
 function margenBadge(m){if(m===null) return '—';const piso=_margenPiso();const bajo=m<piso;return`<span class="badge ${bajo?'badge-red':m>=35?'badge-green':'badge-yellow'}"${bajo?` title="Bajo el piso de margen (${piso}%)"`:''}>${m.toFixed(0)}%${bajo?' ⚠':''}</span>`;}
 function resolveClienteName(f){if(!f) return '—';if(typeof f==='string') return f;if(Array.isArray(f)&&f.length>0) return(state.clientesById&&state.clientesById[f[0]])||'(cliente)';return '—';}
-function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-yellow','Confirmado':'badge-yellow','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Completado':'badge-gray','Listo para despacho':'badge-green','Pendiente':'badge-gray','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green','Cancelado':'badge-red','Cancelada':'badge-red','Anulada':'badge-red','Negociación':'badge-yellow','Contactado':'badge-yellow','Propuesta enviada':'badge-yellow','Cliente activo':'badge-green','Cliente inactivo':'badge-gray','Perdido':'badge-gray','Con deuda':'badge-yellow','Cobrada':'badge-green','Pagada':'badge-green','Pagado':'badge-green','Vencida':'badge-red','QA rechazado':'badge-red','QA pendiente':'badge-yellow'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
+function estadoBadge(e){const m={'Aprobada':'badge-green','Aprobado':'badge-green','Al día':'badge-green','Enviada':'badge-blue','Confirmado':'badge-blue','En producción':'badge-orange','Generado':'badge-purple','Rechazada':'badge-red','Rechazado':'badge-red','Bloqueado':'badge-red','Despachado':'badge-green','Completado':'badge-green','Listo para despacho':'badge-blue','Pendiente':'badge-yellow','Solicitada':'badge-yellow','Lead nuevo':'badge-yellow','QA aprobado':'badge-green','Cancelado':'badge-red','Cancelada':'badge-red','Anulada':'badge-red','Negociación':'badge-yellow','Contactado':'badge-yellow','Propuesta enviada':'badge-yellow','Cliente activo':'badge-green','Cliente inactivo':'badge-gray','Perdido':'badge-gray','Con deuda':'badge-yellow','Cobrada':'badge-green','Pagada':'badge-green','Pagado':'badge-green','Vencida':'badge-red','QA rechazado':'badge-red','QA pendiente':'badge-yellow'};return`<span class="badge ${m[e]||'badge-gray'}">${escapeHtml(e)}</span>`;}
 function formatCLP(v){if(!v) return '$0';return '$'+_NF_CL.format(Math.round(v));}
 function escapeHtml(s){if(s===null||s===undefined) return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function safeHref(v){if(!v)return '';const s=String(v).trim();return(/^https?:\/\//i.test(s)||/^mailto:/i.test(s)||/^tel:/i.test(s))?s.replace(/"/g,'&quot;').replace(/'/g,'&#39;'):'';}
@@ -9210,7 +9212,7 @@ function renderPipelineArea(){
   const todos=_basePed.filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));const activos=todos.filter(p=>p.fields['Estado pedido']!=='Despachado');
   document.getElementById('pedActivosBadge').textContent=activos.length;
   if(!todos.length){document.getElementById('pipelineArea').innerHTML='<div class="empty-state"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-pedidos"/></svg></div><div>Sin pedidos activos</div><button onclick="switchTab(\'cotizaciones\')" style="margin-top:10px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ver cotizaciones</button></div>';return;}
-  const stages=['Confirmado','En producción','Listo para despacho','Despachado'],colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
+  const stages=['Confirmado','En producción','Listo para despacho','Despachado'],colores={'Confirmado':'var(--semantic-info)','En producción':'var(--semantic-production)','Listo para despacho':'var(--semantic-info)','Despachado':'var(--semantic-success)'};
   const counts={};stages.forEach(s=>counts[s]=0);todos.forEach(p=>{const e=p.fields['Estado pedido']||'';if(counts[e]!==undefined) counts[e]++;});
   const resumen=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)">${stages.map(s=>`<div style="text-align:center;background:var(--surface2);border-radius:7px;padding:8px 4px;border:1px solid var(--border2)"><div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:${colores[s]}">${counts[s]}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;line-height:1.3">${s}</div></div>`).join('')}</div>`;
   const today=new Date();today.setHours(0,0,0,0);
@@ -10076,6 +10078,7 @@ function openClienteDetalle(id){
   if(_waPhone){_waBtn.style.display='';_waBtn.onclick=()=>openFollowupWA(_waPhone);}else{_waBtn.style.display='none';}
   document.getElementById('cdSalesIABtn').onclick=()=>{closeClienteDetalle();runSalesAgent(id);};
   document.getElementById('clienteDetalleModal').style.display='flex';
+  document.querySelector('#clienteDetalleModal > .modal-card').scrollTop=0;
   cdTab('datos');
 }
 // ── Facturas por cliente: Airtable + base Finanzas ────────────────────
@@ -15091,7 +15094,7 @@ let _tvTimer=null,_tvClock=null,_tvView=0;
 function _tvCard(t,sub,warn){return `<div style="background:var(--surface2);border:1px solid ${warn?'rgba(255,68,68,.5)':'var(--border)'};border-radius:10px;padding:12px 14px;margin-bottom:10px"><div style="font-size:20px;font-weight:700;color:${warn?'var(--danger)':'var(--text)'};line-height:1.2">${t}</div><div style="font-size:14px;color:var(--text3);margin-top:3px">${sub}</div></div>`;}
 function _tvViewPedidos(){
   const hoy=new Date();hoy.setHours(0,0,0,0);
-  const etapas=[['Confirmado','var(--accent)'],['En producción','var(--accent2)'],['Listo para despacho','var(--accent3)'],['Despachado','var(--accent4)']];
+  const etapas=[['Confirmado','var(--semantic-info)'],['En producción','var(--semantic-production)'],['Listo para despacho','var(--semantic-info)'],['Despachado','var(--semantic-success)']];
   const cols=etapas.map(([est,col])=>{
     let peds=state.pedidos.filter(p=>(p.fields['Estado pedido']||'')===est);
     if(est==='Despachado') peds=peds.filter(p=>{const d=p.fields['Fecha despacho']||p.fields['Fecha entrega'];return d&&new Date(d+'T00:00:00')>=new Date(Date.now()-7*864e5);});
@@ -15177,7 +15180,7 @@ window.tvStart=tvStart;window.tvStop=tvStop;
 function renderPedidosKanban(){
   const today=new Date();today.setHours(0,0,0,0);
   const stages=['Confirmado','En producción','Listo para despacho','Despachado'];
-  const colores={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
+  const colores={'Confirmado':'var(--semantic-info)','En producción':'var(--semantic-production)','Listo para despacho':'var(--semantic-info)','Despachado':'var(--semantic-success)'};
   // La vista Tabla filtra por vendedor; Kanban no lo hacía, así que cambiar de
   // vista dentro de la misma pestaña mostraba los pedidos (y montos) de todos.
   const activos=_pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));
@@ -15346,7 +15349,7 @@ function renderPedidosPlanificacion(){
   const enProd=activos.filter(p=>p.fields['Estado pedido']==='En producción').length;
   const listos=activos.filter(p=>p.fields['Estado pedido']==='Listo para despacho').length;
   const estaSemana=activos.filter(p=>{const fe=p.fields['Fecha entrega'];if(!fe)return false;const d=new Date(fe+'T00:00:00'),diff=Math.floor((d-today)/86400000);return diff>=0&&diff<=7;}).length;
-  const colEstado={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)'};
+  const colEstado={'Confirmado':'var(--semantic-info)','En producción':'var(--semantic-production)','Listo para despacho':'var(--semantic-info)'};
   const fmtShort=d=>_DTF_DM.format(d);
   const equipoSet=new Set();
   activos.forEach(p=>{const eq=p.fields['Equipo asignado']||'';eq.split(',').map(x=>x.trim()).filter(Boolean).forEach(n=>equipoSet.add(n));});
@@ -15392,7 +15395,7 @@ function renderPedidosCalendario(){
   const today=new Date();today.setHours(0,0,0,0);
   const todayStr=fmtDate(today);
   const monthLabel=firstDay.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
-  const stageColors={'Confirmado':'var(--accent)','En producción':'var(--accent2)','Listo para despacho':'var(--accent3)','Despachado':'var(--accent4)'};
+  const stageColors={'Confirmado':'var(--semantic-info)','En producción':'var(--semantic-production)','Listo para despacho':'var(--semantic-info)','Despachado':'var(--semantic-success)'};
   // Agrupar pedidos por Fecha entrega del mes
   const byDate={};
   _pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||'')).forEach(p=>{
