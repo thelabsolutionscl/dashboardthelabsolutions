@@ -13,6 +13,7 @@
 //   GET  /authcheck                → 200 si el token es válido (para "Probar" en el dashboard)
 //   POST /restart                  → reinicia el bridge (sale; launchd lo levanta de nuevo)
 //   POST /recover/{IP}             → reinicia Moonraker en la impresora (SSH) — telemetría caída
+//   POST /recover-camera/{IP}      → reinicia el stack de cámara (SSH) y espera imagen
 //   GET  /sshcheck/{IP}            → ¿puede el bridge entrar por SSH a esa impresora?
 //   GET  /pubkey                   → llave pública del bridge (enrolar impresoras desde otro equipo)
 //   POST /update                   → git pull + reinicio (actualiza el bridge sin ir al iMac)
@@ -50,6 +51,7 @@ const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
 const REPO_DIR = path.join(__dirname, '..');
 const RECOVER_SSH_TIMEOUT_MS = 30000;   // la shell de la impresora es lenta por WiFi
 const RECOVER_WAIT_MS = 45000;          // Moonraker tarda ~15s en registrar sus endpoints
+const CAMERA_RECOVER_WAIT_MS = 65000;   // K2/go2rtc puede tardar ~20s por negociación WebRTC
 
 function loadToken() {
   if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN.trim();
@@ -175,6 +177,98 @@ function runRecoverSsh(ip) {
     });
   });
 }
+
+function cameraRecoverScript() {
+  return [
+    'INIT=/etc/init.d/S99camera',
+    'HELP=/mnt/UDISK/helper-script',
+    'if [ -x "$INIT" ]; then',
+    '  "$INIT" restart >/tmp/thelab-camera-recover.log 2>&1 || "$INIT" start >/tmp/thelab-camera-recover.log 2>&1 || true',
+    '  echo "servicio de cámara reiniciado: $INIT"',
+    '  exit 0',
+    'fi',
+    'if [ -f "$HELP/k2rtc.py" ] && [ -x "$HELP/go2rtc" ]; then',
+    '  for p in $(ps | grep "[k]2rtc.py" | awk "{print \\$1}"); do kill "$p" 2>/dev/null || true; done',
+    '  for p in $(ps | grep "[c]amera_watchdog.py" | awk "{print \\$1}"); do kill "$p" 2>/dev/null || true; done',
+    '  killall go2rtc 2>/dev/null || true',
+    '  start-stop-daemon -S -b -x /usr/bin/python3 -- "$HELP/k2rtc.py"',
+    '  sleep 2',
+    '  start-stop-daemon -S -b -x "$HELP/go2rtc" -- -config "$HELP/go2rtc.yaml"',
+    '  if [ -f "$HELP/camera_watchdog.py" ]; then start-stop-daemon -S -b -x /usr/bin/python3 -- "$HELP/camera_watchdog.py"; fi',
+    '  echo "stack K2 k2rtc/go2rtc reiniciado"',
+    '  exit 0',
+    'fi',
+    'if [ -x /usr/bin/mjpg_streamer ]; then',
+    '  killall mjpg_streamer 2>/dev/null || true',
+    '  if [ -d /usr/lib/mjpg-streamer ]; then',
+    '    LD_LIBRARY_PATH=/usr/lib/mjpg-streamer start-stop-daemon -S -b -x /usr/bin/mjpg_streamer -- -i "input_memfd.so -t 0" -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"',
+    '  else',
+    '    start-stop-daemon -S -b -x /usr/bin/mjpg_streamer -- -i "input_memfd.so -t 0" -o "output_http.so -w /usr/share/mjpg-streamer/www/ -p 8080"',
+    '  fi',
+    '  echo "mjpg_streamer reiniciado"',
+    '  exit 0',
+    'fi',
+    'echo "no se encontró S99camera, helper-script K2 ni mjpg_streamer"; exit 4',
+  ].join('\n');
+}
+function cameraRecoverSshCommand(ip) {
+  const base = recoverSshCommand(ip), args = base.args.slice();
+  args[args.length - 1] = cameraRecoverScript();
+  return { ...base, args };
+}
+function runCameraRecoverSsh(ip) {
+  return new Promise(resolve => {
+    const { cmd, args, env } = cameraRecoverSshCommand(ip);
+    execFile(cmd, args, { timeout: RECOVER_SSH_TIMEOUT_MS, env, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
+      const out=String(stdout||'').trim(), errOut=String(stderr||'').trim();
+      if (err && err.code === 'ENOENT') return resolve({ ok:false, code:'sin-ssh', out, error:'no se encontró '+cmd+' en el iMac' });
+      if (err) {
+        const detalle=errOut||out||err.message;
+        return resolve({ ok:false, code:err.killed?'timeout-ssh':'ssh-falló', out, error:/permission denied|publickey/i.test(detalle)
+          ? 'SSH rechazó la conexión — configura la llave del bridge en esta impresora' : detalle });
+      }
+      resolve({ ok:true, out });
+    });
+  });
+}
+function cameraProbe(ip,port,pathName,timeoutMs) {
+  return new Promise(resolve => {
+    const req=http.request({host:ip,port,path:pathName,method:'GET',agent:keepAliveAgent,timeout:timeoutMs},res=>{
+      const ct=String(res.headers['content-type']||'').toLowerCase();
+      const ok=(res.statusCode||500)<300&&(ct.includes('image/')||ct.includes('multipart/'));
+      res.resume();resolve(ok);
+    });
+    req.on('timeout',()=>{req.destroy();resolve(false);});
+    req.on('error',()=>resolve(false));
+    req.end();
+  });
+}
+async function cameraIsUp(ip) {
+  if (await cameraProbe(ip,1984,'/api/frame.jpeg?src=k2plus',25000)) return {ok:true,kind:'go2rtc',port:1984};
+  if (await cameraProbe(ip,8080,'/?action=snapshot',7000)) return {ok:true,kind:'mjpeg',port:8080};
+  return {ok:false};
+}
+async function waitCameraUp(ip,maxMs) {
+  const t0=Date.now();
+  while(Date.now()-t0<maxMs){
+    const s=await cameraIsUp(ip);if(s.ok)return s;
+    await _sleep(3000);
+  }
+  return {ok:false};
+}
+async function recoverCamera(ip) {
+  const t0=Date.now(),before=await cameraIsUp(ip);
+  if(before.ok)return {ok:true,camera:'up',kind:before.kind,steps:['La cámara ya entregaba imagen — no hizo falta reiniciarla']};
+  const r=await runCameraRecoverSsh(ip);
+  const steps=String(r.out||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  console.log(`[recover-camera] ${ip}: ${r.ok ? steps.join('; ') || 'sin salida' : 'ERROR '+r.error}`);
+  if(!r.ok)return {ok:false,code:r.code,error:r.error,steps};
+  const up=await waitCameraUp(ip,CAMERA_RECOVER_WAIT_MS);
+  steps.push(up.ok
+    ? `Cámara respondió por ${up.kind} tras ${Math.round((Date.now()-t0)/1000)}s`
+    : 'el stack se reinició pero no llegó una imagen — revisa S99camera/go2rtc/camera_watchdog');
+  return {ok:up.ok,camera:up.ok?'up':'down',kind:up.kind||'',steps};
+}
 async function waitMoonrakerUp(ip, maxMs) {
   const t0 = Date.now();
   while (Date.now() - t0 < maxMs) {
@@ -225,6 +319,7 @@ function updateBridge() {
   });
 }
 const _recovering = new Set();
+const _recoveringCamera = new Set();
 async function recoverPrinter(ip) {
   const t0 = Date.now();
   // Si contesta, no hay nada que reiniciar: pudo recuperarse sola entre que se
@@ -320,6 +415,26 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ ...r, restarting: !!r.ok }));
       if (r.ok) { console.log('Actualizado vía /update — saliendo (launchd lo levanta con el código nuevo).'); setTimeout(() => process.exit(0), 400); }
     });
+    return;
+  }
+
+  // Recuperar cámara integrada (K2/K2 Plus go2rtc o K1/Ender MJPEG).
+  const mCamRec = rawPath.match(/^\/recover-camera\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mCamRec) {
+    const ip=mCamRec[1];
+    if(req.method!=='POST'){jsonError(res,405,'usa POST');return;}
+    if(!isPrivateIp(ip)){jsonError(res,403,'solo IPs de red privada');return;}
+    if(!RECOVER_ENABLED){
+      res.writeHead(200,{'Content-Type':'application/json'});
+      res.end(JSON.stringify({ok:false,code:'desactivada',error:'recuperación desactivada en el bridge (BRIDGE_RECOVER=0)',steps:[]}));
+      return;
+    }
+    if(_recoveringCamera.has(ip)){jsonError(res,409,'ya hay una recuperación de cámara en curso para esa impresora');return;}
+    _recoveringCamera.add(ip);
+    recoverCamera(ip)
+      .then(r=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(r));})
+      .catch(e=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,code:'error-interno',error:e.message,steps:[]}));})
+      .finally(()=>_recoveringCamera.delete(ip));
     return;
   }
 
