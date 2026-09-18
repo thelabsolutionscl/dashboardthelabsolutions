@@ -1419,14 +1419,34 @@ function handlePrinterTransition(m,s,previous){
   }
   if(_activeView==='inteligencia')renderIntelligence();
 }
-function onLegacyQueueAdd(machineId,filename,secs,grams){
-  const exists=data().jobs.some(j=>!j.archived&&j.machineId===machineId&&j.gcodeFile===filename&&ACTIVE_JOB_STATES.includes(j.status));
-  if(exists)return;
-  data().jobs.push({id:uid('job'),name:String(filename||'Trabajo de slicer').replace(/\.(gcode|3mf)$/i,''),pedidoId:'',qty:1,unitsPerBed:1,cycles:1,
-    minutesPerCycle:Math.max(1,Math.round(num(secs,3600)/60)),material:'PLA',color:'',grams:Math.max(0,num(grams)),nozzle:'0.4',
-    machineId,spoolId:'',gcodeFile:filename||'',compatibleModels:[getMachine(machineId)?.modelo].filter(Boolean),status:'en_cola',priority:'normal',
-    createdAt:nowIso(),updatedAt:nowIso(),archived:false});
-  persist('Trabajo importado desde cola de laminado');
+function onLegacyQueueAdd(machineId,filename,secs,grams,meta={}){
+  meta=meta&&typeof meta==='object'?meta:{};
+  const existing=data().jobs.find(j=>!j.archived&&j.machineId===machineId&&j.gcodeFile===filename&&ACTIVE_JOB_STATES.includes(j.status));
+  const machine=getMachine(machineId),material=String(meta.material||existing?.material||'PLA'),nozzle=String(meta.nozzle||existing?.nozzle||'0.4');
+  const profileName=String(meta.profileName||'').trim();
+  const profile=profileName?latestProfiles().find(p=>p.name===profileName&&(!p.model||p.model===(meta.model||machine?.modelo))&&(!p.material||p.material===material)&&(!p.nozzle||String(p.nozzle)===nozzle)):null;
+  const patch={
+    name:String(meta.name||existing?.name||filename||'Trabajo de slicer').replace(/\.(gcode|3mf)$/i,''),machineId,
+    minutesPerCycle:Math.max(1,Math.round(num(meta.secs,secs||3600)/60)),material,color:String(meta.color||existing?.color||''),
+    grams:Math.max(0,num(meta.grams,grams)),nozzle,sizeX:Math.max(0,num(meta.sizeX)),sizeY:Math.max(0,num(meta.sizeY)),sizeZ:Math.max(0,num(meta.sizeZ)),
+    profileId:profile?.id||existing?.profileId||'',gcodeFile:filename||existing?.gcodeFile||'',
+    compatibleModels:[meta.model||machine?.modelo].filter(Boolean),slicerMeta:{source:meta.source||'slicer3d',params:meta.params||{},mesh:meta.mesh||{}},
+    updatedAt:nowIso()
+  };
+  if(existing){Object.assign(existing,patch);persist('Metadata de trabajo actualizada desde laminador');return existing;}
+  const job={id:uid('job'),pedidoId:'',qty:1,unitsPerBed:1,cycles:1,spoolId:'',status:'en_cola',priority:'normal',
+    createdAt:nowIso(),updatedAt:nowIso(),archived:false,...patch};
+  data().jobs.push(job);persist('Trabajo importado desde cola de laminado');return job;
+}
+function startUploadedSlicerJob(meta={}){
+  const machineId=String(meta.machineId||''),filename=String(meta.gcodeFile||meta.filename||'');
+  if(!machineId||!filename){toast('No se puede abrir preflight: falta impresora o archivo G-code','error');return false;}
+  const job=onLegacyQueueAdd(machineId,filename,meta.secs,meta.grams,meta);
+  if(!job)return false;
+  job.status='en_cola';job.queuedAt=job.queuedAt||nowIso();job.updatedAt=nowIso();
+  persist('G-code del laminador listo para preflight');
+  openPreflight(job.id);
+  return true;
 }
 
 function openQueueDb(){
@@ -1753,7 +1773,7 @@ const api={
   openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
   openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
-  handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
+  handlePrinterTransition,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
   _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState},
 };
 window.MachineOps=api;
@@ -1777,7 +1797,7 @@ if(typeof printerFirmwareRestart==='function'){
 }
 if(typeof _queueAdd==='function'){
   const baseQueueAdd=_queueAdd;
-  _queueAdd=function(id,gcode,filename,secs,grams){const r=baseQueueAdd(id,gcode,filename,secs,grams);api.onLegacyQueueAdd(id,filename,secs,grams);api.persistLegacyQueue(id);return r;};
+  _queueAdd=function(id,gcode,filename,secs,grams,meta={}){const r=baseQueueAdd(id,gcode,filename,secs,grams,meta);api.onLegacyQueueAdd(id,filename,secs,grams,meta);api.persistLegacyQueue(id);return r;};
 }
 if(typeof _queueRemove==='function'){
   const baseQueueRemove=_queueRemove;
