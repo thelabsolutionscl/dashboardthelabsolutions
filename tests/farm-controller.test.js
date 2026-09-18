@@ -25,6 +25,15 @@ test('tokens se separan en viewer operator admin',()=>{
   assert.equal(api.roleForToken('incorrecto'),'');
 });
 
+test('sesiones efímeras conservan el rol y evitan reutilizar el secreto largo en media/ws',()=>{
+  const session=api.issueSession('operator');
+  assert.ok(session.token&&session.token.length>=24);
+  assert.equal(api.roleForToken(session.token),'operator');
+  assert.ok(session.expiresAt>Date.now());
+  assert.match(source,/\/farm\/session/);
+  assert.match(source,/SESSION_TTL_MS/);
+});
+
 test('rutas destructivas exigen admin y lectura solo viewer',()=>{
   assert.equal(api.routeMinimumRole({method:'GET'},'/192.168.100.51/printer/info'),'viewer');
   assert.equal(api.routeMinimumRole({method:'POST'},'/192.168.100.51/printer/print/start'),'operator');
