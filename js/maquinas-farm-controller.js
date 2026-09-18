@@ -73,8 +73,9 @@ function durableGetPrinterIp(m){
 async function patchRegistryMachine(m,forcedIp){
   if(!m||!m.id)return null;
   const role=await authRole();if(role!=='admin')return null;
-  const fallback=forcedIp||(original.getIp?original.getIp(m):(m.ip||''));
-  if(!fallback)return null;
+  const forced=arguments.length>=2;
+  const fallback=forced?String(forcedIp||''):(original.getIp?original.getIp(m):(m.ip||''));
+  if(!forced&&!fallback)return null;
   const nozzle=localStorage.getItem('printer_nozzle_'+m.id)||m.nozzleInstalled||'';
   const body={id:m.id,ip:fallback,name:m.nombre||m.name||'',model:m.modelo||m.model||'',num:m.numG||m.num||'',nozzleInstalled:nozzle};
   const r=await fetch(url('/farm/registry'),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(6000)});
@@ -99,10 +100,8 @@ async function seedRegistry(){
 }
 async function updateRegistryAfterManualSave(id){
   const m=machines().find(x=>x.id===id);if(!m)return;
-  const ip=localStorage.getItem('printer_ip_'+id)||m.ip||'';
-  if(!ip)return;
-  // Reflejo inmediato para que polling/WebSocket usen la IP que el operador
-  // acaba de guardar, incluso antes de que termine el PATCH remoto.
+  const hasLocal=localStorage.getItem('printer_ip_'+id)!==null;
+  const ip=hasLocal?(localStorage.getItem('printer_ip_'+id)||''):(m.ip||'');
   const current=registryById[id]||{id};Object.assign(current,{ip,updatedAt:new Date().toISOString()});
   if(!registryById[id])registry.push(current);registryById[id]=current;
   try{await patchRegistryMachine(m,ip);}catch(e){console.warn('[FarmRegistry] manual update',e.message);}
