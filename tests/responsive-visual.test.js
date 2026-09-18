@@ -37,7 +37,7 @@ test('la búsqueda global se inicializa y tiene lanzador móvil',()=>{
   assert.match(FIN,/function bootGlobalSearch\(\)[\s\S]*?initGlobalSearch\(\);/);
   assert.match(FIN,/mobileGlobalSearchBtn/);
   assert.match(FIN,/classList\.add\('mobile-open'\)/);
-  assert.match(CSS,/#mobileGlobalSearchBtn\{display:none\}/);
+  assert.match(CSS,/#mobileGlobalSearchBtn\{display:none;?\}/);
   assert.match(CSS,/@media\(max-width:900px\)\{[\s\S]*?#mobileGlobalSearchBtn\{display:inline-flex[^}]*min-width:44px[^}]*min-height:44px/);
   assert.match(CSS,/@media\(max-width:900px\)\{[\s\S]*?\.global-search\.mobile-open\{[^}]*display:flex!important[^}]*position:fixed/);
   assert.match(FIN,/btn\.addEventListener\('click',e=>\{[\s\S]*?e\.stopPropagation\(\)/);
