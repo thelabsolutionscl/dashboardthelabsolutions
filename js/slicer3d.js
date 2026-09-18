@@ -596,9 +596,9 @@ Eliges parámetros de laminado óptimos según geometría de la pieza, material,
 REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). Si activas soportes (supports=true), pon SIEMPRE treeSupports=true por defecto (troncos de celosía con base ancha, estables y fáciles de retirar); usa treeSupports=false solo si el voladizo es una superficie plana grande y continua que necesita interfaz densa. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), cubic (3D resistente), concentric (sigue el contorno, bueno para flexibles/sellos), linear (rápido).
 COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético), "agudo" en esquinas, "cercano" minimiza viaje. outerWallLast=true imprime la pared exterior al final → mejor acabado. bridgeDetect=true para voladizos horizontales. elephantFoot (mm, 0-0.3): encoge la 1ª capa. xyCompensation (mm, -0.3 a 0.3): negativo agranda agujeros. arcFitting=false salvo que se indique (requiere [gcode_arcs] en Klipper).
 VELOCIDAD: outerSpeed (mm/s, 0=auto) baja la pared exterior para mejor acabado (60% de speed en piezas vistosas). infillSpeed (0=auto) sube el relleno. accel (mm/s², 0=no tocar) limita aceleración para reducir ringing en piezas finas. ADHESIÓN: skirt (líneas, ceba el filamento sin pegarse a la pieza), brim (pegado, para piezas altas o ABS), raft=true (base completa bajo la pieza, para superficies difíciles o ABS — encarece). DETALLE: gapFill=true rellena paredes finas sin huecos. fuzzySkin (mm, 0.1-0.3) da textura rugosa mate a la pared exterior. coasting (mm, 0.1-0.3) corta la extrusión antes del fin del perímetro para evitar el blob de costura.
-CALIDAD (estilo OrcaSlicer): minLayerTime (s, 5-12) ralentiza capas chicas para que enfríen → mejor en piezas pequeñas/torres. overhangSpeed (mm/s, 0=off) baja la velocidad de la pared exterior sobre voladizos. flowRatio (%, 95-105) ajusta extrusión. pressureAdvance (mm, 0=off; típico 0.02-0.05 en Klipper) reduce blobbing en esquinas — déjalo en 0 salvo que conozcas el valor de la impresora. wipeDist (mm, 0.5-1.5) limpia la boquilla al retraer → menos stringing. widthOuter/widthInfill (mm, 0=auto) anchos de línea por feature (outer un poco más fino = más nítido). seamMode también acepta "aleatorio" (costura dispersa).
+CALIDAD (estilo OrcaSlicer): minLayerTime (s, 5-12) ralentiza capas chicas para que enfríen → mejor en piezas pequeñas/torres. overhangSpeed (mm/s, 0=off) baja la velocidad de la pared exterior sobre voladizos. flowRatio (%, 95-105) ajusta extrusión. maxVolumetricFlow (mm³/s) limita físicamente el caudal: respeta el valor conservador del material y NO lo eleves por encima sin una calibración. Si la salud de malla dice REVISAR, adviértelo: no supongas que el volumen es fiable. pressureAdvance (mm, 0=off; típico 0.02-0.05 en Klipper) reduce blobbing en esquinas — déjalo en 0 salvo que conozcas el valor de la impresora. wipeDist (mm, 0.5-1.5) limpia la boquilla al retraer → menos stringing. widthOuter/widthInfill (mm, 0=auto) anchos de línea por feature (outer un poco más fino = más nítido). seamMode también acepta "aleatorio" (costura dispersa).
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|lightning|adaptive|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|lightning|adaptive|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"maxVolumetricFlow":12,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!(typeof hasClaudeAccess==='function'?hasClaudeAccess():getAnthropicKey())){showAnthropicModal(()=>analizarIA());return;}
@@ -633,9 +633,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
       supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,brimGap:0,ironingFlow:12,retractMinTravel:1,fuzzyAll:false,fuzzyPointDist:0.4,draftShield:false,
-      minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
+      minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,maxVolumetricFlow:mat.flow||0,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
-      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',seamScarf:false,scarfLen:5,accelOuter:0,accelInfill:0,jerk:0,bridgeFlow:100,
+      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',seamScarf:false,scarfLen:5,accelOuter:0,accelInfill:0,jerk:0,bridgeFlow:100,sequentialClearance:0,
       bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
       spiralize:false,monotonic:obj==='calidad',arachne:obj==='calidad',
       gapFill:obj!=='rapido',fuzzySkin:0,coasting:obj==='calidad'?0.2:0,
@@ -649,34 +649,40 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     renderParams();
   }
   function clampParams(p){
+    p=p||{};
     const noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
-    const mat=MATS[el('slMaterial').value]||{};
-    const vmax=Math.min(spec.vmax,mat.vcap||spec.vmax); // tope de velocidad por impresora Y material (TPU 35mm/s)
-    const cl=(v,a,b,d)=>{v=+v;return Math.min(b,Math.max(a,isFinite(v)?v:d));}; // el default también se acota: speed=60 no debe superar el tope del material (TPU 35mm/s) si la IA omite el campo
+    const mat=MATS[el('slMaterial').value]||MATS.PLA;
+    const cl=(v,a,b,d)=>{v=+v;const base=isFinite(v)?v:d;return Math.min(b,Math.max(a,base));};
+    const layerHeight=cl(p.layerHeight,0.05,noz*0.8,noz*0.5);
+    const maxVolumetricFlow=cl(p.maxVolumetricFlow,0,60,mat.flow||0);
+    const materialVmax=Math.min(spec.vmax,mat.vcap||spec.vmax);
+    const widest=Math.max(noz*1.05,+p.widthOuter||0,+p.widthInfill||0);
+    const flowVmax=maxVolumetricFlow>0?maxVolumetricFlow/Math.max(0.01,widest*layerHeight):materialVmax;
+    const vmax=Math.max(1,Math.min(materialVmax,flowVmax));
+    const speedClamp=(v,d,allowZero=false)=>{if(allowZero&&(+v===0||v===''||v===null||v===undefined))return 0;return Math.round(cl(v,Math.min(5,vmax),vmax,Math.min(d,vmax)));};
     return{
-      layerHeight:cl(p.layerHeight,0.05,noz*0.8,noz*0.5),
+      layerHeight,
       firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
       shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
       infillPct:Math.round(cl(p.infillPct,0,100,15)),
       infillType:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear'].includes(p.infillType)?p.infillType:'grid',
-      speed:Math.round(cl(p.speed,10,vmax,60)),
-      outerSpeed:Math.round(cl(p.outerSpeed,0,vmax,0)),infillSpeed:Math.round(cl(p.infillSpeed,0,vmax,0)),
-      firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
-      travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),accel:Math.round(cl(p.accel,0,30000,0)),
+      speed:speedClamp(p.speed,60),
+      outerSpeed:speedClamp(p.outerSpeed,0,true),infillSpeed:speedClamp(p.infillSpeed,0,true),
+      firstLayerSpeed:speedClamp(p.firstLayerSpeed,30),
+      travelSpeed:Math.round(cl(p.travelSpeed,30,Math.max(30,spec.vmax),Math.min(200,spec.vmax))),accel:Math.round(cl(p.accel,0,30000,0)),
       accelOuter:Math.round(cl(p.accelOuter,0,30000,0)),accelInfill:Math.round(cl(p.accelInfill,0,30000,0)),jerk:cl(p.jerk,0,40,0),bridgeFlow:Math.round(cl(p.bridgeFlow,40,150,100)),
-      nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
-      fanPct:Math.round(cl(p.fanPct,0,100,100)),
+      nozzleTemp:Math.round(cl(p.nozzleTemp,mat.nozMin||170,mat.nozMax||300,mat.noz||210)),bedTemp:Math.round(cl(p.bedTemp,0,mat.bedMax||110,mat.bed||60)),
+      fanPct:Math.round(cl(p.fanPct,0,100,mat.fan??100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
       supInterface:Math.round(cl(p.supInterface,0,5,2)),supOnPlate:!!p.supOnPlate&&p.supOnPlate!=='no',infillOverlap:Math.round(cl(p.infillOverlap,0,40,15)),pauseAtZ:cl(p.pauseAtZ,0,1000,0),
       brimGap:cl(p.brimGap,0,1,0),ironingFlow:Math.round(cl(p.ironingFlow,5,30,12)),retractMinTravel:cl(p.retractMinTravel,0,10,1),
       fuzzyAll:!!p.fuzzyAll&&p.fuzzyAll!=='no',fuzzyPointDist:cl(p.fuzzyPointDist,0.2,2,0.4),draftShield:!!p.draftShield&&p.draftShield!=='no',
       seamScarf:!!p.seamScarf&&p.seamScarf!=='no',scarfLen:cl(p.scarfLen,1,15,5),
-      minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
-      excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',
+      minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:speedClamp(p.overhangSpeed,0,true),flowRatio:cl(p.flowRatio,80,120,100),maxVolumetricFlow,pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
+      excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',sequentialClearance:cl(p.sequentialClearance,0,150,0),
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
-      seamMode:['cercano','alineado','agudo','aleatorio'].includes(p.seamMode)?p.seamMode:'cercano', // 'aleatorio' lo ofrece la UI, lo pide el prompt y lo implementa _seamStart; sin él aquí se descartaba en silencio
-
+      seamMode:['cercano','alineado','agudo','aleatorio'].includes(p.seamMode)?p.seamMode:'cercano',
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
       bridgeDetect:!!p.bridgeDetect&&p.bridgeDetect!=='no',
       arcFitting:!!p.arcFitting&&p.arcFitting!=='no',
@@ -1411,7 +1417,13 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
     return[E,sx,sy];
   }
+  function _flowFeed(feed,width,lh,p){
+    const f=Math.max(1,+feed||1),cap=+(p&&p.maxVolumetricFlow)||0;
+    if(!(cap>0)||!(width>0)||!(lh>0))return Math.round(f);
+    return Math.max(60,Math.round(Math.min(f,cap/(width*lh)*60)));
+  }
   function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy,ohTest,ohFeed,scarf){
+    feed=_flowFeed(feed,extW,lh,p);if(ohFeed)ohFeed=_flowFeed(ohFeed,extW,lh,p);
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     let ord=[...poly.slice(bi),...poly.slice(0,bi)];
     // Piel rugosa (fuzzy skin): resamplea el contorno al paso indicado y perturba cada punto a lo largo de su normal
@@ -1480,6 +1492,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   // Arachne: pared de ancho variable — igual que _printPoly pero con E escalado por wRatio (0..1)
   function _printPolyScaled(gc,poly,z,ox,oy,cX,cY,E,lh,extW,wRatio,feed,p){
+    feed=_flowFeed(feed,extW*Math.max(0.05,wRatio||1),lh,p);
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy,td=Math.hypot(sx-cX,sy-cY);
@@ -1498,6 +1511,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   // Spiralize: imprime el perímetro exterior con Z creciendo continuamente (sin costura de capa)
   function _printPolySpiralZ(gc,poly,zStart,zEnd,ox,oy,cX,cY,E,lh,extW,feed,p){
+    feed=_flowFeed(feed,extW,lh,p);
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy,td=Math.hypot(sx-cX,sy-cY);
@@ -1537,6 +1551,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     return out;
   }
   function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p,retractThresh,optimize){
+    feed=_flowFeed(feed,extW,lh,p);
     if(optimize)lines=_orderLines(lines,cX-ox,cY-oy); // reordena para minimizar viajes (soporte)
     const rt=Math.max(retractThresh||extW*3,(p.retractMinTravel||0)); // combing + viaje mínimo: menos retracciones
     for(const[p1,p2]of lines){
@@ -2042,7 +2057,8 @@ self.onmessage=function(ev){
   // Impresión secuencial: lamina cada pieza por separado y la imprime completa antes de la siguiente.
   // Seguridad: sube a Z libre sobre lo ya impreso antes de viajar a la pieza siguiente; aborta si no caben con separación.
   async function _sliceSequential(p,spec,nozD,matName,model){
-    const objs=S.objects,CLR=18; // separación generosa entre piezas (clearance del cabezal)
+    const objs=S.objects,CLR=+p.sequentialClearance||0;
+    if(!(CLR>0))throw new Error('secuencial bloqueado: ingresa el despeje físico medido del cabezal antes de usar este modo');
     const items=objs.map((t)=>{let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;for(let i=0;i<t.length;i+=3){if(t[i]<mnx)mnx=t[i];if(t[i]>mxx)mxx=t[i];if(t[i+1]<mny)mny=t[i+1];if(t[i+1]>mxy)mxy=t[i+1];if(t[i+2]>mxz)mxz=t[i+2];}return{t,w:mxx-mnx,d:mxy-mny,h:mxz};});
     items.sort((a,b)=>a.h-b.h); // bajas primero
     const usableW=spec.x-20;let curX=10,curY=10,rowH=0;
@@ -2138,12 +2154,46 @@ self.onmessage=function(ev){
       `; filament used [g] = ${G}`,
       `; total filament used [g] = ${G}`].join('\n');
   }
+  function _gcodeEnvelope(gc){
+    let x=0,y=0,z=0,abs=true,mnx=Infinity,mny=Infinity,mnz=Infinity,mxx=-Infinity,mxy=-Infinity,mxz=-Infinity,moves=0;
+    const add=(X,Y,Z)=>{if(![X,Y,Z].every(Number.isFinite))return;mnx=Math.min(mnx,X);mny=Math.min(mny,Y);mnz=Math.min(mnz,Z);mxx=Math.max(mxx,X);mxy=Math.max(mxy,Y);mxz=Math.max(mxz,Z);moves++;};
+    add(x,y,z);
+    const norm=a=>{a%=Math.PI*2;return a<0?a+Math.PI*2:a;};
+    const onArc=(a,a0,a1,cw)=>{a=norm(a);a0=norm(a0);a1=norm(a1);if(cw){const span=norm(a0-a1),pos=norm(a0-a);return pos<=span+1e-9;}const span=norm(a1-a0),pos=norm(a-a0);return pos<=span+1e-9;};
+    for(const raw of String(gc||'').split('\n')){
+      const line=raw.replace(/;.*/,'').trim();if(!line)continue;
+      if(/^G90(?:\s|$)/.test(line)){abs=true;continue;}if(/^G91(?:\s|$)/.test(line)){abs=false;continue;}
+      if(/^G92(?:\s|$)/.test(line)){for(const w of line.split(/\s+/)){const v=+w.slice(1);if(!Number.isFinite(v))continue;if(w[0]==='X')x=v;else if(w[0]==='Y')y=v;else if(w[0]==='Z')z=v;}add(x,y,z);continue;}
+      const arc=/^G[23](?:\s|$)/.test(line),linear=/^G[01](?:\s|$)/.test(line);if(!arc&&!linear)continue;
+      let nx=x,ny=y,nz=z,I=null,J=null;
+      for(const w of line.split(/\s+/)){const v=+w.slice(1);if(!Number.isFinite(v))continue;if(w[0]==='X')nx=abs?v:x+v;else if(w[0]==='Y')ny=abs?v:y+v;else if(w[0]==='Z')nz=abs?v:z+v;else if(w[0]==='I')I=v;else if(w[0]==='J')J=v;}
+      add(nx,ny,nz);
+      if(arc&&I!==null&&J!==null){
+        const cx=x+I,cy=y+J,r=Math.hypot(I,J),a0=Math.atan2(y-cy,x-cx),a1=Math.atan2(ny-cy,nx-cx),cw=line.startsWith('G2');
+        for(const a of[0,Math.PI/2,Math.PI,Math.PI*1.5])if(onArc(a,a0,a1,cw))add(cx+r*Math.cos(a),cy+r*Math.sin(a),Math.max(z,nz));
+      }
+      x=nx;y=ny;z=nz;
+    }
+    return{minX:mnx,minY:mny,minZ:mnz,maxX:mxx,maxY:mxy,maxZ:mxz,moves};
+  }
+  function _validateGcodeForSpec(gc,spec){
+    const e=_gcodeEnvelope(gc),tol=.08,issues=[];
+    if(!e.moves)issues.push('G-code sin movimientos XYZ verificables');
+    if(e.minX<-tol)issues.push(`X mínimo ${e.minX.toFixed(2)} mm`);
+    if(e.minY<-tol)issues.push(`Y mínimo ${e.minY.toFixed(2)} mm`);
+    if(e.minZ<-tol)issues.push(`Z mínimo ${e.minZ.toFixed(2)} mm`);
+    if(e.maxX>spec.x+tol)issues.push(`X máximo ${e.maxX.toFixed(2)} > ${spec.x} mm`);
+    if(e.maxY>spec.y+tol)issues.push(`Y máximo ${e.maxY.toFixed(2)} > ${spec.y} mm`);
+    if(e.maxZ>spec.z+tol)issues.push(`Z máximo ${e.maxZ.toFixed(2)} > ${spec.z} mm`);
+    return{ok:issues.length===0,issues,envelope:e};
+  }
   async function generarGcode(){
     if(!S.stats)return;
     const p=readParams();S.params=p;
     const model=el('slPrinter').value,spec=SPECS[model];
     // En secuencial cada pieza se reempaqueta y _sliceSequential hace su propio chequeo de espacio → no aplica el límite del plato combinado
     const _seqMode=p.sequential&&S.objects&&S.objects.length>1;
+    if(_seqMode&&!(p.sequentialClearance>0)){toast('Impresión secuencial bloqueada: ingresa el despeje físico medido del cabezal (mm).','error');return;}
     if(!_seqMode&&!fitsIn(spec)){toast(`La pieza (${S.stats.dx.toFixed(0)}×${S.stats.dy.toFixed(0)}×${S.stats.dz.toFixed(0)}mm) no cabe en ${model} — elige otra impresora o escala el modelo`,'error');return;}
     const btn=el('slBtnGcode');btn.disabled=true;el('slResult').style.display='none';
     try{
@@ -2161,8 +2211,10 @@ self.onmessage=function(ev){
       if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
       gcode=_tagFeatures(gcode); // ";TYPE:"/"; FEATURE:" → desglose por tipo de línea (y llena "Estimación total" por roles)
       gcode=gcode+'\n'+_footerStats(_est); // comentarios neutros (Moonraker), sin disparar error de carga
-      S.gcode=gcode;
-      setProg(100,'✓ G-code listo');
+      const audit=_validateGcodeForSpec(gcode,spec);
+      if(!audit.ok)throw new Error('G-code fuera del volumen seguro: '+audit.issues.join(' · '));
+      S.gcode=gcode;S.gcodeAudit=audit;
+      setProg(100,'✓ G-code validado y listo');
       localStorage.setItem('sl_last_est_secs',_est.secs.toFixed(1));
       renderResult(_est);
     }catch(e){
