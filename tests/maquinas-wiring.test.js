@@ -79,6 +79,20 @@ test('la inicialización pinta el monitor de inmediato y luego reconcilia datos 
   assert.match(body,/renderCargaMaquinas\(\)/,'debe enlazar la carga de pedidos por máquina');
 });
 
+test('el monitor en vivo se monta antes de Salud y fiabilidad sin destruir cámaras',()=>{
+  const render=functionSource(OPS,'renderIntelligence');
+  const park=functionSource(OPS,'_parkLiveMonitorBeforeIntelligenceRender');
+  const mount=functionSource(OPS,'_mountLiveMonitorBeforeReliability');
+  const anchorPos=render.indexOf('mopsLiveMonitorAnchor');
+  const healthPos=render.indexOf('Salud y fiabilidad por impresora');
+  assert.ok(anchorPos>=0&&healthPos>anchorPos,'el monitor debe quedar antes de Salud y fiabilidad');
+  assert.match(park,/maquinaMonitorView/,'debe reutilizar el monitor existente');
+  assert.match(park,/insertAdjacentElement\('afterend',monitor\)/,'antes de regenerar inteligencia debe sacar el monitor del innerHTML');
+  assert.match(mount,/anchor\.replaceWith\(monitor\)/,'debe mover el mismo nodo, no clonarlo ni recrearlo');
+  assert.match(mount,/renderMonitorGrid\(\)/,'al montarlo debe asegurar que las impresoras ya estén visibles');
+  assert.doesNotMatch(mount,/cloneNode|innerHTML\s*=/,'no debe duplicar ni recrear el monitor/cámaras');
+});
+
 test('las funciones críticas no están ausentes ni duplicadas',()=>{
   const base=['initMaquinas','renderMaquinasCalendar','renderMonitorGrid','renderMonitorKPIs','pollPrinters','connectAllPrinterWs','disconnectAllPrinterWs','getPrinterIp','printerUrl','openPrinterControl','openWebcamModal'];
   for(const name of base){
