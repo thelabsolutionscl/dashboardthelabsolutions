@@ -164,18 +164,21 @@ let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
 let safety = SafetyPolicy.normalizeSnapshot(readJson(SAFETY_FILE, null));
 let queueWrite = Promise.resolve(), registryWrite = Promise.resolve(), safetyWrite = Promise.resolve();
 function persistQueue() {
-  queue.updatedAt = Date.now();
-  queueWrite = queueWrite.then(() => atomicWrite(QUEUE_FILE, queue)).catch(e => console.error('[queue] persist', e));
+  queue.updatedAt=Date.now();
+  const snapshot=JSON.parse(JSON.stringify(queue));
+  queueWrite=queueWrite.then(()=>atomicWrite(QUEUE_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[queue] persist',e);return false;});
   return queueWrite;
 }
 function persistRegistry() {
-  registry.updatedAt = Date.now();
-  registryWrite = registryWrite.then(() => atomicWrite(REGISTRY_FILE, registry)).catch(e => console.error('[registry] persist', e));
+  registry.updatedAt=Date.now();
+  const snapshot=JSON.parse(JSON.stringify(registry));
+  registryWrite=registryWrite.then(()=>atomicWrite(REGISTRY_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[registry] persist',e);return false;});
   return registryWrite;
 }
 function persistSafety() {
-  safety.updatedAt = Date.now();
-  safetyWrite = safetyWrite.then(() => atomicWrite(SAFETY_FILE, safety)).catch(e => console.error('[safety] persist', e));
+  safety.updatedAt=Date.now();
+  const snapshot=JSON.parse(JSON.stringify(safety));
+  safetyWrite=safetyWrite.then(()=>atomicWrite(SAFETY_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[safety] persist',e);return false;});
   return safetyWrite;
 }
 const recoveredAtBoot = recoverQueueJobs(queue);
@@ -321,7 +324,12 @@ async function enqueue(payload) {
   };
   queue.jobs.push(j);
   queue.jobs.sort((a,b)=>b.priority-a.priority||Date.parse(a.createdAt)-Date.parse(b.createdAt));
-  persistQueue();
+  const durable=await persistQueue();
+  if(!durable){
+    queue.jobs=queue.jobs.filter(row=>row!==j);
+    await deletePayload(j);
+    throw new Error('no se pudo persistir la cola durable');
+  }
   return j;
 }
 function markJob(id, patch) {
@@ -348,15 +356,16 @@ function requeueBedBlocked(machineId){
   if(changed)persistQueue();
   return changed;
 }
-function pruneQueue(now=Date.now()){
+async function pruneQueue(now=Date.now()){
   const cutoff=now-30*86400000;
   const active=queue.jobs.filter(j=>!QUEUE_TERMINAL_STATES.has(String(j.state||'')));
   const terminal=queue.jobs.filter(j=>QUEUE_TERMINAL_STATES.has(String(j.state||''))&&(Date.parse(j.updatedAt||j.createdAt||0)||0)>=cutoff)
     .sort((a,b)=>Date.parse(b.updatedAt||0)-Date.parse(a.updatedAt||0)).slice(0,1000);
   if(active.length+terminal.length!==queue.jobs.length){
-    const kept=new Set([...active,...terminal].map(j=>j.id));
-    queue.jobs.filter(j=>!kept.has(j.id)).forEach(j=>deletePayload(j));
-    queue.jobs=[...active,...terminal];persistQueue();
+    const next=[...active,...terminal],kept=new Set(next.map(j=>j.id)),removed=queue.jobs.filter(j=>!kept.has(j.id));
+    const previous=queue.jobs;queue.jobs=next;
+    const durable=await persistQueue();
+    if(durable)await Promise.all(removed.map(deletePayload));else queue.jobs=previous;
   }
 }
 function requestLegacy(method, targetPath, body, headers = {}) {
@@ -472,7 +481,7 @@ async function queueWorker() {
   queueWorkerBusy = true;
   try {
     await reconcileStartedJobs();
-    pruneQueue();
+    await pruneQueue();
     const candidates=queue.jobs.filter(j=>['queued','retry'].includes(j.state));
     for (const j of candidates) {
       // `started` es histórico, NO un lock: el estado vivo de Moonraker decide
@@ -586,8 +595,10 @@ const server = http.createServer(async (req, res) => {
     const removed=queue.jobs.find(j=>j.id===id&&!['checking','uploading','started','printing','paused'].includes(j.state));
     queue.jobs = queue.jobs.filter(j => j.id !== id || ['checking','uploading','started','printing','paused'].includes(j.state));
     if (queue.jobs.length === before) return json(res, 409, { ok: false, error: 'job no encontrado o ya está ejecutándose' });
+    const durable=await persistQueue();
+    if(!durable){if(removed)queue.jobs.push(removed);return json(res,503,{ok:false,error:'no se pudo persistir la eliminación'});}
     if(removed)await deletePayload(removed);
-    persistQueue(); return json(res, 200, { ok: true });
+    return json(res, 200, { ok: true });
   }
   if (p === '/farm/safety' && req.method === 'GET') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
