@@ -2315,11 +2315,16 @@ function onMaquinaModalPedidoChange(){
   const f=p.fields;
   const nPed=f['N° Pedido']||'—',cliente=resolveClienteName(f['Cliente']),estado=f['Estado pedido']||'—';
   document.getElementById('maquinaModalDesc').value=`${nPed} · ${cliente}`;
-  // sugerir horas según pedido si tiene monto (estimación rápida)
-  const monto=(f['Monto total (CLP)']||0)/1.19;
-  if(monto>0&&!document.getElementById('maquinaModalTiempo').value){
-    const hEst=Math.max(1,Math.round(monto/15000)); // aprox $15k neto/h como referencia
-    document.getElementById('maquinaModalTiempo').value=Math.min(hEst,24);
+  // Sugerir horas sólo desde trabajos técnicos MachineOps vinculados a esta
+  // impresora/pedido. El valor comercial del pedido no representa horas de máquina.
+  if(!document.getElementById('maquinaModalTiempo').value){
+    try{
+      const machineId=document.getElementById('maquinaModalId')?.value||'';
+      const ops=JSON.parse(localStorage.getItem('thelab_machine_ops_v2')||'{}');
+      const jobs=(Array.isArray(ops.jobs)?ops.jobs:[]).filter(j=>!j.archived&&j.pedidoId===pid&&(!machineId||j.machineId===machineId));
+      const minutes=jobs.reduce((sum,j)=>sum+Math.max(1,Number(j.cycles)||1)*Math.max(1,Number(j.minutesPerCycle)||0),0);
+      if(minutes>0)document.getElementById('maquinaModalTiempo').value=Math.round(minutes/60*10)/10;
+    }catch(_){}
   }
 }
 async function saveMaquinaEvento(){
