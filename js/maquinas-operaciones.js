@@ -658,6 +658,7 @@ function ensureWorkshopShell(){
   let el=document.getElementById('mopsWorkshopHome');if(el)return el;
   const anchor=document.getElementById('maquinaCapacityView');if(!anchor)return null;
   el=document.createElement('section');el.id='mopsWorkshopHome';el.className='mops-workshop-home';anchor.parentNode.insertBefore(el,anchor);
+  const capSub=anchor.querySelector('.maq-view-sub');if(capSub)capSub.textContent='Simula un escenario usando tiempos técnicos ingresados, carga actual y telemetría reciente. No es una promesa automática de entrega.';
   const legacy=document.getElementById('analyticsContent');
   if(legacy&&!legacy.closest('.mops-workshop-legacy-analytics')){
     const d=document.createElement('details');d.className='mops-workshop-legacy-analytics mops-advanced-details';
@@ -691,7 +692,7 @@ function renderWorkshopHome(){
   const histTone=s.history.fresh?'ok':s.history.mode==='local-fallback'?'warning':'danger';
   const histLabel=s.history.fresh?'Durable y reciente':s.history.mode==='local-fallback'?'Solo caché local':'Sin confirmar';
   const safetyState=!s.reading?'Sin lectura':!s.safety.fresh?'Lectura vencida':s.safety.blockers.length?'Bloqueado':s.safety.warnings.length?'Revisar':'OK';
-  const safetyTone=!s.reading||!s.safety.fresh||s.safety.warnings.length?'warning':s.safety.blockers.length?'danger':'ok';
+  const safetyTone=s.safety.blockers.length?'danger':(!s.reading||!s.safety.fresh||s.safety.warnings.length?'warning':'ok');
   const maintActions=s.maintOverdue+s.maintSoon+s.maintUnknown;
   el.innerHTML=`<div class="mops-workshop-hero">
       <div><span class="mops-workshop-eyebrow">TALLER · FUENTES DE VERDAD</span><h3>Estado físico y configuración de la granja</h3><p>Primero ves qué requiere acción y qué datos son confirmados, registrados o estimados. Abre un módulo sólo cuando lo necesites.</p></div>
