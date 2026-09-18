@@ -63,7 +63,7 @@ const INCIDENT_TYPES={
   electrical:'Eléctrico / conexión',quality:'Calidad dimensional',other:'Otro',
 };
 
-let _data=null,_remoteTimer=null,_initialized=false,_initPromise=null,_activeView='operacion',_activeWorkshopView='taller';
+let _data=null,_remoteTimer=null,_initialized=false,_initPromise=null,_activeView='operacion',_activeWorkshopView='taller',_ganttFilter='carga',_ganttFamily='todas';
 const _techRefreshPending={};
 let _techStatusListenerBound=false;
 const _telemetryWatch={};
@@ -893,23 +893,101 @@ function renderPlanning(){
     <div class="mops-job-board">${openRows.length?openRows.map(planningJobCard).join(''):'<div class="mops-intel-empty">✓ No hay trabajos activos.</div>'}</div>
     ${closedRows.length?(showClosed?`<div class="mops-job-board mops-job-history-grid">${closedRows.map(planningJobCard).join('')}</div>`:`<details class="mops-job-history"><summary>Historial cerrado · ${closedRows.length}</summary><div class="mops-job-board mops-job-history-grid">${closedRows.sort((a,b)=>Date.parse(b.completedAt||b.updatedAt||0)-Date.parse(a.completedAt||a.updatedAt||0)).slice(0,20).map(planningJobCard).join('')}</div></details>`):''}`;
 }
+function ganttFamily(model=''){
+  const m=String(model||'').toLowerCase();
+  if(m.includes('ender'))return'Ender-5 Max';
+  if(m.includes('k2 plus'))return'K2 Plus';
+  if(m.includes('k2'))return'K2';
+  if(m.includes('k1'))return'K1';
+  if(m.includes('giga'))return'Giga';
+  return'Otras';
+}
+function ganttRowData(m,farm){
+  const jobs=jobsForMachine(m.id).sort((a,b)=>num(a.position)-num(b.position)||dueUrgency(a)-dueUrgency(b));
+  const total=jobs.reduce((s,j)=>s+jobMinutes(j),0),live=liveEvidence(m.id),durable=farm.fresh?num(farm.counts?.[m.id]):null;
+  return{m,jobs,total,live,durable,family:ganttFamily(m.modelo),loaded:jobs.length>0};
+}
+function setGanttFilter(value){
+  _ganttFilter=['carga','todas','sin-telemetria'].includes(value)?value:'carga';
+  renderGantt();
+}
+function setGanttFamily(value){
+  _ganttFamily=value||'todas';
+  renderGantt();
+}
+function ganttStatusChip(row){
+  const tele=row.live.known
+    ? `<span class="mops-plan-chip ok">● ${esc(row.live.state||'telemetría')}</span>`
+    : '<span class="mops-plan-chip warning">○ Sin telemetría</span>';
+  const controller=row.durable===null
+    ? '<span class="mops-plan-chip muted">△ Controller sin confirmar</span>'
+    : `<span class="mops-plan-chip ${row.durable?'ok':'muted'}">${row.durable?'✓':'○'} ${row.durable} durable(s)</span>`;
+  const count=`<span class="mops-plan-chip neutral">${row.jobs.length} trabajo(s)</span>`;
+  const time=row.total?`<span class="mops-plan-chip neutral">~ ${fmtMin(row.total)}</span>`:'';
+  return tele+controller+count+time;
+}
+function ganttMachineCard(row){
+  const {m,jobs,total,live}=row;
+  const accent=cssColor(m.color||'#39d5ff');
+  const blocks=jobs.map(j=>{
+    const mins=Math.max(1,jobMinutes(j)),status=JOB_META[j.status]?.label||j.status||'Planificado';
+    return`<button type="button" class="mops-plan-job" onclick="MachineOps.openJob('${j.id}')" title="${esc(j.name)} · ${fmtMin(mins)} · ${esc(j.material||'sin material')}" style="--job-flex:${mins};--machine-accent:${accent}">
+      <span class="mops-plan-job-name">${esc(j.name)}</span>
+      <span class="mops-plan-job-meta">${esc(j.material||'—')} · ${fmtMin(mins)} · ${esc(status)}</span>
+    </button>`;
+  }).join('');
+  return`<article class="mops-plan-machine ${live.known?'trusted':'untrusted'}" style="--machine-accent:${accent}">
+    <div class="mops-plan-machine-head">
+      <div class="mops-plan-machine-title"><i></i><span><b>${esc(m.nombre)} #${m.numG}</b><small>${esc(m.modelo||row.family)}</small></span></div>
+      <div class="mops-plan-machine-total"><b>${fmtMin(total)}</b><small>carga estimada</small></div>
+    </div>
+    <div class="mops-plan-chips">${ganttStatusChip(row)}</div>
+    <div class="mops-plan-track">${blocks}</div>
+  </article>`;
+}
+function ganttIdleChip(row){
+  const m=row.m,accent=cssColor(m.color||'#64748b');
+  return`<div class="mops-plan-idle-chip" style="--machine-accent:${accent}">
+    <i></i><span><b>${esc(m.nombre)} #${m.numG}</b><small>${esc(m.modelo||row.family)} · ${row.live.known?esc(row.live.state):'sin telemetría'}</small></span>
+  </div>`;
+}
 function renderGantt(){
   const el=document.getElementById('mopsGantt');if(!el)return;
-  const farm=farmQueueEvidence();
-  const rows=(MAQUINAS||[]).map(m=>{
-    const jobs=jobsForMachine(m.id).sort((a,b)=>num(a.position)-num(b.position)||dueUrgency(a)-dueUrgency(b));
-    const total=jobs.reduce((s,j)=>s+jobMinutes(j),0),live=liveEvidence(m.id),durable=farm.fresh?num(farm.counts?.[m.id]):null;
-    const blocks=jobs.map(j=>{
-      const width=total?clamp(jobMinutes(j)/total*100,10,100):100,col=JOB_META[j.status]?.color||m.color;
-      return`<div class="mops-gantt-job" onclick="MachineOps.openJob('${j.id}')" title="${esc(j.name)} · ${fmtMin(jobMinutes(j))}" style="width:${width}%;background:${col}">${esc(j.name)}</div>`;
-    }).join('');
-    const stateLabel=live.known?live.state:'sin telemetría reciente';
-    return`<div class="mops-gantt-row ${live.known?'trusted':'untrusted'}">
-      <div class="mops-gantt-machine"><b><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${m.color};margin-right:6px"></span>${esc(m.nombre)} #${m.numG}</b><span>${esc(stateLabel)}</span><small>${jobs.length} planificado(s) · ${fmtMin(total)} estimados · Controller: ${durable===null?'sin confirmar':durable+' durable(s)'}</small></div>
-      <div class="mops-gantt-track">${blocks||'<span class="mops-gantt-empty">Sin trabajos planificados</span>'}</div>
-    </div>`;
+  const farm=farmQueueEvidence(),all=(MAQUINAS||[]).map(m=>ganttRowData(m,farm));
+  const loaded=all.filter(r=>r.loaded),idle=all.filter(r=>!r.loaded),telemetry=all.filter(r=>r.live.known).length;
+  const totalMinutes=loaded.reduce((s,r)=>s+r.total,0),durable=farm.fresh?all.reduce((s,r)=>s+num(r.durable),0):null;
+  const families=['todas',...MODELS.filter(x=>all.some(r=>r.family===x)),...(all.some(r=>r.family==='Otras')?['Otras']:[])];
+  const familyFiltered=all.filter(r=>_ganttFamily==='todas'||r.family===_ganttFamily);
+  let visible=familyFiltered;
+  if(_ganttFilter==='carga')visible=familyFiltered.filter(r=>r.loaded);
+  else if(_ganttFilter==='sin-telemetria')visible=familyFiltered.filter(r=>!r.live.known);
+  const visibleLoaded=visible.filter(r=>r.loaded),visibleIdle=visible.filter(r=>!r.loaded);
+  const grouped=MODELS.concat('Otras').filter(f=>visibleLoaded.some(r=>r.family===f)).map(f=>{
+    const rows=visibleLoaded.filter(r=>r.family===f);
+    return`<section class="mops-plan-family"><div class="mops-plan-family-head"><b>${esc(f)}</b><span>${rows.length} con carga</span></div><div class="mops-plan-machine-grid">${rows.map(ganttMachineCard).join('')}</div></section>`;
   }).join('');
-  el.innerHTML=`<div class="mops-gantt-head"><div><b>Plan estimado por impresora</b><small>Las barras son una secuencia de planificación, no una garantía de ejecución. El contador Controller es la única confirmación de cola durable.</small></div></div><div class="mops-gantt">${rows}</div>`;
+  const familyOptions=families.map(f=>`<option value="${esc(f)}"${_ganttFamily===f?' selected':''}>${f==='todas'?'Todas las familias':esc(f)}</option>`).join('');
+  const idleBlock=visibleIdle.length?`<details class="mops-plan-idle"${_ganttFilter==='todas'?' open':''}><summary>Ver ${visibleIdle.length} impresora(s) sin trabajos planificados</summary><div class="mops-plan-idle-grid">${visibleIdle.map(ganttIdleChip).join('')}</div></details>`:'';
+  el.innerHTML=`<div class="mops-gantt-head mops-plan-head">
+      <div><b>Plan estimado por impresora</b><small>Primero mostramos las impresoras con carga. Las vacías quedan plegadas. Esto es planificación; sólo el Controller confirma una cola durable real.</small></div>
+      <div class="mops-plan-head-actions">
+        <div class="mops-plan-filters" role="group" aria-label="Filtro de planificación">
+          <button type="button" class="${_ganttFilter==='carga'?'active':''}" onclick="MachineOps.setGanttFilter('carga')">Con carga <span>${loaded.length}</span></button>
+          <button type="button" class="${_ganttFilter==='todas'?'active':''}" onclick="MachineOps.setGanttFilter('todas')">Todas <span>${all.length}</span></button>
+          <button type="button" class="${_ganttFilter==='sin-telemetria'?'active':''}" onclick="MachineOps.setGanttFilter('sin-telemetria')">Sin telemetría <span>${all.length-telemetry}</span></button>
+        </div>
+        <select class="mops-plan-family-select" onchange="MachineOps.setGanttFamily(this.value)">${familyOptions}</select>
+      </div>
+    </div>
+    <div class="mops-plan-summary">
+      <span><small>CON CARGA</small><b>${loaded.length}</b><em>de ${all.length}</em></span>
+      <span><small>HORAS PLANIFICADAS</small><b>${fmtMin(totalMinutes)}</b><em>estimación acumulada</em></span>
+      <span class="${telemetry===all.length?'ok':'warning'}"><small>TELEMETRÍA RECIENTE</small><b>${telemetry}/${all.length}</b><em>lectura &lt; 60 s</em></span>
+      <span class="${farm.fresh?'ok':'warning'}"><small>CONTROLLER</small><b>${durable===null?'—':durable}</b><em>${farm.fresh?'trabajos durables':'sin confirmación reciente'}</em></span>
+    </div>
+    <div class="mops-plan-legend"><span><i class="ok"></i>telemetría reciente</span><span><i class="warning"></i>dato sin confirmar</span><span><i></i>duración estimada de MachineOps</span></div>
+    ${visibleLoaded.length?grouped:'<div class="mops-intel-empty">No hay impresoras con trabajos para este filtro.</div>'}
+    ${idleBlock}`;
 }
 
 function orderLabel(id){
@@ -1929,7 +2007,7 @@ async function init(){
 }
 
 const api={
-  init,showView,goToSection,renderAll,renderPlanning,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,archiveJob,
+  init,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,archiveJob,
   openPreflight,closePreflight,confirmPreflight,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,

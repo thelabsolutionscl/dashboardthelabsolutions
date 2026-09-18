@@ -2399,3 +2399,134 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   #tab-maquinas .mops-workshop-tile-icon svg{width:25px;height:25px}
   #tab-maquinas .mops-workshop-tile strong{font-size:15.5px;margin-top:6px}
 }
+
+
+/* Máquinas · Plan estimado por impresora · vista clara */
+#tab-maquinas .mops-plan-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px
+}
+#tab-maquinas .mops-plan-head>div:first-child{max-width:760px}
+#tab-maquinas .mops-plan-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+#tab-maquinas .mops-plan-filters{display:flex;gap:6px;flex-wrap:wrap}
+#tab-maquinas .mops-plan-filters button{
+  appearance:none;border:1px solid var(--border2);border-radius:999px;background:var(--surface2);color:var(--text3);
+  padding:6px 9px;font-size:9px;font-weight:750;cursor:pointer;transition:.15s ease
+}
+#tab-maquinas .mops-plan-filters button span{margin-left:4px;color:var(--text2)}
+#tab-maquinas .mops-plan-filters button:hover{border-color:rgba(0,212,204,.34);color:var(--text2)}
+#tab-maquinas .mops-plan-filters button.active{border-color:rgba(0,212,204,.44);background:rgba(0,212,204,.08);color:var(--accent)}
+#tab-maquinas .mops-plan-family-select{
+  min-height:30px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text2);
+  padding:5px 28px 5px 9px;font-size:9.5px;font-weight:700
+}
+#tab-maquinas .mops-plan-summary{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 9px
+}
+#tab-maquinas .mops-plan-summary>span{
+  position:relative;overflow:hidden;padding:10px 11px;border:1px solid var(--border2);border-radius:10px;background:var(--surface)
+}
+#tab-maquinas .mops-plan-summary>span:before{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:var(--border2)}
+#tab-maquinas .mops-plan-summary>span.ok:before{background:var(--accent3)}
+#tab-maquinas .mops-plan-summary>span.warning:before{background:var(--warn)}
+#tab-maquinas .mops-plan-summary small,#tab-maquinas .mops-plan-summary b,#tab-maquinas .mops-plan-summary em{display:block}
+#tab-maquinas .mops-plan-summary small{font-size:8px;font-weight:800;letter-spacing:.65px;color:var(--text3)}
+#tab-maquinas .mops-plan-summary b{margin-top:4px;font-size:17px;line-height:1;color:var(--text)}
+#tab-maquinas .mops-plan-summary em{margin-top:4px;font-size:8.7px;font-style:normal;color:var(--text3)}
+#tab-maquinas .mops-plan-legend{
+  display:flex;gap:12px;flex-wrap:wrap;margin-bottom:15px;padding:7px 9px;border-top:1px solid var(--border);
+  font-size:8.5px;color:var(--text3)
+}
+#tab-maquinas .mops-plan-legend span{display:inline-flex;align-items:center;gap:5px}
+#tab-maquinas .mops-plan-legend i{display:block;width:7px;height:7px;border-radius:50%;background:var(--text3)}
+#tab-maquinas .mops-plan-legend i.ok{background:var(--accent3)}
+#tab-maquinas .mops-plan-legend i.warning{background:var(--warn)}
+
+#tab-maquinas .mops-plan-family{margin:0 0 14px}
+#tab-maquinas .mops-plan-family-head{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 7px
+}
+#tab-maquinas .mops-plan-family-head b{font-size:10.5px;color:var(--text);letter-spacing:.15px}
+#tab-maquinas .mops-plan-family-head span{
+  padding:3px 7px;border:1px solid var(--border2);border-radius:999px;background:var(--surface2);
+  font-size:8.5px;font-weight:700;color:var(--text3)
+}
+#tab-maquinas .mops-plan-machine-grid{display:grid;gap:8px}
+#tab-maquinas .mops-plan-machine{
+  position:relative;padding:11px 12px 12px;border:1px solid var(--border2);border-radius:13px;
+  background:linear-gradient(180deg,rgba(255,255,255,.014),rgba(255,255,255,.004)),var(--surface)
+}
+#tab-maquinas .mops-plan-machine:before{
+  content:'';position:absolute;left:0;top:11px;bottom:11px;width:2px;border-radius:0 2px 2px 0;background:var(--machine-accent)
+}
+#tab-maquinas .mops-plan-machine.untrusted{border-color:rgba(255,170,0,.16)}
+#tab-maquinas .mops-plan-machine-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:7px}
+#tab-maquinas .mops-plan-machine-title{display:flex;align-items:flex-start;gap:8px;min-width:0}
+#tab-maquinas .mops-plan-machine-title>i{display:block;width:8px;height:8px;margin-top:3px;border-radius:50%;background:var(--machine-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--machine-accent) 12%,transparent)}
+#tab-maquinas .mops-plan-machine-title b,#tab-maquinas .mops-plan-machine-title small{display:block}
+#tab-maquinas .mops-plan-machine-title b{font-size:10.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tab-maquinas .mops-plan-machine-title small{margin-top:2px;font-size:8.8px;color:var(--text3)}
+#tab-maquinas .mops-plan-machine-total{text-align:right;flex:0 0 auto}
+#tab-maquinas .mops-plan-machine-total b,#tab-maquinas .mops-plan-machine-total small{display:block}
+#tab-maquinas .mops-plan-machine-total b{font-size:11px;color:var(--text2)}
+#tab-maquinas .mops-plan-machine-total small{margin-top:1px;font-size:8px;color:var(--text3)}
+
+#tab-maquinas .mops-plan-chips{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px}
+#tab-maquinas .mops-plan-chip{
+  display:inline-flex;align-items:center;min-height:21px;padding:3px 7px;border:1px solid var(--border2);border-radius:999px;
+  background:var(--surface2);font-size:8.3px;font-weight:700;color:var(--text3)
+}
+#tab-maquinas .mops-plan-chip.ok{border-color:rgba(0,212,170,.22);background:rgba(0,212,170,.045);color:var(--accent3)}
+#tab-maquinas .mops-plan-chip.warning{border-color:rgba(255,170,0,.22);background:rgba(255,170,0,.045);color:var(--warn)}
+#tab-maquinas .mops-plan-chip.neutral{color:var(--text2)}
+#tab-maquinas .mops-plan-chip.muted{color:var(--text3)}
+
+#tab-maquinas .mops-plan-track{
+  display:flex;gap:5px;min-height:39px;overflow-x:auto;padding:4px;border:1px solid var(--border);
+  border-radius:10px;background:rgba(255,255,255,.018);scrollbar-width:thin
+}
+#tab-maquinas .mops-plan-job{
+  appearance:none;position:relative;flex:var(--job-flex) 1 150px;min-width:150px;max-width:100%;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 11px;border:0;border-radius:7px;
+  background:color-mix(in srgb,var(--machine-accent) 82%,#ffffff 18%);color:#071313;cursor:pointer;text-align:left;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);transition:filter .15s ease,transform .15s ease
+}
+#tab-maquinas .mops-plan-job:hover{filter:brightness(1.08);transform:translateY(-1px)}
+#tab-maquinas .mops-plan-job-name{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.2px;font-weight:850
+}
+#tab-maquinas .mops-plan-job-meta{flex:0 0 auto;font-size:7.8px;font-weight:700;opacity:.78;white-space:nowrap}
+
+#tab-maquinas .mops-plan-idle{
+  margin-top:12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.008);overflow:hidden
+}
+#tab-maquinas .mops-plan-idle>summary{
+  cursor:pointer;list-style:none;padding:10px 12px;font-size:9.5px;font-weight:750;color:var(--text3)
+}
+#tab-maquinas .mops-plan-idle>summary::-webkit-details-marker{display:none}
+#tab-maquinas .mops-plan-idle>summary:before{content:'▸';display:inline-block;width:16px}
+#tab-maquinas .mops-plan-idle[open]>summary:before{content:'▾'}
+#tab-maquinas .mops-plan-idle-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;padding:0 10px 10px
+}
+#tab-maquinas .mops-plan-idle-chip{
+  display:flex;align-items:center;gap:8px;min-height:42px;padding:7px 9px;border:1px solid var(--border2);
+  border-radius:9px;background:var(--surface2)
+}
+#tab-maquinas .mops-plan-idle-chip>i{display:block;width:7px;height:7px;border-radius:50%;background:var(--machine-accent)}
+#tab-maquinas .mops-plan-idle-chip b,#tab-maquinas .mops-plan-idle-chip small{display:block}
+#tab-maquinas .mops-plan-idle-chip b{font-size:9.2px;color:var(--text2)}
+#tab-maquinas .mops-plan-idle-chip small{margin-top:2px;font-size:8px;color:var(--text3)}
+
+@media(max-width:980px){
+  #tab-maquinas .mops-plan-head{display:block}
+  #tab-maquinas .mops-plan-head-actions{justify-content:flex-start;margin-top:9px}
+  #tab-maquinas .mops-plan-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+  #tab-maquinas .mops-plan-summary{grid-template-columns:1fr 1fr}
+  #tab-maquinas .mops-plan-head-actions{display:grid;grid-template-columns:1fr}
+  #tab-maquinas .mops-plan-family-select{width:100%}
+  #tab-maquinas .mops-plan-job{min-width:220px;display:block;padding:7px 9px}
+  #tab-maquinas .mops-plan-job-meta{display:block;margin-top:2px;white-space:normal}
+  #tab-maquinas .mops-plan-idle-grid{grid-template-columns:1fr}
+}
