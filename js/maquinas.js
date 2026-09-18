@@ -127,13 +127,22 @@ function _defaultCamUrl(m){
     ? `http://${ip}:1984/api/frame.jpeg?src=k2plus`
     : `http://${ip}:8080/?action=stream`;
 }
-// Fuente única de la URL de cámara: primero lo que el usuario fijó a mano
-// (localStorage o Airtable vía m.cam), y si no, el default por modelo.
+// Las URLs estándar de la cámara integrada siguen la IP viva del registry.
+// Así una IP DHCP antigua guardada en Airtable/localStorage no deja la cámara
+// apuntando para siempre al dueño anterior de esa dirección.
+function _camFollowLivePrinterIp(raw,m){
+  const s=String(raw||'').trim();if(!s||!m)return s;
+  const standardMjpeg=/^http:\/\/\d{1,3}(?:\.\d{1,3}){3}:8080\/\?action=stream(?:&.*)?$/i.test(s);
+  const standardK2=/^http:\/\/\d{1,3}(?:\.\d{1,3}){3}:1984\/api\/frame\.jpe?g\?src=k2plus(?:&.*)?$/i.test(s);
+  return standardMjpeg||standardK2?_defaultCamUrl(m):s;
+}
+// Fuente única: override manual/Airtable para casos especiales; las rutas
+// estándar integradas se normalizan a la IP viva de la máquina.
 function _printerCamRaw(id){
-  const ex=localStorage.getItem('printer_cam_'+id);
-  if(ex)return ex;
   const m=(typeof MAQUINAS!=='undefined')?MAQUINAS.find(x=>x.id===id):null;
-  if(m&&m.cam)return m.cam;
+  const ex=localStorage.getItem('printer_cam_'+id);
+  if(ex)return _camFollowLivePrinterIp(ex,m);
+  if(m&&m.cam)return _camFollowLivePrinterIp(m.cam,m);
   return m?_defaultCamUrl(m):'';
 }
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
