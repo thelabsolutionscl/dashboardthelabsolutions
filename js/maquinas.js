@@ -312,11 +312,28 @@ function _cameraLoadError(im){
   _cameraSchedule(im,delay);
 }
 function _refreshSnapshotCams(force=false){
+  if(document.hidden&&!force)return;
   document.querySelectorAll('img[data-snap]').forEach(im=>{
-    if(im.dataset.camSuspended==='1')return;
+    if(im.dataset.camSuspended==='1'||im.dataset.pageSuspended==='1')return;
     if(force){im.dataset.camLoading='0';_cameraRefreshNow(im);return;}
     const key=_cameraTimerKey(im);
     if(im.dataset.camLoading!=='1'&&(!key||!_camRetryTimers[key]))_cameraRefreshNow(im);
+  });
+}
+function _cameraPageVisibility(){
+  const hidden=!!document.hidden;
+  document.querySelectorAll('#maquinaMonGrid img[data-machine-id],#webcamModal img[data-machine-id]').forEach(im=>{
+    if(hidden){
+      im.dataset.pageSuspended='1';_cameraClearTimer(im);im.dataset.camLoading='0';
+      if(im.dataset.camKind==='snapshot'||im.dataset.camKind==='mjpeg')im.removeAttribute('src');
+    }else if(im.dataset.pageSuspended==='1'){
+      delete im.dataset.pageSuspended;
+      if(im.dataset.camSuspended==='1')return;
+      const base=im.dataset.camBase||im.getAttribute('data-snap')||'';
+      if(!base)return;
+      if(im.dataset.camKind==='snapshot')_cameraRefreshNow(im);
+      else im.src=base+(base.includes('?')?'&':'?')+'_resume='+Date.now();
+    }
   });
 }
 const HIST_KEY='printer_history_v1';
@@ -797,7 +814,7 @@ function ensurePrinterRealtimeService(){
     _printerLifecycleBound=true;
     window.addEventListener('focus',_resumePrinterRealtime);
     window.addEventListener('online',_resumePrinterRealtime);
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden)_resumePrinterRealtime();});
+    document.addEventListener('visibilitychange',()=>{_cameraPageVisibility();if(!document.hidden)_resumePrinterRealtime();});
   }
 }
 function fmtSecs(s){if(!s||s<=0)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
