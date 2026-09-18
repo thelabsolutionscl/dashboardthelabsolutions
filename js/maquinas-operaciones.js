@@ -626,6 +626,8 @@ const VIEW_GROUPS={
   trabajos:['planificacion','calidad','postproduccion'],
   taller:['capacidad','perfiles','laminado','materiales','mantenimiento','seguridad','analitica','automatizacion'],
 };
+const WORKSHOP_CORE=['materiales','mantenimiento','seguridad','capacidad'];
+const WORKSHOP_ADVANCED=['perfiles','laminado','analitica','automatizacion'];
 const VIEW_TITLES={
   inteligencia:'🧠 Alertas',operacion:'📡 Máquinas',
   planificacion:'🗓 Planificación',calidad:'✅ Calidad',postproduccion:'🧩 Postproducción',
@@ -647,24 +649,97 @@ function goToSection(view){
 }
 function renderSectionIndex(group){
   const el=document.getElementById('maqSectionIndex');if(!el)return;
+  if(group==='taller'){el.innerHTML='';el.style.display='none';return;}
+  el.style.display='';
   const members=VIEW_GROUPS[group]||[];
-  // Con una sola sección el índice no aporta nada: se oculta.
   el.innerHTML=members.length<2?'':members.map(v=>`<button type="button" onclick="MachineOps.goToSection('${v}')">${esc(VIEW_TITLES[v]||v)}</button>`).join('');
 }
+function ensureWorkshopShell(){
+  let el=document.getElementById('mopsWorkshopHome');if(el)return el;
+  const anchor=document.getElementById('maquinaCapacityView');if(!anchor)return null;
+  el=document.createElement('section');el.id='mopsWorkshopHome';el.className='mops-workshop-home';anchor.parentNode.insertBefore(el,anchor);
+  const legacy=document.getElementById('analyticsContent');
+  if(legacy&&!legacy.closest('.mops-workshop-legacy-analytics')){
+    const d=document.createElement('details');d.className='mops-workshop-legacy-analytics mops-advanced-details';
+    const s=document.createElement('summary');s.textContent='Historial técnico heredado · gráficos de cierres de impresión';d.appendChild(s);
+    legacy.parentNode.insertBefore(d,legacy);d.appendChild(legacy);
+  }
+  return el;
+}
+function workshopHistoryEvidence(now=Date.now()){
+  let s={};try{s=window.PrinterHistory?.status?.()||{};}catch(_){}
+  const lastSync=num(s.lastSync),durable=s.mode==='durable',fresh=durable&&!!lastSync&&now-lastSync<120000;
+  return{mode:s.mode||'unknown',durable,fresh,lastSync,lastError:String(s.lastError||''),serverHistoryCount:num(s.serverHistoryCount)};
+}
+function workshopSummary(now=Date.now()){
+  const spools=data().spools.filter(s=>!s.archived),stockFree=spools.reduce((sum,s)=>sum+spoolAvailable(s),0),stockRegistered=spools.reduce((sum,s)=>sum+num(s.remaining),0);
+  const lowStock=spools.filter(s=>s.status!=='agotado'&&spoolAvailable(s)<Math.min(250,num(s.initial)*.2)).length;
+  let maintSoon=0,maintOverdue=0,maintUnknown=0;
+  try{(MAQUINAS||[]).forEach(m=>{const rows=getMaintAlerts(m)||[];rows.forEach(a=>{if(a.verified===false)maintUnknown++;else if(a.hours>=a.threshold)maintOverdue++;else maintSoon++;});});}catch(_){}
+  const reading=latestSafetyReading(),safety=safetyDecision(data().safetyConfig,reading,{unattended:true,cameraConfigured:true},now);
+  const safetyAge=reading?Math.max(0,Math.round((now-Date.parse(reading.at||0))/60000)):null;
+  const profiles=latestProfiles(),readyProfiles=profiles.filter(p=>p.status==='approved'&&profileProductionCheck(p).ok).length,invalidApproved=profiles.filter(p=>p.status==='approved'&&!profileProductionCheck(p).ok).length;
+  const history=workshopHistoryEvidence(now);
+  const maintRecords=(()=>{try{return getMaintLog().length;}catch(_){return 0;}})();
+  return{spools:spools.length,stockFree,stockRegistered,lowStock,maintSoon,maintOverdue,maintUnknown,maintRecords,reading,safety,safetyAge,profiles:profiles.length,readyProfiles,invalidApproved,history};
+}
+function workshopNavCard(view,title,subtitle,value,tone='neutral'){
+  return`<button class="mops-workshop-card ${tone}" type="button" onclick="MachineOps.showView('${view}')"><span class="mops-workshop-card-top"><b>${title}</b><i>→</i></span><strong>${value}</strong><small>${subtitle}</small></button>`;
+}
+function renderWorkshopHome(){
+  const el=ensureWorkshopShell();if(!el)return;const s=workshopSummary();
+  const histTone=s.history.fresh?'ok':s.history.mode==='local-fallback'?'warning':'danger';
+  const histLabel=s.history.fresh?'Durable y reciente':s.history.mode==='local-fallback'?'Solo caché local':'Sin confirmar';
+  const safetyState=!s.reading?'Sin lectura':!s.safety.fresh?'Lectura vencida':s.safety.blockers.length?'Bloqueado':s.safety.warnings.length?'Revisar':'OK';
+  const safetyTone=!s.reading||!s.safety.fresh||s.safety.warnings.length?'warning':s.safety.blockers.length?'danger':'ok';
+  const maintActions=s.maintOverdue+s.maintSoon+s.maintUnknown;
+  el.innerHTML=`<div class="mops-workshop-hero">
+      <div><span class="mops-workshop-eyebrow">TALLER · FUENTES DE VERDAD</span><h3>Estado físico y configuración de la granja</h3><p>Primero ves qué requiere acción y qué datos son confirmados, registrados o estimados. Abre un módulo sólo cuando lo necesites.</p></div>
+      <button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">☁ Sincronizar MachineOps</button>
+    </div>
+    <div class="mops-workshop-trust">
+      <span class="${histTone}"><b>HISTORIAL DE IMPRESIÓN</b><strong>${histLabel}</strong><small>${s.history.lastSync?'sync '+esc(fmtStamp(s.history.lastSync)):'sin sincronización central'}${s.history.lastError?' · '+esc(s.history.lastError):''}</small></span>
+      <span class="warning"><b>MATERIALES</b><strong>Inventario registrado</strong><small>${(s.stockRegistered/1000).toFixed(2)} kg declarados · sin balanza física</small></span>
+      <span class="${safetyTone}"><b>SEGURIDAD AMBIENTAL</b><strong>${esc(safetyState)}</strong><small>${s.reading?esc(s.reading.source||'registro')+' · hace '+s.safetyAge+' min':'sin sensor/lectura manual vigente'}</small></span>
+      <span class="${s.maintRecords?'ok':'warning'}"><b>MANTENCIÓN</b><strong>${s.maintRecords?s.maintRecords+' registros':'Sin historial registrado'}</strong><small>umbrales por horas · depende del historial de impresión</small></span>
+    </div>
+    <div class="mops-workshop-kpis">
+      <article class="${s.maintOverdue?'danger':maintActions?'warning':'ok'}"><small>MANTENCIÓN</small><b>${s.maintOverdue}</b><span>vencidas verificadas · ${s.maintSoon} próximas · ${s.maintUnknown} sin base registrada</span></article>
+      <article class="${s.lowStock?'warning':'ok'}"><small>MATERIAL LIBRE</small><b>${(s.stockFree/1000).toFixed(2)} kg</b><span>${s.lowStock} rollo(s) bajo mínimo registrado</span></article>
+      <article class="${safetyTone}"><small>AMBIENTE</small><b>${esc(safetyState)}</b><span>cámara se valida por impresora en preflight</span></article>
+      <article class="${s.invalidApproved?'warning':s.readyProfiles?'ok':'neutral'}"><small>PERFILES LISTOS</small><b>${s.readyProfiles}/${s.profiles}</b><span>${s.invalidApproved} aprobado(s) incompleto(s)</span></article>
+    </div>
+    <div class="mops-workshop-section-title"><div><b>Operación física</b><small>Lo que normalmente revisas en el taller.</small></div></div>
+    <div class="mops-workshop-nav-grid">
+      ${workshopNavCard('materiales','🧵 Materiales','Stock registrado, reservas y rollos bajos',s.lowStock?s.lowStock+' bajo stock':(s.stockFree/1000).toFixed(2)+' kg libres',s.lowStock?'warning':'ok')}
+      ${workshopNavCard('mantenimiento','🔧 Mantención','Horas, registros y próximos servicios',maintActions?maintActions+' por revisar':'sin alertas',maintActions?'warning':'ok')}
+      ${workshopNavCard('seguridad','🛡 Seguridad','Sensor/lectura manual y reglas de preflight',safetyState,safetyTone)}
+      ${workshopNavCard('capacidad','🧮 Capacidad','Simulador de escenario; no promesa automática','Simular','neutral')}
+    </div>
+    <div class="mops-workshop-section-title"><div><b>Herramientas avanzadas</b><small>Configuración y análisis; no necesitas tenerlas abiertas todo el tiempo.</small></div></div>
+    <div class="mops-workshop-nav-grid advanced">
+      ${workshopNavCard('perfiles','🎛 Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
+      ${workshopNavCard('laminado','🖨 Laminador','Agente 3D, G-code y preflight','Abrir','neutral')}
+      ${workshopNavCard('analitica','📊 Analítica','QA, tiempos reales y costos modelados','Abrir','neutral')}
+      ${workshopNavCard('automatizacion','⚙ Configuración','Umbrales, automatización y costos','Avanzado','neutral')}
+    </div>
+    <div class="mops-workshop-legend"><span><i class="ok"></i><b>Confirmado</b> sensor/controller reciente</span><span><i class="warning"></i><b>Registrado</b> dato ingresado/sincronizado</span><span><i></i><b>Estimado</b> simulación o modelo de costo</span></div>`;
+}
 function showView(view,button){
-  const target=view||'hoy';
-  const group=groupOf(target);
-  _activeView=group;
-  const members=VIEW_GROUPS[group];
-  document.querySelectorAll('[data-maq-view]').forEach(el=>{el.style.display=members.includes(el.dataset.maqView)?'':'none';});
+  const target=view||'hoy',group=groupOf(target);_activeView=group;
+  const members=VIEW_GROUPS[group]||[];
+  ensureWorkshopShell();
+  document.querySelectorAll('[data-maq-view]').forEach(node=>{
+    const v=node.dataset.maqView;
+    if(group==='taller'&&members.includes(v))node.style.display=(target!=='taller'&&v===target)?'':'none';
+    else node.style.display=members.includes(v)?'':'none';
+  });
+  const home=document.getElementById('mopsWorkshopHome');if(home)home.style.display=group==='taller'?'':'none';
   document.querySelectorAll('[data-maq-nav]').forEach(b=>b.classList.toggle('active',b.dataset.maqNav===group));
   if(button)button.classList.add('active');
-  localStorage.setItem('machine_ops_view',group);
-  renderSectionIndex(group);
-  renderAll();
-  // Si llegó un nombre de área concreto (enlace directo, QR, botón interno),
-  // la pantalla ya es la correcta: falta llevar la vista hasta esa sección.
-  if(target!==group)goToSection(target);
+  localStorage.setItem('machine_ops_view',group);renderSectionIndex(group);renderAll();
+  if(group==='taller'&&target!=='taller')goToSection(target);
+  else if(target!==group)goToSection(target);
 }
 
 function renderOpsOverview(){
@@ -936,18 +1011,19 @@ function archiveJob(id){
 
 function renderMaterials(){
   const sum=document.getElementById('mopsMaterialSummary'),el=document.getElementById('mopsSpools');if(!sum||!el)return;
-  const rows=data().spools.filter(s=>!s.archived),remaining=rows.reduce((s,x)=>s+num(x.remaining),0),reserved=rows.reduce((s,x)=>s+reservedForSpool(x.id),0);
-  const low=rows.filter(s=>spoolAvailable(s)<Math.min(250,num(s.initial)*.2)&&s.status!=='agotado').length;
+  const rows=data().spools.filter(s=>!s.archived),registered=rows.reduce((s,x)=>s+num(x.remaining),0),reserved=rows.reduce((s,x)=>s+reservedForSpool(x.id),0);
+  const free=rows.reduce((s,x)=>s+spoolAvailable(x),0),low=rows.filter(s=>spoolAvailable(s)<Math.min(250,num(s.initial)*.2)&&s.status!=='agotado').length;
   const value=rows.reduce((s,x)=>s+num(x.remaining)/1000*num(x.costPerKg),0);
-  sum.innerHTML=`<div class="mops-kpis">${kpi('Rollos activos',rows.length,'registrados')}${kpi('Disponible',(remaining/1000).toFixed(2)+' kg',`${(reserved/1000).toFixed(2)} kg reservados`)}${kpi('Stock bajo',low,'requieren reposición',low?'var(--warn)':'var(--accent3)')}${kpi('Valor remanente',fmtMoney(value),'costo estimado')}</div>`;
+  sum.innerHTML=`<div class="mops-kpis">${kpi('Rollos activos',rows.length,'registrados')}${kpi('Stock registrado',(registered/1000).toFixed(2)+' kg','inventario declarado')}${kpi('Reservado',(reserved/1000).toFixed(2)+' kg','trabajos abiertos')}${kpi('Libre',(free/1000).toFixed(2)+' kg','registrado − reservado',low?'var(--warn)':'var(--accent3)')}${kpi('Stock bajo',low,'requieren reposición',low?'var(--warn)':'var(--accent3)')}${kpi('Valor registrado',fmtMoney(value),'estimado según costo/kg')}</div>
+    <div class="mops-source-note warning"><b>Fuente: inventario registrado.</b><span>No existe una balanza física conectada. El stock baja al cerrar trabajos/QA o al editar un rollo; “Libre” descuenta reservas de trabajos abiertos.</span></div>`;
   el.innerHTML=rows.length?`<div class="mops-spool-grid">${rows.map(s=>{
-    const free=spoolAvailable(s),pct=clamp(num(s.remaining)/Math.max(1,num(s.initial))*100,0,100),res=reservedForSpool(s.id);
+    const available=spoolAvailable(s),pct=clamp(num(s.remaining)/Math.max(1,num(s.initial))*100,0,100),res=reservedForSpool(s.id);
     const color=pct<15?'var(--danger)':pct<30?'var(--warn)':'var(--accent3)';
     return`<div class="mops-spool">
       <div style="display:flex;align-items:center;gap:8px"><span style="width:13px;height:13px;border-radius:50%;background:${cssColor(s.colorCss||s.color)};border:1px solid var(--border2)"></span><b style="font-size:12px;color:var(--text);flex:1">${esc(s.name)}</b><span class="mops-status" style="color:${color}">${esc(s.status||'activo')}</span></div>
       <div style="font-size:10.5px;color:var(--text3);margin-top:5px">${esc(s.material)} · ${esc(s.color||'sin color')} · ${esc(s.brand||'sin marca')}</div>
       <div class="mops-spool-meter"><i style="width:${pct}%;background:${color}"></i></div>
-      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--text2)"><span><b>${Math.round(free)} g</b> libres</span><span>${Math.round(res)} g reservados</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--text2)"><span><b>${Math.round(available)} g</b> libres</span><span>${Math.round(res)} g reservados</span></div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px">${esc(machineLabel(s.machineId))}${s.slot?' · slot '+esc(s.slot):''} · ${fmtMoney(num(s.costPerKg))}/kg</div>
       <div style="display:flex;gap:5px;margin-top:9px"><button class="btn btn-ghost btn-sm" onclick="MachineOps.openSpool('${s.id}')">Editar</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.printEntityLabel('spool','${s.id}')">▦ QR</button>${s.status!=='agotado'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.markSpoolEmpty('${s.id}')">Agotar</button>`:''}</div>
     </div>`;
@@ -985,6 +1061,16 @@ function latestProfiles(){
   return[...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')||a.model.localeCompare(b.model,'es'));
 }
 function profileLabel(id){const p=data().profiles.find(x=>x.id===id);return p?`${p.name} v${num(p.version,1)}`:'perfil eliminado';}
+function profileProductionCheck(p){
+  const missing=[];
+  if(!String(p?.model||'').trim())missing.push('modelo');
+  if(!String(p?.material||'').trim())missing.push('material');
+  if(!String(p?.nozzle||'').trim())missing.push('boquilla');
+  if(!(p?.params&&typeof p.params==='object'&&Object.keys(p.params).length))missing.push('parámetros');
+  const layer=num(p?.layerHeight||p?.params?.layerHeight);
+  if(!(layer>0))missing.push('altura de capa');
+  return{ok:missing.length===0,missing};
+}
 function addProfileVersion(meta,params){
   const normalized={...(params||{})},fingerprint=hashText(JSON.stringify(normalized));
   const siblings=data().profiles.filter(p=>profileKey(p)===profileKey(meta));
@@ -1024,12 +1110,23 @@ function saveProfile(){
   closeProfile();if(r.created){persist('Versión de perfil creada');toast(`${name} v${r.profile.version} guardado ✓`,'success');}else toast('No hay cambios respecto de la versión existente','info');
 }
 function setProfileStatus(id,status){
-  const p=data().profiles.find(x=>x.id===id);if(!p||!['experimental','approved','deprecated'].includes(status))return;p.status=status;p.updatedAt=nowIso();
-  if(status==='approved'){p.approvedBy=actor();p.approvedAt=nowIso();}persist('Estado de perfil actualizado');
+  const p=data().profiles.find(x=>x.id===id);if(!p||!['experimental','approved','deprecated'].includes(status))return;
+  if(status==='approved'){
+    const check=profileProductionCheck(p);
+    if(!check.ok){toast('No se puede aprobar: falta '+check.missing.join(', '),'error');return;}
+    if(!confirm('Aprobar este perfil certifica una REVISIÓN HUMANA para producción. No reemplaza una pieza piloto ni una validación dimensional.\n\n¿Confirmas la aprobación?'))return;
+    p.approvedBy=actor();p.approvedAt=nowIso();
+  }
+  p.status=status;p.updatedAt=nowIso();persist('Estado de perfil actualizado');
 }
 function archiveProfile(id){const p=data().profiles.find(x=>x.id===id);if(!p)return;p.archived=true;p.updatedAt=nowIso();persist('Perfil archivado');}
 function useProfile(id){
-  const p=data().profiles.find(x=>x.id===id);if(!p)return;let legacy={};try{legacy=JSON.parse(localStorage.getItem('sl_profiles')||'{}');}catch(_){}
+  const p=data().profiles.find(x=>x.id===id);if(!p)return;
+  const check=profileProductionCheck(p);
+  if(p.status==='deprecated'){toast('Este perfil está deprecado. Crea o selecciona una versión vigente.','error');return;}
+  if(!check.ok){toast('Perfil incompleto: '+check.missing.join(', '),'error');return;}
+  if(p.status!=='approved'&&!confirm('Este perfil todavía es EXPERIMENTAL. Úsalo solo para prueba/pieza piloto.\n\n¿Continuar?'))return;
+  let legacy={};try{legacy=JSON.parse(localStorage.getItem('sl_profiles')||'{}');}catch(_){}
   legacy[p.name]=p.params||{};localStorage.setItem('sl_profiles',JSON.stringify(legacy));showView('laminado');
   setTimeout(()=>{setVal('slPrinter',p.model);setVal('slMaterial',p.material);setVal('slNozzle',p.nozzle);try{SL3D.loadProfile(p.name);}catch(_){toast('Perfil copiado al laminador; genera parámetros para aplicarlo','info');}},120);
   audit('Perfil enviado al laminador','',profileLabel(id));writeLocal();scheduleRemote();
@@ -1045,10 +1142,12 @@ async function importProfileFile(event){
   }catch(e){toast('No se pudo importar el perfil JSON: '+e.message,'error');}finally{event.target.value='';}
 }
 function renderProfiles(){
-  const el=input('mopsProfiles');if(!el)return;const rows=latestProfiles(),approved=rows.filter(p=>p.status==='approved').length;
-  const versions=data().profiles.filter(p=>!p.archived).length;
-  el.innerHTML=`<div class="mops-kpis">${kpi('Perfiles vigentes',rows.length,'combinaciones')}${kpi('Aprobados',approved,'listos para producción',approved===rows.length?'var(--accent3)':'var(--warn)')}${kpi('Versiones',versions,'histórico trazable')}</div>
-  ${rows.length?`<div class="mops-profile-grid">${rows.map(p=>{const count=data().profiles.filter(x=>profileKey(x)===profileKey(p)&&!x.archived).length,col=p.status==='approved'?'var(--accent3)':p.status==='deprecated'?'var(--danger)':'var(--warn)';return`<div class="mops-profile-card"><div style="display:flex;gap:8px;align-items:center"><b style="color:var(--text);flex:1">${esc(p.name)}</b><span class="mops-status" style="color:${col}">${esc(p.status)}</span></div><div style="font-size:10.5px;color:var(--text3);margin-top:5px">${esc(p.model||'cualquier modelo')} · ${esc(p.material||'material libre')} · ${esc(p.nozzle)} mm · capa ${num(p.layerHeight||p.params?.layerHeight).toFixed(2)} mm</div><div style="font-size:10px;color:var(--text3);margin-top:5px">v${p.version} · ${count} versión${count!==1?'es':''} · huella ${esc(p.fingerprint)}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px"><button class="btn btn-primary btn-sm" onclick="MachineOps.useProfile('${p.id}')">Usar</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openProfile('${p.id}')">Nueva versión</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.exportProfile('${p.id}')">Exportar</button>${p.status!=='approved'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.setProfileStatus('${p.id}','approved')">✓ Aprobar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveProfile('${p.id}')">Archivar</button></div></div>`;}).join('')}</div>`:'<div class="empty-state">Aún no hay perfiles compartidos. Guarda uno desde el laminador o créalo manualmente.</div>'}`;
+  const el=input('mopsProfiles');if(!el)return;const rows=latestProfiles(),versions=data().profiles.filter(p=>!p.archived).length;
+  const ready=rows.filter(p=>p.status==='approved'&&profileProductionCheck(p).ok).length;
+  const invalidApproved=rows.filter(p=>p.status==='approved'&&!profileProductionCheck(p).ok).length;
+  el.innerHTML=`<div class="mops-kpis">${kpi('Perfiles vigentes',rows.length,'combinaciones')}${kpi('Listos producción',ready,'aprobados + completos',ready===rows.length&&rows.length?'var(--accent3)':'var(--warn)')}${kpi('Aprobados incompletos',invalidApproved,'requieren corregir metadata',invalidApproved?'var(--danger)':'var(--accent3)')}${kpi('Versiones',versions,'histórico trazable')}</div>
+  <div class="mops-source-note"><b>Qué significa “Aprobado”.</b><span>Es una aprobación humana registrada con usuario y fecha. Para series críticas conviene validar una pieza piloto; el dashboard no puede certificar por sí solo acabado o tolerancias físicas.</span></div>
+  ${rows.length?`<div class="mops-profile-grid">${rows.map(p=>{const count=data().profiles.filter(x=>profileKey(x)===profileKey(p)&&!x.archived).length,check=profileProductionCheck(p),readyNow=p.status==='approved'&&check.ok,col=readyNow?'var(--accent3)':p.status==='deprecated'?'var(--danger)':'var(--warn)',statusText=p.status==='approved'&&!check.ok?'aprobado incompleto':p.status;return`<div class="mops-profile-card"><div style="display:flex;gap:8px;align-items:center"><b style="color:var(--text);flex:1">${esc(p.name)}</b><span class="mops-status" style="color:${col}">${esc(statusText)}</span></div><div style="font-size:10.5px;color:var(--text3);margin-top:5px">${esc(p.model||'sin modelo')} · ${esc(p.material||'sin material')} · ${esc(p.nozzle||'—')} mm · capa ${num(p.layerHeight||p.params?.layerHeight).toFixed(2)} mm</div><div style="font-size:10px;color:var(--text3);margin-top:5px">v${p.version} · ${count} versión${count!==1?'es':''} · huella ${esc(p.fingerprint)}${p.approvedAt?` · aprobado ${esc(fmtStamp(p.approvedAt))}`:''}</div>${!check.ok?`<div class="mops-profile-missing">Falta: ${esc(check.missing.join(', '))}</div>`:''}<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px"><button class="btn btn-primary btn-sm" onclick="MachineOps.useProfile('${p.id}')">Usar</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openProfile('${p.id}')">Nueva versión</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.exportProfile('${p.id}')">Exportar</button>${p.status!=='approved'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.setProfileStatus('${p.id}','approved')">✓ Aprobar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveProfile('${p.id}')">Archivar</button></div></div>`;}).join('')}</div>`:'<div class="empty-state">Aún no hay perfiles compartidos. Guarda uno desde el laminador o créalo manualmente.</div>'}`;
 }
 
 function qaJobOptions(selected=''){
@@ -1194,31 +1293,49 @@ function simulateCapacity(inputData,fleet,loads={},nowMs=Date.now()){
   const q=Math.max(1,Math.ceil(num(inputData.qty,1))),perBed=Math.max(1,Math.ceil(num(inputData.unitsPerBed,1))),cycles=Math.ceil(q/perBed);
   const cycleMinutes=Math.max(1,num(inputData.minutesPerCycle,60)),handling=Math.max(0,num(inputData.handlingMinutes,8)),buffer=clamp(num(inputData.bufferPct,15),0,100)/100;
   const probe={material:inputData.material||'PLA',sizeX:num(inputData.sizeX),sizeY:num(inputData.sizeY),sizeZ:num(inputData.sizeZ)};
+  if(!(probe.sizeX>0&&probe.sizeY>0&&probe.sizeZ>0))return{ok:false,reason:'Ingresa dimensiones X, Y y Z para comprobar compatibilidad física',cycles,qty:q,assignments:[]};
   const machines=(fleet||[]).filter(m=>m.operational!==false&&modelCanRun(m.modelo||m.model,probe)).map(m=>({id:m.id,model:m.modelo||m.model,label:m.label||m.nombre||m.id,
-    speed:(MODEL_CAPS[m.modelo||m.model]||MODEL_CAPS.K1).speed,available:Math.max(0,num(loads[m.id])),cycles:0,minutes:0,qty:0}));
-  if(!machines.length)return{ok:false,reason:'No hay máquinas operativas compatibles',cycles,qty:q,assignments:[]};
+    available:Math.max(0,num(loads[m.id])),cycles:0,minutes:0,qty:0}));
+  if(!machines.length)return{ok:false,reason:'No hay máquinas operativas compatibles con material y dimensiones',cycles,qty:q,assignments:[]};
   let remaining=q,totalPrinterMinutes=0;
   for(let i=0;i<cycles;i++){
-    const slot=machines.slice().sort((a,b)=>(a.available+cycleMinutes/a.speed)-(b.available+cycleMinutes/b.speed))[0];
-    const duration=cycleMinutes/slot.speed+handling;slot.available+=duration;slot.minutes+=duration;slot.cycles++;const units=Math.min(perBed,remaining);slot.qty+=units;remaining-=units;totalPrinterMinutes+=duration;
+    const slot=machines.slice().sort((a,b)=>(a.available+cycleMinutes+handling)-(b.available+cycleMinutes+handling))[0];
+    // “Minutos por ciclo” se respeta literalmente. No se aplican multiplicadores
+    // de velocidad inventados por modelo: si un modelo demora distinto, usa el
+    // tiempo de slicer/medición correspondiente al escenario que estás simulando.
+    const duration=cycleMinutes+handling;slot.available+=duration;slot.minutes+=duration;slot.cycles++;const units=Math.min(perBed,remaining);slot.qty+=units;remaining-=units;totalPrinterMinutes+=duration;
   }
   const used=machines.filter(m=>m.cycles),finishMinutes=Math.max(...used.map(m=>m.available)),promisedMinutes=Math.ceil(finishMinutes*(1+buffer));
   const promisedAt=new Date(nowMs+promisedMinutes*60000),dueMs=inputData.dueDate?dateValue(inputData.dueDate):Infinity;
   const grams=Math.max(0,num(inputData.grams)),materialCost=grams/1000*Math.max(0,num(inputData.costPerKg)),machineCost=totalPrinterMinutes/60*Math.max(0,num(inputData.hourlyRate,1500));
   return{ok:true,qty:q,cycles,machinesUsed:used.length,finishMinutes,promisedMinutes,promisedAt:promisedAt.toISOString(),dueDate:inputData.dueDate||'',
     feasible:dueMs===Infinity||promisedAt.getTime()<=dueMs,totalPrinterMinutes,grams,materialCost,machineCost,totalCost:materialCost+machineCost,
+    confidence:'scenario',assumptions:['tiempo por ciclo ingresado','carga MachineOps','telemetría reciente','margen configurado'],
     assignments:used.map(m=>({machineId:m.id,model:m.model,label:m.label,cycles:m.cycles,qty:m.qty,minutes:Math.round(m.minutes)}))};
+}
+function capacityLoadMinutes(machineId){
+  const jobs=jobsForMachine(machineId),queued=jobs.filter(j=>['pendiente','planificado','en_cola'].includes(j.status)).reduce((s,j)=>s+jobMinutes(j),0);
+  const printing=jobs.find(j=>j.status==='imprimiendo'),live=liveEvidence(machineId);
+  let running=0;
+  if(printing){
+    const eta=num(live.live?.eta);
+    running=live.known&&live.state==='printing'&&eta>0?eta/60:jobMinutes(printing);
+  }
+  // QA no ocupa capacidad de impresora. Antes se sumaba junto con el trabajo
+  // imprimiendo completo y, además, el ETA vivo: podía duplicar la carga.
+  return Math.max(0,queued+running);
 }
 function capacityInput(){return{pedidoId:inputVal('mopsCapPedido'),name:inputVal('mopsCapName').trim(),qty:inputVal('mopsCapQty'),unitsPerBed:inputVal('mopsCapPerBed'),minutesPerCycle:inputVal('mopsCapMinutes'),
   handlingMinutes:inputVal('mopsCapHandling'),material:inputVal('mopsCapMaterial'),grams:inputVal('mopsCapGrams'),costPerKg:inputVal('mopsCapCostKg'),hourlyRate:inputVal('mopsCapRate'),
   sizeX:inputVal('mopsCapX'),sizeY:inputVal('mopsCapY'),sizeZ:inputVal('mopsCapZ'),dueDate:inputVal('mopsCapDue'),bufferPct:inputVal('mopsCapBuffer')};}
 function fillCapacityOrders(){const el=input('mopsCapPedido');if(!el)return;const selected=el.value,orders=activeOrders();el.innerHTML='<option value="">— simulación sin pedido —</option>'+orders.map(p=>`<option value="${p.id}">${esc(p.fields['N° Pedido']||'—')} · ${esc(resolveClienteName(p.fields.Cliente))}</option>`).join('');if(orders.some(p=>p.id===selected))el.value=selected;}
 function runCapacitySimulation(){
-  fillCapacityOrders();const request=capacityInput(),loads={};(MAQUINAS||[]).forEach(m=>loads[m.id]=jobsForMachine(m.id).reduce((s,j)=>s+jobMinutes(j),0)+(liveState(m.id)==='printing'?num(_printerStatus[m.id]?.eta)/60:0));
+  fillCapacityOrders();const request=capacityInput(),loads={};(MAQUINAS||[]).forEach(m=>loads[m.id]=capacityLoadMinutes(m.id));
   const fleet=(MAQUINAS||[]).map(m=>({...m,operational:machineOperational(m)}));_lastCapacity=simulateCapacity(request,fleet,loads);
   const el=input('mopsCapacityResult');if(!el)return;if(!_lastCapacity.ok){el.innerHTML=`<div class="mops-alert danger">⚠ <span>${esc(_lastCapacity.reason)}</span></div>`;return;}
   const r=_lastCapacity,finish=new Date(r.promisedAt).toLocaleString('es-CL',{dateStyle:'medium',timeStyle:'short'}),col=r.feasible?'var(--accent3)':'var(--danger)';
-  el.innerHTML=`<div class="mops-kpis">${kpi('Ciclos',r.cycles,`${r.qty} unidades`)}${kpi('Máquinas',r.machinesUsed,'compatibles usadas')}${kpi('Horas impresora',(r.totalPrinterMinutes/60).toFixed(1)+' h','suma productiva')}${kpi('Promesa',finish,r.feasible?'cumple fecha':'riesgo de atraso',col)}${kpi('Costo 3D',fmtMoney(r.totalCost),`${fmtMoney(r.materialCost)} material · ${fmtMoney(r.machineCost)} máquina`)}</div><div class="card" style="overflow-x:auto"><table class="mops-job-table" style="min-width:620px"><thead><tr><th>Máquina</th><th>Modelo</th><th>Ciclos</th><th>Unidades</th><th>Carga</th></tr></thead><tbody>${r.assignments.map(a=>`<tr><td>${esc(machineLabel(a.machineId))}</td><td>${esc(a.model)}</td><td>${a.cycles}</td><td>${a.qty}</td><td>${fmtMin(a.minutes)}</td></tr>`).join('')}</tbody></table></div><div class="mops-alert ${r.feasible?'':'danger'}" style="margin-top:10px">${r.feasible?'✅':'🚨'} <span>${r.feasible?'Capacidad disponible con el margen de seguridad indicado.':'La promesa excede la fecha límite. Reduce carga, agrega máquinas o renegocia la entrega.'}</span></div>`;
+  el.innerHTML=`<div class="mops-source-note warning"><b>Escenario, no promesa contractual.</b><span>Usa el tiempo por ciclo que ingresaste, la carga MachineOps y telemetría reciente. No inventa una “velocidad” distinta por modelo. QA no ocupa impresora y una impresión activa usa ETA restante cuando está disponible.</span></div>
+    <div class="mops-kpis">${kpi('Ciclos',r.cycles,`${r.qty} unidades`)}${kpi('Máquinas',r.machinesUsed,'operativas + compatibles')}${kpi('Horas impresora',(r.totalPrinterMinutes/60).toFixed(1)+' h','tiempo ingresado + manipulación')}${kpi('Fin estimado',finish,r.feasible?'dentro del escenario':'excede fecha del escenario',col)}${kpi('Costo modelado',fmtMoney(r.totalCost),`${fmtMoney(r.materialCost)} material · ${fmtMoney(r.machineCost)} máquina`)}</div><div class="card" style="overflow-x:auto"><table class="mops-job-table" style="min-width:620px"><thead><tr><th>Máquina</th><th>Modelo</th><th>Ciclos</th><th>Unidades</th><th>Carga agregada</th></tr></thead><tbody>${r.assignments.map(a=>`<tr><td>${esc(machineLabel(a.machineId))}</td><td>${esc(a.model)}</td><td>${a.cycles}</td><td>${a.qty}</td><td>${fmtMin(a.minutes)}</td></tr>`).join('')}</tbody></table></div><div class="mops-alert ${r.feasible?'':'danger'}" style="margin-top:10px">${r.feasible?'✓':'🚨'} <span>${r.feasible?'El escenario entra antes de la fecha con el margen indicado. Valida G-code/tiempo real antes de comprometer entrega.':'El escenario excede la fecha límite. Ajusta carga, tiempo por ciclo o entrega.'}</span></div>`;
 }
 // Resumen compacto para el Calendario. Usa los trabajos planificados reales del
 // pedido y la carga/ETA viva de la flota; si aún no hay trabajos, devuelve
@@ -1249,6 +1366,7 @@ function createCapacityJobs(){
 
 // ── Seguridad ambiental y compuerta de inicio ────────────────
 function latestSafetyReading(){return data().safetyReadings.slice().sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0))[0]||null;}
+function optionalMeasure(v){if(v===undefined||v===null||String(v).trim()==='')return null;const n=Number(v);return Number.isFinite(n)?n:null;}
 function safetyDecision(config,reading,context={},nowMs=Date.now()){
   // "Fresco" = hay lectura, es reciente Y el sensor está EN LÍNEA. Un sensor
   // caído (online:false) no es dato confiable aunque su marca de tiempo sea
@@ -1261,9 +1379,12 @@ function safetyDecision(config,reading,context={},nowMs=Date.now()){
   const cfg={...DEFAULT_SAFETY,...(config||{})},blockers=[],warnings=[],fresh=!!reading&&reading.online!==false&&nowMs-Date.parse(reading.at||0)<=num(cfg.staleMinutes,10)*60000;
   if(fresh){
     if(reading.smoke===true)blockers.push('El sensor detecta humo.');
-    if(num(reading.temperature)>num(cfg.maxTemperature))blockers.push(`Temperatura ambiental ${num(reading.temperature).toFixed(1)}°C sobre el máximo.`);
-    if(num(reading.voc)>num(cfg.maxVoc))blockers.push(`VOC ${Math.round(num(reading.voc))} sobre el máximo configurado.`);
-    if(num(reading.humidity)>num(cfg.maxHumidity))warnings.push(`Humedad ${num(reading.humidity).toFixed(0)}%: aumenta el riesgo de filamento húmedo.`);
+    if(reading.temperature==null)(cfg.enforce?blockers:warnings).push('Temperatura ambiental sin lectura.');
+    else if(num(reading.temperature)>num(cfg.maxTemperature))blockers.push(`Temperatura ambiental ${num(reading.temperature).toFixed(1)}°C sobre el máximo.`);
+    if(reading.voc==null)(cfg.enforce?blockers:warnings).push('VOC sin lectura.');
+    else if(num(reading.voc)>num(cfg.maxVoc))blockers.push(`VOC ${Math.round(num(reading.voc))} sobre el máximo configurado.`);
+    if(reading.humidity==null)warnings.push('Humedad sin lectura.');
+    else if(num(reading.humidity)>num(cfg.maxHumidity))warnings.push(`Humedad ${num(reading.humidity).toFixed(0)}%: aumenta el riesgo de filamento húmedo.`);
   }
   const unattended=!!context.unattended;
   if(unattended){
@@ -1297,25 +1418,38 @@ function saveSafetyConfig(){
 }
 function recordSafetyReading(values,source='manual'){
   const bool=v=>v===undefined||v===null?undefined:v===true||v==='true'||v===1;
-  const r={id:uid('safety'),at:nowIso(),temperature:num(values.temperature),humidity:num(values.humidity),voc:num(values.voc),smoke:bool(values.smoke),
+  const r={id:uid('safety'),at:nowIso(),temperature:optionalMeasure(values.temperature),humidity:optionalMeasure(values.humidity),voc:optionalMeasure(values.voc),smoke:bool(values.smoke),
     ventilation:bool(values.ventilation),online:values.online!==false,source,updatedAt:nowIso()};
   data().safetyReadings.unshift(r);if(data().safetyReadings.length>200)data().safetyReadings.length=200;persist('Lectura ambiental registrada');return r;
 }
-function recordSafetyManual(){recordSafetyReading({temperature:inputVal('mopsSafetyTemp'),humidity:inputVal('mopsSafetyHumidity'),voc:inputVal('mopsSafetyVoc'),smoke:input('mopsSafetySmokeNow')?.checked,ventilation:input('mopsSafetyVentNow')?.checked},'manual');toast('Lectura ambiental guardada ✓','success');}
+function recordSafetyManual(){
+  const temp=optionalMeasure(inputVal('mopsSafetyTemp')),hum=optionalMeasure(inputVal('mopsSafetyHumidity')),voc=optionalMeasure(inputVal('mopsSafetyVoc'));
+  if(temp==null||hum==null||voc==null){toast('Completa temperatura, humedad y VOC antes de registrar una lectura manual','error');return;}
+  if(temp<0||temp>60||hum<0||hum>100||voc<0||voc>10000){toast('Lectura manual fuera de rango razonable; revísala antes de guardar','error');return;}
+  recordSafetyReading({temperature:temp,humidity:hum,voc,smoke:input('mopsSafetySmokeNow')?.checked,ventilation:input('mopsSafetyVentNow')?.checked},'manual');
+  toast('Lectura manual guardada como declaración del operador ✓','success');
+}
 async function refreshSafety(){
   const url=data().safetyConfig.sensorUrl;if(!url){toast('Configura la URL del sensor o registra una lectura manual','info');return;}
   try{const token=sessionStorage.getItem('machine_ops_sensor_token')||'',r=await fetch(url,{headers:token?{'Authorization':'Bearer '+token}:{},signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();recordSafetyReading(d,'sensor');toast('Sensores actualizados ✓','success');}
   catch(e){audit('Sensor ambiental sin respuesta','',e.message,'error');writeLocal();scheduleRemote();toast('No se pudo leer el sensor: '+e.message,'error');renderSafety();}
 }
 function renderSafety(){
-  const el=input('mopsSafety');if(!el)return;const cfg=data().safetyConfig,r=latestSafetyReading(),decision=safetyDecision(cfg,r,{unattended:true,cameraConfigured:(MAQUINAS||[]).some(m=>{try{return!!printerCamUrl(m.id);}catch(_){return false;}})});
+  const el=input('mopsSafety');if(!el)return;const cfg=data().safetyConfig,r=latestSafetyReading();
+  // La cámara se valida por IMPRESORA en el preflight. Aquí se evalúa sólo el
+  // ambiente del taller; antes “alguna cámara configurada” podía hacer parecer
+  // satisfecha una condición que no correspondía a todas las máquinas.
+  const decision=safetyDecision(cfg,r,{unattended:true,cameraConfigured:true});
   if(input('mopsSafetyEnforce'))input('mopsSafetyEnforce').checked=!!cfg.enforce;if(input('mopsSafetyCamera'))input('mopsSafetyCamera').checked=!!cfg.cameraRequired;if(input('mopsSafetyVent'))input('mopsSafetyVent').checked=!!cfg.ventilationRequired;if(input('mopsSafetySmoke'))input('mopsSafetySmoke').checked=!!cfg.smokeRequired;
   setVal('mopsSafetyMaxTemp',cfg.maxTemperature);setVal('mopsSafetyMaxHumidity',cfg.maxHumidity);setVal('mopsSafetyMaxVoc',cfg.maxVoc);setVal('mopsSafetyUrl',cfg.sensorUrl);setVal('mopsSafetyToken',sessionStorage.getItem('machine_ops_sensor_token')||'');
-  const age=r?Math.max(0,Math.round((Date.now()-Date.parse(r.at))/60000)):null,col=decision.blockers.length?'var(--danger)':decision.warnings.length?'var(--warn)':'var(--accent3)';
-  el.innerHTML=`<div class="mops-kpis">${kpi('Estado',decision.blockers.length?'BLOQUEADO':decision.warnings.length?'REVISAR':'SEGURO',r?`lectura hace ${age} min`:'sin lectura',col)}${kpi('Temperatura',r?num(r.temperature).toFixed(1)+' °C':'—',`máx. ${cfg.maxTemperature} °C`)}${kpi('Humedad',r?num(r.humidity).toFixed(0)+' %':'—',`máx. ${cfg.maxHumidity}%`)}${kpi('VOC',r?Math.round(num(r.voc)):'—',`máx. ${cfg.maxVoc}`)}${kpi('Ventilación',r?(r.ventilation?'ACTIVA':'NO CONFIRMADA'):'—','sensor ambiental',r?.ventilation?'var(--accent3)':'var(--warn)')}${kpi('Humo',r?(r.smoke?'DETECTADO':'normal'):'—','sensor ambiental',r?.smoke?'var(--danger)':'var(--accent3)')}</div>
+  const age=r?Math.max(0,Math.round((Date.now()-Date.parse(r.at))/60000)):null;
+  const state=!r?'SIN DATOS':!decision.fresh?'LECTURA VENCIDA':decision.blockers.length?'BLOQUEADO':decision.warnings.length?'REVISAR':'SEGURO';
+  const col=!r||!decision.fresh?'var(--warn)':decision.blockers.length?'var(--danger)':decision.warnings.length?'var(--warn)':'var(--accent3)';
+  const measure=(v,suffix='')=>v==null?'—':num(v).toFixed(suffix===' °C'?1:0)+suffix;
+  el.innerHTML=`<div class="mops-kpis">${kpi('Ambiente',state,r?`${esc(r.source||'registro')} · hace ${age} min`:'sin lectura',col)}${kpi('Temperatura',measure(r?.temperature,' °C'),`máx. ${cfg.maxTemperature} °C`)}${kpi('Humedad',measure(r?.humidity,' %'),`máx. ${cfg.maxHumidity}%`)}${kpi('VOC',r?.voc==null?'—':Math.round(num(r.voc)),`máx. ${cfg.maxVoc}`)}${kpi('Ventilación',r?(r.ventilation===true?'ACTIVA':r.ventilation===false?'NO CONFIRMADA':'—'):'—','lectura ambiental',r?.ventilation===true?'var(--accent3)':'var(--warn)')}${kpi('Humo',r?(r.smoke===true?'DETECTADO':r.smoke===false?'normal':'—'):'—','lectura ambiental',r?.smoke===true?'var(--danger)':'var(--accent3)')}</div>
+  <div class="mops-source-note ${r?.source==='manual'?'warning':''}"><b>Fuente: ${r?esc(r.source||'desconocida'):'sin lectura'}.</b><span>${r?.source==='manual'?'Es una declaración del operador, no una medición automática. ':''}La cámara se comprueba por impresora durante el preflight; este bloque sólo representa el ambiente del taller.</span></div>
   ${[...decision.blockers,...decision.warnings].length?`<div style="display:grid;gap:7px;margin-bottom:12px">${decision.blockers.map(x=>`<div class="mops-alert danger">🚨 <span>${esc(x)}</span></div>`).join('')}${decision.warnings.map(x=>`<div class="mops-alert warn">⚠ <span>${esc(x)}</span></div>`).join('')}</div>`:''}`;
 }
-
 function maintenanceThreshold(machineId,type){
   const m=getMachine(machineId),model=m?.modelo||'K1';
   return num(data().maintenanceProfiles?.[model]?.[type],DEFAULT_MAINT[model]?.[type]||100);
@@ -1338,10 +1472,10 @@ function renderMaintenanceProfiles(){
 function renderAnalytics(){
   const el=document.getElementById('mopsAnalytics');if(!el)return;
   const qa=data().qa,approved=qa.filter(q=>q.result!=='fallido').length,failed=qa.filter(q=>q.result==='fallido').length;
-  const success=qa.length?approved/qa.length*100:100,waste=qa.reduce((s,q)=>s+num(q.wasteGrams),0);
+  const success=qa.length?approved/qa.length*100:null,waste=qa.reduce((s,q)=>s+num(q.wasteGrams),0);
   const completed=data().jobs.filter(j=>j.status==='terminado'||j.status==='fallido');
-  const est=completed.reduce((s,j)=>s+jobMinutes(j),0),actual=completed.reduce((s,j)=>s+num(j.actualMinutes,jobMinutes(j)),0);
-  const accuracy=est&&actual?Math.max(0,100-Math.abs(actual-est)/est*100):100;
+  const measured=completed.filter(j=>num(j.actualMinutes)>0),est=measured.reduce((s,j)=>s+jobMinutes(j),0),actual=measured.reduce((s,j)=>s+num(j.actualMinutes),0);
+  const accuracy=est&&actual?Math.max(0,100-Math.abs(actual-est)/est*100):null;
   const jobProdCost=j=>['terminado','fallido'].includes(j.status)?jobCostBreakdown(j).total:0;
   const allocatedRevenue=j=>{
     const p=state.pedidosById?.[j.pedidoId],net=num(p?.fields?.['Monto total (CLP)'])/1.19;if(!net)return 0;
@@ -1350,16 +1484,19 @@ function renderAnalytics(){
   };
   const cost=completed.reduce((s,j)=>s+jobProdCost(j),0);
   const contribution=completed.reduce((s,j)=>s+allocatedRevenue(j)-jobProdCost(j),0);
+  const linkedRevenueJobs=completed.filter(j=>num(state.pedidosById?.[j.pedidoId]?.fields?.['Monto total (CLP)'])>0).length;
   const machineRows=(MAQUINAS||[]).map(m=>{
     const mj=data().jobs.filter(j=>j.machineId===m.id),done=mj.filter(j=>j.status==='terminado').length,fail=mj.filter(j=>j.status==='fallido').length;
-    const hours=mj.reduce((s,j)=>s+num(j.actualMinutes,j.status==='terminado'?jobMinutes(j):0),0)/60;
+    const actualRows=mj.filter(j=>num(j.actualMinutes)>0),hours=actualRows.reduce((s,j)=>s+num(j.actualMinutes),0)/60;
     const grams=mj.reduce((s,j)=>s+num(j.materialConsumed),0);
     const prodCost=mj.reduce((s,j)=>s+jobProdCost(j),0),contrib=mj.reduce((s,j)=>s+allocatedRevenue(j)-jobProdCost(j),0);
-    return{m,done,fail,hours,grams,prodCost,contrib,rate:(done+fail)?done/(done+fail)*100:100};
+    return{m,done,fail,hours,grams,prodCost,contrib,rate:(done+fail)?done/(done+fail)*100:null,actualCount:actualRows.length};
   }).sort((a,b)=>b.hours-a.hours);
-  el.innerHTML=`<div class="mops-kpis">${kpi('Éxito QA',success.toFixed(1)+'%',`${approved} aprobados · ${failed} fallidos`,success<90?'var(--danger)':'var(--accent3)')}${kpi('Desperdicio',waste+' g','registrado en fallas',waste?'var(--warn)':'var(--accent3)')}${kpi('Precisión ETA',accuracy.toFixed(0)+'%','estimado versus real')}${kpi('Costo producción 3D',fmtMoney(cost),'material + energía + mano de obra + desgaste')}${kpi('Contribución 3D',fmtMoney(contribution),'venta neta asignada − costo 3D',contribution<0?'var(--danger)':'var(--accent3)')}</div>
-    <div class="card" style="overflow-x:auto"><div style="padding:11px 13px 4px;font-size:10.5px;font-weight:700;color:var(--text3)">RENDIMIENTO POR IMPRESORA</div><table class="mops-job-table" style="min-width:850px"><thead><tr><th>Máquina</th><th>Terminados</th><th>Fallidos</th><th>Tasa éxito</th><th>Horas</th><th>Material</th><th>Costo 3D</th><th>Contribución</th></tr></thead><tbody>${machineRows.map(r=>`<tr><td><b style="color:var(--text)">${esc(r.m.nombre)} #${r.m.numG}</b><div style="font-size:10px;color:var(--text3)">${esc(r.m.modelo)}</div></td><td>${r.done}</td><td style="color:${r.fail?'var(--danger)':'var(--text2)'}">${r.fail}</td><td style="color:${r.rate<90?'var(--danger)':'var(--accent3)'}">${r.rate.toFixed(0)}%</td><td>${r.hours.toFixed(1)}h</td><td>${Math.round(r.grams)}g</td><td>${fmtMoney(r.prodCost)}</td><td style="color:${r.contrib<0?'var(--danger)':'var(--accent3)'}">${fmtMoney(r.contrib)}</td></tr>`).join('')}</tbody></table></div>
-    <div class="card" style="padding:12px;margin-top:12px"><div style="font-size:10.5px;font-weight:700;color:var(--text3);margin-bottom:8px">AUDITORÍA OPERACIONAL</div><div class="mops-audit-list">${data().audit.slice(0,40).map(a=>`<div class="mops-audit-row"><span>${new Date(a.at).toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'})}</span><b style="color:var(--text2)">${esc(a.actor)}</b><span>${esc(a.action)}${a.machineId?' · '+esc(machineLabel(a.machineId)):''}${a.detail?' · '+esc(a.detail):''}</span></div>`).join('')||'<div style="color:var(--text3);font-size:10.5px">Sin acciones registradas</div>'}</div></div>`;
+  const pct=v=>v==null?'—':v.toFixed(1)+'%';
+  el.innerHTML=`<div class="mops-source-note warning"><b>Analítica registrada, no contabilidad oficial.</b><span>Éxito QA sólo usa QA registrados; precisión ETA sólo trabajos con tiempo real medido. La contribución reparte la venta neta del pedido entre trabajos 3D según minutos, por lo que es una asignación estimada y puede incluir valor de diseño/postproducción.</span></div>
+    <div class="mops-kpis">${kpi('Éxito QA',pct(success),qa.length?`${approved} aprobados · ${failed} fallidos`:'sin QA registrados',success==null?'var(--text3)':success<90?'var(--danger)':'var(--accent3)')}${kpi('Desperdicio',waste+' g',qa.length?'registrado en QA/fallas':'sin QA registrados',waste?'var(--warn)':'var(--text3)')}${kpi('Precisión ETA',accuracy==null?'—':accuracy.toFixed(0)+'%',measured.length?`${measured.length} trabajos con tiempo real`:'sin tiempos reales medidos',accuracy==null?'var(--text3)':'var(--text)')}${kpi('Costo modelado 3D',fmtMoney(cost),`${completed.length} trabajos cerrados`)}${kpi('Contribución asignada*',linkedRevenueJobs?fmtMoney(contribution):'—',linkedRevenueJobs?`${linkedRevenueJobs} trabajos con pedido valorizado`:'sin base de venta enlazada',linkedRevenueJobs&&contribution<0?'var(--danger)':'var(--text)')}</div>
+    <div class="card" style="overflow-x:auto"><div style="padding:11px 13px 4px;font-size:10.5px;font-weight:700;color:var(--text3)">RENDIMIENTO POR IMPRESORA · SOLO DATOS REGISTRADOS</div><table class="mops-job-table" style="min-width:850px"><thead><tr><th>Máquina</th><th>Terminados</th><th>Fallidos</th><th>Tasa éxito</th><th>Horas reales</th><th>Material</th><th>Costo modelado</th><th>Contribución*</th></tr></thead><tbody>${machineRows.map(r=>`<tr><td><b style="color:var(--text)">${esc(r.m.nombre)} #${r.m.numG}</b><div style="font-size:10px;color:var(--text3)">${esc(r.m.modelo)}</div></td><td>${r.done}</td><td style="color:${r.fail?'var(--danger)':'var(--text2)'}">${r.fail}</td><td style="color:${r.rate==null?'var(--text3)':r.rate<90?'var(--danger)':'var(--accent3)'}">${r.rate==null?'—':r.rate.toFixed(0)+'%'}</td><td>${r.actualCount?r.hours.toFixed(1)+'h':'—'}</td><td>${Math.round(r.grams)}g</td><td>${fmtMoney(r.prodCost)}</td><td style="color:${r.contrib<0?'var(--danger)':'var(--text2)'}">${fmtMoney(r.contrib)}</td></tr>`).join('')}</tbody></table></div>
+    <details class="mops-advanced-details"><summary>Auditoría operacional · ${data().audit.length} evento(s)</summary><div class="mops-audit-list">${data().audit.slice(0,40).map(a=>`<div class="mops-audit-row"><span>${new Date(a.at).toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'})}</span><b style="color:var(--text2)">${esc(a.actor)}</b><span>${esc(a.action)}${a.machineId?' · '+esc(machineLabel(a.machineId)):''}${a.detail?' · '+esc(a.detail):''}</span></div>`).join('')||'<div style="color:var(--text3);font-size:10.5px">Sin acciones registradas</div>'}</div></details>`;
 }
 // Con tres pantallas, cada contador suma lo que hay pendiente dentro de ella.
 // Los identificadores de las áreas viejas se conservan: setText ignora los que
@@ -1375,12 +1512,11 @@ function updateNavCounts(){
   let alerts=0;try{(MAQUINAS||[]).forEach(m=>alerts+=getMaintAlerts(m).length);}catch(_){}
   setText('mopsNavMaint',alerts);
   const smart=buildSmartAlerts();setText('mopsNavIntel',smart.length);
-  // Taller es la pantalla de consulta: solo avisa de lo que exige una acción
-  // (mantenciones vencidas o próximas y bloqueos de seguridad), no del stock.
-  setText('mopsNavTaller',alerts+safety);
+  const workshop=workshopSummary();
+  setText('mopsNavTaller',alerts+safety+workshop.lowStock+workshop.invalidApproved);
 }
 function renderAll(){
-  renderOpsOverview();renderIntelligence();renderAutomationConfig();renderPlanning();renderMaterials();renderQuality();renderPostProduction();renderProfiles();renderMaintenanceProfiles();renderAnalytics();renderSafety();fillCapacityOrders();updateNavCounts();
+  renderOpsOverview();renderIntelligence();renderAutomationConfig();renderPlanning();renderMaterials();renderQuality();renderPostProduction();renderProfiles();renderMaintenanceProfiles();renderAnalytics();renderSafety();fillCapacityOrders();renderWorkshopHome();updateNavCounts();
 }
 
 async function syncNow(){
@@ -1774,7 +1910,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState},
 };
 window.MachineOps=api;
 
