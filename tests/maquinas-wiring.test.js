@@ -93,6 +93,18 @@ test('el monitor en vivo se monta antes del diagnóstico sin destruir cámaras',
   assert.doesNotMatch(mount,/cloneNode|innerHTML\s*=/,'no debe duplicar ni recrear el monitor/cámaras');
 });
 
+test('panel CFS muestra únicamente los dos equipos que físicamente tienen CFS',()=>{
+  const render=functionSource(OPS,'renderIntelligence');
+  const has=functionSource(OPS,'machineHasCfs');
+  assert.match(render,/\.filter\(machineHasCfs\)/);
+  assert.match(render,/Solo equipos con CFS instalado: K1 #1 y K2 Plus #11/);
+  assert.match(render,/CFS confirmados/);
+  assert.match(has,/machine\.modelo==='K2 Plus'/);
+  assert.match(has,/id==='k1-1'/);
+  assert.match(has,/machine\.modelo==='K1'&&globalNo===1/);
+  assert.doesNotMatch(render,/\['K2','K2 Plus'\]\.includes\(machine\.modelo\)/);
+});
+
 test('Centro de granja distingue evidencia, eventos automáticos e historial',()=>{
   const render=functionSource(OPS,'renderIntelligence');
   const reliability=functionSource(OPS,'machineReliability');
@@ -105,7 +117,7 @@ test('Centro de granja distingue evidencia, eventos automáticos e historial',()
   const incidentCard=functionSource(OPS,'_incidentCard');
   assert.match(incidentCard,/Confirmar falla/);
   assert.match(incidentCard,/Descartar/);
-  assert.match(render,/Datos físicos y CFS/);
+  assert.match(render,/CFS físico/);
   assert.match(render,/mops-physical-details/,'CFS debe quedar como detalle técnico contraíble');
   assert.match(reliability,/PrinterHistory|printerHistoryEvidence/);
   assert.match(reliability,/FarmHealth|centralHealthEvidence/);

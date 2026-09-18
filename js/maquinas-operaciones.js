@@ -494,14 +494,21 @@ function _incidentRowsForUi(){
   const history=all.filter(row=>row.resolvedAt||(!incidentIsConfirmed(row)&&Date.now()-Date.parse(row.at||0)>=24*3600000));
   return{pending,history};
 }
+function machineHasCfs(machine){
+  if(!machine)return false;
+  const id=String(machine.id||'');
+  const globalNo=Number(machine.numG??machine.num??0);
+  // Configuración física real del taller: solo K1 #1 y K2 Plus.
+  return machine.modelo==='K2 Plus'||id==='k1-1'||(machine.modelo==='K1'&&globalNo===1);
+}
 function _filamentPhysicalSummary(machine){
   const s=typeof _printerStatus!=='undefined'?_printerStatus[machine.id]||{}:{},f=s.filament||null;
   const fresh=!!s.lastSeenAt&&Date.now()-num(s.lastSeenAt)<60000;
   if(!fresh)return{level:'unknown',label:'Sin dato reciente',detail:'La telemetría física tiene más de 60 s o aún no llegó.',f:null};
   if(f?.cfsConnected)return{level:'ok',label:'CFS conectado',detail:`${f.cfsSlots?.length||0} slot${(f.cfsSlots?.length||0)===1?'':'s'} con lectura física.`,f};
-  if(f?.detected===true)return{level:'ok',label:'Filamento detectado',detail:'Sensor físico activo; CFS no detectado.',f};
-  if(f?.detected===false)return{level:'warning',label:'Sin filamento',detail:'El sensor físico reporta vacío.',f};
-  return{level:'unknown',label:'CFS no detectado',detail:'No se interpreta como falla; no hay lectura física suficiente.',f};
+  if(f?.detected===true)return{level:'unknown',label:'CFS sin confirmar',detail:'Hay filamento detectado, pero la telemetría no confirma el CFS en esta lectura.',f};
+  if(f?.detected===false)return{level:'warning',label:'CFS sin confirmar',detail:'La telemetría no confirma el CFS y el sensor físico reporta que no hay filamento.',f};
+  return{level:'unknown',label:'CFS sin lectura',detail:'La telemetría reciente no entregó estado del CFS.',f};
 }
 function _incidentCard(row){
   const confirmed=incidentIsConfirmed(row),detected=!confirmed&&!row.resolvedAt;
@@ -527,7 +534,7 @@ function renderIntelligence(){
   const healthRows=(MAQUINAS||[]).map(machine=>({machine,...machineReliability(machine.id)}));
   const monthCut=Date.now()-30*86400000,costRows=data().jobs.filter(j=>['terminado','fallido'].includes(j.status)&&Date.parse(j.completedAt||j.updatedAt||0)>=monthCut).map(jobCostBreakdown),monthCost=costRows.reduce((sum,row)=>sum+row.total,0);
   const recommend=data().jobs.filter(j=>!j.archived&&['pendiente','planificado','en_cola'].includes(j.status)).sort((a,b)=>dueUrgency(a)-dueUrgency(b)).slice(0,6).map(job=>({job,...recommendationForJob(job)}));
-  const physical=(MAQUINAS||[]).filter(machine=>['K2','K2 Plus'].includes(machine.modelo)||(typeof _printerStatus!=='undefined'&&_printerStatus[machine.id]?.filament)).map(machine=>({machine,..._filamentPhysicalSummary(machine)}));
+  const physical=(MAQUINAS||[]).filter(machineHasCfs).map(machine=>({machine,..._filamentPhysicalSummary(machine)}));
   const incidents=_incidentRowsForUi();
   const bridgeLabel={up:'Operativo',down:'Sin respuesta',checking:'Comprobando…'}[_bridgeHealth.state]||'Sin comprobar',bridgeColor=_bridgeHealth.state==='up'?'var(--accent3)':_bridgeHealth.state==='down'?'var(--danger)':'var(--warn)';
   const confidenceCounts={alta:0,media:0,baja:0};healthRows.forEach(row=>confidenceCounts[row.confidence]=(confidenceCounts[row.confidence]||0)+1);
@@ -563,12 +570,12 @@ function renderIntelligence(){
     </section>
 
     <details class="card mops-intel-panel mops-physical-details" style="margin-top:12px">
-      <summary><span><b>🧵 Datos físicos y CFS</b><small>Información técnica en vivo; no se interpreta como falla cuando falta telemetría.</small></span><span>${physical.filter(row=>row.level==='ok').length}/${physical.length} con lectura útil</span></summary>
+      <summary><span><b>🧵 CFS físico</b><small>Solo equipos con CFS instalado: K1 #1 y K2 Plus #11.</small></span><span>${physical.filter(row=>row.level==='ok').length}/${physical.length} CFS confirmados</span></summary>
       <div class="mops-cfs-grid mops-physical-grid">${physical.length?physical.map(row=>`<article>
         <div><b>${esc(machineLabel(row.machine.id))}</b><span class="mops-cfs-state ${row.level==='ok'?'online':'offline'}" style="color:${_statusColor(row.level)}">${esc(row.label)}</span></div>
         <small>${esc(row.detail)}</small>
         ${row.f?.cfsSlots?.length?`<div class="mops-cfs-slots">${row.f.cfsSlots.map(slot=>`<span><i style="background:${cssColor(slot.color)}"></i><b>${esc(slot.slot)}</b><small>${esc(slot.material||'—')} · ${Math.round(num(slot.remain))} restante</small></span>`).join('')}</div>`:''}
-      </article>`).join(''):'<div class="mops-intel-empty">No hay equipos con telemetría física configurada.</div>'}</div>
+      </article>`).join(''):'<div class="mops-intel-empty">No hay equipos CFS configurados.</div>'}</div>
     </details>`;
 
   _mountIntelligenceEmbeddedNodes(el,embedded);
@@ -1659,7 +1666,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,_filamentPhysicalSummary},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary},
 };
 window.MachineOps=api;
 
