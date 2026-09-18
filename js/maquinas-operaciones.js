@@ -305,19 +305,22 @@ function centralHealthEvidence(machineId){
 function machineReliability(machineId){
   const history=printerHistoryEvidence(machineId),central=centralHealthEvidence(machineId);
   const current=liveState(machineId),cut=Date.now()-30*86400000;
+  const live=typeof _printerStatus!=='undefined'?_printerStatus[machineId]||{}:{};
+  const liveFresh=!!live.lastSeenAt&&Date.now()-num(live.lastSeenAt)<60000;
   const confirmed=data().incidents.filter(i=>i.machineId===machineId&&!i.resolvedAt&&incidentIsConfirmed(i)&&Date.parse(i.at||0)>=cut);
   const detected=data().incidents.filter(i=>i.machineId===machineId&&!i.resolvedAt&&!incidentIsConfirmed(i)&&Date.parse(i.at||0)>=cut);
   let maintenanceAlerts=[];try{maintenanceAlerts=getMaintAlerts(getMachine(machineId))||[];}catch(_){}
   const sample=history.total,completion=sample?history.completed/sample*100:null;
   const centralBad=central.fresh&&central.row&&(central.row.health==='offline'||['shutdown','error'].includes(String(central.row.klipperState||'')));
-  const liveBad=['offline','noip','shutdown','error','apidown'].includes(current);
-  let level='unknown',label='Sin datos suficientes';
+  const liveBad=liveFresh&&['offline','noip','shutdown','error','apidown'].includes(current);
+  const currentGood=(central.fresh&&central.row?.online)||(liveFresh&&!['connecting','unknown','offline','noip','shutdown','error','apidown'].includes(current));
+  let level='unknown',label='Sin datos actuales';
   if(centralBad||liveBad||confirmed.length){level='critical';label='Requiere atención';}
-  else if(maintenanceAlerts.length||(sample>=4&&completion<80)){level='warning';label='Conviene revisar';}
-  else if((central.fresh&&central.row?.online)||sample>=3){level='ok';label='Sin problemas detectados';}
+  else if(maintenanceAlerts.length){level='warning';label='Mantención pendiente';}
+  else if(currentGood){level='ok';label='Operativa ahora';}
   const confidence=history.durable&&central.central&&central.fresh&&sample>=5?'alta':
-    ((history.durable||central.fresh)&&sample>=2?'media':'baja');
-  return{level,label,confidence,history,central,current,completion,confirmed:confirmed.length,detected:detected.length,maintenance:maintenanceAlerts.length};
+    ((central.fresh||liveFresh)&&(history.durable||sample>=2)?'media':'baja');
+  return{level,label,confidence,history,central,current,liveFresh,completion,confirmed:confirmed.length,detected:detected.length,maintenance:maintenanceAlerts.length};
 }
 function preflightFromFacts(facts){
   const checks=[];
@@ -524,7 +527,7 @@ function renderIntelligence(){
   const healthRows=(MAQUINAS||[]).map(machine=>({machine,...machineReliability(machine.id)}));
   const monthCut=Date.now()-30*86400000,costRows=data().jobs.filter(j=>['terminado','fallido'].includes(j.status)&&Date.parse(j.completedAt||j.updatedAt||0)>=monthCut).map(jobCostBreakdown),monthCost=costRows.reduce((sum,row)=>sum+row.total,0);
   const recommend=data().jobs.filter(j=>!j.archived&&['pendiente','planificado','en_cola'].includes(j.status)).sort((a,b)=>dueUrgency(a)-dueUrgency(b)).slice(0,6).map(job=>({job,...recommendationForJob(job)}));
-  const physical=(MAQUINAS||[]).filter(machine=>['K2','K2 Plus'].includes(machine.modelo)||_printerStatus?.[machine.id]?.filament).map(machine=>({machine,..._filamentPhysicalSummary(machine)}));
+  const physical=(MAQUINAS||[]).filter(machine=>['K2','K2 Plus'].includes(machine.modelo)||(typeof _printerStatus!=='undefined'&&_printerStatus[machine.id]?.filament)).map(machine=>({machine,..._filamentPhysicalSummary(machine)}));
   const incidents=_incidentRowsForUi();
   const bridgeLabel={up:'Operativo',down:'Sin respuesta',checking:'Comprobando…'}[_bridgeHealth.state]||'Sin comprobar',bridgeColor=_bridgeHealth.state==='up'?'var(--accent3)':_bridgeHealth.state==='down'?'var(--danger)':'var(--warn)';
   const confidenceCounts={alta:0,media:0,baja:0};healthRows.forEach(row=>confidenceCounts[row.confidence]=(confidenceCounts[row.confidence]||0)+1);
@@ -1652,7 +1655,7 @@ const api={
   openScanner,closeScanner,submitScan,handleScan,clearScanMachine,printEntityLabel,
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
   renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,checkBridgeHealth,saveIntelligenceConfig,
-  openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,
+  openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
   openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
