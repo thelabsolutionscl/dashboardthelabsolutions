@@ -55,7 +55,8 @@ test('fallo al guardar mantención remota queda visible como pendiente, no como 
   const src=functionSource(MAQ,'saveMaintRecord');
   assert.match(src,/printer_maint_sync_pending/);
   assert.match(src,/guardada localmente/i);
-  assert.match(src,/Airtable no respondió/i);
+  assert.match(src,/cola de sincronización|reintentará/i);
+  assert.match(MAQ,/function syncPendingMaintenance\(/);
 });
 
 test('materiales distinguen stock registrado reservado y libre',()=>{
@@ -100,4 +101,18 @@ test('capacidad excluye QA y evita doble conteo de impresión activa',()=>{
   assert.match(src,/\['pendiente','planificado','en_cola'\]/);
   assert.match(src,/live\.state==='printing'/);
   assert.doesNotMatch(src,/qa/);
+});
+
+
+test('agenda de máquinas usa outbox y no pierde cambios ante un corte',()=>{
+  assert.match(MAQ,/maquina_eventos_outbox_v1/);
+  assert.match(MAQ,/function flushMachineEventOutbox\(/);
+  assert.match(MAQ,/_queueMachineEventOps/);
+});
+
+test('horas sugeridas provienen de trabajos técnicos, nunca del monto comercial',()=>{
+  const src=functionSource(MAQ,'onMaquinaModalPedidoChange');
+  assert.doesNotMatch(src,/Monto total|15000/);
+  assert.match(src,/thelab_machine_ops_v2/);
+  assert.match(src,/minutesPerCycle/);
 });

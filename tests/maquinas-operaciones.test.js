@@ -51,11 +51,12 @@ test('horas de trabajo se calculan por ciclos reales',()=>{
 
 test('el modelo persistente incluye trazabilidad de postproducción, perfiles y seguridad',()=>{
   const d=loadOps().defaultData();
-  assert.equal(d.version,4);
+  assert.equal(d.version,5);
   assert.deepEqual(Array.from(d.workflows),[]);
   assert.deepEqual(Array.from(d.profiles),[]);
   assert.deepEqual(Array.from(d.safetyReadings),[]);
   assert.deepEqual(Array.from(d.incidents),[]);
+  assert.deepEqual({...d.bedClearAcks},{});
   assert.equal(d.automation.autoLink,true);
   assert.equal(d.costConfig.electricityClpKwh,220);
   assert.equal(d.safetyConfig.enforce,false);
@@ -356,4 +357,51 @@ test('interfaz expone postproducción, capacidad, perfiles, seguridad y QR móvi
   assert.match(OPS,/sessionStorage\.setItem\('machine_ops_sensor_token'/);
   assert.doesNotMatch(OPS,/localStorage\.setItem\('machine_ops_sensor_token'/);
   assert.match(SLICER,/MachineOps\?\.captureSlicerProfile/);
+});
+
+
+test('compatibilidad no acepta dimensiones parciales y no usa multiplicadores inventados por modelo',()=>{
+  const ops=loadOps();
+  assert.equal(ops.modelCanRun('K1',{material:'PLA',sizeX:100,sizeY:0,sizeZ:50}),false);
+  assert.equal(ops.modelCanRun('K1',{material:'PLA',sizeX:0,sizeY:0,sizeZ:0}),true,'sin dimensiones queda desconocido, no falsamente incompatible');
+  assert.doesNotMatch(OPS,/\/cap\.speed/);
+  assert.doesNotMatch(OPS,/speed:1\.22|speed:1\.18|speed:1\.12|speed:\.92|speed:\.72/);
+});
+
+test('preflight separa material-volumen, boquilla y cama liberada',()=>{
+  assert.match(OPS,/Boquilla instalada/);
+  assert.match(OPS,/Dimensiones incompletas/);
+  assert.match(OPS,/falta confirmar retiro de pieza/);
+  assert.match(OPS,/function installedNozzle\(/);
+  assert.match(OPS,/function bedIsCleared\(/);
+  assert.match(OPS,/confirmBedCleared/);
+});
+
+test('inicio revalida inmediatamente y sólo ejecuta mediante Farm Controller',()=>{
+  const start=OPS.slice(OPS.indexOf('async function startJob('),OPS.indexOf('\nfunction startExistingFile',OPS.indexOf('async function startJob(')));
+  assert.match(start,/const fresh=evaluatePreflight\(j,m\)/);
+  assert.match(start,/window\.FarmQueue\?\.startExisting/);
+  assert.doesNotMatch(start,/printer\/print\/start/);
+  assert.match(start,/j\.status='en_cola'/,'aceptación del Controller no debe fingir que ya imprime');
+});
+
+test('reimpresión desde archivos crea trabajo y exige preflight',()=>{
+  assert.match(MAQ,/window\.MachineOps\?\.startExistingFile/);
+  assert.doesNotMatch(MAQ.slice(MAQ.indexOf('async function reprintFile('),MAQ.indexOf('// Historial real',MAQ.indexOf('async function reprintFile('))),/printer\/print\/start/);
+  assert.match(OPS,/function startExistingFile\(/);
+  assert.match(OPS,/openPreflight\(j\.id\)/);
+});
+
+test('lifecycle de Controller reconcilia en cola, imprimiendo, QA y fallido',()=>{
+  assert.match(OPS,/function reconcileFarmQueueJobs\(/);
+  assert.match(OPS,/state==='completed'/);
+  assert.match(OPS,/\['printing','paused'\]/);
+  assert.match(OPS,/\['cancelled','failed'\]/);
+});
+
+test('la ficha de fiabilidad usa muestra real y no accede a propiedades score inexistentes',()=>{
+  const open=OPS.slice(OPS.indexOf('function openTech('),OPS.indexOf('\nfunction closeTech',OPS.indexOf('function openTech(')));
+  assert.doesNotMatch(open,/reliability\.score/);
+  assert.match(open,/reliability\.completion/);
+  assert.match(open,/reliability\.history\.total/);
 });

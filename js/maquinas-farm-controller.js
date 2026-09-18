@@ -16,7 +16,7 @@ const original={
   saveConn:typeof window.savePrinterConn==='function'?window.savePrinterConn:null,
 };
 
-const ACTIVE_QUEUE_STATES=new Set(['queued','retry','checking','uploading','uploaded']);
+const ACTIVE_QUEUE_STATES=new Set(['queued','retry','checking','uploading','uploaded','started','printing']);
 const counts=Object.create(null);
 let jobs=[],lastQueueSync=0,queueSyncing=null,controllerOk=null;
 let registry=[],registryById=Object.create(null),lastRegistrySync=0,registrySyncing=null;
@@ -27,6 +27,11 @@ function base(){try{return typeof getPrinterTunnel==='function'?getPrinterTunnel
 function url(path){const t=token();return base()+path+(t?(path.includes('?')?'&':'?')+'bt='+encodeURIComponent(t):'');}
 function render(){try{if(typeof renderMonitorGrid==='function')renderMonitorGrid();}catch(_){}}
 function machines(){try{return typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)?MAQUINAS:[];}catch(_){return[];}}
+function executionId(prefix='exec'){
+  try{if(globalThis.crypto?.randomUUID)return prefix+'-'+globalThis.crypto.randomUUID();}catch(_){}
+  return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);
+}
+function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 
 async function readJson(r){
   let d=null;try{d=await r.json();}catch(_){}
@@ -68,9 +73,11 @@ function durableGetPrinterIp(m){
 async function patchRegistryMachine(m,forcedIp){
   if(!m||!m.id)return null;
   const role=await authRole();if(role!=='admin')return null;
-  const fallback=forcedIp||(original.getIp?original.getIp(m):(m.ip||''));
-  if(!fallback)return null;
-  const body={id:m.id,ip:fallback,name:m.nombre||m.name||'',model:m.modelo||m.model||'',num:m.numG||m.num||''};
+  const forced=arguments.length>=2;
+  const fallback=forced?String(forcedIp||''):(original.getIp?original.getIp(m):(m.ip||''));
+  if(!forced&&!fallback)return null;
+  const nozzle=localStorage.getItem('printer_nozzle_'+m.id)||m.nozzleInstalled||'';
+  const body={id:m.id,ip:fallback,name:m.nombre||m.name||'',model:m.modelo||m.model||'',num:m.numG||m.num||'',nozzleInstalled:nozzle};
   const r=await fetch(url('/farm/registry'),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(6000)});
   const d=await readJson(r);
   if(d.machine){
@@ -93,10 +100,8 @@ async function seedRegistry(){
 }
 async function updateRegistryAfterManualSave(id){
   const m=machines().find(x=>x.id===id);if(!m)return;
-  const ip=localStorage.getItem('printer_ip_'+id)||m.ip||'';
-  if(!ip)return;
-  // Reflejo inmediato para que polling/WebSocket usen la IP que el operador
-  // acaba de guardar, incluso antes de que termine el PATCH remoto.
+  const hasLocal=localStorage.getItem('printer_ip_'+id)!==null;
+  const ip=hasLocal?(localStorage.getItem('printer_ip_'+id)||''):(m.ip||'');
   const current=registryById[id]||{id};Object.assign(current,{ip,updatedAt:new Date().toISOString()});
   if(!registryById[id])registry.push(current);registryById[id]=current;
   try{await patchRegistryMachine(m,ip);}catch(e){console.warn('[FarmRegistry] manual update',e.message);}
@@ -115,7 +120,9 @@ async function syncQueue(force=false){
     try{
       const r=await fetch(url('/farm/queue'),{cache:'no-store',signal:AbortSignal.timeout(5000)});
       const d=await readJson(r);
-      jobs=Array.isArray(d.jobs)?d.jobs:[];lastQueueSync=Date.now();controllerOk=true;rebuildCounts();render();
+      jobs=Array.isArray(d.jobs)?d.jobs:[];lastQueueSync=Date.now();controllerOk=true;rebuildCounts();
+      try{window.MachineOps?.reconcileFarmQueueJobs?.(jobs);}catch(_){}
+      render();
     }catch(e){controllerOk=false;}
     finally{queueSyncing=null;}
     return jobs;
@@ -127,38 +134,63 @@ function bytesToBase64(buffer){
   for(let i=0;i<bytes.length;i+=CHUNK)binary+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));
   return btoa(binary);
 }
-async function durableAdd(id,gcode,filename,secs,grams,meta={}){
-  try{
-    const m=machines().find(x=>x.id===id);
-    const metadata=meta&&typeof meta==='object'?meta:{};
-    const payload={machineId:id,ip:m?durableGetPrinterIp(m):'',filename,secs:Number(secs||0),grams:Number(grams||0),source:metadata.source||'dashboard',metadata,gcodeBase64:bytesToBase64(await new Blob([gcode],{type:'text/plain'}).arrayBuffer())};
-    const r=await fetch(url('/farm/queue'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});
-    const d=await readJson(r);if(!d.ok)throw new Error(d.error||'cola rechazada');
-    counts[id]=(counts[id]||0)+1;
-    try{toast(`📋 Encolado de forma durable en ${m?.nombre||id} (#${counts[id]} en cola)`,'success');}catch(_){}
-    try{window.MachineOps?.onLegacyQueueAdd?.(id,filename,secs,grams,metadata);}catch(_){}
-    await syncQueue(true);render();return d.job;
-  }catch(e){
-    console.warn('[FarmQueue] controller no disponible; usando cola local',e);
-    controllerOk=false;
-    return original.add?original.add(id,gcode,filename,secs,grams,meta):null;
+async function _postQueue(path,payload,timeout=15000){
+  const b=base(),t=token();if(!b||!t)throw new Error('Farm Controller/token no disponible');
+  let lastError=null;
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const r=await fetch(url(path),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(timeout)});
+      return await readJson(r);
+    }catch(e){lastError=e;if(attempt===0)await sleep(450);}
   }
+  throw lastError||new Error('Controller sin respuesta');
+}
+async function durableAdd(id,gcode,filename,secs,grams,meta={}){
+  const m=machines().find(x=>x.id===id),metadata=meta&&typeof meta==='object'?{...meta}:{};
+  const idempotencyKey=String(metadata.idempotencyKey||metadata.executionId||executionId('upload'));
+  metadata.idempotencyKey=idempotencyKey;
+  try{
+    const payload={machineId:id,filename,secs:Number(secs||0),grams:Number(grams||0),source:metadata.source||'dashboard',metadata,idempotencyKey,
+      gcodeBase64:bytesToBase64(await new Blob([gcode],{type:'text/plain'}).arrayBuffer())};
+    const d=await _postQueue('/farm/queue',payload,20000);if(!d.ok)throw new Error(d.error||'cola rechazada');
+    controllerOk=true;
+    try{toast(`📋 Controller confirmó ${filename} en ${m?.nombre||id}`,'success');}catch(_){}
+    try{window.MachineOps?.onLegacyQueueAdd?.(id,filename,secs,grams,metadata);}catch(_){}
+    await syncQueue(true);render();return d.job||null;
+  }catch(e){
+    console.warn('[FarmQueue] no se confirmó cola durable',e);
+    controllerOk=false;
+    try{toast('No se creó una cola local de respaldo: Controller no confirmó el trabajo. Reintenta al recuperar conexión.','error');}catch(_){}
+    return null;
+  }
+}
+async function startExisting(id,filename,meta={}){
+  const metadata=meta&&typeof meta==='object'?{...meta}:{},idempotencyKey=String(metadata.idempotencyKey||metadata.executionId||executionId('existing'));
+  metadata.idempotencyKey=idempotencyKey;
+  const d=await _postQueue('/farm/queue/existing',{machineId:id,filename,source:metadata.source||'machineops',metadata,idempotencyKey,existingFile:true},12000);
+  controllerOk=true;await syncQueue(true);render();return d.job||null;
+}
+async function confirmBedClear(id,signature){
+  if(!id||!signature)throw new Error('machineId/signature requeridos');
+  const d=await _postQueue('/farm/ready/'+encodeURIComponent(id),{signature},8000);
+  controllerOk=true;await syncQueue(true);render();return d;
 }
 async function durableStartNext(id){
   try{
     await syncQueue(true);
     const j=jobs.find(x=>x.machineId===id&&['queued','retry'].includes(x.state));
-    if(!j){if(controllerOk===false&&original.start)return original.start(id);return;}
+    if(!j){if(controllerOk===false)throw new Error('Farm Controller no disponible');return null;}
     const r=await fetch(url('/farm/queue/'+encodeURIComponent(j.id)+'/run'),{method:'POST',signal:AbortSignal.timeout(5000)});
-    await readJson(r);setTimeout(()=>syncQueue(true),1200);
+    const d=await readJson(r);setTimeout(()=>syncQueue(true),1200);return d.job||j;
   }catch(e){
-    console.warn('[FarmQueue] start durable falló',e);
-    if(controllerOk===false&&original.start)return original.start(id);
+    console.warn('[FarmQueue] start durable falló',e);controllerOk=false;
+    try{toast('No se inicia desde la cola local: Farm Controller no confirmó la ejecución','error');}catch(_){}
+    return null;
   }
 }
 function durableCount(id){
   if(Object.prototype.hasOwnProperty.call(counts,id))return counts[id];
-  return controllerOk===false&&original.count?original.count(id):0;
+  return 0;
 }
 
 // Instalar wrappers una vez que maquinas.js ya definió sus funciones.
@@ -177,6 +209,6 @@ window.addEventListener('online',_resumeControllerSync);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)_resumeControllerSync();});
 window.addEventListener('farm-controller-health',_resumeControllerSync);
 
-window.FarmQueue={sync:syncQueue,status:()=>({controllerOk,lastSync:lastQueueSync,jobs:[...jobs],counts:{...counts}})};
+window.FarmQueue={sync:syncQueue,startExisting,confirmBedClear,status:()=>({controllerOk,lastSync:lastQueueSync,jobs:[...jobs],counts:{...counts}})};
 window.FarmRegistry={sync:syncRegistry,seed:seedRegistry,ipFor:durableGetPrinterIp,status:()=>({controllerOk,role:controllerRole,lastSync:lastRegistrySync,machines:[...registry]})};
 })();

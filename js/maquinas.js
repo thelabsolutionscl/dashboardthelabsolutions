@@ -9,7 +9,48 @@ function fmtDayLabel(d){return['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.ge
 function getMaquinaSemanaLunes(){const t=new Date();t.setHours(0,0,0,0);const day=t.getDay();const l=new Date(t);l.setDate(t.getDate()-(day===0?6:day-1)+(maquinaState.semanaOffset*7));return l;}
 function navSemana(d){maquinaState.semanaOffset+=d;renderMaquinasCalendar();}
 function goToday(){maquinaState.semanaOffset=0;renderMaquinasCalendar();}
-function getMaquinaEstadoGlobal(id){const m=MAQUINAS.find(x=>x.id===id);return m?.estado||localStorage.getItem('estado_maq_'+id)||'disponible';}
+function _machineStatePendingKey(id){return 'estado_maq_pending_'+id;}
+function getMaquinaEstadoGlobal(id){
+  const m=MAQUINAS.find(x=>x.id===id);
+  let pending='';try{pending=JSON.parse(localStorage.getItem(_machineStatePendingKey(id))||'null')?.value||'';}catch(_){}
+  return pending||m?.estado||localStorage.getItem('estado_maq_'+id)||'disponible';
+}
+async function _saveMachineStateReliable(id,value){
+  const payload={value,updatedAt:Date.now()};
+  localStorage.setItem('estado_maq_'+id,value);
+  localStorage.setItem(_machineStatePendingKey(id),JSON.stringify(payload));
+  try{
+    await saveMaquinaEstadoAirtable(id,value);
+    localStorage.removeItem(_machineStatePendingKey(id));
+    return true;
+  }catch(e){return false;}
+}
+async function flushMachineStateOutbox(){
+  for(const m of (MAQUINAS||[])){
+    let pending=null;try{pending=JSON.parse(localStorage.getItem(_machineStatePendingKey(m.id))||'null');}catch(_){}
+    if(!pending?.value)continue;
+    try{await saveMaquinaEstadoAirtable(m.id,pending.value);m.estado=pending.value;localStorage.removeItem(_machineStatePendingKey(m.id));}
+    catch(_){}
+  }
+}
+const _MACHINE_EVENT_OUTBOX='maquina_eventos_outbox_v1';
+function _machineEventOutbox(){
+  try{const rows=JSON.parse(localStorage.getItem(_MACHINE_EVENT_OUTBOX)||'[]');return Array.isArray(rows)?rows:[];}catch(_){return[];}
+}
+function _queueMachineEventOps(ops){
+  const rows=_machineEventOutbox(),map=new Map(rows.map(x=>[x.key,x]));
+  for(const op of ops||[])if(op?.key)map.set(op.key,{...op,updatedAt:Date.now()});
+  localStorage.setItem(_MACHINE_EVENT_OUTBOX,JSON.stringify([...map.values()].slice(-500)));
+}
+async function flushMachineEventOutbox(){
+  const rows=_machineEventOutbox();if(!rows.length)return true;
+  for(const op of rows){
+    if(op.type==='delete')delete maquinaState.eventos[op.key];
+    else if(op.type==='set'&&op.value)maquinaState.eventos[op.key]=op.value;
+  }
+  try{await saveMaquinaEventosAirtable();localStorage.removeItem(_MACHINE_EVENT_OUTBOX);return true;}
+  catch(_){return false;}
+}
 const MAQUINA_ESTADOS={
   disponible:{label:'Disponible',short:'✓ Disp.',color:'green',icon:'✓'},
   reservada:{label:'Reservada',short:'◷ Res.',color:'yellow',icon:'◷'},
@@ -21,14 +62,19 @@ const MAQUINA_ESTADOS={
 };
 function maquinaEstadoMeta(estado){return MAQUINA_ESTADOS[estado]||MAQUINA_ESTADOS.disponible;}
 async function toggleMaquinaEstado(id){
-  const m=MAQUINAS.find(x=>x.id===id);if(!m) return;
-  const nv=m.estado==='disponible'?'mantencion':'disponible';
-  m.estado=nv;
-  localStorage.setItem('estado_maq_'+id,nv);
-  renderMaquinasCalendar();
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const current=getMaquinaEstadoGlobal(id);
+  if(!['disponible','mantencion'].includes(current)){
+    toast(`${m.nombre} #${m.numG||m.num}: ${maquinaEstadoMeta(current).label}. Para reactivarla usa la ficha técnica y confirma el cambio.`,'info');
+    try{window.MachineOps?.openTech?.(id);}catch(_){}
+    return;
+  }
+  const nv=current==='disponible'?'mantencion':'disponible';
+  if(current==='mantencion'&&nv==='disponible'&&!confirm(`¿Marcar ${m.nombre} #${m.numG||m.num} como DISPONIBLE?\n\nConfirma que la mantención terminó y la máquina fue revisada físicamente.`))return;
+  m.estado=nv;renderMaquinasCalendar();
   const meta=maquinaEstadoMeta(nv);
-  toast(`${m.nombre} #${m.num}: ${meta.icon} ${meta.label}`,nv==='disponible'?'success':'error');
-  try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);toast('Estado guardado sólo en este dispositivo; Airtable no respondió','info');}
+  const synced=await _saveMachineStateReliable(id,nv);
+  toast(`${m.nombre} #${m.numG||m.num}: ${meta.icon} ${meta.label}${synced?"":" · pendiente de sincronizar"}`,synced?(nv==='disponible'?'success':'error'):'info');
 }
 function _renderMaquinasMonitorNow(){
   // El monitor debe existir desde el primer frame de la pestaña. MAQUINAS ya
@@ -45,6 +91,7 @@ async function initMaquinas(){
   if(_maquinasInitPromise)return _maquinasInitPromise;
   _maquinasInitPromise=(async()=>{
     await loadMaquinasAirtable();
+    await flushMachineStateOutbox();
 
     // Reconciliado el registry real, repintamos inmediatamente y arrancamos
     // telemetría/cámaras ANTES de esperar eventos de calendario/mantención.
@@ -53,6 +100,8 @@ async function initMaquinas(){
     _resumePrinterRealtime();
 
     await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
+    await flushMachineEventOutbox();
+    await syncPendingMaintenance();
     seedOdometerIfNeeded();
     renderMaquinasCalendar();
     _renderMaquinasMonitorNow();
@@ -263,11 +312,28 @@ function _cameraLoadError(im){
   _cameraSchedule(im,delay);
 }
 function _refreshSnapshotCams(force=false){
+  if(document.hidden&&!force)return;
   document.querySelectorAll('img[data-snap]').forEach(im=>{
-    if(im.dataset.camSuspended==='1')return;
+    if(im.dataset.camSuspended==='1'||im.dataset.pageSuspended==='1')return;
     if(force){im.dataset.camLoading='0';_cameraRefreshNow(im);return;}
     const key=_cameraTimerKey(im);
     if(im.dataset.camLoading!=='1'&&(!key||!_camRetryTimers[key]))_cameraRefreshNow(im);
+  });
+}
+function _cameraPageVisibility(){
+  const hidden=!!document.hidden;
+  document.querySelectorAll('#maquinaMonGrid img[data-machine-id],#webcamModal img[data-machine-id]').forEach(im=>{
+    if(hidden){
+      im.dataset.pageSuspended='1';_cameraClearTimer(im);im.dataset.camLoading='0';
+      if(im.dataset.camKind==='snapshot'||im.dataset.camKind==='mjpeg')im.removeAttribute('src');
+    }else if(im.dataset.pageSuspended==='1'){
+      delete im.dataset.pageSuspended;
+      if(im.dataset.camSuspended==='1')return;
+      const base=im.dataset.camBase||im.getAttribute('data-snap')||'';
+      if(!base)return;
+      if(im.dataset.camKind==='snapshot')_cameraRefreshNow(im);
+      else im.src=base+(base.includes('?')?'&':'?')+'_resume='+Date.now();
+    }
   });
 }
 const HIST_KEY='printer_history_v1';
@@ -342,11 +408,14 @@ async function _queueStartNext(id){
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
     xhr.onload=async()=>{
       if(xhr.status>=200&&xhr.status<300){
-        job._starting=false;
-        if(_printQueue[id]&&_printQueue[id][0]===job){_printQueue[id].shift();renderMonitorGrid();}  // recién ahora se consume
-        try{await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});}catch(_){}
-        toast(`▶ Cola: iniciando ${job.filename} en ${m?.nombre||id}`,'success');
-        if(typeof pollPrinters==='function')pollPrinters();
+        try{
+          const started=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
+          if(!started.ok){reintentar('Cola: G-code subido, pero no se pudo iniciar ('+started.status+')');return;}
+          job._starting=false;
+          if(_printQueue[id]&&_printQueue[id][0]===job){_printQueue[id].shift();renderMonitorGrid();}
+          toast(`▶ Cola: ${job.filename} iniciado en ${m?.nombre||id}`,'success');
+          if(typeof pollPrinters==='function')pollPrinters();
+        }catch(e){reintentar('Cola: G-code subido, pero START no fue confirmado');}
       }else reintentar('Cola: no se pudo subir el trabajo ('+xhr.status+')');
     };
     xhr.onerror=()=>reintentar('Cola: impresora inaccesible');
@@ -362,6 +431,12 @@ const MONITOR_GRUPOS=[
   {key:'Ender-5 Max',label:'Ender-5 Max',color:'#ffaa00'},
   {key:'Giga',label:'Giga',color:'#ff4444'},
 ];
+
+function machineHasPhysicalCfs(machine){
+  if(!machine)return false;
+  const id=String(machine.id||''),globalNo=Number(machine.numG??machine.num??0);
+  return machine.modelo==='K2 Plus'||id==='k1-1'||(machine.modelo==='K1'&&globalNo===1);
+}
 
 function getPrinterIp(m){return localStorage.getItem('printer_ip_'+m.id)||m.ip||null;}
 function getPrinterApiKey(id){
@@ -471,6 +546,7 @@ function _extractFilamentTelemetry(status){
 
 function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
+  if(!_validPrivatePrinterIp(val)){toast('IP inválida: usa una IPv4 privada del taller','error');return;}
   localStorage.setItem('printer_ip_'+id,val);
   const m=MAQUINAS.find(x=>x.id===id);
   if(m){m.ip=val;if(m._airtableId){if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:val}})});}}
@@ -488,6 +564,16 @@ function savePrinterApiKey(id){
   toast(`API Key ${val?'guardada':'eliminada'} · ${m?.nombre} #${m?.numG}`,'success');
 }
 
+function _validPrivatePrinterIp(value){
+  const m=String(value||'').trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);if(!m)return false;
+  const o=m.slice(1).map(Number);if(o.some(v=>v<0||v>255))return false;
+  return o[0]===10||(o[0]===172&&o[1]>=16&&o[1]<=31)||(o[0]===192&&o[1]===168);
+}
+function _ensurePrinterPhysicalFields(id){
+  const light=document.getElementById('printerConnLight');if(!light||document.getElementById('printerConnNozzle'))return;
+  const wrap=document.createElement('div');wrap.className='field-group';wrap.innerHTML='<label class="field-label">Boquilla instalada (mm)</label><select class="field-select" id="printerConnNozzle"><option value="">Sin registrar</option><option>0.2</option><option>0.4</option><option>0.6</option><option>0.8</option><option>1.0</option></select><small style="color:var(--text3);font-size:10px">Se usa para bloquear un G-code preparado para otra boquilla.</small>';
+  const group=light.closest('.field-group');if(group)group.insertAdjacentElement('afterend',wrap);else light.parentElement?.appendChild(wrap);
+}
 function openPrinterConnModal(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   document.getElementById('printerConnTitle').textContent=`${m.nombre} #${m.numG}`;
@@ -495,6 +581,8 @@ function openPrinterConnModal(id){
   document.getElementById('printerConnIp').value=getPrinterIp(m)||'';
   document.getElementById('printerConnKey').value=getPrinterApiKey(id);
   document.getElementById('printerConnLight').value=localStorage.getItem('printer_light_override_'+id)||'';
+  _ensurePrinterPhysicalFields(id);
+  const nozzle=document.getElementById('printerConnNozzle');if(nozzle)nozzle.value=localStorage.getItem('printer_nozzle_'+id)||m.nozzleInstalled||'';
   document.getElementById('printerConnModal').style.display='flex';
 }
 function closePrinterConnModal(){document.getElementById('printerConnModal').style.display='none';}
@@ -503,6 +591,9 @@ function savePrinterConn(){
   const ip=(document.getElementById('printerConnIp').value||'').trim();
   const key=(document.getElementById('printerConnKey').value||'').trim();
   const light=(document.getElementById('printerConnLight').value||'').trim();
+  const nozzle=(document.getElementById('printerConnNozzle')?.value||'').trim();
+  if(ip&&!_validPrivatePrinterIp(ip)){toast('IP inválida: usa una IPv4 privada del taller','error');return;}
+  if(nozzle&&!['0.2','0.4','0.6','0.8','1.0'].includes(nozzle)){toast('Boquilla inválida','error');return;}
   const lightCfg=_printerLightParseOverride(light);
   if(lightCfg?.error){toast(lightCfg.error,'error');document.getElementById('printerConnLight').focus();return;}
   if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
@@ -510,9 +601,10 @@ function savePrinterConn(){
   localStorage.removeItem(keyName);
   if(key)sessionStorage.setItem(keyName,key);else sessionStorage.removeItem(keyName);
   if(light)localStorage.setItem('printer_light_override_'+id,light);else localStorage.removeItem('printer_light_override_'+id);
+  if(nozzle)localStorage.setItem('printer_nozzle_'+id,nozzle);else localStorage.removeItem('printer_nozzle_'+id);
   delete _printerLightCaps[id];
   const m=MAQUINAS.find(x=>x.id===id);
-  if(m&&m._airtableId){m.ip=ip||m.ip;if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
+  if(m){m.ip=ip||null;if(m._airtableId&&hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
   closePrinterConnModal();
   toast(`Conexión guardada · ${m?.nombre} #${m?.numG}`,'success');
   pollPrinters();
@@ -566,7 +658,7 @@ async function fetchPrinterStatus(m){
   const headers=getPrinterAuthHeaders(m.id);
   try{
     const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks'];
-    if(m.modelo==='K2'||m.modelo==='K2 Plus')objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
+    if(machineHasPhysicalCfs(m))objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
     const path='/printer/objects/query?'+objects.map(encodeURIComponent).join('&')+_printerLightQuerySuffix(m.id);
     const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
     if(!r.ok){
@@ -722,7 +814,7 @@ function ensurePrinterRealtimeService(){
     _printerLifecycleBound=true;
     window.addEventListener('focus',_resumePrinterRealtime);
     window.addEventListener('online',_resumePrinterRealtime);
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden)_resumePrinterRealtime();});
+    document.addEventListener('visibilitychange',()=>{_cameraPageVisibility();if(!document.hidden)_resumePrinterRealtime();});
   }
 }
 function fmtSecs(s){if(!s||s<=0)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
@@ -1331,7 +1423,10 @@ function printerEmergencyStop(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   if(!confirm(`⛔ PARADA DE EMERGENCIA — ${m.nombre} #${m.numG}\n\nDetiene TODO de inmediato (incluido cualquier print en curso) y deja el firmware apagado hasta reiniciarlo desde Fluidd/Mainsail. Úsalo solo ante un peligro real.\n\n¿Continuar?`))return;
   const ip=getPrinterIp(m);
-  fetch(printerUrl(ip,'/printer/emergency_stop'),{method:'POST',headers:getPrinterAuthHeaders(id)}).then(()=>{toast('⛔ Parada de emergencia enviada','info');setTimeout(pollPrinters,1500);}).catch(()=>toast('Sin conexión','error'));
+  fetch(printerUrl(ip,'/printer/emergency_stop'),{method:'POST',headers:getPrinterAuthHeaders(id),signal:AbortSignal.timeout(6000)}).then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    toast('⛔ Parada de emergencia confirmada','info');setTimeout(pollPrinters,1500);
+  }).catch(e=>toast('No se pudo confirmar la parada de emergencia: '+(e?.message||'sin conexión'),'error'));
 }
 // Archivos en la impresora
 async function loadPrinterFiles(id){
@@ -1352,9 +1447,11 @@ async function loadPrinterFiles(id){
 async function reprintFile(id,filename){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   if(_isPrinterBusy(_pcState(id))){toast('🔒 La impresora ya está ocupada','error');return;}
-  if(!confirm(`Imprimir "${filename}" en ${m.nombre} #${m.numG}?`))return;
-  const ip=getPrinterIp(m);
-  try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});if(r.ok){toast(`▶ Imprimiendo ${filename}`,'success');closePrinterControl();setTimeout(pollPrinters,1500);}else toast('Error al iniciar: '+r.status,'error');}catch(e){toast('Sin conexión','error');}
+  if(window.MachineOps?.startExistingFile){
+    closePrinterControl();
+    return window.MachineOps.startExistingFile(id,filename);
+  }
+  toast('Centro de operaciones no disponible: no se inicia una impresión sin preflight','error');
 }
 // Historial real de Moonraker (para costos)
 async function loadPrinterHistory(id){
@@ -1494,6 +1591,13 @@ function _printSessionAction(st,hasSession){
   const close=hasSession&&st!=='printing'&&!transitorio;
   return{open,close,result:close?(st==='complete'?'Completado':'Cancelado'):null};
 }
+function _controllerOwnsPrint(machineId,filename){
+  try{
+    const status=window.FarmQueue?.status?.()||{},target=String(filename||'').replace(/\.gcode$/i,'').toLowerCase();
+    return (status.jobs||[]).some(j=>j.machineId===machineId&&String(j.filename||'').replace(/\.gcode$/i,'').toLowerCase()===target&&
+      ['started','printing','paused','completed','cancelled','failed'].includes(String(j.state||''))&&Date.now()-Date.parse(j.updatedAt||j.createdAt||0)<48*3600000);
+  }catch(_){return false;}
+}
 function checkTransitions(m,s){
   const prev=_prevState[m.id];const st=s.state;
   if(st==='error'&&prev!=='error'){
@@ -1510,13 +1614,17 @@ function checkTransitions(m,s){
     _sendWaAlertIfEnabled(title,detail);
   }
   const act=_printSessionAction(st,!!_sessions[m.id]);
-  if(act.open)_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
+  if(act.open){
+    const elapsedMs=Math.max(0,Number(s.elapsed||0))*1000;
+    _sessions[m.id]={file:s.filename,start:Date.now()-elapsedMs,filamentStart:Math.max(0,(s.filamentMm||0)),controllerOwned:_controllerOwnsPrint(m.id,s.filename)};
+  }
   if(act.close){
     const sess=_sessions[m.id];
     if(sess){
-      const dur=Math.round((Date.now()-sess.start)/60000);
+      const end=Date.now(),dur=Math.max(1,Math.round((Number(s.elapsed||0)>0?Number(s.elapsed)*1000:end-sess.start)/60000));
       const filamentMm=Math.max(0,(s.filamentMm||0)-sess.filamentStart);
-      saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,act.result,filamentMm);
+      const owned=sess.controllerOwned||_controllerOwnsPrint(m.id,sess.file);
+      if(!owned)saveHistoryEntry(m,sess.file,sess.start,end,dur,act.result,filamentMm);
       delete _sessions[m.id];
       if(st==='complete'){
         // Auto-calibrar estimación de tiempo por modelo de impresora
@@ -1877,6 +1985,22 @@ function openMaintModal(id){
   document.getElementById('maintModal').style.display='flex';
 }
 function closeMaintModal(){document.getElementById('maintModal').style.display='none';}
+const _MAINT_OUTBOX_KEY='printer_maint_outbox_v1';
+function _pendingMaintRows(){try{const rows=JSON.parse(localStorage.getItem(_MAINT_OUTBOX_KEY)||'[]');return Array.isArray(rows)?rows:[];}catch(_){return[];}}
+function _setPendingMaintRows(rows){if(rows.length)localStorage.setItem(_MAINT_OUTBOX_KEY,JSON.stringify(rows.slice(-100)));else localStorage.removeItem(_MAINT_OUTBOX_KEY);}
+async function syncPendingMaintenance(){
+  let pending=_pendingMaintRows();if(!pending.length)return true;
+  const remoteKeys=new Set((maquinaState.maintLog||[]).map(_maintRecordKey));
+  const remaining=[];
+  for(const rec of pending){
+    if(remoteKeys.has(_maintRecordKey(rec)))continue;
+    try{await saveMaintRecordAirtable(rec);}
+    catch(_){remaining.push(rec);}
+  }
+  _setPendingMaintRows(remaining);
+  if(!remaining.length)localStorage.removeItem('printer_maint_sync_pending');
+  return remaining.length===0;
+}
 async function saveMaintRecord(){
   const id=document.getElementById('maintModalId').value;
   const tipo=document.getElementById('maintModalTipo').value;
@@ -1889,7 +2013,12 @@ async function saveMaintRecord(){
   const local=getMaintLogLocal();local.unshift(rec);localStorage.setItem(MAINT_KEY,JSON.stringify(local.slice(0,200)));
   closeMaintModal();renderMaintenanceTable();renderMonitorGrid();
   try{await saveMaintRecordAirtable(rec);localStorage.removeItem('printer_maint_sync_pending');toast(`🔧 Mantención registrada y sincronizada · ${MAINT_TYPES.find(t=>t.key===tipo)?.label}`,'success');}
-  catch(e){console.warn('No se pudo guardar mantención en Airtable',e);localStorage.setItem('printer_maint_sync_pending','1');toast('Mantención guardada localmente, pero Airtable no respondió. Seguirá visible y requiere sincronización.','info');}
+  catch(e){
+    console.warn('No se pudo guardar mantención en Airtable',e);
+    const pending=_pendingMaintRows();if(!pending.some(x=>_maintRecordKey(x)===_maintRecordKey(rec)))pending.push(rec);_setPendingMaintRows(pending);
+    localStorage.setItem('printer_maint_sync_pending','1');
+    toast('Mantención guardada localmente; queda en cola de sincronización y se reintentará contra el registro remoto.','info');
+  }
 }
 function openMaintConfig(){
   const cfg=getMaintConfig();
@@ -2255,11 +2384,16 @@ function onMaquinaModalPedidoChange(){
   const f=p.fields;
   const nPed=f['N° Pedido']||'—',cliente=resolveClienteName(f['Cliente']),estado=f['Estado pedido']||'—';
   document.getElementById('maquinaModalDesc').value=`${nPed} · ${cliente}`;
-  // sugerir horas según pedido si tiene monto (estimación rápida)
-  const monto=(f['Monto total (CLP)']||0)/1.19;
-  if(monto>0&&!document.getElementById('maquinaModalTiempo').value){
-    const hEst=Math.max(1,Math.round(monto/15000)); // aprox $15k neto/h como referencia
-    document.getElementById('maquinaModalTiempo').value=Math.min(hEst,24);
+  // Sugerir horas sólo desde trabajos técnicos MachineOps vinculados a esta
+  // impresora/pedido. El valor comercial del pedido no representa horas de máquina.
+  if(!document.getElementById('maquinaModalTiempo').value){
+    try{
+      const machineId=document.getElementById('maquinaModalId')?.value||'';
+      const ops=JSON.parse(localStorage.getItem('thelab_machine_ops_v2')||'{}');
+      const jobs=(Array.isArray(ops.jobs)?ops.jobs:[]).filter(j=>!j.archived&&j.pedidoId===pid&&(!machineId||j.machineId===machineId));
+      const minutes=jobs.reduce((sum,j)=>sum+Math.max(1,Number(j.cycles)||1)*Math.max(1,Number(j.minutesPerCycle)||0),0);
+      if(minutes>0)document.getElementById('maquinaModalTiempo').value=Math.round(minutes/60*10)/10;
+    }catch(_){}
   }
 }
 async function saveMaquinaEvento(){
@@ -2267,15 +2401,22 @@ async function saveMaquinaEvento(){
   if(!fi||!ff){toast('Ingresa las fechas','error');return;}
   const pedidoId=document.getElementById('maquinaModalPedido')?.value||'';
   const start=new Date(fi+'T00:00:00'),end=new Date(ff+'T00:00:00');let count=0;
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const key=`${maqId}_${fmtDate(new Date(d))}`;if(tipo==='disponible') delete maquinaState.eventos[key];else{const ev={tipo,desc,tiempo:parseFloat(tiempo)||null};if(pedidoId) ev.pedidoId=pedidoId;maquinaState.eventos[key]=ev;}count++;}
-  closeMaquinaModal();renderMaquinasCalendar();toast(`✓ ${count} día${count>1?'s':''} marcados — guardando...`,'info');
-  try{await saveMaquinaEventosAirtable();toast('✓ Guardado en Airtable','success');}
-  catch(e){toast('Error al guardar: '+e.message,'error');}
+  const outboxOps=[];
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    const key=`${maqId}_${fmtDate(new Date(d))}`;
+    if(tipo==='disponible'){delete maquinaState.eventos[key];outboxOps.push({type:'delete',key});}
+    else{const ev={tipo,desc,tiempo:parseFloat(tiempo)||null};if(pedidoId)ev.pedidoId=pedidoId;maquinaState.eventos[key]=ev;outboxOps.push({type:'set',key,value:ev});}
+    count++;
+  }
+  _queueMachineEventOps(outboxOps);
+  closeMaquinaModal();renderMaquinasCalendar();toast(`✓ ${count} día${count>1?'s':''} marcados — sincronizando...`,'info');
+  const synced=await flushMachineEventOutbox();
+  toast(synced?'✓ Guardado en Airtable':'Guardado localmente · sincronización pendiente',synced?'success':'info');
 }
 async function deleteMaquinaEvento(maqId,dateStr){
-  delete maquinaState.eventos[`${maqId}_${dateStr}`];renderMaquinasCalendar();
-  try{await saveMaquinaEventosAirtable();toast('Evento eliminado','info');}
-  catch(e){toast('Error al eliminar: '+e.message,'error');}
+  const key=`${maqId}_${dateStr}`;delete maquinaState.eventos[key];_queueMachineEventOps([{type:'delete',key}]);renderMaquinasCalendar();
+  const synced=await flushMachineEventOutbox();
+  toast(synced?'Evento eliminado':'Eliminación guardada localmente · sincronización pendiente',synced?'info':'warning');
 }
 
 // ── EQUIPO ────────────────────────────────────────────────────

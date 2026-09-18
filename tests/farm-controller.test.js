@@ -78,7 +78,7 @@ test('metadata del slicer se conserva sanitizada en la cola durable',()=>{
 
 test('controller evalúa seguridad antes de subir el G-code',()=>{
   const safetyPos=source.indexOf('SafetyPolicy.evaluateSnapshot(safety, j');
-  const uploadPos=source.indexOf("requestLegacy('POST', `/${ip}/server/files/upload`");
+  const uploadPos=source.indexOf('/server/files/upload');
   assert.ok(safetyPos>0,'debe existir evaluación de seguridad');
   assert.ok(uploadPos>safetyPos,'la evaluación debe ocurrir antes del upload');
   assert.match(source,/state: 'blocked', safetyBlocked: true/);
@@ -88,4 +88,39 @@ test('controller expone snapshot de seguridad y permite sincronizarlo',()=>{
   assert.match(source,/p === '\/farm\/safety' && req\.method === 'GET'/);
   assert.match(source,/p === '\/farm\/safety' && req\.method === 'PUT'/);
   assert.match(source,/const role = requireRole\(req, res, 'operator'\)/);
+});
+
+
+test('firma de cama terminada es estable para la misma impresión',()=>{
+  const a=api.bedSignatureFromPrintStats({filename:'/gcodes/Pieza%20A.gcode',print_duration:123.4,state:'complete'});
+  const b=api.bedSignatureFromPrintStats({filename:'Pieza A.gcode',print_duration:123.49,state:'complete'});
+  assert.equal(a,b);
+  assert.match(a,/piezaa\|123\|complete/);
+});
+
+test('cola exige identidad registrada, idempotencia y lifecycle central',()=>{
+  assert.match(source,/máquina no registrada o sin IP válida en Farm Registry/);
+  assert.match(source,/idempotencyKey/);
+  assert.match(source,/queue\.jobs\.find\(j=>j\.idempotencyKey===idempotencyKey\)/);
+  assert.match(source,/reconcileStartedJobs/);
+  assert.match(source,/state:'completed'/);
+  assert.match(source,/recordProductionEvent/);
+  assert.match(source,/pruneQueue/);
+});
+
+test('trabajo siguiente exige cama liberada y existe endpoint de confirmación',()=>{
+  assert.match(source,/retirar pieza y confirmar cama libre/);
+  assert.match(source,/bedSignatureFromPrintStats/);
+  assert.ok(source.includes('farm\\/ready'),'debe existir endpoint /farm/ready/:machineId');
+  assert.match(source,/requeueBedBlocked/);
+});
+
+test('operator puede subir lectura de seguridad pero no rebajar la política',()=>{
+  assert.match(source,/const safeBody=role==='admin'\?body:\{\.\.\.body,config:safety\.config\}/);
+});
+
+test('Controller soporta iniciar un G-code ya existente sin saltarse lifecycle',()=>{
+  assert.match(source,/p==='\/farm\/queue\/existing'/);
+  assert.match(source,/existingFile:true/);
+  assert.match(source,/if\(!j\.existingFile\)/);
 });

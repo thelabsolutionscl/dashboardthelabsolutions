@@ -2530,3 +2530,23 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   #tab-maquinas .mops-plan-job-meta{display:block;margin-top:2px;white-space:normal}
   #tab-maquinas .mops-plan-idle-grid{grid-template-columns:1fr}
 }
+
+
+/* Máquinas · estado de servicios / confianza operacional */
+.mops-service-trust{margin:0 0 14px;padding:13px 14px;border:1px solid var(--border2);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.008))}
+.mops-service-trust-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.mops-service-trust-head>div{display:grid;gap:2px}
+.mops-service-trust-head b{font-size:12px;color:var(--text)}
+.mops-service-trust-head small{font-size:10.5px;color:var(--text3)}
+.mops-service-trust-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.mops-service-trust-grid article{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;padding:8px 9px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);min-width:0}
+.mops-service-trust-grid article .mops-service-dot{width:8px;height:8px;border-radius:999px;background:var(--text3);box-shadow:0 0 0 3px rgba(128,128,128,.08)}
+.mops-service-trust-grid article.ok .mops-service-dot{background:var(--accent3);box-shadow:0 0 0 3px rgba(0,212,170,.12)}
+.mops-service-trust-grid article.warning .mops-service-dot{background:var(--warn);box-shadow:0 0 0 3px rgba(255,170,0,.12)}
+.mops-service-trust-grid article.critical .mops-service-dot{background:var(--danger);box-shadow:0 0 0 3px rgba(255,68,68,.12)}
+.mops-service-trust-grid article div{display:grid;gap:1px;min-width:0}
+.mops-service-trust-grid article b{font-size:10.5px;color:var(--text2)}
+.mops-service-trust-grid article small{font-size:9.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mops-service-trust-grid article time{grid-column:2;font-size:8.5px;color:var(--text3);opacity:.7}
+@media(max-width:1100px){.mops-service-trust-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.mops-service-trust-head{align-items:flex-start;flex-direction:column}.mops-service-trust-grid{grid-template-columns:1fr}}

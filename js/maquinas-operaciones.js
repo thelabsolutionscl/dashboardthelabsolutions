@@ -22,11 +22,11 @@ const JOB_META={
   archivado:{label:'Archivado',color:'#64748b'},
 };
 const MODEL_CAPS={
-  'K1':{bed:[220,220,250],materials:['PLA','PLA+','PETG','TPU'],speed:1.22},
-  'K2':{bed:[350,350,350],materials:['PLA','PLA+','PETG','ABS','ASA','TPU','PA','PA-CF','PETG-CF'],speed:1.18},
-  'K2 Plus':{bed:[500,500,500],materials:['PLA','PLA+','PETG','ABS','ASA','TPU','PA','PA-CF','PETG-CF'],speed:1.12},
-  'Ender-5 Max':{bed:[400,400,600],materials:['PLA','PLA+','PETG','TPU'],speed:.92},
-  'Giga':{bed:[800,800,800],materials:['PLA','PLA+','PETG','TPU'],speed:.72},
+  'K1':{bed:[220,220,250],materials:['PLA','PLA+','PETG','TPU']},
+  'K2':{bed:[350,350,350],materials:['PLA','PLA+','PETG','ABS','ASA','TPU','PA','PA-CF','PETG-CF']},
+  'K2 Plus':{bed:[500,500,500],materials:['PLA','PLA+','PETG','ABS','ASA','TPU','PA','PA-CF','PETG-CF']},
+  'Ender-5 Max':{bed:[400,400,600],materials:['PLA','PLA+','PETG','TPU']},
+  'Giga':{bed:[800,800,800],materials:['PLA','PLA+','PETG','TPU']},
 };
 const DEFAULT_MAINT={
   'K1':{'nozzle':180,'lubrication':90,'belt':450,'extruder':250,'bed':220,'sensors':500,'general':50},
@@ -83,7 +83,7 @@ const hashText=value=>{let h=2166136261;for(const c of String(value||'')){h^=c.c
 const postStageMeta=key=>POST_STAGES.find(s=>s.key===key)||{key,label:key,icon:'•'};
 
 function defaultData(){
-  return{version:4,updatedAt:0,jobs:[],spools:[],qa:[],workflows:[],profiles:[],safetyReadings:[],incidents:[],audit:[],alertAcks:{},
+  return{version:5,updatedAt:0,jobs:[],spools:[],qa:[],workflows:[],profiles:[],safetyReadings:[],incidents:[],audit:[],alertAcks:{},bedClearAcks:{},
     automation:{...DEFAULT_AUTOMATION},costConfig:{...DEFAULT_COST},
     safetyConfig:{...DEFAULT_SAFETY},maintenanceProfiles:JSON.parse(JSON.stringify(DEFAULT_MAINT))};
 }
@@ -98,6 +98,7 @@ function normalizeData(raw){
   d.incidents=Array.isArray(d.incidents)?d.incidents:[];
   d.audit=Array.isArray(d.audit)?d.audit:[];
   d.alertAcks=d.alertAcks&&typeof d.alertAcks==='object'&&!Array.isArray(d.alertAcks)?d.alertAcks:{};
+  d.bedClearAcks=d.bedClearAcks&&typeof d.bedClearAcks==='object'&&!Array.isArray(d.bedClearAcks)?d.bedClearAcks:{};
   d.automation={...DEFAULT_AUTOMATION,...(d.automation||{})};
   d.costConfig={...DEFAULT_COST,...(d.costConfig||{})};
   d.safetyConfig={...DEFAULT_SAFETY,...(d.safetyConfig||{})};
@@ -136,6 +137,7 @@ function mergeData(local,remote){
     incidents:mergeRows(l.incidents,r.incidents).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,300),
     audit:mergeRows(l.audit,r.audit).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,500),
     alertAcks:remoteIsNewer?r.alertAcks:l.alertAcks,
+    bedClearAcks:remoteIsNewer?r.bedClearAcks:l.bedClearAcks,
     automation:remoteIsNewer?r.automation:l.automation,
     costConfig:remoteIsNewer?r.costConfig:l.costConfig,
     safetyConfig:remoteIsNewer?r.safetyConfig:l.safetyConfig,
@@ -186,6 +188,35 @@ function audit(action,machineId='',detail='',severity='info'){
 function getMachine(id){return (typeof MAQUINAS!=='undefined'?MAQUINAS:[]).find(m=>m.id===id);}
 function machineLabel(id){const m=getMachine(id);return m?`${m.nombre} #${m.numG||m.num}`:'Sin asignar';}
 function liveState(id){try{return (_printerStatus[id]||{}).state||'';}catch(_){return'';}}
+function bedClearSignature(id){
+  let live={};try{live=_printerStatus[id]||{};}catch(_){}
+  return [fileKey(live.filename||''),Math.round(num(live.elapsed)),String(live.state||'')].join('|');
+}
+function bedIsCleared(id){
+  if(liveState(id)!=='complete')return true;
+  const ack=data().bedClearAcks?.[id];
+  return !!ack&&ack.signature===bedClearSignature(id);
+}
+async function confirmBedCleared(id){
+  const m=getMachine(id);if(!m)return false;
+  if(liveState(id)!=='complete'){toast('La impresora no está esperando retiro de pieza','info');return false;}
+  const signature=bedClearSignature(id);
+  if(!signature){toast('No se pudo identificar la impresión finalizada','error');return false;}
+  data().bedClearAcks[id]={signature,clearedAt:nowIso(),actor:actor()};
+  audit('Cama liberada por operador',id,'Pieza retirada y cama disponible','control');
+  writeLocal();scheduleRemote();
+  try{await window.FarmQueue?.confirmBedClear?.(id,signature);}catch(e){toast('Cama marcada localmente; Controller aún no confirmó','info');}
+  renderAll();try{renderMonitorGrid();}catch(_){}
+  toast(`${machineLabel(id)} · cama liberada`,'success');
+  try{openTech(id,{autoRefresh:false});}catch(_){}
+  return true;
+}
+function installedNozzle(machine){
+  if(!machine?.id)return'';
+  let registry=null;try{registry=window.FarmRegistry?.status?.().machines?.find(x=>x.id===machine.id)||null;}catch(_){}
+  const value=registry?.nozzleInstalled||machine.nozzleInstalled||localStorage.getItem('printer_nozzle_'+machine.id)||'';
+  return String(value||'').trim();
+}
 function liveEvidence(id,now=Date.now()){
   const live=typeof _printerStatus!=='undefined'?_printerStatus[id]||{}:{};
   const state=String(live.state||''),lastSeen=num(live.lastSeenAt);
@@ -202,7 +233,7 @@ function farmQueueEvidence(now=Date.now()){
 function farmQueueMatch(job,evidence=farmQueueEvidence()){
   if(!job?.machineId||!job?.gcodeFile)return null;
   const target=fileKey(job.gcodeFile);
-  return evidence.jobs.find(row=>row.machineId===job.machineId&&target&&fileKey(row.filename)===target&&['queued','retry','checking','uploading','uploaded','started'].includes(String(row.state||'')))||null;
+  return evidence.jobs.find(row=>row.machineId===job.machineId&&target&&fileKey(row.filename)===target&&['queued','retry','checking','uploading','uploaded','started','printing','paused'].includes(String(row.state||'')))||null;
 }
 function machineOperational(m){
   if(!m||getMaquinaEstadoGlobal(m.id)!=='disponible')return false;
@@ -211,7 +242,9 @@ function machineOperational(m){
   // a una impresora disponible.
   const evidence=liveEvidence(m.id);
   if(!evidence.known)return false;
-  return !['offline','apidown','noip','shutdown','error'].includes(evidence.state);
+  if(['offline','apidown','noip','shutdown','error'].includes(evidence.state))return false;
+  if(evidence.state==='complete'&&!bedIsCleared(m.id))return false;
+  return true;
 }
 function machineCapabilities(m){return MODEL_CAPS[m?.modelo]||MODEL_CAPS.K1;}
 function jobMinutes(j){return Math.max(1,num(j.cycles,1))*Math.max(1,num(j.minutesPerCycle,60));}
@@ -222,9 +255,10 @@ function jobModels(j){
 function modelCanRun(model,j){
   const c=MODEL_CAPS[model];if(!c)return false;
   if(j.material&&!c.materials.includes(j.material))return false;
-  const x=num(j.sizeX),y=num(j.sizeY),z=num(j.sizeZ);
-  if(x&&y&&z){
-    const fits=(x<=c.bed[0]&&y<=c.bed[1]||y<=c.bed[0]&&x<=c.bed[1])&&z<=c.bed[2];
+  const x=num(j.sizeX),y=num(j.sizeY),z=num(j.sizeZ),dims=[x,y,z],known=dims.every(v=>v>0),partial=dims.some(v=>v>0)&&!known;
+  if(partial)return false;
+  if(known){
+    const fits=((x<=c.bed[0]&&y<=c.bed[1])||(y<=c.bed[0]&&x<=c.bed[1]))&&z<=c.bed[2];
     if(!fits)return false;
   }
   return true;
@@ -254,7 +288,7 @@ function machineScore(j,m,loadMinutes=0){
   const bedVol=cap.bed[0]*cap.bed[1]*cap.bed[2];
   const oversizePenalty=Math.max(0,(1-jobVol/bedVol))*80;
   const historyCalibration=num(localStorage.getItem('sl_time_cal_'+m.modelo),1);
-  return loadMinutes+eta+(jobMinutes(j)*historyCalibration/cap.speed)+oversizePenalty+materialBonus;
+  return loadMinutes+eta+(jobMinutes(j)*historyCalibration)+oversizePenalty+materialBonus;
 }
 function pickMachine(j,loads){
   let best=null,bestScore=Infinity;
@@ -347,8 +381,13 @@ function preflightFromFacts(facts){
   const checks=[];
   const add=(key,label,level,detail)=>checks.push({key,label,level,detail});
   add('connection','Conectividad',facts.connectionReady?'pass':'block',facts.connectionReady?'Moonraker disponible':facts.connectionDetail||'Sin telemetría');
-  add('availability','Máquina libre',facts.machineFree?'pass':'block',facts.machineFree?'Sin impresión activa':'La máquina está ocupada o detenida');
-  add('compatibility','Compatibilidad',facts.compatible?'pass':'block',facts.compatible?'Volumen, material y boquilla compatibles':'Trabajo incompatible con esta impresora');
+  add('availability','Máquina lista',facts.machineFree?'pass':'block',facts.machineFree?'Sin impresión activa y cama liberada':facts.bedNeedsClear?'La impresión terminó, pero falta confirmar retiro de pieza / cama libre':'La máquina está ocupada o detenida');
+  const dimLevel=facts.dimensionsPartial?'block':facts.dimensionsKnown?'pass':'warn';
+  add('compatibility','Material y volumen',facts.compatible?dimLevel:'block',!facts.compatible?'Trabajo incompatible con esta impresora':facts.dimensionsPartial?'Dimensiones incompletas: registra X, Y y Z':facts.dimensionsKnown?'Material y volumen verificados':'Material compatible; dimensiones no registradas');
+  if(facts.jobNozzle){
+    add('nozzle','Boquilla instalada',facts.nozzleKnown?(facts.nozzleMatch?'pass':'block'):'warn',
+      facts.nozzleKnown?(facts.nozzleMatch?`Boquilla ${facts.installedNozzle} confirmada`:`Trabajo requiere ${facts.jobNozzle} mm y la máquina declara ${facts.installedNozzle} mm`):`Trabajo requiere ${facts.jobNozzle} mm; boquilla física sin registrar`);
+  }
   add('file','Archivo G-code',facts.hasFile?'pass':'block',facts.hasFile?'Archivo identificado':'Falta indicar el archivo G-code');
   if(facts.gramsRequired>0)add('spool','Filamento suficiente',facts.spoolAvailable>=facts.gramsRequired?'pass':facts.spoolKnown?'block':'warn',facts.spoolKnown?`${Math.round(facts.spoolAvailable)} g disponibles / ${Math.round(facts.gramsRequired)} g requeridos`:'No hay inventario de rollo vinculado');
   if(facts.filamentDetected===false)add('sensor','Sensor físico','block','La impresora no detecta filamento');
@@ -365,9 +404,12 @@ function evaluatePreflight(job,machine){
   const spool=data().spools.find(s=>s.id===job.spoolId),free=spool?spoolAvailable(spool):0;
   let maint=[];try{maint=getMaintAlerts(machine);}catch(_){ }
   const overdue=maint.some(a=>a.hours>=a.threshold),safety=safetyDecision(data().safetyConfig,latestSafetyReading(),{unattended:jobMinutes(job)>=240,cameraConfigured:!!(localStorage.getItem('printer_cam_'+machine.id)||machine.cam)});
+  const x=num(job.sizeX),y=num(job.sizeY),z=num(job.sizeZ),dimensionsKnown=x>0&&y>0&&z>0,dimensionsPartial=(x>0||y>0||z>0)&&!dimensionsKnown;
+  const nozzle=installedNozzle(machine),jobNozzle=String(job.nozzle||'').trim(),nozzleKnown=!!nozzle,nozzleMatch=!jobNozzle||!nozzleKnown||String(nozzle)===jobNozzle;
   return preflightFromFacts({
     connectionReady:!['','connecting','offline','noip','shutdown','error','startup'].includes(stateNow),connectionDetail:live.connectionError,
-    machineFree:!['printing','paused'].includes(stateNow)&&machineOperational(machine),compatible:modelCanRun(machine.modelo,job),hasFile:!!job.gcodeFile,
+    machineFree:!['printing','paused'].includes(stateNow)&&machineOperational(machine),bedNeedsClear:stateNow==='complete'&&!bedIsCleared(machine.id),
+    compatible:modelCanRun(machine.modelo,job),dimensionsKnown,dimensionsPartial,jobNozzle,installedNozzle:nozzle,nozzleKnown,nozzleMatch,hasFile:!!job.gcodeFile,
     gramsRequired:num(job.grams),spoolKnown:!!spool,spoolAvailable:free,filamentDetected:live.filament?.detected??null,
     cameraConfigured:!!(localStorage.getItem('printer_cam_'+machine.id)||machine.cam),maintenanceOverdue:overdue,maintenanceSoon:maint.length>0,
     safetyBlockers:safety.blockers,safetyWarnings:safety.warnings,
@@ -516,10 +558,9 @@ function _incidentRowsForUi(){
   return{pending,history};
 }
 function machineHasCfs(machine){
+  if(typeof machineHasPhysicalCfs==='function')return machineHasPhysicalCfs(machine);
   if(!machine)return false;
-  const id=String(machine.id||'');
-  const globalNo=Number(machine.numG??machine.num??0);
-  // Configuración física real del taller: solo K1 #1 y K2 Plus.
+  const id=String(machine.id||''),globalNo=Number(machine.numG??machine.num??0);
   return machine.modelo==='K2 Plus'||id==='k1-1'||(machine.modelo==='K1'&&globalNo===1);
 }
 function _filamentPhysicalSummary(machine){
@@ -547,6 +588,35 @@ function _incidentCard(row){
     </div><div class="mops-incident-actions">${actions}</div>
   </article>`;
 }
+function _serviceTrustSnapshot(now=Date.now()){
+  const fresh=(ts,ms)=>!!num(ts)&&now-num(ts)<ms;
+  let queue={},registry={},history={},health={},safety={};
+  try{queue=window.FarmQueue?.status?.()||{};}catch(_){}
+  try{registry=window.FarmRegistry?.status?.()||{};}catch(_){}
+  try{history=window.PrinterHistory?.status?.()||{};}catch(_){}
+  try{health=window.FarmHealth?.status?.()||{};}catch(_){}
+  try{safety=window.MachineOpsUnattendedSafety?.status?.()||{};}catch(_){}
+  const machines=(typeof MAQUINAS!=='undefined'?MAQUINAS:[])||[];
+  const live=machines.filter(m=>liveEvidence(m.id,now).known).length;
+  const camConfigured=machines.filter(m=>{try{return !!printerCamUrl(m.id);}catch(_){return false;}}).length;
+  const row=(key,label,state,detail,stamp=0)=>({key,label,state,detail,stamp});
+  return[
+    row('controller','Controller',queue.controllerOk===true&&fresh(queue.lastSync,30000)?'ok':queue.controllerOk===false?'critical':'warning',
+      queue.controllerOk===true?`cola sincronizada · ${(queue.jobs||[]).filter(j=>['queued','retry','checking','uploading','uploaded','started','printing','paused'].includes(j.state)).length} activos`:'sin confirmación reciente',queue.lastSync),
+    row('telemetry','Telemetría',live===machines.length&&machines.length?'ok':live?'warning':'critical',`${live}/${machines.length} con lectura < 60 s`),
+    row('registry','Registry',registry.controllerOk===true&&fresh(registry.lastSync,60000)?'ok':registry.controllerOk===false?'critical':'warning',
+      registry.controllerOk===true?`${(registry.machines||[]).length} identidades centrales`:'sin confirmación reciente',registry.lastSync),
+    row('history','Historial',history.mode==='durable'&&fresh(history.lastSync,120000)?'ok':history.mode==='local-fallback'?'warning':'critical',
+      history.mode==='durable'?`${history.serverHistoryCount||0} cierres centrales`:history.mode==='local-fallback'?'usando caché local':'sin historial central',history.lastSync),
+    row('health','Salud central',health.mode==='central'&&fresh(health.generatedAt||health.lastSync,120000)?'ok':health.mode==='unavailable'?'critical':'warning',
+      health.mode==='central'?`${health.summary?.online??'—'} online · ${health.summary?.offline??'—'} offline`:'sin snapshot reciente',health.generatedAt||health.lastSync),
+    row('safety','Seguridad',safety.lastSyncOk&&fresh(safety.lastSyncAt,120000)?'ok':safety.lastSyncAt?'warning':'warning',
+      safety.lastSyncOk?'política sincronizada con Controller':safety.lastSyncError||'sin sincronización reciente',safety.lastSyncAt),
+    row('camera','Cámaras',camConfigured===machines.length&&machines.length?'ok':camConfigured?'warning':'critical',`${camConfigured}/${machines.length} configuradas`),
+    row('airtable','Airtable',typeof hasAirtableAccess==='function'&&hasAirtableAccess()?'ok':'warning',
+      typeof hasAirtableAccess==='function'&&hasAirtableAccess()?'acceso disponible':'modo local / sin acceso')
+  ];
+}
 function renderIntelligence(){
   const el=input('mopsIntelligence');if(!el)return;
   const embedded=_parkIntelligenceEmbeddedNodes(el);
@@ -559,8 +629,13 @@ function renderIntelligence(){
   const incidents=_incidentRowsForUi();
   const bridgeLabel={up:'Operativo',down:'Sin respuesta',checking:'Comprobando…'}[_bridgeHealth.state]||'Sin comprobar',bridgeColor=_bridgeHealth.state==='up'?'var(--accent3)':_bridgeHealth.state==='down'?'var(--danger)':'var(--warn)';
   const confidenceCounts={alta:0,media:0,baja:0};healthRows.forEach(row=>confidenceCounts[row.confidence]=(confidenceCounts[row.confidence]||0)+1);
+  const services=_serviceTrustSnapshot();
 
-  el.innerHTML=`<div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
+  el.innerHTML=`<section class="mops-service-trust">
+      <div class="mops-service-trust-head"><div><b>Estado de servicios</b><small>Antes de actuar, confirma qué fuentes están realmente disponibles.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">↻ Sincronizar todo</button></div>
+      <div class="mops-service-trust-grid">${services.map(s=>`<article class="${s.state}"><span class="mops-service-dot"></span><div><b>${esc(s.label)}</b><small>${esc(s.detail)}</small></div>${s.stamp?`<time>${esc(fmtStamp(s.stamp))}</time>`:''}</article>`).join('')}</div>
+    </section>
+    <div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
     <div id="mopsOpsOverviewAnchor" class="mops-intelligence-overview-anchor" aria-hidden="true"></div>
     <div class="mops-intel-grid">
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
@@ -1100,19 +1175,42 @@ function openPreflight(id){
 function closePreflight(){const modal=input('mopsPreflightModal');if(modal)modal.style.display='none';}
 function confirmPreflight(){const id=inputVal('mopsPreflightJobId');if(!id)return;closePreflight();startJob(id,{preflightConfirmed:true});}
 async function startJob(id,options={}){
-  const j=data().jobs.find(x=>x.id===id);if(!j||!j.machineId)return;
+  const j=data().jobs.find(x=>x.id===id);if(!j||!j.machineId)return false;
   const m=getMachine(j.machineId),st=liveState(j.machineId);
-  if(!options.preflightConfirmed){openPreflight(id);return;}
-  if(!machineOperational(m)){toast('La máquina no está operativa','error');return;}
-  if(st==='printing'||st==='paused'){j.status='en_cola';persist('Trabajo conservado en cola');toast('La impresora está ocupada; el trabajo permanece en cola','info');return;}
-  if(!j.gcodeFile){toast('Configura el nombre del archivo G-code que ya está en la impresora','error');return;}
-  if(!checkSafetyBeforeStart(j,m,true))return;
+  if(!options.preflightConfirmed){openPreflight(id);return false;}
+  // El modal puede quedar abierto mientras cambia filamento, mantención o estado.
+  // Por eso el preflight se repite justo antes del comando físico.
+  const fresh=evaluatePreflight(j,m);
+  if(!fresh.ok){
+    audit('Inicio detenido por preflight revalidado',m.id,fresh.blockers.map(x=>x.detail).join(' · '),'warn');
+    toast(fresh.blockers[0]?.detail||'Las condiciones cambiaron; revisa el preflight','error');
+    openPreflight(id);return false;
+  }
+  if(!machineOperational(m)){toast('La máquina no está operativa o la cama no fue liberada','error');return false;}
+  if(st==='printing'||st==='paused'){j.status='en_cola';persist('Trabajo conservado en cola');toast('La impresora está ocupada; el trabajo permanece en cola','info');return false;}
+  if(!j.gcodeFile){toast('Configura el nombre del archivo G-code que ya está en la impresora','error');return false;}
+  if(!checkSafetyBeforeStart(j,m,true))return false;
+  if(!window.FarmQueue?.startExisting){
+    audit('Inicio detenido: Controller no disponible',m.id,j.gcodeFile,'error');
+    toast('No se inicia sin Farm Controller: evita ejecuciones fuera del registro central','error');return false;
+  }
   try{
-    const ip=getPrinterIp(m);const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(j.gcodeFile)}`),{method:'POST',signal:AbortSignal.timeout(9000),headers:getPrinterAuthHeaders(j.machineId)});
-    if(!r.ok)throw new Error('Moonraker '+r.status);
-    j.status='imprimiendo';j.startedAt=nowIso();j.updatedAt=nowIso();persist('Impresión iniciada');
-    audit('Comando Moonraker',m.id,`START ${j.gcodeFile}`,'control');toast('Impresión iniciada ✓','success');setTimeout(pollPrinters,1200);
-  }catch(e){audit('Fallo comando Moonraker',m.id,e.message,'error');toast('No se pudo iniciar: '+e.message,'error');}
+    const execution=await window.FarmQueue.startExisting(j.machineId,j.gcodeFile,{jobId:j.id,idempotencyKey:'machineops:'+j.id,name:j.name,material:j.material,nozzle:j.nozzle,source:'machineops'});
+    if(!execution)throw new Error('Controller no confirmó la ejecución');
+    j.farmJobId=execution.id||j.farmJobId;j.executionId=execution.idempotencyKey||j.executionId;
+    j.status='en_cola';j.startRequestedAt=nowIso();j.updatedAt=nowIso();persist('Inicio solicitado al Controller');
+    audit('Ejecución Controller',m.id,`START solicitado ${j.gcodeFile} · ${j.farmJobId||''}`,'control');
+    toast('Controller aceptó el inicio; esperando confirmación de telemetría ✓','success');setTimeout(pollPrinters,1200);return true;
+  }catch(e){audit('Fallo Controller',m.id,e.message,'error');toast('No se pudo iniciar: '+e.message,'error');return false;}
+}
+function startExistingFile(machineId,filename){
+  const m=getMachine(machineId);if(!m||!filename)return false;
+  const j={id:uid('job'),name:'Reimpresión · '+String(filename).replace(/\.gcode$/i,''),pedidoId:'',qty:1,unitsPerBed:1,cycles:1,minutesPerCycle:60,
+    material:'',color:'',grams:0,nozzle:'',sizeX:0,sizeY:0,sizeZ:0,dueDate:'',priority:'normal',machineId,spoolId:'',profileId:'',
+    gcodeFile:String(filename),notes:'Creado desde Archivos de la impresora; requiere preflight antes de iniciar.',compatibleModels:[m.modelo],postStages:[],
+    status:'en_cola',source:'existing-file',createdAt:nowIso(),updatedAt:nowIso(),archived:false};
+  data().jobs.push(j);audit('Reimpresión preparada',machineId,j.gcodeFile,'control');writeLocal();scheduleRemote();renderAll();
+  toast('Reimpresión preparada: revisa el preflight','info');openPreflight(j.id);return j.id;
 }
 function archiveJob(id){
   const j=data().jobs.find(x=>x.id===id);if(!j)return;
@@ -1631,7 +1729,19 @@ function renderAll(){
 }
 
 async function syncNow(){
-  await loadRemote();await saveRemote();renderAll();toast('Centro de producción sincronizado ✓','success');
+  const tasks=[
+    loadRemote().catch(()=>null),
+    window.FarmQueue?.sync?.(true),
+    window.FarmRegistry?.sync?.(true),
+    window.PrinterHistory?.sync?.(true),
+    window.FarmHealth?.refresh?.(true),
+    window.FarmDrift?.refresh?.(true),
+  ].filter(Boolean);
+  await Promise.allSettled(tasks);
+  try{if(typeof flushMachineStateOutbox==='function')await flushMachineStateOutbox();}catch(_){}
+  try{if(typeof flushMachineEventOutbox==='function')await flushMachineEventOutbox();}catch(_){}
+  try{if(typeof syncPendingMaintenance==='function')await syncPendingMaintenance();}catch(_){}
+  await saveRemote();renderAll();toast('Máquinas sincronizadas con todas las fuentes disponibles ✓','success');
 }
 
 function findJobForPrint(machineId,filename){
@@ -1648,6 +1758,9 @@ function handlePrinterTransition(m,s,previous){
     watch.progress=progress;watch.lastSeenAt=Date.now();
   }else{watch.progress=null;watch.unchangedAt=Date.now();}
   watch.state=s.state;_telemetryWatch[m.id]=watch;
+  if(s.state==='printing'&&previous!=='printing'&&data().bedClearAcks?.[m.id]){
+    delete data().bedClearAcks[m.id];writeLocal();scheduleRemote();
+  }
   if(s.state==='printing'&&data().automation.enabled&&data().automation.autoLink){
     const active=data().jobs.find(x=>x.machineId===m.id&&!x.archived&&x.status==='imprimiendo'),j=active||findJobForPrint(m.id,s.filename);
     if(j&&j.status!=='imprimiendo'){j.status='imprimiendo';j.startedAt=j.startedAt||new Date(Date.now()-num(s.elapsed)*1000).toISOString();j.updatedAt=nowIso();persist('Trabajo detectado y vinculado por G-code',{render:true});}
@@ -1665,6 +1778,32 @@ function handlePrinterTransition(m,s,previous){
     const j=data().jobs.find(x=>x.machineId===m.id&&!x.archived&&x.status==='imprimiendo');addIncident({machineId:m.id,jobId:j?.id||'',type:'electrical',note:s.klMsg||'Firmware o impresora detenida durante la producción',source:'telemetry'});persist('Falla de impresora detectada por telemetría');
   }
   if(_activeView==='inteligencia')renderIntelligence();
+}
+function reconcileFarmQueueJobs(rows=[]){
+  let changed=false;
+  for(const remote of (Array.isArray(rows)?rows:[])){
+    const job=data().jobs.find(j=>!j.archived&&(j.farmJobId===remote.id||(j.executionId&&j.executionId===remote.idempotencyKey)))||null;
+    if(!job)continue;
+    const state=String(remote.state||'');
+    const touch=(status)=>{
+      if(job.status!==status){job.status=status;changed=true;}
+      if(remote.startedAt&&!job.startedAt){job.startedAt=remote.startedAt;changed=true;}
+      if(remote.id&&!job.farmJobId){job.farmJobId=remote.id;changed=true;}
+      if(remote.idempotencyKey&&!job.executionId){job.executionId=remote.idempotencyKey;changed=true;}
+      job.controllerState=state;job.controllerError=remote.lastError||'';job.updatedAt=nowIso();
+    };
+    if(['queued','retry','checking','uploading','uploaded','started','blocked'].includes(state))touch(job.status==='imprimiendo'?'imprimiendo':'en_cola');
+    else if(['printing','paused'].includes(state))touch('imprimiendo');
+    else if(state==='completed'){
+      touch(job.status==='terminado'?'terminado':'qa');
+      if(remote.completedAt&&!job.completedAt){job.completedAt=remote.completedAt;changed=true;}
+      if(job.startedAt&&job.completedAt&&!job.actualMinutes){job.actualMinutes=Math.max(1,Math.round((Date.parse(job.completedAt)-Date.parse(job.startedAt))/60000));changed=true;}
+    }else if(['cancelled','failed'].includes(state)){
+      touch('fallido');if(remote.completedAt&&!job.completedAt){job.completedAt=remote.completedAt;changed=true;}
+    }
+  }
+  if(changed){writeLocal();scheduleRemote();renderAll();}
+  return changed;
 }
 function onLegacyQueueAdd(machineId,filename,secs,grams,meta={}){
   meta=meta&&typeof meta==='object'?meta:{};
@@ -1887,7 +2026,10 @@ function openTech(id,{autoRefresh=true}={}){
   else if(facts.disconnected)printStateHtml=`<div class="mops-alert warn" style="margin-top:12px">⚠ <span><b>Estado de impresión desconocido.</b> Sin telemetría no se asumirá que la máquina está libre.</span></div>`;
   else if(live.state==='shutdown'||live.state==='error')printStateHtml=`<div class="mops-alert danger" style="margin-top:12px">🚨 <span><b>La impresora requiere atención.</b> ${esc(live.klMsg||'Klipper reportó una detención.')}</span></div>`;
   else if(live.state==='cancelled')printStateHtml=`<div class="mops-alert warn" style="margin-top:12px">⏹ <span><b>La última impresión fue cancelada.</b> La máquina sigue en línea${esc(tempHint)}.</span></div>`;
-  else if(live.state==='complete')printStateHtml=`<div class="mops-alert" style="margin-top:12px">✅ <span><b>Impresión finalizada.</b> La máquina está conectada${esc(tempHint)}.</span></div>`;
+  else if(live.state==='complete'){
+    const cleared=bedIsCleared(id);
+    printStateHtml=`<div class="mops-alert ${cleared?'':'warn'}" style="margin-top:12px">${cleared?'✅':'⚠'} <span><b>${cleared?'Cama liberada.':'Impresión finalizada · falta retirar la pieza.'}</b> ${cleared?'La máquina puede recibir el siguiente trabajo.':'No se considerará disponible hasta confirmarlo físicamente.'}${esc(tempHint)}.</span>${cleared?'':`<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="MachineOps.confirmBedCleared('${id}')">✓ Confirmar cama libre</button>`}</div>`;
+  }
   else printStateHtml='<div class="mops-alert" style="margin-top:12px">✅ <span><b>En línea y sin impresión activa.</b> Puedes asignar el siguiente trabajo.</span></div>';
   const ft=live.filament;
   const cfsSlots=ft?.cfsSlots?.length?`<div class="mops-tech-slots">${ft.cfsSlots.map(slot=>`<span>${slot.color?`<i style="background:${cssColor(slot.color)}"></i>`:''}<b>${esc(slot.slot)}</b>${slot.material?' · '+esc(slot.material):''}${Number.isFinite(slot.remain)?' · '+Math.round(slot.remain)+' restante':''}</span>`).join('')}</div>`:'';
@@ -1914,10 +2056,10 @@ function openTech(id,{autoRefresh=true}={}){
           ${kpi('Tiempo restante',etaValue,etaSub)}
           ${kpi('Trabajos planificados',jobs.length,fmtMin(queueMinutes),jobs.length?'var(--accent4)':'var(--accent3)')}
           ${kpi('Filamento',filamentSummary.value,filamentSummary.sub,filamentSummary.color)}
-          ${kpi('Fiabilidad',reliability.score.toFixed(0)+'%',`${reliability.done} correctos · ${reliability.failed} fallidos`,reliability.score<70?'var(--danger)':reliability.score<85?'var(--warn)':'var(--accent3)')}
+          ${kpi('Fiabilidad',reliability.completion==null?reliability.label:reliability.completion.toFixed(0)+'%',reliability.history.total?`${reliability.history.completed} correctos · ${reliability.history.notCompleted} fallidos · confianza ${reliability.confidence}`:`${reliability.label} · confianza ${reliability.confidence}`,reliability.level==='critical'?'var(--danger)':reliability.level==='warning'?'var(--warn)':reliability.level==='ok'?'var(--accent3)':'var(--text3)')}
         </div>
         <div class="field-group"><label class="field-label">Estado operacional</label><select class="field-select" onchange="MachineOps.setMachineStatus('${id}',this.value)">${stateOptions}</select></div>
-        <div class="mops-tech-spec">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · materiales: ${esc(cap.materials.join(', '))}</div>
+        <div class="mops-tech-spec">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · boquilla ${esc(installedNozzle(m)||'sin registrar')} mm · ${machineHasCfs(m)?'CFS físico · ':''}materiales: ${esc(cap.materials.join(', '))}</div>
       </div>
     </div>
     ${printStateHtml}
@@ -1955,10 +2097,12 @@ function openTech(id,{autoRefresh=true}={}){
 function closeTech(){input('mopsTechModal').style.display='none';}
 async function setMachineStatus(id,status){
   const m=getMachine(id);if(!m||!(status in MAQUINA_ESTADOS))return;
-  m.estado=status;localStorage.setItem('estado_maq_'+id,status);audit('Estado operacional actualizado',id,maquinaEstadoMeta(status).label,'control');writeLocal();scheduleRemote();
-  try{await saveMaquinaEstadoAirtable(id,status);}catch(e){toast('Estado local guardado; Airtable no respondió','info');}
+  const previous=getMaquinaEstadoGlobal(id);
+  if(status==='disponible'&&previous!=='disponible'&&!confirm(`¿Marcar ${machineLabel(id)} como DISPONIBLE?\n\nConfirma que fue revisada físicamente y no está esperando repuesto, calibración ni mantención.`)){openTech(id,{autoRefresh:false});return;}
+  m.estado=status;audit('Estado operacional actualizado',id,maquinaEstadoMeta(status).label,'control');writeLocal();scheduleRemote();
+  const synced=typeof _saveMachineStateReliable==='function'?await _saveMachineStateReliable(id,status):await saveMaquinaEstadoAirtable(id,status).then(()=>true).catch(()=>false);
   renderAll();try{renderMaquinasCalendar();renderMonitorGrid();}catch(_){}
-  toast(`${machineLabel(id)} · ${maquinaEstadoMeta(status).label}`,'success');openTech(id);
+  toast(`${machineLabel(id)} · ${maquinaEstadoMeta(status).label}${synced?'':' · pendiente de sincronizar'}`,synced?'success':'info');openTech(id,{autoRefresh:false});
 }
 async function copyTextSafe(value){
   const text=String(value||'');if(!text)return false;
@@ -2007,7 +2151,7 @@ async function init(){
 }
 
 const api={
-  init,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,archiveJob,
+  init,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,
   openPreflight,closePreflight,confirmPreflight,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,
@@ -2018,10 +2162,10 @@ const api={
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
   renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,checkBridgeHealth,saveIntelligenceConfig,
   openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
-  openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
+  openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
-  handlePrinterTransition,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState},
+  handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot},
 };
 window.MachineOps=api;
 

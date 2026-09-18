@@ -16,7 +16,7 @@
 
 const OPS_KEY='thelab_machine_ops_v2';
 const OPS_ACTIVE=new Set(['pendiente','planificado','en_cola','imprimiendo','qa']);
-const FARM_ACTIVE=new Set(['queued','retry','checking','uploading','uploaded']);
+const FARM_ACTIVE=new Set(['queued','retry','checking','uploading','uploaded','started','printing','paused']);
 const LIVE_FREE=new Set(['idle','standby','ready']);
 const LIVE_BAD=new Set(['offline','noip','shutdown','error','apidown']);
 const LIVE_UNKNOWN=new Set(['','connecting','unknown','startup']);
