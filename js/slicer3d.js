@@ -2454,23 +2454,51 @@ self.onmessage=function(ev){
   }
   function previewSlide(v){_drawGcodeLayer(+v);}
   function toggleTravel(on){S.showTravel=on;_drawGcodeLayer(S.previewIdx||0);}
+  function _machineReadiness(m,requireIdle=true){
+    const st=(typeof _printerStatus!=='undefined'&&_printerStatus[m.id])||{},state=String(st.state||'offline');
+    const last=Number(st.lastSeenAt||0),fresh=!!last&&Date.now()-last<60000;
+    let admin=true;try{if(typeof getMaquinaEstadoGlobal==='function')admin=getMaquinaEstadoGlobal(m.id)==='disponible';}catch(_){}
+    const known=fresh&&!['','connecting','unknown','startup','offline','noip','shutdown','error','apidown'].includes(state);
+    const idle=['idle','ready','standby'].includes(state);
+    return{ready:admin&&known&&(!requireIdle||idle),admin,known,idle,state,fresh,lastSeenAt:last};
+  }
+  function _abrasiveKnown(m){
+    const mat=MATS[el('slMaterial')?.value]||{};if(!mat.abrasive)return true;
+    const v=String(localStorage.getItem('printer_nozzle_material_'+m.id)||'').toLowerCase();
+    return /(harden|endurec|steel|acero|ruby|rubi|tungsten|carbide|ceramic)/.test(v);
+  }
+  function _abrasiveCheck(m,interactive=true){
+    const matName=el('slMaterial')?.value,mat=MATS[matName]||{};if(!mat.abrasive)return true;
+    if(_abrasiveKnown(m))return true;
+    if(!interactive)return false;
+    const ok=confirm(`${matName} es abrasivo y no hay material de boquilla registrado para ${m.nombre} #${m.numG}.\n\n¿Confirmas físicamente que esta impresora tiene boquilla endurecida/apta para fibra?`);
+    if(ok)try{localStorage.setItem('printer_nozzle_material_'+m.id,'hardened-confirmed');}catch(_){}
+    return ok;
+  }
+  function _gcodeFitsMachine(m){
+    const spec=SPECS[m&&m.modelo];if(!spec||!S.gcode)return{ok:false,issues:['modelo o G-code no disponible']};
+    return _validateGcodeForSpec(S.gcode,spec);
+  }
+  function _slicerJobMeta(m){
+    const st=S.stats||{},params=S.params||{},mat=el('slMaterial')?.value||'';
+    return{name:S.name||'Pieza 3D',source:'slicer3d',material:mat,nozzle:String(el('slNozzle')?.value||''),model:el('slPrinter')?.value||'',
+      sizeX:+st.dx||0,sizeY:+st.dy||0,sizeZ:+st.dz||0,grams:+S.est?.grams||0,secs:+S.est?.secs||0,profileName:el('slProfileSel')?.value||'',
+      params:{layerHeight:params.layerHeight,infillPct:params.infillPct,infillType:params.infillType,supports:!!params.supports,maxVolumetricFlow:params.maxVolumetricFlow},
+      mesh:{volumeReliable:!!S.meshHealth?.volumeReliable,openEdges:S.meshHealth?.openEdges||0,nonManifoldEdges:S.meshHealth?.nonManifoldEdges||0},
+      machineId:m?.id||''};
+  }
   function _suggestPrinter(machines,est){
-    // Score each machine: idle>standby>other; model match bonus; queue empty bonus
     const model=el('slPrinter').value;
     const scores=machines.map(m=>{
-      const st=(_printerStatus[m.id]||{}).state||'offline';
-      const busy=st==='printing'||st==='paused';
-      const idle=st==='idle'||st==='standby'||st==='ready';
-      const spec=SPECS[m.modelo]||SPECS[model]||{};
-      const fits=S.bounds?(S.bounds.dx<=(spec.x||300)&&S.bounds.dy<=(spec.y||300)&&S.bounds.dz<=(spec.z||300)):true;
-      let score=0;
-      if(busy)score-=100;
-      if(idle)score+=10;
-      if(m.modelo===model)score+=5;
-      if(fits)score+=8;
-      if(!_queueCount(m.id))score+=3;
-      return{m,score,idle,busy,fits};
-    });
+      const r=_machineReadiness(m,true),spec=SPECS[m.modelo]||SPECS[model]||{},fits=S.bounds?(S.bounds.dx<=(spec.x||0)-2&&S.bounds.dy<=(spec.y||0)-2&&S.bounds.dz<=(spec.z||0)-2):false;
+      const gfit=S.gcode?_gcodeFitsMachine(m).ok:fits;
+      let score=-Infinity;
+      if(r.ready&&fits&&gfit){
+        score=10+(m.modelo===model?5:0)+(!_queueCount(m.id)?3:0);
+        if(_abrasiveKnown(m))score+=1;
+      }
+      return{m,score};
+    }).filter(x=>Number.isFinite(x.score));
     scores.sort((a,b)=>b.score-a.score);
     return scores[0]?.m||null;
   }
@@ -2491,8 +2519,11 @@ self.onmessage=function(ev){
     const pk=localStorage.getItem('sl_price_kg')||localStorage.getItem('filament_cost_clp')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
     const warns=[];
     if(S.params.supports)warns.push('<b>Soportes activados</b>: '+(S.params.treeSupports?'tipo árbol (ramas que se fusionan en troncos, fáciles de retirar)':'columnas en rejilla bajo los voladizos, retirar a mano')+'. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
-    if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
-    if(S.params.arcFitting)warns.push('<b>Arcos G2/G3 activados</b>: el archivo es más liviano, pero tu Klipper debe tener <code>[gcode_arcs]</code> habilitado (las K1/K2 modernas lo traen). Si la impresora rechaza G2/G3, vuelve a desactivar esta opción.');
+    if(S.params.raft)warns.push('<b>Raft activado</b>: el motor nativo genera base + interfaz y eleva el modelo; el envelope final se valida contra la cama antes de habilitar el envío.');
+    if(S.params.arcFitting)warns.push('<b>Arcos G2/G3 activados</b>: el archivo requiere que el firmware destino admita arcos. Si la impresora rechaza G2/G3, vuelve a desactivar esta opción.');
+    if(!S.meshHealth?.volumeReliable)warns.push('<b>Malla no verificada como sólido cerrado</b>: el laminado puede funcionar, pero volumen/peso geométrico y algunas superficies no deben tratarse como evidencia exacta.');
+    if((MATS[el('slMaterial').value]||{}).abrasive)warns.push('<b>Material abrasivo</b>: antes de enviar se exigirá confirmar una boquilla endurecida/apta para fibra en la impresora destino.');
+    const audit=S.gcodeAudit||_validateGcodeForSpec(S.gcode,SPECS[model]),auditTxt=audit.ok?'G-code dentro del volumen':'G-code fuera de límites';
     const suggHint=suggested?`<div style="font-size:10px;color:var(--accent);margin-bottom:8px">💡 Impresora sugerida: <b>${escapeHtml(suggested.nombre)} #${suggested.numG}</b> — ${((_printerStatus[suggested.id]||{}).state||'offline')}</div>`:'';
     el('slResult').style.display='block';
     el('slResult').innerHTML=`
@@ -2502,7 +2533,7 @@ self.onmessage=function(ev){
           <span class="badge badge-green">⏱ ~${fmtTime(est.secs)}</span>
           <span class="badge badge-green">🧵 ${est.filM.toFixed(1)} m</span>
           <span class="badge badge-green">⚖ ~${est.grams.toFixed(0)} g</span>
-          <span class="badge badge-gray">📄 ${kb.toLocaleString('es-CL')} KB</span>
+          <span class="badge badge-gray">📄 ${kb.toLocaleString('es-CL')} KB</span>\n          <span class="badge ${audit.ok?'badge-green':'badge-red'}">🛡 ${auditTxt}</span>
         </div>
         <!-- COSTO -->
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px">
@@ -2526,10 +2557,10 @@ self.onmessage=function(ev){
             ${suggHint}
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <select class="field-select" id="slTarget" style="width:auto;min-width:180px">${opts}</select>
-              <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Iniciar al subir</label>
+              <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Revisar e iniciar al subir</label>
               <button class="btn btn-ghost" id="slBtnSend" onclick="SL3D.enviar()">📤 Enviar</button>
-              <button class="btn btn-ghost" id="slBtnQueue" onclick="SL3D.encolar()" title="Encolar: el trabajo se iniciará automáticamente cuando la impresora quede libre">🔁 Encolar</button>
-              <button class="btn btn-ghost" onclick="SL3D.enviarATodas()" title="Enviar a todas las impresoras libres simultáneamente">📤 Todas las libres</button>
+              <button class="btn btn-ghost" id="slBtnQueue" onclick="SL3D.encolar()" title="Guardar en la cola durable con metadata real de material, boquilla y tiempo">🔁 Encolar seguro</button>
+              <button class="btn btn-ghost" onclick="SL3D.enviarATodas()" title="Subir a máquinas confirmadas libres; nunca inicia en lote">📤 Subir a libres</button>
             </div>
           </div>
           `:'<span style="font-size:10px;color:var(--text3)">Configura la IP de una impresora para enviar directo</span>'}
@@ -2567,62 +2598,59 @@ self.onmessage=function(ev){
   }
   function _destinoOk(m){
     const laminado=el('slPrinter')?.value;
-    if(!m||!m.modelo||m.modelo===laminado)return true;
-    if(!_cabeEn(m)){
-      const st=S.stats;
-      toast(`No se envía: la pieza (${st.dx.toFixed(0)}×${st.dy.toFixed(0)}×${st.dz.toFixed(0)}mm) no cabe en ${m.nombre} #${m.numG}, que es ${m.modelo}. Lamina para esa impresora.`,'error');
-      return false;
-    }
-    return confirm(`Este G-code se laminó para ${laminado} y lo vas a mandar a ${m.nombre} #${m.numG}, que es ${m.modelo}.\n\nCabe en la cama, pero la aceleración y el G-code de arranque son los de ${laminado}.\n\n¿Enviar igual?`);
+    if(!m)return false;
+    const gf=_gcodeFitsMachine(m);
+    if(!gf.ok){toast(`No se envía a ${m.nombre} #${m.numG}: ${gf.issues.join(' · ')}`,'error');return false;}
+    try{
+      const modelCanRun=window.MachineOps?._test?.modelCanRun;
+      if(typeof modelCanRun==='function'){
+        const meta=_slicerJobMeta(m);
+        if(!modelCanRun(m.modelo,meta)){toast(`No se envía: ${m.modelo} no está habilitada para ${meta.material} o para estas dimensiones en MachineOps.`,'error');return false;}
+      }
+    }catch(_){}
+    if(!_abrasiveCheck(m,true)){toast('Envío cancelado: confirma una boquilla apta para material abrasivo.','error');return false;}
+    if(!m.modelo||m.modelo===laminado)return true;
+    return confirm(`Este G-code se laminó para ${laminado} y se enviará a ${m.nombre} #${m.numG} (${m.modelo}).\n\nEl envelope cabe, pero el G-code de arranque/aceleraciones pertenece a ${laminado}.\n\n¿Subir el archivo de todas formas? (No se iniciará sin preflight.)`);
   }
   // idExplicito: al enviar a varias, cada llamada trae SU impresora. Antes la
   // función no recibía nada y siempre leía el selector, así que "enviar a todas"
   // mandaba el mismo archivo N veces a la misma máquina.
-  function enviar(idExplicito,yaChequeado){
+  function enviar(idExplicito,yaChequeado,opts={}){
     const id=idExplicito||el('slTarget')?.value;if(!id||!S.gcode)return;
     const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);
     if(!ip){toast('Esa impresora no tiene IP configurada','error');return;}
     if(!yaChequeado&&!_destinoOk(m))return;
-    const fname=gcodeFileName(),autoStart=el('slAutoStart')?.checked;
-    // Con varias en vuelo el botón es uno solo: no se toca desde los envíos en lote.
+    const fname=gcodeFileName(),wantsPreflight=!opts.noStart&&!!el('slAutoStart')?.checked;
     const btn=idExplicito?null:el('slBtnSend');
     if(btn){btn.disabled=true;btn.textContent='⏳ Subiendo…';}
-    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}toast(`✓ DEMO: ${fname} enviado de forma simulada a ${m.nombre} #${m.numG}`,'success');},250);return;}
+    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar';}toast(`✓ DEMO: ${fname} enviado de forma simulada a ${m.nombre} #${m.numG}`,'success');},250);return;}
     const fd=new FormData();
-    fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);
-    fd.append('root','gcodes');
-    const xhr=new XMLHttpRequest();
-    xhr.open('POST',printerUrl(ip,'/server/files/upload'));
+    fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);fd.append('root','gcodes');
+    const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
     xhr.upload.onprogress=ev=>{if(btn&&ev.lengthComputable)btn.textContent='⏳ '+Math.round(ev.loaded/ev.total*100)+'%';};
-    xhr.onload=async()=>{
-      if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}
+    xhr.onload=()=>{
+      if(btn){btn.disabled=false;btn.textContent='📤 Enviar';}
       if(xhr.status>=200&&xhr.status<300){
         toast(`✓ ${fname} subido a ${m.nombre} #${m.numG}`,'success');
-        if(autoStart){
-          try{
-            const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(fname)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
-            toast(r.ok?`▶ Imprimiendo en ${m.nombre} #${m.numG}`:'No se pudo iniciar la impresión',r.ok?'success':'error');
-            if(typeof pollPrinters==='function')pollPrinters();
-          }catch(e){toast('No se pudo iniciar: '+e.message,'error');}
+        if(wantsPreflight){
+          const meta={..._slicerJobMeta(m),machineId:id,gcodeFile:fname};
+          if(window.MachineOps?.startUploadedSlicerJob)window.MachineOps.startUploadedSlicerJob(meta);
+          else toast('Archivo subido. No se inició: el preflight de MachineOps no está disponible.','info');
         }
       }else toast('Error al subir ('+xhr.status+')','error');
     };
-    xhr.onerror=()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}toast(`${m.nombre} #${m.numG}: impresora inaccesible — revisa modo Local/Remoto y el túnel`,'error');};
+    xhr.onerror=()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar';}toast(`${m.nombre} #${m.numG}: impresora inaccesible — revisa modo Local/Remoto y el túnel`,'error');};
     xhr.send(fd);
   }
   function encolar(){
     const id=el('slTarget')?.value;if(!id||!S.gcode)return;
     const m=MAQUINAS.find(x=>x.id===id);if(!m){toast('Impresora no encontrada','error');return;}
-    const st=(_printerStatus[id]||{}).state||'offline';
-    const busy=st==='printing'||st==='paused';
-    if(!busy){
-      // printer is free: just send + auto-start
-      const autoOld=el('slAutoStart');if(autoOld)autoOld.checked=true;
-      enviar();return;
-    }
-    const fname=gcodeFileName();
-    _queueAdd(id,S.gcode,fname,S.est?.secs,S.est?.grams);
+    if(!_destinoOk(m))return;
+    const r=_machineReadiness(m,false);
+    if(!r.ready){toast('No se encola: la máquina no está administrativamente disponible o su telemetría no es reciente/confiable.','error');return;}
+    const fname=gcodeFileName(),meta=_slicerJobMeta(m);
+    _queueAdd(id,S.gcode,fname,S.est?.secs,S.est?.grams,meta);
   }
 
   // ── Cotizar desde slicer: transfiere datos a la pestaña de cotización ──
@@ -2651,25 +2679,24 @@ self.onmessage=function(ev){
   // ── Enviar a todas las impresoras libres ──
   function enviarATodas(){
     if(!S.gcode){toast('Genera el G-code primero','error');return;}
-    const libres=MAQUINAS.filter(m=>{
-      const st=(typeof _printerStatus!=='undefined'&&_printerStatus[m.id]||{}).state||'offline';
-      return(st==='idle'||st==='ready'||st==='standby')&&(typeof getPrinterIp==='function'&&getPrinterIp(m));
-    });
-    if(!libres.length){toast('No hay impresoras libres con IP configurada','error');return;}
-    // La pieza tiene que caber en CADA destino: el G-code es uno solo, laminado
-    // para la cama de un modelo. Las que no dan se dejan fuera y se dicen.
-    const aptas=libres.filter(_cabeEn),fuera=libres.filter(m=>!_cabeEn(m));
-    if(!aptas.length){
-      toast(`La pieza no cabe en ninguna de las ${libres.length} impresoras libres. Lamina para una de ellas.`,'error');return;
+    const candidatas=MAQUINAS.filter(m=>typeof getPrinterIp==='function'&&getPrinterIp(m)&&_machineReadiness(m,true).ready);
+    if(!candidatas.length){toast('No hay impresoras confirmadas libres con telemetría reciente e IP válida','error');return;}
+    const aptas=[],fuera=[];
+    for(const m of candidatas){
+      const g=_gcodeFitsMachine(m);
+      if(!g.ok)fuera.push({m,why:g.issues.join(' · ')});
+      else if(!_abrasiveCheck(m,false))fuera.push({m,why:'boquilla endurecida no confirmada para material abrasivo'});
+      else{
+        let compatible=true;try{const fn=window.MachineOps?._test?.modelCanRun;if(typeof fn==='function')compatible=fn(m.modelo,_slicerJobMeta(m));}catch(_){}
+        if(compatible)aptas.push(m);else fuera.push({m,why:'modelo/material no compatible según MachineOps'});
+      }
     }
-    const laminado=el('slPrinter')?.value;
-    const distintas=aptas.filter(m=>m.modelo&&m.modelo!==laminado);
-    const aviso=`¿Enviar a ${aptas.length} impresora(s) libre(s)?\n${aptas.map(m=>m.nombre+' #'+m.numG).join(', ')}`
-      +(fuera.length?`\n\nSe dejan fuera (la pieza no cabe): ${fuera.map(m=>m.nombre+' #'+m.numG).join(', ')}`:'')
-      +(distintas.length?`\n\nOJO: el G-code se laminó para ${laminado}. Estas son de otro modelo y usarán la aceleración y el arranque de ${laminado}: ${distintas.map(m=>m.nombre+' ('+m.modelo+')').join(', ')}`:'');
+    if(!aptas.length){toast('Ninguna impresora libre pasó todos los controles de compatibilidad. Revisa el detalle o envía individualmente.','error');return;}
+    const aviso=`¿Subir el archivo a ${aptas.length} impresora(s) confirmadas libres?\n${aptas.map(m=>m.nombre+' #'+m.numG).join(', ')}\n\nEsto SOLO sube el G-code; no inicia impresiones en lote.`
+      +(fuera.length?`\n\nFuera por seguridad/compatibilidad:\n${fuera.map(x=>'- '+x.m.nombre+' #'+x.m.numG+': '+x.why).join('\n')}`:'');
     if(!confirm(aviso))return;
-    aptas.forEach(m=>enviar(m.id,true));   // ya chequeadas aquí arriba
-    toast(`Enviando a ${aptas.length} impresora(s)…`,'success');
+    aptas.forEach(m=>enviar(m.id,true,{noStart:true}));
+    toast(`Subiendo a ${aptas.length} impresora(s)… sin auto-inicio`,'success');
   }
   // ── Init ────────────────────────────────────────────────────
   function onPrinterChange(){if(S.stats)renderStats();loadMachineGcode();}
@@ -2677,6 +2704,7 @@ self.onmessage=function(ev){
     const sel=el('slPrinter');if(!sel)return;
     sel.innerHTML=Object.keys(SPECS).map(k=>`<option value="${k}">${k} — ${SPECS[k].x}×${SPECS[k].y}×${SPECS[k].z}mm</option>`).join('');
     const drop=el('slDrop');
+    if(drop&&!drop.querySelector?.('[data-sl-privacy]')){const n=document.createElement('div');n.setAttribute('data-sl-privacy','1');n.style.cssText='margin-top:7px;font-size:9px;color:var(--text3);line-height:1.4';n.textContent='Archivo 3D: procesamiento local. Si usas IA se envían métricas, nombre y notas; no la malla/triángulos.';drop.appendChild(n);}
     ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--accent)';drop.style.background='rgba(0,212,204,0.05)';}));
     ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--border2)';drop.style.background='';}));
     drop.addEventListener('drop',e=>loadFiles(e.dataTransfer.files));
