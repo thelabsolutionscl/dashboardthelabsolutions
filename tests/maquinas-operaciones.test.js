@@ -259,6 +259,16 @@ test('vinculación inteligente reconoce variantes de nombre sin adivinar archivo
   assert.equal(ops.filenameMatchScore(job,'llaveros_cliente_b'),0);
 });
 
+test('el slicer entra a MachineOps con material, boquilla, dimensiones y preflight real',()=>{
+  assert.match(OPS,/function onLegacyQueueAdd\(machineId,filename,secs,grams,meta=\{\}\)/);
+  assert.match(OPS,/material=String\(meta\.material/);
+  assert.match(OPS,/nozzle=String\(meta\.nozzle/);
+  assert.match(OPS,/sizeX:Math\.max\(0,num\(meta\.sizeX\)\)/);
+  assert.match(OPS,/function startUploadedSlicerJob\(meta=\{\}\)/);
+  assert.match(OPS,/openPreflight\(job\.id\)/,'el slicer no debe arrancar directo');
+  assert.match(OPS,/_queueAdd=function\(id,gcode,filename,secs,grams,meta=\{\}\)/);
+});
+
 test('preflight bloquea conexión, compatibilidad, archivo y filamento físico',()=>{
   const ops=loadOps();
   const blocked=ops.preflightFromFacts({connectionReady:false,machineFree:true,compatible:false,hasFile:false,gramsRequired:200,spoolKnown:true,spoolAvailable:500,filamentDetected:false,cameraConfigured:false,maintenanceOverdue:false,maintenanceSoon:false,safetyBlockers:[],safetyWarnings:[]});
