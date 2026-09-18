@@ -588,6 +588,35 @@ function _incidentCard(row){
     </div><div class="mops-incident-actions">${actions}</div>
   </article>`;
 }
+function _serviceTrustSnapshot(now=Date.now()){
+  const fresh=(ts,ms)=>!!num(ts)&&now-num(ts)<ms;
+  let queue={},registry={},history={},health={},safety={};
+  try{queue=window.FarmQueue?.status?.()||{};}catch(_){}
+  try{registry=window.FarmRegistry?.status?.()||{};}catch(_){}
+  try{history=window.PrinterHistory?.status?.()||{};}catch(_){}
+  try{health=window.FarmHealth?.status?.()||{};}catch(_){}
+  try{safety=window.MachineOpsUnattendedSafety?.status?.()||{};}catch(_){}
+  const machines=(typeof MAQUINAS!=='undefined'?MAQUINAS:[])||[];
+  const live=machines.filter(m=>liveEvidence(m.id,now).known).length;
+  const camConfigured=machines.filter(m=>{try{return !!printerCamUrl(m.id);}catch(_){return false;}}).length;
+  const row=(key,label,state,detail,stamp=0)=>({key,label,state,detail,stamp});
+  return[
+    row('controller','Controller',queue.controllerOk===true&&fresh(queue.lastSync,30000)?'ok':queue.controllerOk===false?'critical':'warning',
+      queue.controllerOk===true?`cola sincronizada · ${(queue.jobs||[]).filter(j=>['queued','retry','checking','uploading','uploaded','started','printing','paused'].includes(j.state)).length} activos`:'sin confirmación reciente',queue.lastSync),
+    row('telemetry','Telemetría',live===machines.length&&machines.length?'ok':live?'warning':'critical',`${live}/${machines.length} con lectura < 60 s`),
+    row('registry','Registry',registry.controllerOk===true&&fresh(registry.lastSync,60000)?'ok':registry.controllerOk===false?'critical':'warning',
+      registry.controllerOk===true?`${(registry.machines||[]).length} identidades centrales`:'sin confirmación reciente',registry.lastSync),
+    row('history','Historial',history.mode==='durable'&&fresh(history.lastSync,120000)?'ok':history.mode==='local-fallback'?'warning':'critical',
+      history.mode==='durable'?`${history.serverHistoryCount||0} cierres centrales`:history.mode==='local-fallback'?'usando caché local':'sin historial central',history.lastSync),
+    row('health','Salud central',health.mode==='central'&&fresh(health.generatedAt||health.lastSync,120000)?'ok':health.mode==='unavailable'?'critical':'warning',
+      health.mode==='central'?`${health.summary?.online??'—'} online · ${health.summary?.offline??'—'} offline`:'sin snapshot reciente',health.generatedAt||health.lastSync),
+    row('safety','Seguridad',safety.lastSyncOk&&fresh(safety.lastSyncAt,120000)?'ok':safety.lastSyncAt?'warning':'warning',
+      safety.lastSyncOk?'política sincronizada con Controller':safety.lastSyncError||'sin sincronización reciente',safety.lastSyncAt),
+    row('camera','Cámaras',camConfigured===machines.length&&machines.length?'ok':camConfigured?'warning':'critical',`${camConfigured}/${machines.length} configuradas`),
+    row('airtable','Airtable',typeof hasAirtableAccess==='function'&&hasAirtableAccess()?'ok':'warning',
+      typeof hasAirtableAccess==='function'&&hasAirtableAccess()?'acceso disponible':'modo local / sin acceso')
+  ];
+}
 function renderIntelligence(){
   const el=input('mopsIntelligence');if(!el)return;
   const embedded=_parkIntelligenceEmbeddedNodes(el);
@@ -600,8 +629,13 @@ function renderIntelligence(){
   const incidents=_incidentRowsForUi();
   const bridgeLabel={up:'Operativo',down:'Sin respuesta',checking:'Comprobando…'}[_bridgeHealth.state]||'Sin comprobar',bridgeColor=_bridgeHealth.state==='up'?'var(--accent3)':_bridgeHealth.state==='down'?'var(--danger)':'var(--warn)';
   const confidenceCounts={alta:0,media:0,baja:0};healthRows.forEach(row=>confidenceCounts[row.confidence]=(confidenceCounts[row.confidence]||0)+1);
+  const services=_serviceTrustSnapshot();
 
-  el.innerHTML=`<div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
+  el.innerHTML=`<section class="mops-service-trust">
+      <div class="mops-service-trust-head"><div><b>Estado de servicios</b><small>Antes de actuar, confirma qué fuentes están realmente disponibles.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">↻ Sincronizar todo</button></div>
+      <div class="mops-service-trust-grid">${services.map(s=>`<article class="${s.state}"><span class="mops-service-dot"></span><div><b>${esc(s.label)}</b><small>${esc(s.detail)}</small></div>${s.stamp?`<time>${esc(fmtStamp(s.stamp))}</time>`:''}</article>`).join('')}</div>
+    </section>
+    <div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
     <div id="mopsOpsOverviewAnchor" class="mops-intelligence-overview-anchor" aria-hidden="true"></div>
     <div class="mops-intel-grid">
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
@@ -1695,7 +1729,19 @@ function renderAll(){
 }
 
 async function syncNow(){
-  await loadRemote();await saveRemote();renderAll();toast('Centro de producción sincronizado ✓','success');
+  const tasks=[
+    loadRemote().catch(()=>null),
+    window.FarmQueue?.sync?.(true),
+    window.FarmRegistry?.sync?.(true),
+    window.PrinterHistory?.sync?.(true),
+    window.FarmHealth?.refresh?.(true),
+    window.FarmDrift?.refresh?.(true),
+  ].filter(Boolean);
+  await Promise.allSettled(tasks);
+  try{if(typeof flushMachineStateOutbox==='function')await flushMachineStateOutbox();}catch(_){}
+  try{if(typeof flushMachineEventOutbox==='function')await flushMachineEventOutbox();}catch(_){}
+  try{if(typeof syncPendingMaintenance==='function')await syncPendingMaintenance();}catch(_){}
+  await saveRemote();renderAll();toast('Máquinas sincronizadas con todas las fuentes disponibles ✓','success');
 }
 
 function findJobForPrint(machineId,filename){
@@ -2119,7 +2165,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState,bedClearSignature,bedIsCleared,installedNozzle},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot},
 };
 window.MachineOps=api;
 
