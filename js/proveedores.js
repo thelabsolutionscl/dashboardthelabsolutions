@@ -541,6 +541,26 @@ function initMobileTableLabels(){
     if(tb&&!tb._labeled){tb._labeled=true;new MutationObserver(()=>applyTableLabels(t)).observe(tb,{childList:true});}
   });
 }
+function bootMobileTableLabels(){
+  initMobileTableLabels();
+  if(document.body&&!document.body._mobileTableLabelObserver){
+    document.body._mobileTableLabelObserver=true;
+    new MutationObserver(muts=>{
+      for(const m of muts){
+        for(const n of m.addedNodes||[]){
+          if(n.nodeType!==1) continue;
+          if(n.matches?.('.table-wrap table')) applyTableLabels(n);
+          n.querySelectorAll?.('.table-wrap table').forEach(applyTableLabels);
+        }
+      }
+    }).observe(document.body,{childList:true,subtree:true});
+  }
+}
+if(typeof document!=='undefined'){
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootMobileTableLabels,{once:true});
+  else bootMobileTableLabels();
+}
+
 function addBusinessDays(date,days){const d=new Date(date);let added=0;while(added<days){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6) added++;}return d;}
 function updateVtoPreview(){const fi=document.getElementById('cot-fecha');const prev=document.getElementById('cot-vto-preview');if(!fi||!prev) return;const base=fi.value?new Date(fi.value+'T00:00:00'):new Date();prev.value=addBusinessDays(base,10).toISOString().split('T')[0];}
 function initDates(){
