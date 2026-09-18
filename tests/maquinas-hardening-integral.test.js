@@ -149,6 +149,16 @@ test('seguridad del Controller no puede ser debilitada por token operator',()=>{
 });
 
 
+test('Controller separa payloads y el navegador usa ticket efímero cuando está disponible',()=>{
+  assert.match(CTRL,/const PAYLOAD_DIR/);
+  assert.match(CTRL,/async function writePayload\(/);
+  assert.match(CTRL,/payloadFile:payloadStored\.file/);
+  assert.match(CTRL,/\/farm\/session/);
+  assert.match(MAQ,/async function refreshPrinterTunnelSession\(/);
+  assert.match(MAQ,/X-Bridge-Token/);
+  assert.match(MAQ,/_printerTunnelSessionExpires/);
+});
+
 test('Controller serializa transiciones por impresora, no sólo por job',()=>{
   assert.match(CTRL,/activeMachineRuns=new Set\(\)/);
   const run=fn(CTRL,'runQueuedJob');
