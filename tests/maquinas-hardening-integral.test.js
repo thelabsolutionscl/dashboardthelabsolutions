@@ -138,6 +138,12 @@ test('planificador no usa multiplicadores hardcodeados de velocidad',()=>{
   assert.doesNotMatch(OPS,/\/cap\.speed/);
 });
 
+test('Registry y cama libre sólo confirman éxito después de persistir',()=>{
+  assert.match(CTRL,/const durable=await persistRegistry\(\)/);
+  assert.match(CTRL,/no se pudo persistir Farm Registry/);
+  assert.match(CTRL,/no se pudo persistir la confirmación de cama libre/);
+});
+
 test('seguridad del Controller no puede ser debilitada por token operator',()=>{
   assert.match(CTRL,/safeBody=role==='admin'\?body:\{\.\.\.body,config:safety\.config\}/);
 });
