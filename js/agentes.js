@@ -451,7 +451,56 @@ function churnReactivar(cliId){
 // Pedidos despachados hace 3+ días (hasta 30): mensaje de satisfacción con
 // invitación a dejar reseña en Google, por WhatsApp o correo (Andrea).
 const _PD_LOG_KEY='thelab_postdel_log_v1';
+const _PD_COLLAPSE_KEY='thelab_postdel_collapsed_v1';
 function _pdLog(){try{return JSON.parse(localStorage.getItem(_PD_LOG_KEY)||'{}');}catch(e){return{};}}
+function _pdTrayCollapsed(){try{return localStorage.getItem(_PD_COLLAPSE_KEY)==='1';}catch(e){return false;}}
+function _pdSetTrayCollapsed(v){try{localStorage.setItem(_PD_COLLAPSE_KEY,v?'1':'0');}catch(e){}}
+function _pdBindTrayCollapse(card,list){
+  if(!card||!list) return;
+  const header=list.previousElementSibling;
+  if(!header) return;
+  let toggle=header.querySelector('.pd-tray-toggle');
+  if(!toggle){
+    toggle=document.createElement('span');
+    toggle.className='pd-tray-toggle';
+    toggle.style.cssText='margin-left:8px;color:var(--text3);font-size:15px;line-height:1;transition:transform .15s ease;user-select:none';
+    toggle.setAttribute('aria-hidden','true');
+    header.appendChild(toggle);
+  }
+  const paint=()=>{
+    const collapsed=_pdTrayCollapsed();
+    list.style.display=collapsed?'none':'';
+    header.setAttribute('aria-expanded',collapsed?'false':'true');
+    header.title=collapsed?'Mostrar post-entrega pendientes':'Ocultar post-entrega pendientes';
+    toggle.textContent=collapsed?'▸':'▾';
+  };
+  if(!header.dataset.pdCollapseBound){
+    header.dataset.pdCollapseBound='1';
+    header.setAttribute('role','button');
+    header.setAttribute('tabindex','0');
+    header.style.cursor='pointer';
+    header.addEventListener('click',e=>{
+      if(e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea,label')) return;
+      _pdSetTrayCollapsed(!_pdTrayCollapsed());
+      paint();
+    });
+    header.addEventListener('keydown',e=>{
+      if(e.key!=='Enter'&&e.key!==' ') return;
+      if(e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea,label')) return;
+      e.preventDefault();
+      _pdSetTrayCollapsed(!_pdTrayCollapsed());
+      paint();
+    });
+  }
+  paint();
+}
+function pdToggleTray(){
+  const card=document.getElementById('pdTrayCard');
+  const list=document.getElementById('pdTrayList');
+  if(!card||!list) return;
+  _pdSetTrayCollapsed(!_pdTrayCollapsed());
+  _pdBindTrayCollapse(card,list);
+}
 function _pdReviewUrl(){return localStorage.getItem('thelab_greview_url')||'';}
 function pdSetReviewUrl(){
   const cur=_pdReviewUrl();
@@ -617,6 +666,7 @@ function buildPostEntregaTray(){
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado sin enviar" onclick="pdMarkDone('${x.p.id}','manual')">✓</button>
     </div>`;
   }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más</div>`:'');
+  _pdBindTrayCollapse(card,list);
 }
 function pdWhatsApp(pedidoId){
   const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
