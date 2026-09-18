@@ -2172,3 +2172,101 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   #tab-maquinas .mcap-week-guide{align-items:flex-start;flex-direction:column}
   #tab-maquinas .mcap-week-guide small{text-align:left}
 }
+
+
+/* Máquinas · Taller confiable */
+#tab-maquinas .mops-source-note{
+  display:flex;align-items:flex-start;gap:8px;margin:0 0 12px;padding:9px 11px;
+  border:1px solid var(--border2);border-radius:9px;background:var(--surface2);
+  font-size:9.7px;line-height:1.45;color:var(--text3)
+}
+#tab-maquinas .mops-source-note b{color:var(--text2);white-space:nowrap}
+#tab-maquinas .mops-source-note.ok{border-color:rgba(0,212,170,.28);background:rgba(0,212,170,.045)}
+#tab-maquinas .mops-source-note.warning{border-color:rgba(255,170,0,.28);background:rgba(255,170,0,.045)}
+#tab-maquinas .mops-source-note.danger{border-color:rgba(255,68,68,.28);background:rgba(255,68,68,.045)}
+#tab-maquinas .mops-profile-missing{margin-top:7px;padding:5px 7px;border-radius:6px;background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.18);font-size:9px;color:var(--warn)}
+#tab-maquinas .mops-advanced-details{margin-top:12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden}
+#tab-maquinas .mops-advanced-details>summary{cursor:pointer;list-style:none;padding:10px 12px;font-size:10.5px;font-weight:700;color:var(--text2)}
+#tab-maquinas .mops-advanced-details>summary::-webkit-details-marker{display:none}
+#tab-maquinas .mops-advanced-details>summary:before{content:'▸';display:inline-block;width:17px;color:var(--text3)}
+#tab-maquinas .mops-advanced-details[open]>summary:before{content:'▾'}
+#tab-maquinas .mops-advanced-details .mops-audit-list{padding:0 12px 12px}
+
+#tab-maquinas .mops-workshop-home{margin-bottom:18px}
+#tab-maquinas .mops-workshop-hero{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+  padding:16px 17px;border:1px solid var(--border);border-radius:14px;
+  background:linear-gradient(180deg,rgba(0,212,204,.055),rgba(255,255,255,.012));margin-bottom:10px
+}
+#tab-maquinas .mops-workshop-eyebrow{display:block;margin-bottom:4px;font-size:8.8px;font-weight:800;letter-spacing:1px;color:var(--accent)}
+#tab-maquinas .mops-workshop-hero h3{margin:0;font-size:16px;line-height:1.2;color:var(--text)}
+#tab-maquinas .mops-workshop-hero p{margin:5px 0 0;max-width:760px;font-size:10.2px;line-height:1.5;color:var(--text3)}
+#tab-maquinas .mops-workshop-trust{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px
+}
+#tab-maquinas .mops-workshop-trust>span{
+  display:grid;gap:2px;padding:9px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);min-width:0
+}
+#tab-maquinas .mops-workshop-trust>span.ok{border-color:rgba(0,212,170,.26);background:rgba(0,212,170,.045)}
+#tab-maquinas .mops-workshop-trust>span.warning{border-color:rgba(255,170,0,.26);background:rgba(255,170,0,.045)}
+#tab-maquinas .mops-workshop-trust>span.danger{border-color:rgba(255,68,68,.26);background:rgba(255,68,68,.045)}
+#tab-maquinas .mops-workshop-trust b{font-size:8px;letter-spacing:.65px;color:var(--text3)}
+#tab-maquinas .mops-workshop-trust strong{font-size:10.5px;color:var(--text)}
+#tab-maquinas .mops-workshop-trust small{font-size:8.7px;line-height:1.35;color:var(--text3);overflow:hidden;text-overflow:ellipsis}
+#tab-maquinas .mops-workshop-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:17px}
+#tab-maquinas .mops-workshop-kpis article{
+  position:relative;overflow:hidden;padding:11px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--surface)
+}
+#tab-maquinas .mops-workshop-kpis article:before{content:'';position:absolute;left:0;top:0;right:0;height:2px;background:var(--border2)}
+#tab-maquinas .mops-workshop-kpis article.ok:before{background:var(--accent3)}
+#tab-maquinas .mops-workshop-kpis article.warning:before{background:var(--warn)}
+#tab-maquinas .mops-workshop-kpis article.danger:before{background:var(--danger)}
+#tab-maquinas .mops-workshop-kpis small,#tab-maquinas .mops-workshop-kpis b,#tab-maquinas .mops-workshop-kpis span{display:block}
+#tab-maquinas .mops-workshop-kpis small{font-size:8px;font-weight:800;letter-spacing:.65px;color:var(--text3)}
+#tab-maquinas .mops-workshop-kpis b{margin-top:4px;font-size:18px;line-height:1;color:var(--text)}
+#tab-maquinas .mops-workshop-kpis span{margin-top:5px;font-size:8.8px;line-height:1.35;color:var(--text3)}
+#tab-maquinas .mops-workshop-section-title{display:flex;align-items:flex-end;justify-content:space-between;margin:14px 1px 8px}
+#tab-maquinas .mops-workshop-section-title b,#tab-maquinas .mops-workshop-section-title small{display:block}
+#tab-maquinas .mops-workshop-section-title b{font-size:11px;color:var(--text)}
+#tab-maquinas .mops-workshop-section-title small{margin-top:2px;font-size:9px;color:var(--text3)}
+#tab-maquinas .mops-workshop-nav-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+#tab-maquinas .mops-workshop-nav-grid.advanced{grid-template-columns:repeat(4,minmax(0,1fr))}
+#tab-maquinas .mops-workshop-card{
+  appearance:none;text-align:left;padding:11px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--surface);
+  cursor:pointer;color:inherit;min-height:92px;transition:border-color .15s ease,transform .15s ease,background .15s ease
+}
+#tab-maquinas .mops-workshop-card:hover{border-color:var(--accent);background:var(--surface2);transform:translateY(-1px)}
+#tab-maquinas .mops-workshop-card.ok{border-color:rgba(0,212,170,.22)}
+#tab-maquinas .mops-workshop-card.warning{border-color:rgba(255,170,0,.24)}
+#tab-maquinas .mops-workshop-card.danger{border-color:rgba(255,68,68,.24)}
+#tab-maquinas .mops-workshop-card-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#tab-maquinas .mops-workshop-card-top b{font-size:10.5px;color:var(--text)}
+#tab-maquinas .mops-workshop-card-top i{font-style:normal;color:var(--text3)}
+#tab-maquinas .mops-workshop-card strong{display:block;margin-top:10px;font-size:13px;color:var(--text2)}
+#tab-maquinas .mops-workshop-card small{display:block;margin-top:3px;font-size:8.8px;line-height:1.35;color:var(--text3)}
+#tab-maquinas .mops-workshop-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:11px;padding:8px 10px;border-top:1px solid var(--border);font-size:8.8px;color:var(--text3)}
+#tab-maquinas .mops-workshop-legend span{display:inline-flex;align-items:center;gap:5px}
+#tab-maquinas .mops-workshop-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text3)}
+#tab-maquinas .mops-workshop-legend i.ok{background:var(--accent3)}
+#tab-maquinas .mops-workshop-legend i.warning{background:var(--warn)}
+#tab-maquinas .mops-workshop-legacy-analytics{margin-top:12px}
+#tab-maquinas .maint-chip{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--border2);border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700}
+#tab-maquinas .maint-chip.ok{color:var(--accent3);border-color:rgba(0,212,170,.22);background:rgba(0,212,170,.05)}
+#tab-maquinas .maint-chip.soon{color:var(--warn);border-color:rgba(255,170,0,.24);background:rgba(255,170,0,.05)}
+#tab-maquinas .maint-chip.overdue{color:var(--danger);border-color:rgba(255,68,68,.24);background:rgba(255,68,68,.05)}
+#tab-maquinas .maint-chip.unknown{color:var(--text3);background:var(--surface2)}
+#tab-maquinas .maint-action-alert{border-color:rgba(255,170,0,.5)!important}
+
+@media(max-width:900px){
+  #tab-maquinas .mops-workshop-trust,#tab-maquinas .mops-workshop-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #tab-maquinas .mops-workshop-nav-grid,#tab-maquinas .mops-workshop-nav-grid.advanced{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+  #tab-maquinas .mops-source-note{display:block}
+  #tab-maquinas .mops-source-note b{display:block;margin-bottom:3px;white-space:normal}
+  #tab-maquinas .mops-workshop-hero{display:block}
+  #tab-maquinas .mops-workshop-hero .btn{margin-top:10px;width:100%}
+  #tab-maquinas .mops-workshop-trust,#tab-maquinas .mops-workshop-kpis{grid-template-columns:1fr 1fr}
+  #tab-maquinas .mops-workshop-nav-grid,#tab-maquinas .mops-workshop-nav-grid.advanced{grid-template-columns:1fr}
+  #tab-maquinas .mops-workshop-card{min-height:78px}
+}
