@@ -60,6 +60,13 @@ test('la semántica de estados tiene presentación visual compartida',()=>{
   assert.match(CSS,/\.badge-yellow\{[^}]*var\(--warn\)/);
 });
 
+test('Ver propuesta de Cotizaciones se centra sin cambiar el drawer de Pedidos',()=>{
+  assert.match(fs.readFileSync('js/operativo-visual.js','utf8'),/dlg\.dataset\.kind=kind/);
+  assert.match(OP,/\.op-drawer\{[^}]*inset:0 0 0 auto[^}]*height:100dvh/,'Pedidos conserva el drawer lateral');
+  assert.match(OP,/dialog\.op-drawer\[data-kind="quote"\]\{[\s\S]*?inset:0;[\s\S]*?width:min\(760px,calc\(100vw - 48px\)\);[\s\S]*?height:auto;[\s\S]*?margin:auto;[\s\S]*?border-radius:14px/);
+  assert.match(OP,/@media\(max-width:768px\)\{[\s\S]*?dialog\.op-drawer\[data-kind="quote"\]\{[^}]*width:100vw[^}]*height:100dvh[^}]*border-radius:0/);
+});
+
 test('el detalle de cliente se centra en escritorio y sólo es fullscreen en móvil',()=>{
   assert.match(OP,/#clienteDetalleModal\{padding:24px;align-items:center;justify-content:center;overflow:hidden\}/);
   assert.match(OP,/#clienteDetalleModal>\.modal-card\{width:min\(960px,calc\(100vw - 48px\)\);height:auto;max-height:calc\(100dvh - 48px\);max-width:960px!important;margin:auto;[^}]*border-radius:14px\}/);
