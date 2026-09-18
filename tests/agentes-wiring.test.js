@@ -112,7 +112,7 @@ test('todo handler on*= de la sección apunta a una función real', () => {
 test('las funciones críticas existen y no están duplicadas', () => {
   const names = ['buildFollowupTray', 'buildWinbackTray', 'buildRecompraTray', 'buildPostEntregaTray',
     'renderChurn', 'renderCsatSummary', 'runAgentInline', 'draftAgentEmail', 'agentSendWA',
-    'fuMarkDone', 'pdMarkDone', 'pdEmail', 'pdWhatsApp', 'marcarReactivado'];
+    'fuMarkDone', 'pdMarkDone', 'pdEmail', 'pdWhatsApp', 'pdToggleTray', '_pdBindTrayCollapse', 'marcarReactivado'];
   for (const name of names) {
     assert.ok(hasFunction(name, AGENTS), `falta ${name}`);
     assert.equal(count(new RegExp(`function\\s+${esc(name)}\\s*\\(`, 'g'), AGENTS), 1, `${name} debe definirse una vez`);
@@ -131,6 +131,16 @@ test('cada bandeja escribe en un contenedor que existe en el HTML', () => {
     assert.match(body, new RegExp(`getElementById\\(['"]${esc(id)}['"]\\)`), `${fn} debe usar #${id}`);
     assert.ok(INDEX.includes(`id="${id}"`), `#${id} debe existir en el HTML`);
   }
+});
+
+test('post-entrega se puede desplegar y ocultar desde su cabecera', () => {
+  const build = functionSource('buildPostEntregaTray', AGENTS);
+  const bind = functionSource('_pdBindTrayCollapse', AGENTS);
+  assert.match(build, /_pdBindTrayCollapse\(card,list\)/, 'la bandeja debe aplicar el estado colapsado al renderizar');
+  assert.match(bind, /addEventListener\(['"]click['"]/, 'la cabecera debe reaccionar al click');
+  assert.match(bind, /list\.style\.display/, 'el click debe mostrar u ocultar la lista');
+  assert.match(bind, /aria-expanded/, 'el estado desplegado debe ser accesible');
+  assert.match(AGENTS, /thelab_postdel_collapsed_v1/, 'la preferencia debe persistir entre renderizados');
 });
 
 test('los envíos de correo se previsualizan antes de salir', () => {
