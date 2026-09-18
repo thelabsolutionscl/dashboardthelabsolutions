@@ -2059,7 +2059,7 @@ function openTech(id,{autoRefresh=true}={}){
           ${kpi('Fiabilidad',reliability.completion==null?reliability.label:reliability.completion.toFixed(0)+'%',reliability.history.total?`${reliability.history.completed} correctos · ${reliability.history.notCompleted} fallidos · confianza ${reliability.confidence}`:`${reliability.label} · confianza ${reliability.confidence}`,reliability.level==='critical'?'var(--danger)':reliability.level==='warning'?'var(--warn)':reliability.level==='ok'?'var(--accent3)':'var(--text3)')}
         </div>
         <div class="field-group"><label class="field-label">Estado operacional</label><select class="field-select" onchange="MachineOps.setMachineStatus('${id}',this.value)">${stateOptions}</select></div>
-        <div class="mops-tech-spec">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · materiales: ${esc(cap.materials.join(', '))}</div>
+        <div class="mops-tech-spec">${esc(m.modelo)} · cama ${esc(cap.bed.join('×'))} mm · boquilla ${esc(installedNozzle(m)||'sin registrar')} mm · ${machineHasCfs(m)?'CFS físico · ':''}materiales: ${esc(cap.materials.join(', '))}</div>
       </div>
     </div>
     ${printStateHtml}
