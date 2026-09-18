@@ -391,6 +391,7 @@ async function runQueuedJob(j) {
     }else markJob(j.id,{state:'uploaded',ip,attempts:nextAttempts,lastError:''});
     const start=await requestLegacy('POST',`/${ip}/printer/print/start?filename=${encodeURIComponent(j.filename)}`);
     if(!start.ok)return markJob(j.id,{state:nextAttempts<4?'retry':'failed',lastError:`start HTTP ${start.status}: ${start.body.toString('utf8').slice(0,300)}`});
+    if(machine?.bedClearSignature){delete machine.bedClearSignature;delete machine.bedClearedAt;machine.updatedAt=nowIso();persistRegistry();}
     return markJob(j.id,{state:'started',startedAt:nowIso(),gcodeBase64:'',lastError:''});
   } finally {
     activeJobRuns.delete(j.id);
