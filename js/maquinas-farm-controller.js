@@ -178,12 +178,13 @@ async function durableStartNext(id){
   try{
     await syncQueue(true);
     const j=jobs.find(x=>x.machineId===id&&['queued','retry'].includes(x.state));
-    if(!j){if(controllerOk===false&&original.start)return original.start(id);return;}
+    if(!j){if(controllerOk===false)throw new Error('Farm Controller no disponible');return null;}
     const r=await fetch(url('/farm/queue/'+encodeURIComponent(j.id)+'/run'),{method:'POST',signal:AbortSignal.timeout(5000)});
-    await readJson(r);setTimeout(()=>syncQueue(true),1200);
+    const d=await readJson(r);setTimeout(()=>syncQueue(true),1200);return d.job||j;
   }catch(e){
-    console.warn('[FarmQueue] start durable falló',e);
-    if(controllerOk===false&&original.start)return original.start(id);
+    console.warn('[FarmQueue] start durable falló',e);controllerOk=false;
+    try{toast('No se inicia desde la cola local: Farm Controller no confirmó la ejecución','error');}catch(_){}
+    return null;
   }
 }
 function durableCount(id){
