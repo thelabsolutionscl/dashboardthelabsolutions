@@ -32,7 +32,8 @@
     // Se preservan filtros, estado, errores, antigüedad de telemetría y controles.
     fold([$('maqOcupacion')],'Ocupación de la flota');
     fold([$('calHistory')?.closest('.card')],'Historial de reprogramaciones');
-    fold([$('calProximos')?.closest('.card')],'Próximos 14 días');
+    // Próximos 14 días, Foco operativo y Compromisos sin fecha tienen su propio
+    // colapsado en calendario-collapsible.js; no envolverlos otra vez en <details>.
     fold([$('equipoHeader')?.closest('.card'),$('equipoDetalleSemana')],'Planificación semanal del equipo');
     fold([$('comMes')?.parentElement,$('comisionesRanking')],'Ventas y comisiones del equipo');
     fold([$('redesAutoPanel')],'Automatizaciones de redes');
