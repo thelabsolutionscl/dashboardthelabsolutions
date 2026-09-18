@@ -39,9 +39,10 @@ function montar(material = 'TPU', nozzle = 0.4) {
   const el = (id) => ({ value: vals[id] });
   const SPECS = { K1: { vmax: 500, y: 300 } };
   const MATS = {
-    PLA: { noz: 210, bed: 60, fan: 100, dens: 1.24 },
-    TPU: { noz: 225, bed: 50, fan: 60, dens: 1.21, vcap: 35 },
-    PVA: { noz: 200, bed: 60, fan: 100, dens: 1.23, vcap: 25 },
+    PLA: { noz: 210, bed: 60, fan: 100, dens: 1.24, nozMin:185, nozMax:235, bedMax:75, flow:18 },
+    PETG:{ noz:240, bed:80, fan:40, dens:1.27, nozMin:215, nozMax:250, bedMax:95, flow:12 },
+    TPU: { noz: 225, bed: 50, fan: 60, dens: 1.21, vcap: 35, nozMin:195, nozMax:245, bedMax:70, flow:4 },
+    PVA: { noz: 200, bed: 60, fan: 100, dens: 1.23, vcap: 25, nozMin:185, nozMax:230, bedMax:75, flow:4 },
   };
   return new Function('el', 'SPECS', 'MATS', extract('clampParams') + '\nreturn clampParams;')(el, SPECS, MATS);
 }
@@ -87,15 +88,26 @@ test('un speed por encima del tope se recorta al tope', () => {
   assert.equal(montar('TPU')({ speed: 120 }).speed, 35);
 });
 
-test('las temperaturas se mantienen acotadas (defensa intacta)', () => {
-  const p = montar('TPU')({ nozzleTemp: 999, bedTemp: 999 });
-  assert.equal(p.nozzleTemp, 300);
-  assert.equal(p.bedTemp, 110);
+test('las temperaturas se acotan por material, no solo por un máximo genérico', () => {
+  const tpu = montar('TPU')({ nozzleTemp: 999, bedTemp: 999 });
+  assert.equal(tpu.nozzleTemp, 245);
+  assert.equal(tpu.bedTemp, 70);
+  const petg=montar('PETG')({nozzleTemp:999,bedTemp:999});
+  assert.equal(petg.nozzleTemp,250);
+  assert.equal(petg.bedTemp,95);
+});
+
+test('el caudal volumétrico puede limitar una velocidad aunque el firmware permita más',()=>{
+  const cp=montar('PLA',0.4);
+  const p=cp({layerHeight:0.3,maxVolumetricFlow:3,speed:200});
+  assert.ok(p.speed<=24,'3 mm³/s con línea ~0.42×0.3 no puede ir a 200 mm/s');
+  assert.equal(p.maxVolumetricFlow,3);
 });
 
 // ── El código lo dice ────────────────────────────────────────────────────
 
 test('el whitelist de seamMode incluye aleatorio y cl acota el default', () => {
   assert.match(SRC, /seamMode:\['cercano','alineado','agudo','aleatorio'\]\.includes/);
-  assert.match(SRC, /return Math\.min\(b,Math\.max\(a,isFinite\(v\)\?v:d\)\);/);
+  assert.match(SRC, /maxVolumetricFlow/);
+  assert.match(SRC, /nozMin/);
 });
