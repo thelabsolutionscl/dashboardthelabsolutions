@@ -66,6 +66,9 @@ const _WS_OPEN_TIMEOUT_MS=12000;    // evita conexiones TCP/WebSocket medio abie
 const _CAM_SNAPSHOT_MS=1200;        // siguiente frame sólo DESPUÉS de recibir el anterior
 const _CAM_LOAD_TIMEOUT_MS=25000;   // K2 puede tardar ~20s negociando WebRTC
 const _CAM_RETRY_MAX_MS=30000;
+const _CAM_AUTORECOVER_FAILS=3;     // tras varios fallos reales, reinicia el stack de cámara por el bridge
+const _CAM_AUTORECOVER_COOLDOWN_MS=10*60*1000;
+const _CAM_RECOVER_TIMEOUT_MS=95000;
 function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 function getPrinterTunnelToken(){
   const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';
@@ -167,13 +170,14 @@ function _safePrinterMediaUrl(raw){
 }
 let _camSnapInterval=null;
 const _camRetryTimers={};
+const _camRecovering={},_camLastRecover={};
 function _cameraTimerKey(im){return im?.dataset?.machineId||im?.id||'';}
 function _cameraClearTimer(im){
   const key=_cameraTimerKey(im);if(!key)return;
   clearTimeout(_camRetryTimers[key]);delete _camRetryTimers[key];
 }
 function _cameraRefreshNow(im){
-  if(!im||!im.isConnected)return;
+  if(!im||!im.isConnected||im.dataset.camSuspended==='1')return;
   const base=im.dataset.camBase||im.getAttribute('data-snap')||'';if(!base)return;
   _cameraClearTimer(im);
   im.dataset.camLoading='1';
@@ -192,21 +196,60 @@ function _cameraSchedule(im,delay){
 }
 function _cameraLoadOk(im){
   if(!im)return;
-  im.dataset.camLoading='0';im.dataset.camFails='0';im.style.opacity='1';
+  im.dataset.camLoading='0';im.dataset.camFails='0';im.dataset.camLastOk=String(Date.now());im.style.opacity='1';
   const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display='none';
   _cameraClearTimer(im);
-  if(im.dataset.camKind==='snapshot')_cameraSchedule(im,_CAM_SNAPSHOT_MS);
+  if(im.dataset.camKind==='snapshot'&&im.dataset.camSuspended!=='1')_cameraSchedule(im,_CAM_SNAPSHOT_MS);
+}
+function _cameraManagedByPrinter(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return false;
+  const raw=_printerCamRaw(id),def=_defaultCamUrl(m);
+  return !!raw&&raw===def;
+}
+async function recoverPrinterCamera(id,silent=false){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return false;
+  const ip=getPrinterIp(m);if(!ip)return false;
+  if(silent&&!_cameraManagedByPrinter(id))return false;
+  const now=Date.now();
+  if(_camRecovering[id])return false;
+  if(silent&&_camLastRecover[id]&&now-_camLastRecover[id]<_CAM_AUTORECOVER_COOLDOWN_MS)return false;
+  _camLastRecover[id]=now;_camRecovering[id]=true;
+  if(!silent)toast(`📷 Reiniciando cámara · ${m.nombre} #${m.numG}…`,'info');
+  try{
+    const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/recover-camera/${ip}`),{method:'POST',signal:AbortSignal.timeout(_CAM_RECOVER_TIMEOUT_MS)});
+    let d={};try{d=await r.json();}catch(_){}
+    if(r.status===403){if(!silent)toast('El token actual no tiene permiso admin para reiniciar la cámara','error');return false;}
+    if(r.status===404){if(!silent)toast('El bridge todavía no tiene recuperación de cámara. Actualízalo en el iMac.','error');return false;}
+    if(r.status===409)return false;
+    if(!r.ok||!d.ok){
+      if(!silent)toast('No se pudo recuperar la cámara: '+(d.error||`HTTP ${r.status}`),'error');
+      return false;
+    }
+    const slot=document.getElementById('mccam_'+id),cardImg=slot?.querySelector('img');
+    if(cardImg){cardImg.dataset.camFails='0';cardImg.dataset.camLoading='0';_cameraClearTimer(cardImg);_cameraRefreshNow(cardImg);}
+    const modalId=document.getElementById('webcamModalId')?.value;
+    const modalImg=document.getElementById('webcamModalImg');
+    if(modalId===id&&modalImg?.src){modalImg.dataset.camFails='0';modalImg.dataset.camLoading='0';_cameraClearTimer(modalImg);_cameraRefreshNow(modalImg);}
+    if(!silent)toast(`✅ Cámara recuperada · ${m.nombre} #${m.numG}`,'success');
+    return true;
+  }catch(e){
+    if(!silent)toast(e?.name==='TimeoutError'||e?.name==='AbortError'?'La cámara tardó demasiado en recuperarse':'No se pudo hablar con el bridge para recuperar la cámara','error');
+    return false;
+  }finally{_camRecovering[id]=false;}
 }
 function _cameraLoadError(im){
   if(!im)return;
   im.dataset.camLoading='0';im.style.opacity='0';
   const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display='flex';
   const n=(parseInt(im.dataset.camFails||'0',10)||0)+1;im.dataset.camFails=String(n);
+  const machineId=im.dataset.machineId||'';
+  if(machineId&&n>=_CAM_AUTORECOVER_FAILS)recoverPrinterCamera(machineId,true).catch(()=>{});
   const delay=Math.min(_CAM_RETRY_MAX_MS,1000*Math.pow(2,Math.min(n-1,5)));
   _cameraSchedule(im,delay);
 }
 function _refreshSnapshotCams(force=false){
   document.querySelectorAll('img[data-snap]').forEach(im=>{
+    if(im.dataset.camSuspended==='1')return;
     if(force){im.dataset.camLoading='0';_cameraRefreshNow(im);return;}
     const key=_cameraTimerKey(im);
     if(im.dataset.camLoading!=='1'&&(!key||!_camRetryTimers[key]))_cameraRefreshNow(im);
@@ -1026,7 +1069,7 @@ function _syncPrinterCam(id,camKey,force){
   if(!camU){slot.innerHTML='';slot.__camKey='';return;}
   slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative;min-height:56px">
     <img loading="eager" decoding="async" data-machine-id="${id}" data-cam-base="${camU}" data-cam-kind="${snap?'snapshot':'mjpeg'}" data-cam-loading="1" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="_cameraLoadOk(this)" onerror="_cameraLoadError(this)">
-    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:10px;color:#666">reconectando automáticamente…</span></div>
+    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:10px;color:#666">reconectando automáticamente…</span><button type="button" onclick="event.stopPropagation();recoverPrinterCamera('${id}')" style="margin-top:3px;background:#151515;border:1px solid #333;border-radius:6px;color:#bbb;padding:4px 8px;font-size:9.5px;cursor:pointer">↻ Reiniciar cámara</button></div>
   </div>`;
   slot.__camKey=camKey;
   const im=slot.querySelector('img');
@@ -1538,13 +1581,28 @@ async function openBedMesh(id){
 }
 function openWebcamModal(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
-  const url=localStorage.getItem('printer_cam_'+id)||'';
+  const url=_printerCamRaw(id)||'';
   document.getElementById('webcamModalTitle').textContent=`${m.nombre} #${m.numG}`;
   document.getElementById('webcamModalId').value=id;
   document.getElementById('webcamModalUrl').value=url;
   const img=document.getElementById('webcamModalImg');
   const nf=document.getElementById('webcamNoFeed');
-  if(url){const cu=printerCamUrl(id);if(_camIsSnapshot(url))img.setAttribute('data-snap',cu);else img.removeAttribute('data-snap');img.src=cu;img.style.display='block';nf.style.display='none';}else{img.removeAttribute('data-snap');img.src='';img.style.display='none';nf.style.display='flex';}
+  if(url){
+    const cu=printerCamUrl(id),snap=_camIsSnapshot(url);
+    // Las K2 pueden aceptar un solo consumidor WebRTC estable. Mientras el modal
+    // está abierto congelamos el último frame de la tarjeta y dejamos que el modal
+    // sea el único que pida snapshots; al cerrar se reanuda la tarjeta.
+    if(snap){
+      const cardImg=document.getElementById('mccam_'+id)?.querySelector('img');
+      if(cardImg){cardImg.dataset.camSuspended='1';_cameraClearTimer(cardImg);}
+      img.setAttribute('data-snap',cu);
+    }else img.removeAttribute('data-snap');
+    img.dataset.camBase=cu;img.dataset.camKind=snap?'snapshot':'mjpeg';img.dataset.camLoading='1';img.dataset.camFails='0';
+    img.onload=()=>_cameraLoadOk(img);img.onerror=()=>_cameraLoadError(img);
+    img.src=cu;img.style.display='block';nf.style.display='none';
+  }else{
+    img.removeAttribute('data-snap');img.removeAttribute('data-cam-base');img.removeAttribute('data-cam-kind');img.src='';img.style.display='none';nf.style.display='flex';
+  }
   const ts=document.getElementById('webcamTestStatus');if(ts)ts.textContent='';
   document.getElementById('webcamModal').style.display='flex';
 }
@@ -1583,7 +1641,14 @@ async function testWebcam(){
   }finally{clearTimeout(to);}
 }
 function saveWebcamUrl(){const id=document.getElementById('webcamModalId').value;const url=document.getElementById('webcamModalUrl').value.trim();if(url&&!_safePrinterMediaUrl(url)){toast('URL de webcam inválida — usa http:// o https://','error');return;}if(url)localStorage.setItem('printer_cam_'+id,url);else localStorage.removeItem('printer_cam_'+id);const m=MAQUINAS.find(x=>x.id===id);if(m){m.cam=url||null;if(m._airtableId){if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{cam:url||''}})});}}closeWebcamModal();renderMonitorGrid();toast(url?'📷 Webcam configurada — guardada en Airtable':'Webcam eliminada','success');}
-function closeWebcamModal(){document.getElementById('webcamModal').style.display='none';const wi=document.getElementById('webcamModalImg');if(wi){wi.removeAttribute('data-snap');wi.src='';}}
+function closeWebcamModal(){
+  const id=document.getElementById('webcamModalId')?.value||'';
+  document.getElementById('webcamModal').style.display='none';
+  const wi=document.getElementById('webcamModalImg');
+  if(wi){_cameraClearTimer(wi);wi.onload=null;wi.onerror=null;wi.removeAttribute('data-snap');wi.removeAttribute('data-cam-base');wi.removeAttribute('data-cam-kind');wi.src='';}
+  const cardImg=id?document.getElementById('mccam_'+id)?.querySelector('img'):null;
+  if(cardImg&&cardImg.dataset.camSuspended==='1'){delete cardImg.dataset.camSuspended;cardImg.dataset.camLoading='0';_cameraRefreshNow(cardImg);}
+}
 
 function openHistoryModal(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;

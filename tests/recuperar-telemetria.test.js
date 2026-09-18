@@ -98,6 +98,26 @@ test('la ruta /recover exige POST, token, IP privada y no se solapa',()=>{
   assert.equal(priv('8.8.8.8'),false);
 });
 
+test('el bridge puede recuperar cámaras K2/K2 Plus y MJPEG sin tocar Klipper',()=>{
+  const camScript=functionSource(BRIDGE,'cameraRecoverScript');
+  assert.match(camScript,/S99camera/,'prefiere el servicio persistente instalado en la impresora');
+  assert.match(camScript,/k2rtc\.py/,'K2 requiere el puente WebRTC');
+  assert.match(camScript,/go2rtc/,'K2 publica snapshots mediante go2rtc');
+  assert.match(camScript,/camera_watchdog\.py/,'debe reponer también el watchdog');
+  assert.match(camScript,/mjpg_streamer/,'K1 y Ender mantienen recuperación MJPEG');
+  assert.doesNotMatch(camScript,/klipper|FIRMWARE_RESTART/i,'recuperar cámara no puede reiniciar Klipper');
+  const probe=functionSource(BRIDGE,'cameraIsUp');
+  assert.match(probe,/1984/);
+  assert.match(probe,/frame\.jpeg\?src=k2plus/);
+  assert.match(probe,/8080/);
+  const route=BRIDGE.slice(BRIDGE.indexOf('const mCamRec ='),BRIDGE.indexOf('// Recuperar la telemetría'));
+  assert.match(route,/req\.method!=='POST'/);
+  assert.match(route,/isPrivateIp\(ip\)/);
+  assert.match(route,/_recoveringCamera\.has\(ip\)/,'no debe reiniciar dos veces el mismo stack');
+  assert.match(route,/recoverCamera\(ip\)/);
+  assert.doesNotMatch(route,/writeHead\(5\d\d/,'Cloudflare no debe convertir el error en una respuesta sin CORS');
+});
+
 test('la tarjeta de telemetría caída ofrece el botón de recuperación',()=>{
   const tarjeta=MAQ.slice(MAQ.indexOf("} else if(s.state==='apidown')"),MAQ.indexOf("} else if(s.state==='offline')"));
   assert.match(tarjeta,/recoverPrinterTelemetry\('\$\{m\.id\}'\)/,'el botón llama a la recuperación');

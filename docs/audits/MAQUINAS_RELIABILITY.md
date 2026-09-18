@@ -86,6 +86,42 @@ de una inicialización.
 **Corrección:** las aperturas concurrentes comparten una sola promesa de
 inicialización.
 
+## Hallazgos de la segunda pasada — cámara K2 en línea sin imagen
+
+La revisión visual posterior detectó una K2 con Moonraker **en línea** pero sin
+imagen. Eso confirmó que telemetría y cámara deben tratarse como servicios
+independientes y que el retry del navegador por sí solo no basta.
+
+### 10. La tarjeta y el modal podían competir por el mismo WebRTC de la K2
+
+Las K2/K2 Plus entregan el frame mediante `k2rtc.py + go2rtc`. Abrir el modal
+creaba un segundo consumidor mientras la tarjeta seguía solicitando snapshots.
+En este hardware el origen WebRTC puede degradarse o quedar negro cuando ambos
+consumidores negocian a la vez.
+
+**Corrección:** al abrir el modal de una K2, la tarjeta conserva su último frame
+pero pausa sus solicitudes; el modal queda como único consumidor. Al cerrar,
+la tarjeta reanuda inmediatamente.
+
+### 11. El modal ignoraba la cámara automática si no había override manual
+
+La tarjeta usa `_printerCamRaw()`, que deriva la cámara desde modelo + IP viva.
+El modal, en cambio, miraba solo `localStorage printer_cam_*`. Una K2 podía
+tener cámara válida en la tarjeta y aparecer como "sin cámara" en el modal.
+
+**Corrección:** tarjeta y modal comparten ahora la misma fuente canónica.
+
+### 12. Un stack go2rtc/k2rtc caído requería intervención manual
+
+El navegador reintentaba el JPEG indefinidamente, pero si `go2rtc`,
+`k2rtc.py` o `camera_watchdog.py` habían caído, ningún retry podía revivirlos.
+
+**Corrección:** el bridge incorpora `POST /recover-camera/{IP}`. Tras varios
+fallos consecutivos de una cámara gestionada por la impresora, el dashboard
+solicita una recuperación por SSH con cooldown; además deja un botón
+**Reiniciar cámara** para recuperación manual. El bridge prioriza
+`/etc/init.d/S99camera` y tiene fallback para el stack K2 y para MJPEG.
+
 ## Arquitectura resultante
 
 1. **WebSocket Moonraker**: canal primario en vivo, local y remoto.

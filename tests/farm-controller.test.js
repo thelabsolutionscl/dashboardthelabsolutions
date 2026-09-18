@@ -29,6 +29,7 @@ test('rutas destructivas exigen admin y lectura solo viewer',()=>{
   assert.equal(api.routeMinimumRole({method:'GET'},'/192.168.100.51/printer/info'),'viewer');
   assert.equal(api.routeMinimumRole({method:'POST'},'/192.168.100.51/printer/print/start'),'operator');
   assert.equal(api.routeMinimumRole({method:'POST'},'/recover/192.168.100.51'),'admin');
+  assert.equal(api.routeMinimumRole({method:'POST'},'/recover-camera/192.168.100.70'),'admin');
   assert.equal(api.routeMinimumRole({method:'POST'},'/update'),'admin');
   assert.equal(api.routeMinimumRole({method:'POST'},'/restart'),'admin');
 });
