@@ -28,7 +28,7 @@ async function toggleMaquinaEstado(id){
   renderMaquinasCalendar();
   const meta=maquinaEstadoMeta(nv);
   toast(`${m.nombre} #${m.num}: ${meta.icon} ${meta.label}`,nv==='disponible'?'success':'error');
-  try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);}
+  try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);toast('Estado guardado sólo en este dispositivo; Airtable no respondió','info');}
 }
 function _renderMaquinasMonitorNow(){
   // El monitor debe existir desde el primer frame de la pestaña. MAQUINAS ya
@@ -1761,7 +1761,13 @@ function getMaintThreshold(tipo,maquinaId){
   }
   const cfg=getMaintConfig();return parseInt(cfg[tipo])||MAINT_TYPES.find(t=>t.key===tipo)?.defaultHours||100;
 }
-function getMaintLog(){return maquinaState.maintLog.length?maquinaState.maintLog:getMaintLogLocal();}
+function _maintRecordKey(r){return String(r?.id||r?.recordId||[r?.maquinaId||'',r?.tipo||'',Number(r?.ts)||0,String(r?.notas||'')].join('|'));}
+function getMaintLog(){
+  const map=new Map();
+  for(const r of getMaintLogLocal())if(r&&r.maquinaId)map.set(_maintRecordKey(r),r);
+  for(const r of (maquinaState.maintLog||[]))if(r&&r.maquinaId)map.set(_maintRecordKey(r),r);
+  return[...map.values()].sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0));
+}
 function getPrintHours(id){if(_useOdometer())return(getOdometer()[id]||{}).hours||0;return getHist().filter(x=>x.id===id&&x.result==='Completado').reduce((s,x)=>s+(x.dur||0)/60,0);}
 function getHoursSinceMaint(id,tipo){
   const log=getMaintLog().filter(x=>x.maquinaId===id&&x.tipo===tipo).sort((a,b)=>b.ts-a.ts);
@@ -1770,8 +1776,12 @@ function getHoursSinceMaint(id,tipo){
   return Math.max(0,total-log[0].printHoursAtTime);
 }
 function getMaintAlerts(m){
-  return MAINT_TYPES.filter(t=>getHoursSinceMaint(m.id,t.key)>=getMaintThreshold(t.key,m.id)*0.9)
-    .map(t=>({...t,hours:getHoursSinceMaint(m.id,t.key),threshold:getMaintThreshold(t.key,m.id)}));
+  const log=getMaintLog();
+  return MAINT_TYPES.map(t=>{
+    const last=log.filter(x=>x.maquinaId===m.id&&x.tipo===t.key).sort((a,b)=>(b.ts||0)-(a.ts||0))[0]||null;
+    const hours=getHoursSinceMaint(m.id,t.key),threshold=getMaintThreshold(t.key,m.id);
+    return{...t,hours,threshold,last,verified:!!last};
+  }).filter(t=>t.hours>=t.threshold*0.9);
 }
 // Ritmo de impresión (h/semana) de las últimas 4 semanas, para proyectar mantención
 function getWeeklyPrintRate(id){
@@ -1793,6 +1803,10 @@ function getFilamentCost(id){const kg=getTotalFilamentKg(id);const cost=parseFlo
 
 function renderMaintenanceTable(){
   const el=document.getElementById('maintTable');if(!el)return;
+  let hist={};try{hist=window.PrinterHistory?.status?.()||{};}catch(_){}
+  const histFresh=hist.mode==='durable'&&hist.lastSync&&Date.now()-Number(hist.lastSync)<120000;
+  const sourceLabel=histFresh?'Historial central reciente':hist.mode==='local-fallback'?'Caché local':'Historial sin confirmar';
+  const evidenceHtml='<div class="mops-source-note '+(histFresh?'ok':'warning')+'"><b>Horas y proyección: '+sourceLabel+'.</b><span>'+(histFresh?'Sincronización central reciente.':'Los valores pueden estar incompletos o diferir en otro dispositivo.')+' Una mantención sin registro base no se considera evidencia de una fecha previa.</span></div>';
   let totH=0,totKg=0,totCost=0,totPrints=0,totAlerts=0;       // acumuladores de flota
   const rows=MAQUINAS.map(m=>{
     const ph=getPrintHours(m.id);
@@ -1805,12 +1819,12 @@ function renderMaintenanceTable(){
     const perType=MAINT_TYPES.map(t=>{
       const l=mLog.filter(x=>x.tipo===t.key).sort((a,b)=>b.ts-a.ts);const last=l[0];
       const h=last?Math.max(0,ph-last.printHoursAtTime):ph;const thresh=getMaintThreshold(t.key,m.id);
-      return{t,h,thresh,last,pct:thresh>0?h/thresh:0};
+      return{t,h,thresh,last,pct:thresh>0?h/thresh:0,verified:!!last};
     });
     const alertsN=perType.filter(p=>p.pct>=0.9).length;
     totH+=ph;totKg+=filKgN;totCost+=filCost;totPrints+=prints;totAlerts+=alertsN;
     const chips=perType.map(({t,h,thresh,last,pct})=>{
-      const ok=pct<0.9,over=pct>=1;
+      const ok=pct<0.9,over=!!last&&pct>=1;
       const lastStr=last?_DTF_DM.format(new Date(last.ts)):'sin reg.';
       const statusIcon=over?'⚠':ok?'✓':'~';
       return`<span title="${t.label}: ${h.toFixed(1)}h / ${thresh}h (${Math.round(pct*100)}%) · Último: ${lastStr}" style="display:inline-flex;align-items:center;gap:3px;background:${over?'rgba(255,68,68,0.15)':pct>=0.9?'rgba(255,170,0,0.15)':last?'rgba(0,212,170,0.12)':'rgba(255,255,255,0.04)'};color:${over?'#ff4444':pct>=0.9?'#ffaa00':last?'#00d4aa':'var(--text3)'};border:1px solid ${over?'rgba(255,68,68,0.3)':pct>=0.9?'rgba(255,170,0,0.3)':last?'rgba(0,212,170,0.25)':'var(--border2)'};border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700">${t.icon} ${statusIcon} <span style="font-weight:400;opacity:0.85">${Math.round(pct*100)}%</span></span>`;
@@ -1818,9 +1832,10 @@ function renderMaintenanceTable(){
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
     const alerts={length:alertsN};
     const rate=getWeeklyPrintRate(m.id);let fc=null;
-    perType.forEach(p=>{const left=p.thresh-p.h;const weeks=left<=0?0:(rate>0?left/rate:Infinity);if(!fc||weeks<fc.weeks)fc={tipo:p.t.label,hoursLeft:left,weeks,rate};});
+    perType.filter(p=>p.last).forEach(p=>{const left=p.thresh-p.h;const weeks=left<=0?0:(rate>0?left/rate:Infinity);if(!fc||weeks<fc.weeks)fc={tipo:p.t.label,hoursLeft:left,weeks,rate};});
     let fcHtml;
-    if(!fc||(fc.rate<=0&&fc.hoursLeft>0)){const _disp=(typeof getMaquinaEstadoGlobal==='function'?getMaquinaEstadoGlobal(m.id):'disponible')==='disponible';fcHtml=_disp?`<span style="color:#ffaa00;font-size:10.5px;font-weight:600" title="Habilitada pero sin impresiones completadas en 4 semanas — capacidad ociosa">⚠ subutilizada</span>`:`<span style="color:var(--text3);font-size:10.5px" title="Sin impresiones recientes">sin uso reciente</span>`;}
+    if(!fc){fcHtml=`<span style="color:var(--warn);font-size:10.5px;font-weight:600" title="No hay un servicio base registrado para proyectar horas desde la última mantención">? sin mantención base registrada</span>`;}
+    else if(fc.rate<=0&&fc.hoursLeft>0){fcHtml=`<span style="color:var(--text3);font-size:10.5px" title="No hay suficientes impresiones recientes para proyectar una fecha">sin ritmo suficiente para proyectar</span>`;}
     else if(fc.hoursLeft<=0)fcHtml=`<span style="color:#ff4444;font-size:10.5px;font-weight:700">⚠ ${escapeHtml(fc.tipo)} vencida</span>`;
     else{const w=fc.weeks;const col=w<1?'#ff4444':w<2?'#ffaa00':'#00d4aa';const lbl=w<1?'esta semana':w<2?`~${Math.round(w*7)} días`:`~${Math.round(w)} sem`;fcHtml=`<span style="color:${col};font-size:10.5px;font-weight:600" title="${escapeHtml(fc.tipo)}: faltan ${fc.hoursLeft.toFixed(0)}h al ritmo de ${fc.rate.toFixed(1)}h/semana">${escapeHtml(fc.tipo)} en ${lbl}</span> <span style="color:var(--text3);font-size:10px">· ${fc.rate.toFixed(0)}h/sem</span>`;}
     return`<tr style="border-bottom:1px solid var(--border2)">
@@ -1832,7 +1847,7 @@ function renderMaintenanceTable(){
       <td style="padding:9px 10px"><button onclick="openMaintModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:4px 10px;cursor:pointer;white-space:nowrap" ${alerts.length?'style="border-color:rgba(255,170,0,0.5)"':''}>+ Registrar</button></td>
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px">
+  el.innerHTML=evidenceHtml+`<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:700px">
     <thead><tr style="border-bottom:1px solid var(--border)">
       <th style="padding:8px 10px;font-size:10.5px;color:var(--text3);text-align:left">Máquina</th>
       <th style="padding:8px 10px;font-size:10.5px;color:var(--text3);text-align:center">Horas totales</th>
@@ -1873,8 +1888,8 @@ async function saveMaintRecord(){
   // guardar también en localStorage como backup
   const local=getMaintLogLocal();local.unshift(rec);localStorage.setItem(MAINT_KEY,JSON.stringify(local.slice(0,200)));
   closeMaintModal();renderMaintenanceTable();renderMonitorGrid();
-  toast(`🔧 Mantención registrada · ${MAINT_TYPES.find(t=>t.key===tipo)?.label}`,'success');
-  try{await saveMaintRecordAirtable(rec);}catch(e){console.warn('No se pudo guardar mantención en Airtable',e);}
+  try{await saveMaintRecordAirtable(rec);localStorage.removeItem('printer_maint_sync_pending');toast(`🔧 Mantención registrada y sincronizada · ${MAINT_TYPES.find(t=>t.key===tipo)?.label}`,'success');}
+  catch(e){console.warn('No se pudo guardar mantención en Airtable',e);localStorage.setItem('printer_maint_sync_pending','1');toast('Mantención guardada localmente, pero Airtable no respondió. Seguirá visible y requiere sincronización.','info');}
 }
 function openMaintConfig(){
   const cfg=getMaintConfig();
