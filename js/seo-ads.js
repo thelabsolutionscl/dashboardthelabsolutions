@@ -1718,6 +1718,14 @@ function webVisualNumber(text){
   const n=parseFloat(String(text||'').replace(/[^0-9,.-]/g,'').replace(',','.'));
   return Number.isFinite(n)?n:null;
 }
+function webVisualSetText(el,value){
+  if(el&&el.textContent!==String(value))el.textContent=String(value);
+}
+function webVisualSetAction(el,html,target){
+  if(!el)return;
+  if(el.innerHTML!==html)el.innerHTML=html;
+  if(el.dataset.webGo!==target)el.dataset.webGo=target;
+}
 function webVisualSyncGuide(){
   const visitors=document.getElementById('webGuideTrafficValue');
   const trafficMeta=document.getElementById('webGuideTrafficMeta');
@@ -1726,37 +1734,33 @@ function webVisualSyncGuide(){
   const seo=document.getElementById('webGuideSeoValue');
   const seoMeta=document.getElementById('webGuideSeoMeta');
   const action=document.getElementById('webGuideAction');
-  if(visitors)visitors.textContent=webVisualText('web-kpi-usuarios');
+  webVisualSetText(visitors,webVisualText('web-kpi-usuarios'));
   if(trafficMeta){
     const sessions=webVisualText('web-kpi-sesiones','sin datos');
-    trafficMeta.textContent=sessions==='sin datos'?'Personas que llegan a tu sitio':'Sesiones: '+sessions;
+    webVisualSetText(trafficMeta,sessions==='sin datos'?'Personas que llegan a tu sitio':'Sesiones: '+sessions);
   }
-  if(ads)ads.textContent=webVisualText('ads-kpi-roas');
+  webVisualSetText(ads,webVisualText('ads-kpi-roas'));
   if(adsMeta){
     const conv=webVisualText('ads-kpi-conv','sin datos');
-    adsMeta.textContent=conv==='sin datos'?'Retorno por cada $1 invertido':'Conversiones: '+conv;
+    webVisualSetText(adsMeta,conv==='sin datos'?'Retorno por cada $1 invertido':'Conversiones: '+conv);
   }
-  if(seo)seo.textContent=webVisualText('seoAuditScore','Pendiente');
+  webVisualSetText(seo,webVisualText('seoAuditScore','Pendiente'));
   if(seoMeta){
     const score=webVisualNumber(webVisualText('seoAuditScore',''));
-    seoMeta.textContent=score===null?'Analiza el sitio para obtener una nota':score>=90?'SEO saludable':score>=70?'Hay mejoras importantes':'Requiere atención';
+    webVisualSetText(seoMeta,score===null?'Analiza el sitio para obtener una nota':score>=90?'SEO saludable':score>=70?'Hay mejoras importantes':'Requiere atención');
   }
   if(action){
     const stale=document.getElementById('adsStaleWarning');
     const pending=document.getElementById('adsPendingPanel');
     const score=webVisualNumber(webVisualText('seoAuditScore',''));
     if(stale&&getComputedStyle(stale).display!=='none'){
-      action.innerHTML='<b>1.</b> Actualiza Google Ads: los datos están desactualizados.';
-      action.dataset.webGo='ads';
+      webVisualSetAction(action,'<b>1.</b> Actualiza Google Ads: los datos están desactualizados.','ads');
     }else if(pending&&getComputedStyle(pending).display!=='none'){
-      action.innerHTML='<b>1.</b> Revisa los cambios de Google Ads que aún están pendientes.';
-      action.dataset.webGo='ads';
+      webVisualSetAction(action,'<b>1.</b> Revisa los cambios de Google Ads que aún están pendientes.','ads');
     }else if(score!==null&&score<90){
-      action.innerHTML='<b>1.</b> Revisa SEO: hay oportunidades para mejorar visibilidad.';
-      action.dataset.webGo='seo';
+      webVisualSetAction(action,'<b>1.</b> Revisa SEO: hay oportunidades para mejorar visibilidad.','seo');
     }else{
-      action.innerHTML='<b>1.</b> Empieza por Tráfico: mira cuántas personas llegaron y desde dónde.';
-      action.dataset.webGo='traffic';
+      webVisualSetAction(action,'<b>1.</b> Empieza por Tráfico: mira cuántas personas llegaron y desde dónde.','traffic');
     }
   }
 }
