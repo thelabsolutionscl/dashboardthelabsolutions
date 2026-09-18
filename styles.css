@@ -709,14 +709,20 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 .sort-th.desc::after{content:' ▼';color:var(--accent);}
 .row-selected td{background:rgba(0,212,204,0.06)!important;}
 #selectAllChk,.row-chk{width:14px;height:14px;}
+@media(max-width:900px){
+  #mobileGlobalSearchBtn{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;background:none;border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:18px;cursor:pointer}
+  .global-search.mobile-open{display:flex!important;position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));z-index:12000;max-width:none;padding:10px;border:1px solid var(--border2);border-radius:14px;background:rgba(17,17,17,.98);box-shadow:0 0 0 100vmax rgba(0,0,0,.72),0 16px 56px rgba(0,0,0,.65)}
+  .global-search.mobile-open #globalSearchInput{height:44px;font-size:16px}
+  .global-search.mobile-open .global-search-results{top:62px;max-height:min(68dvh,520px)}
+  #tab-visual .vai-frame-wrap{height:calc(100dvh - 150px);min-height:260px}
+}
 @media(min-width:769px) and (max-width:900px){
   body{padding-left:0!important}
   .topbar{padding:0 18px;gap:10px}
   .topbar-nav,.global-search,.icon-dock{display:none}
   .topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:auto}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai,.user-chip{display:none!important}
-  .mobile-menu-btn:not(#mobilePlusBtn),#mobileGlobalSearchBtn{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin-left:4px}
-  #mobileGlobalSearchBtn{background:none;border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:18px;cursor:pointer}
+  .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin-left:4px}
   #nuevoDropdown{display:none!important}
   .main{padding:18px}
   #tab-maquinas .maq-workspace-nav{position:static}
@@ -1426,12 +1432,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     padding-bottom:max(0px,env(safe-area-inset-bottom));
   }
 
-  /* ── Búsqueda global móvil ───────────────────────────── */
-  #mobileGlobalSearchBtn{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;background:none;border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:18px;cursor:pointer}
-  .global-search.mobile-open{display:flex!important;position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));z-index:12000;max-width:none;padding:10px;border:1px solid var(--border2);border-radius:14px;background:rgba(17,17,17,.98);box-shadow:0 0 0 100vmax rgba(0,0,0,.72),0 16px 56px rgba(0,0,0,.65)}
-  .global-search.mobile-open #globalSearchInput{height:44px;font-size:16px}
-  .global-search.mobile-open .global-search-results{top:62px;max-height:min(68dvh,520px)}
-  #tab-visual .vai-frame-wrap{height:calc(100dvh - 150px);min-height:260px}
+  /* ── Navegación táctil móvil ─────────────────────────── */
   .mobile-nav-close,.mobile-tab-btn{min-height:44px}
   /* ── Typography ──────────────────────────────────────── */
   .section-title{font-size:20px!important;letter-spacing:1px!important;}
