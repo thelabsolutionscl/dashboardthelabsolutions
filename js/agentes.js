@@ -1502,3 +1502,65 @@ const AGENT_LOG={
   },
   clear(){if(!confirm('¿Borrar el historial local de agentes? (el historial compartido en Airtable no se borra)')) return;this._runs=[];this._merged=null;try{localStorage.removeItem(this._key);}catch(e){}this.render();}
 };
+
+
+// ── PANELES COLAPSABLES EN CENTRO DE AGENTES ─────────────────────────────
+// Supplier Search Agent y Cola de Agentes conservan la cabecera visible y
+// permiten ocultar/mostrar su contenido con un clic, igual que Post-entrega.
+const _AGENT_PANEL_COLLAPSE_PREFIX='thelab_agent_panel_collapsed_v1_';
+function _agentPanelCollapsed(key){
+  try{return localStorage.getItem(_AGENT_PANEL_COLLAPSE_PREFIX+key)==='1';}
+  catch(e){return false;}
+}
+function _agentSetPanelCollapsed(key,value){
+  try{localStorage.setItem(_AGENT_PANEL_COLLAPSE_PREFIX+key,value?'1':'0');}
+  catch(e){}
+}
+function _bindAgentCollapsibleCard(card,key){
+  if(!card) return;
+  const header=Array.from(card.children).find(el=>el.classList&&el.classList.contains('card-header'));
+  if(!header) return;
+  const title=header.querySelector('.card-title');
+  if(!title) return;
+  let toggle=title.querySelector('.agent-card-collapse-toggle');
+  if(!toggle){
+    toggle=document.createElement('span');
+    toggle.className='agent-card-collapse-toggle';
+    toggle.style.cssText='margin-left:7px;color:var(--text3);font-size:15px;line-height:1;user-select:none';
+    toggle.setAttribute('aria-hidden','true');
+    title.appendChild(toggle);
+  }
+  const content=Array.from(card.children).filter(el=>el!==header);
+  const paint=()=>{
+    const collapsed=_agentPanelCollapsed(key);
+    content.forEach(el=>{el.style.display=collapsed?'none':'';});
+    header.setAttribute('aria-expanded',collapsed?'false':'true');
+    header.title=collapsed?'Mostrar sección':'Ocultar sección';
+    toggle.textContent=collapsed?'▸':'▾';
+  };
+  if(!header.dataset.agentCollapseBound){
+    header.dataset.agentCollapseBound='1';
+    header.setAttribute('role','button');
+    header.setAttribute('tabindex','0');
+    header.style.cursor='pointer';
+    header.addEventListener('click',e=>{
+      if(e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea,label')) return;
+      _agentSetPanelCollapsed(key,!_agentPanelCollapsed(key));
+      paint();
+    });
+    header.addEventListener('keydown',e=>{
+      if(e.key!=='Enter'&&e.key!==' ') return;
+      if(e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea,label')) return;
+      e.preventDefault();
+      _agentSetPanelCollapsed(key,!_agentPanelCollapsed(key));
+      paint();
+    });
+  }
+  paint();
+}
+function initAgentSectionCollapsibles(){
+  const supplierCard=document.getElementById('ssSearchBtn')?.closest('.card');
+  _bindAgentCollapsibleCard(supplierCard,'supplier-search');
+  _bindAgentCollapsibleCard(document.getElementById('agentQueueCard'),'agent-queue');
+}
+try{initAgentSectionCollapsibles();}catch(e){}

@@ -112,7 +112,7 @@ test('todo handler on*= de la sección apunta a una función real', () => {
 test('las funciones críticas existen y no están duplicadas', () => {
   const names = ['buildFollowupTray', 'buildWinbackTray', 'buildRecompraTray', 'buildPostEntregaTray',
     'renderChurn', 'renderCsatSummary', 'runAgentInline', 'draftAgentEmail', 'agentSendWA',
-    'fuMarkDone', 'pdMarkDone', 'pdEmail', 'pdWhatsApp', 'pdToggleTray', '_pdBindTrayCollapse', 'marcarReactivado'];
+    'fuMarkDone', 'pdMarkDone', 'pdEmail', 'pdWhatsApp', 'pdToggleTray', '_pdBindTrayCollapse', '_bindAgentCollapsibleCard', 'initAgentSectionCollapsibles', 'marcarReactivado'];
   for (const name of names) {
     assert.ok(hasFunction(name, AGENTS), `falta ${name}`);
     assert.equal(count(new RegExp(`function\\s+${esc(name)}\\s*\\(`, 'g'), AGENTS), 1, `${name} debe definirse una vez`);
@@ -131,6 +131,19 @@ test('cada bandeja escribe en un contenedor que existe en el HTML', () => {
     assert.match(body, new RegExp(`getElementById\\(['"]${esc(id)}['"]\\)`), `${fn} debe usar #${id}`);
     assert.ok(INDEX.includes(`id="${id}"`), `#${id} debe existir en el HTML`);
   }
+});
+
+test('Supplier Search y Cola de Agentes se pueden desplegar y ocultar', () => {
+  const init = functionSource('initAgentSectionCollapsibles', AGENTS);
+  const bind = functionSource('_bindAgentCollapsibleCard', AGENTS);
+  assert.match(init, /getElementById\(['"]ssSearchBtn['"]\).*closest\(['"]\.card['"]\)/, 'Supplier Search debe resolver su tarjeta');
+  assert.match(init, /getElementById\(['"]agentQueueCard['"]\)/, 'debe enlazar la Cola de Agentes');
+  assert.ok(INDEX.includes('id="ssSearchBtn"'), '#ssSearchBtn debe existir en el HTML');
+  assert.ok(INDEX.includes('id="agentQueueCard"'), '#agentQueueCard debe existir en el HTML');
+  assert.match(bind, /addEventListener\(['"]click['"]/, 'la cabecera debe reaccionar al click');
+  assert.match(bind, /content\.forEach/, 'debe ocultar o mostrar el contenido dejando la cabecera visible');
+  assert.match(bind, /aria-expanded/, 'debe exponer el estado desplegado');
+  assert.match(AGENTS, /thelab_agent_panel_collapsed_v1_/, 'debe recordar el estado de cada panel');
 });
 
 test('post-entrega se puede desplegar y ocultar desde su cabecera', () => {
