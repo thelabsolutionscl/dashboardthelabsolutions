@@ -67,6 +67,38 @@ test('salud de malla distingue sólido cerrado de superficie abierta',()=>{
   assert.equal(open.volumeReliable,false);
 });
 
+test('auto-orientación evalúa caras reales inclinadas y puede llevar un cubo rotado a 0% de voladizos',()=>{
+  const defs=[fn('_orientationSample'),fn('_orientationCandidates'),fn('_overhangMetric'),fn('_alignTris'),fn('_bestOrientation')].join('\n');
+  const api=new Function(defs+';return {_bestOrientation,_overhangMetric};')();
+  const V=[
+    [-10,-10,-10],[10,-10,-10],[10,10,-10],[-10,10,-10],
+    [-10,-10,10],[10,-10,10],[10,10,10],[-10,10,10]
+  ];
+  // Caras con winding coherente hacia afuera.
+  const F=[
+    [0,2,1],[0,3,2], [4,5,6],[4,6,7],
+    [0,1,5],[0,5,4], [1,2,6],[1,6,5],
+    [2,3,7],[2,7,6], [3,0,4],[3,4,7]
+  ];
+  const rx=27*Math.PI/180,ry=19*Math.PI/180,ca=Math.cos(rx),sa=Math.sin(rx),cb=Math.cos(ry),sb=Math.sin(ry);
+  const rot=([x,y,z])=>{const y1=y*ca-z*sa,z1=y*sa+z*ca;return[x*cb+z1*sb,y1,-x*sb+z1*cb];};
+  const out=[];for(const face of F)for(const vi of face)out.push(...rot(V[vi]));
+  const mesh=new Float32Array(out);
+  const before=api._overhangMetric(mesh);
+  const best=api._bestOrientation(mesh);
+  const after=api._overhangMetric(best.tris);
+  assert.ok(best.candidates>6,'debe evaluar más que las seis rotaciones cartesianas');
+  assert.ok(before.ovPct>0.1,'el cubo inclinado debe presentar voladizo antes');
+  assert.ok(after.ovPct<0.05,`debe apoyar una cara real y eliminar el voladizo; quedó ${after.ovPct}%`);
+  assert.ok(after.contact>0,'la orientación elegida debe generar una base de contacto real');
+});
+
+test('análisis de voladizo no considera apoyada una cara inclinada solo porque un vértice toca Z=0',()=>{
+  const s=fn('analyze');
+  assert.match(s,/Math\.max\(az,bz,cz\)>0\.5/);
+  assert.doesNotMatch(s,/nz\/ln<-0\.57&&Math\.min\(az,bz,cz\)>0\.5/);
+});
+
 test('secuencial exige despeje físico y ya no usa 18 mm mágico',()=>{
   const s=fn('_sliceSequential');
   assert.match(s,/p\.sequentialClearance/);
