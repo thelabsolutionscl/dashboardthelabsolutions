@@ -654,7 +654,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     const mat=MATS[el('slMaterial').value]||MATS.PLA;
     const cl=(v,a,b,d)=>{v=+v;const base=isFinite(v)?v:d;return Math.min(b,Math.max(a,base));};
     const layerHeight=cl(p.layerHeight,0.05,noz*0.8,noz*0.5);
-    const maxVolumetricFlow=cl(p.maxVolumetricFlow,0,60,mat.flow||0);
+    const materialFlowCap=mat.flow||60,maxVolumetricFlow=cl(p.maxVolumetricFlow,0,materialFlowCap,mat.flow||0);
     const materialVmax=Math.min(spec.vmax,mat.vcap||spec.vmax);
     const widest=Math.max(noz*1.05,+p.widthOuter||0,+p.widthInfill||0);
     const flowVmax=maxVolumetricFlow>0?maxVolumetricFlow/Math.max(0.01,widest*layerHeight):materialVmax;
@@ -2526,9 +2526,10 @@ self.onmessage=function(ev){
     // Precio del filamento: usa el ya configurado en Máquinas (filament_cost_clp) si el slicer no tiene uno propio, para mantener un solo número en toda la app
     const pk=localStorage.getItem('sl_price_kg')||localStorage.getItem('filament_cost_clp')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
     const warns=[];
-    if(S.params.supports)warns.push('<b>Soportes activados</b>: '+(S.params.treeSupports?'tipo árbol (ramas que se fusionan en troncos, fáciles de retirar)':'columnas en rejilla bajo los voladizos, retirar a mano')+'. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
+    if(S.params.supports)warns.push('<b>Soportes activados</b>: '+(S.params.treeSupports?'tipo árbol (motor nativo)':'columnas en rejilla bajo voladizos')+'. En geometrías críticas/series largas, valida primero una pieza piloto o compara con OrcaSlicer.');
     if(S.params.raft)warns.push('<b>Raft activado</b>: el motor nativo genera base + interfaz y eleva el modelo; el envelope final se valida contra la cama antes de habilitar el envío.');
     if(S.params.arcFitting)warns.push('<b>Arcos G2/G3 activados</b>: el archivo requiere que el firmware destino admita arcos. Si la impresora rechaza G2/G3, vuelve a desactivar esta opción.');
+    if(['gyroid','adaptive','lightning'].includes(S.params.infillType)||S.params.arachne||S.params.treeSupports)warns.push('<b>Motor nativo con funciones aproximadas</b>: la seguridad geométrica se valida, pero la equivalencia de calidad con OrcaSlicer no se presume. Para producción repetitiva, aprueba una pieza piloto y guarda el perfil validado.');
     if(!S.meshHealth?.volumeReliable)warns.push('<b>Malla no verificada como sólido cerrado</b>: el laminado puede funcionar, pero volumen/peso geométrico y algunas superficies no deben tratarse como evidencia exacta.');
     if((MATS[el('slMaterial').value]||{}).abrasive)warns.push('<b>Material abrasivo</b>: antes de enviar se exigirá confirmar una boquilla endurecida/apta para fibra en la impresora destino.');
     const audit=S.gcodeAudit||_validateGcodeForSpec(S.gcode,SPECS[model]),auditTxt=audit.ok?'G-code dentro del volumen':'G-code fuera de límites';
@@ -2541,7 +2542,9 @@ self.onmessage=function(ev){
           <span class="badge badge-green">⏱ ~${fmtTime(est.secs)}</span>
           <span class="badge badge-green">🧵 ${est.filM.toFixed(1)} m</span>
           <span class="badge badge-green">⚖ ~${est.grams.toFixed(0)} g</span>
-          <span class="badge badge-gray">📄 ${kb.toLocaleString('es-CL')} KB</span>\n          <span class="badge ${audit.ok?'badge-green':'badge-red'}">🛡 ${auditTxt}</span>
+          <span class="badge badge-gray">📄 ${kb.toLocaleString('es-CL')} KB</span>
+          <span class="badge ${audit.ok?'badge-green':'badge-red'}">🛡 ${auditTxt}</span>
+          <span class="badge badge-gray">Motor nativo · validación geométrica</span>
         </div>
         <!-- COSTO -->
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px">
