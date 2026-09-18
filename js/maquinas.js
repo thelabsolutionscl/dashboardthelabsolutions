@@ -179,8 +179,8 @@ function _cameraRefreshNow(im){
   im.dataset.camLoading='1';
   im.src=base+(base.includes('?')?'&':'?')+'_cam='+Date.now();
   const key=_cameraTimerKey(im);
-  if(key)_camRetryTimers[key]=setTimeout(()=>{
-    if(!im.isConnected)return;
+  if(key&&im.dataset.camKind==='snapshot')_camRetryTimers[key]=setTimeout(()=>{
+    if(!im.isConnected){delete _camRetryTimers[key];return;}
     im.dataset.camLoading='0';_cameraRefreshNow(im);
   },_CAM_LOAD_TIMEOUT_MS);
 }
@@ -606,7 +606,17 @@ function _scheduleWsReconnect(m){
   clearTimeout(_wsTimers[m.id]);
   _wsTimers[m.id]=setTimeout(()=>{if(getPrinterIp(m))connectPrinterWs(m);},delay);
 }
-function connectAllPrinterWs(){if(!_wsEnabled())return;MAQUINAS.forEach(m=>{if(getPrinterIp(m))connectPrinterWs(m);});}
+function connectAllPrinterWs(){
+  if(!_wsEnabled())return;
+  const liveIds=new Set(MAQUINAS.map(m=>m.id));
+  Object.keys(_wsConn).forEach(id=>{
+    if(liveIds.has(id))return;
+    clearTimeout(_wsTimers[id]);clearTimeout(_wsOpenTimers[id]);
+    const ws=_wsConn[id];if(ws){try{ws.onclose=null;ws.close();}catch(e){}}
+    delete _wsConn[id];delete _wsConnected[id];delete _wsRaw[id];delete _wsLastMessage[id];delete _wsLastProbe[id];
+  });
+  MAQUINAS.forEach(m=>{if(getPrinterIp(m))connectPrinterWs(m);});
+}
 function disconnectAllPrinterWs(){
   MAQUINAS.forEach(m=>{
     clearTimeout(_wsTimers[m.id]);clearTimeout(_wsOpenTimers[m.id]);
@@ -845,8 +855,8 @@ function renderMonitorGrid(){
     // ciclo) para que el stream no parpadee. camKey cambia solo si cambia la URL.
     // Cámara y Moonraker son canales independientes. Mantener la cámara viva
     // incluso con telemetría caída permite verificar físicamente la impresión.
-    const showCam=!!ip;
-    const camKey=(_rawCam&&showCam)?(_camU+'|'+(_camSnap?'s':'m')):'';
+    const showCam=!!_rawCam;
+    const camKey=showCam?(_camU+'|'+(_camSnap?'s':'m')):'';
     // Huella estructural: SOLO lo que cambia qué ramas se dibujan. Excluye
     // progreso/eta/temperaturas (se parchean en vivo) → la tarjeta no se
     // reconstruye cada 15s mientras imprime, evitando el parpadeo.
@@ -967,7 +977,10 @@ function renderMonitorGrid(){
   const wanted=new Set(__cards.map(c=>c.id));
   Array.from(el.children).forEach(node=>{
     const id=String(node.id||'').replace(/^mcard_/,'');
-    if(node.id?.startsWith('mcard_')&&!wanted.has(id))node.remove();
+    if(node.id?.startsWith('mcard_')&&!wanted.has(id)){
+      const im=node.querySelector('img[data-machine-id]');if(im)_cameraClearTimer(im);
+      node.remove();
+    }
   });
   __cards.forEach(c=>{
     let node=document.getElementById('mcard_'+c.id);
@@ -1017,9 +1030,12 @@ function _syncPrinterCam(id,camKey,force){
   </div>`;
   slot.__camKey=camKey;
   const im=slot.querySelector('img');
-  if(im){
+  if(im&&snap){
     const key=_cameraTimerKey(im);
-    if(key)_camRetryTimers[key]=setTimeout(()=>{if(im.isConnected&&im.dataset.camLoading==='1'){im.dataset.camLoading='0';_cameraRefreshNow(im);}},_CAM_LOAD_TIMEOUT_MS);
+    if(key)_camRetryTimers[key]=setTimeout(()=>{
+      if(!im.isConnected){delete _camRetryTimers[key];return;}
+      if(im.dataset.camLoading==='1'){im.dataset.camLoading='0';_cameraRefreshNow(im);}
+    },_CAM_LOAD_TIMEOUT_MS);
   }
 }
 // Parchea los valores que cambian a cada lectura, en sitio, sin reconstruir la
