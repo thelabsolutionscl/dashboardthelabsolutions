@@ -15,9 +15,22 @@ const STORAGE=fs.readFileSync(path.join(ROOT,'js','machineops-storage-adapter.js
 function fn(src,name){
   const re=new RegExp('(?:async\\s+)?function\\s+'+name+'\\s*\\('),m=re.exec(src);
   assert.ok(m,'falta '+name);
-  const start=m.index,open=src.indexOf('{',m.index+m[0].length),stack=[];
-  let quote='',esc=false,line=false,block=false,depth=0;
-  for(let i=open;i<src.length;i++){
+  const start=m.index;
+  let paren=0,body=-1,quote='',esc=false,line=false,block=false;
+  for(let i=src.indexOf('(',m.index);i<src.length;i++){
+    const ch=src[i],n=src[i+1];
+    if(line){if(ch==='\n')line=false;continue;}
+    if(block){if(ch==='*'&&n==='/'){block=false;i++;}continue;}
+    if(quote){if(esc){esc=false;continue;}if(ch==='\\'){esc=true;continue;}if(ch===quote)quote='';continue;}
+    if(ch==='/'&&n==='/'){line=true;i++;continue;}
+    if(ch==='/'&&n==='*'){block=true;i++;continue;}
+    if(ch==='"'||ch==="'"||ch==='\x60'){quote=ch;continue;}
+    if(ch==='(')paren++;
+    else if(ch===')'&&--paren===0){body=src.indexOf('{',i);break;}
+  }
+  assert.ok(body>=0,'sin cuerpo '+name);
+  let depth=0;quote='';esc=false;line=false;block=false;
+  for(let i=body;i<src.length;i++){
     const ch=src[i],n=src[i+1];
     if(line){if(ch==='\n')line=false;continue;}
     if(block){if(ch==='*'&&n==='/'){block=false;i++;}continue;}
