@@ -517,5 +517,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, normalizeRegistry, roleForToken, routeMinimumRole, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, normalizeRegistry, roleForToken, routeMinimumRole, cleanJobMetadata, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
