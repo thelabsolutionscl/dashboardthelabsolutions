@@ -509,6 +509,7 @@ function _extractFilamentTelemetry(status){
 
 function savePrinterIp(id){
   const inp=document.getElementById('ipin_'+id);const val=(inp?.value||'').trim();if(!val)return;
+  if(!_validPrivatePrinterIp(val)){toast('IP inválida: usa una IPv4 privada del taller','error');return;}
   localStorage.setItem('printer_ip_'+id,val);
   const m=MAQUINAS.find(x=>x.id===id);
   if(m){m.ip=val;if(m._airtableId){if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:val}})});}}
@@ -526,6 +527,16 @@ function savePrinterApiKey(id){
   toast(`API Key ${val?'guardada':'eliminada'} · ${m?.nombre} #${m?.numG}`,'success');
 }
 
+function _validPrivatePrinterIp(value){
+  const m=String(value||'').trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);if(!m)return false;
+  const o=m.slice(1).map(Number);if(o.some(v=>v<0||v>255))return false;
+  return o[0]===10||(o[0]===172&&o[1]>=16&&o[1]<=31)||(o[0]===192&&o[1]===168);
+}
+function _ensurePrinterPhysicalFields(id){
+  const light=document.getElementById('printerConnLight');if(!light||document.getElementById('printerConnNozzle'))return;
+  const wrap=document.createElement('div');wrap.className='field-group';wrap.innerHTML='<label class="field-label">Boquilla instalada (mm)</label><select class="field-select" id="printerConnNozzle"><option value="">Sin registrar</option><option>0.2</option><option>0.4</option><option>0.6</option><option>0.8</option><option>1.0</option></select><small style="color:var(--text3);font-size:10px">Se usa para bloquear un G-code preparado para otra boquilla.</small>';
+  const group=light.closest('.field-group');if(group)group.insertAdjacentElement('afterend',wrap);else light.parentElement?.appendChild(wrap);
+}
 function openPrinterConnModal(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   document.getElementById('printerConnTitle').textContent=`${m.nombre} #${m.numG}`;
@@ -533,6 +544,8 @@ function openPrinterConnModal(id){
   document.getElementById('printerConnIp').value=getPrinterIp(m)||'';
   document.getElementById('printerConnKey').value=getPrinterApiKey(id);
   document.getElementById('printerConnLight').value=localStorage.getItem('printer_light_override_'+id)||'';
+  _ensurePrinterPhysicalFields(id);
+  const nozzle=document.getElementById('printerConnNozzle');if(nozzle)nozzle.value=localStorage.getItem('printer_nozzle_'+id)||m.nozzleInstalled||'';
   document.getElementById('printerConnModal').style.display='flex';
 }
 function closePrinterConnModal(){document.getElementById('printerConnModal').style.display='none';}
@@ -541,6 +554,9 @@ function savePrinterConn(){
   const ip=(document.getElementById('printerConnIp').value||'').trim();
   const key=(document.getElementById('printerConnKey').value||'').trim();
   const light=(document.getElementById('printerConnLight').value||'').trim();
+  const nozzle=(document.getElementById('printerConnNozzle')?.value||'').trim();
+  if(ip&&!_validPrivatePrinterIp(ip)){toast('IP inválida: usa una IPv4 privada del taller','error');return;}
+  if(nozzle&&!['0.2','0.4','0.6','0.8','1.0'].includes(nozzle)){toast('Boquilla inválida','error');return;}
   const lightCfg=_printerLightParseOverride(light);
   if(lightCfg?.error){toast(lightCfg.error,'error');document.getElementById('printerConnLight').focus();return;}
   if(ip)localStorage.setItem('printer_ip_'+id,ip);else localStorage.removeItem('printer_ip_'+id);
@@ -548,6 +564,7 @@ function savePrinterConn(){
   localStorage.removeItem(keyName);
   if(key)sessionStorage.setItem(keyName,key);else sessionStorage.removeItem(keyName);
   if(light)localStorage.setItem('printer_light_override_'+id,light);else localStorage.removeItem('printer_light_override_'+id);
+  if(nozzle)localStorage.setItem('printer_nozzle_'+id,nozzle);else localStorage.removeItem('printer_nozzle_'+id);
   delete _printerLightCaps[id];
   const m=MAQUINAS.find(x=>x.id===id);
   if(m&&m._airtableId){m.ip=ip||m.ip;if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
