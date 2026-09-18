@@ -40,7 +40,7 @@ const xhrOK  = function () { this.open = () => {}; this.setRequestHeader = () =>
 const xhrFail = function () { this.open = () => {}; this.setRequestHeader = () => {}; this.send = () => { this.status = 500; this.onload && this.onload(); }; };
 const xhrErr = function () { this.open = () => {}; this.setRequestHeader = () => {}; this.send = () => { this.onerror && this.onerror(); }; };
 
-function montar({ queue, ip = '10.0.0.5', xhr }) {
+function montar({ queue, ip = '10.0.0.5', xhr, startOk=true }) {
   const toasts = [], scheduled = [], fetches = [];
   const deps = {
     _printQueue: queue,
@@ -53,7 +53,7 @@ function montar({ queue, ip = '10.0.0.5', xhr }) {
     FormData: class { append() {} },
     Blob: class { constructor() {} },
     XMLHttpRequest: xhr,
-    fetch: async (u, o) => { fetches.push({ u: String(u), o }); return { ok: true, status: 200 }; },
+    fetch: async (u, o) => { fetches.push({ u: String(u), o }); return { ok: startOk, status: startOk?200:500 }; },
     renderMonitorGrid: () => {},
     pollPrinters: () => {},
     AbortSignal: { timeout: () => null },
@@ -88,11 +88,18 @@ test('sin IP: el trabajo queda en cola (no se pierde)', async () => {
 
 // ── Camino feliz intacto ────────────────────────────────────────────────
 
-test('subida exitosa: el trabajo sale de la cola y arranca la impresión', async () => {
+test('subida y START exitosos: el trabajo sale de la cola', async () => {
   const m = montar({ queue: { p1: [job()] }, xhr: xhrOK });
-  await m.start('p1');
-  assert.equal(m.queue.p1.length, 0, 'se consume tras éxito');
+  await m.start('p1');await Promise.resolve();await Promise.resolve();
+  assert.equal(m.queue.p1.length, 0, 'se consume solo tras START confirmado');
   assert.ok(m.fetches.some((f) => /print\/start/.test(f.u)), 'inicia la impresión');
+});
+
+test('upload exitoso pero START 500: el trabajo NO se consume',async()=>{
+  const m=montar({queue:{p1:[job()]},xhr:xhrOK,startOk:false});
+  await m.start('p1');await Promise.resolve();await Promise.resolve();
+  assert.equal(m.queue.p1.length,1);
+  assert.ok(m.toasts.some(t=>/no se pudo iniciar|START no fue confirmado/i.test(t.msg)));
 });
 
 // ── Reintentos acotados ─────────────────────────────────────────────────
@@ -107,7 +114,9 @@ test('tras 3 intentos fallidos deja de reintentar y avisa iniciar a mano', async
 
 // ── El código lo dice ───────────────────────────────────────────────────
 
-test('el trabajo se consume solo tras subida exitosa, no antes', () => {
+test('el trabajo se consume solo tras START confirmado, no tras upload', () => {
   assert.doesNotMatch(BODY, /const job=q\.shift\(\)/, 'ya no hace shift antes de subir');
-  assert.match(BODY, /_printQueue\[id\]\[0\]===job\)\s*\{\s*_printQueue\[id\]\.shift\(\)/, 'consume solo tras éxito');
+  assert.match(BODY, /if\(!started\.ok\)/);
+  const startPos=BODY.indexOf('if(!started.ok)'),shiftPos=BODY.indexOf('_printQueue[id].shift()');
+  assert.ok(startPos>=0&&shiftPos>startPos,'consume solo después de confirmar START');
 });
