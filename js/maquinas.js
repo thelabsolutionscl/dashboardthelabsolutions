@@ -1554,6 +1554,13 @@ function _printSessionAction(st,hasSession){
   const close=hasSession&&st!=='printing'&&!transitorio;
   return{open,close,result:close?(st==='complete'?'Completado':'Cancelado'):null};
 }
+function _controllerOwnsPrint(machineId,filename){
+  try{
+    const status=window.FarmQueue?.status?.()||{},target=String(filename||'').replace(/\.gcode$/i,'').toLowerCase();
+    return (status.jobs||[]).some(j=>j.machineId===machineId&&String(j.filename||'').replace(/\.gcode$/i,'').toLowerCase()===target&&
+      ['started','printing','paused','completed','cancelled','failed'].includes(String(j.state||''))&&Date.now()-Date.parse(j.updatedAt||j.createdAt||0)<48*3600000);
+  }catch(_){return false;}
+}
 function checkTransitions(m,s){
   const prev=_prevState[m.id];const st=s.state;
   if(st==='error'&&prev!=='error'){
@@ -1570,13 +1577,17 @@ function checkTransitions(m,s){
     _sendWaAlertIfEnabled(title,detail);
   }
   const act=_printSessionAction(st,!!_sessions[m.id]);
-  if(act.open)_sessions[m.id]={file:s.filename,start:Date.now(),filamentStart:s.filamentMm||0};
+  if(act.open){
+    const elapsedMs=Math.max(0,Number(s.elapsed||0))*1000;
+    _sessions[m.id]={file:s.filename,start:Date.now()-elapsedMs,filamentStart:Math.max(0,(s.filamentMm||0)),controllerOwned:_controllerOwnsPrint(m.id,s.filename)};
+  }
   if(act.close){
     const sess=_sessions[m.id];
     if(sess){
-      const dur=Math.round((Date.now()-sess.start)/60000);
+      const end=Date.now(),dur=Math.max(1,Math.round((Number(s.elapsed||0)>0?Number(s.elapsed)*1000:end-sess.start)/60000));
       const filamentMm=Math.max(0,(s.filamentMm||0)-sess.filamentStart);
-      saveHistoryEntry(m,sess.file,sess.start,Date.now(),dur,act.result,filamentMm);
+      const owned=sess.controllerOwned||_controllerOwnsPrint(m.id,sess.file);
+      if(!owned)saveHistoryEntry(m,sess.file,sess.start,end,dur,act.result,filamentMm);
       delete _sessions[m.id];
       if(st==='complete'){
         // Auto-calibrar estimación de tiempo por modelo de impresora
