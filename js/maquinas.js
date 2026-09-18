@@ -30,22 +30,37 @@ async function toggleMaquinaEstado(id){
   toast(`${m.nombre} #${m.num}: ${meta.icon} ${meta.label}`,nv==='disponible'?'success':'error');
   try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);}
 }
+function _renderMaquinasMonitorNow(){
+  // El monitor debe existir desde el primer frame de la pestaña. MAQUINAS ya
+  // trae un registry base local; después se reconcilia con Airtable sin dejar
+  // el grid vacío mientras esperan red, eventos o mantenciones.
+  try{renderMonitorFilterTabs();}catch(_){}
+  try{renderMonitorKPIs();}catch(_){}
+  try{renderMonitorGrid();}catch(_){}
+}
 async function initMaquinas(){
+  // También se ejecuta si ya hay una inicialización en curso: volver a abrir
+  // Máquinas nunca depende de que termine un fetch anterior para pintar cards.
+  _renderMaquinasMonitorNow();
   if(_maquinasInitPromise)return _maquinasInitPromise;
   _maquinasInitPromise=(async()=>{
     await loadMaquinasAirtable();
+
+    // Reconciliado el registry real, repintamos inmediatamente y arrancamos
+    // telemetría/cámaras ANTES de esperar eventos de calendario/mantención.
+    _renderMaquinasMonitorNow();
+    ensurePrinterRealtimeService();
+    _resumePrinterRealtime();
+
     await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
     seedOdometerIfNeeded();
     renderMaquinasCalendar();
-    renderMonitorFilterTabs();
-    renderMonitorKPIs();
+    _renderMaquinasMonitorNow();
     renderMaintenanceTable();
     try{audit3DLoadDaily();}catch(_){}
     renderProductionAnalytics();
     try{renderCargaMaquinas();}catch(e){}
     requestNotificationPermission(false);
-    ensurePrinterRealtimeService();
-    _resumePrinterRealtime();
   })();
   try{return await _maquinasInitPromise;}
   finally{_maquinasInitPromise=null;}
