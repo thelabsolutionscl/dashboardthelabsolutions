@@ -168,9 +168,12 @@ if(original.saveIp)window.savePrinterIp=function(id){const out=original.saveIp.a
 if(original.saveConn)window.savePrinterConn=function(){const id=document.getElementById('printerConnId')?.value||'';const out=original.saveConn.apply(this,arguments);if(id)setTimeout(()=>updateRegistryAfterManualSave(id),0);return out;};
 
 Promise.all([syncQueue(true),syncRegistry(true),authRole(true)]).then(()=>seedRegistry()).catch(()=>{});
-setInterval(()=>{if(!document.hidden){syncQueue(false);syncRegistry(false);}},15000);
-window.addEventListener('focus',()=>{syncQueue(true);syncRegistry(true);});
-window.addEventListener('farm-controller-health',()=>{syncQueue(true);syncRegistry(true);});
+setInterval(()=>{syncQueue(false);syncRegistry(false);},15000);
+const _resumeControllerSync=()=>{syncQueue(true);syncRegistry(true);};
+window.addEventListener('focus',_resumeControllerSync);
+window.addEventListener('online',_resumeControllerSync);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)_resumeControllerSync();});
+window.addEventListener('farm-controller-health',_resumeControllerSync);
 
 window.FarmQueue={sync:syncQueue,status:()=>({controllerOk,lastSync:lastQueueSync,jobs:[...jobs],counts:{...counts}})};
 window.FarmRegistry={sync:syncRegistry,seed:seedRegistry,ipFor:durableGetPrinterIp,status:()=>({controllerOk,role:controllerRole,lastSync:lastRegistrySync,machines:[...registry]})};
