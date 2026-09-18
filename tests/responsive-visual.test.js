@@ -38,7 +38,8 @@ test('la búsqueda global se inicializa y tiene lanzador móvil',()=>{
   assert.match(FIN,/mobileGlobalSearchBtn/);
   assert.match(FIN,/classList\.add\('mobile-open'\)/);
   assert.match(CSS,/#mobileGlobalSearchBtn\{display:none\}/);
-  assert.match(CSS,/#mobileGlobalSearchBtn\{display:inline-flex[^}]*min-width:44px[^}]*min-height:44px/);
+  assert.match(CSS,/@media\(max-width:900px\)\{[\s\S]*?#mobileGlobalSearchBtn\{display:inline-flex[^}]*min-width:44px[^}]*min-height:44px/);
+  assert.match(CSS,/@media\(max-width:900px\)\{[\s\S]*?\.global-search\.mobile-open\{[^}]*display:flex!important[^}]*position:fixed/);
   assert.match(FIN,/btn\.addEventListener\('click',e=>\{[\s\S]*?e\.stopPropagation\(\)/);
   assert.match(CSS,/\.global-search\.mobile-open\{[^}]*position:fixed/);
 });
@@ -49,7 +50,7 @@ test('Máquinas no queda debajo del topbar al hacer scroll',()=>{
 });
 
 test('Visual AI evita el min-height rígido en móvil',()=>{
-  assert.match(CSS,/#tab-visual \.vai-frame-wrap\{height:calc\(100dvh - 150px\);min-height:260px\}/);
+  assert.match(CSS,/@media\(max-width:900px\)\{[\s\S]*?#tab-visual \.vai-frame-wrap\{height:calc\(100dvh - 150px\);min-height:260px\}/);
 });
 
 test('la semántica de estados tiene presentación visual compartida',()=>{
