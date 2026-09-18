@@ -33,6 +33,24 @@ async function flushMachineStateOutbox(){
     catch(_){}
   }
 }
+const _MACHINE_EVENT_OUTBOX='maquina_eventos_outbox_v1';
+function _machineEventOutbox(){
+  try{const rows=JSON.parse(localStorage.getItem(_MACHINE_EVENT_OUTBOX)||'[]');return Array.isArray(rows)?rows:[];}catch(_){return[];}
+}
+function _queueMachineEventOps(ops){
+  const rows=_machineEventOutbox(),map=new Map(rows.map(x=>[x.key,x]));
+  for(const op of ops||[])if(op?.key)map.set(op.key,{...op,updatedAt:Date.now()});
+  localStorage.setItem(_MACHINE_EVENT_OUTBOX,JSON.stringify([...map.values()].slice(-500)));
+}
+async function flushMachineEventOutbox(){
+  const rows=_machineEventOutbox();if(!rows.length)return true;
+  for(const op of rows){
+    if(op.type==='delete')delete maquinaState.eventos[op.key];
+    else if(op.type==='set'&&op.value)maquinaState.eventos[op.key]=op.value;
+  }
+  try{await saveMaquinaEventosAirtable();localStorage.removeItem(_MACHINE_EVENT_OUTBOX);return true;}
+  catch(_){return false;}
+}
 const MAQUINA_ESTADOS={
   disponible:{label:'Disponible',short:'✓ Disp.',color:'green',icon:'✓'},
   reservada:{label:'Reservada',short:'◷ Res.',color:'yellow',icon:'◷'},
@@ -82,6 +100,8 @@ async function initMaquinas(){
     _resumePrinterRealtime();
 
     await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
+    await flushMachineEventOutbox();
+    await syncPendingMaintenance();
     seedOdometerIfNeeded();
     renderMaquinasCalendar();
     _renderMaquinasMonitorNow();
@@ -1948,6 +1968,22 @@ function openMaintModal(id){
   document.getElementById('maintModal').style.display='flex';
 }
 function closeMaintModal(){document.getElementById('maintModal').style.display='none';}
+const _MAINT_OUTBOX_KEY='printer_maint_outbox_v1';
+function _pendingMaintRows(){try{const rows=JSON.parse(localStorage.getItem(_MAINT_OUTBOX_KEY)||'[]');return Array.isArray(rows)?rows:[];}catch(_){return[];}}
+function _setPendingMaintRows(rows){if(rows.length)localStorage.setItem(_MAINT_OUTBOX_KEY,JSON.stringify(rows.slice(-100)));else localStorage.removeItem(_MAINT_OUTBOX_KEY);}
+async function syncPendingMaintenance(){
+  let pending=_pendingMaintRows();if(!pending.length)return true;
+  const remoteKeys=new Set((maquinaState.maintLog||[]).map(_maintRecordKey));
+  const remaining=[];
+  for(const rec of pending){
+    if(remoteKeys.has(_maintRecordKey(rec)))continue;
+    try{await saveMaintRecordAirtable(rec);}
+    catch(_){remaining.push(rec);}
+  }
+  _setPendingMaintRows(remaining);
+  if(!remaining.length)localStorage.removeItem('printer_maint_sync_pending');
+  return remaining.length===0;
+}
 async function saveMaintRecord(){
   const id=document.getElementById('maintModalId').value;
   const tipo=document.getElementById('maintModalTipo').value;
@@ -1960,7 +1996,12 @@ async function saveMaintRecord(){
   const local=getMaintLogLocal();local.unshift(rec);localStorage.setItem(MAINT_KEY,JSON.stringify(local.slice(0,200)));
   closeMaintModal();renderMaintenanceTable();renderMonitorGrid();
   try{await saveMaintRecordAirtable(rec);localStorage.removeItem('printer_maint_sync_pending');toast(`🔧 Mantención registrada y sincronizada · ${MAINT_TYPES.find(t=>t.key===tipo)?.label}`,'success');}
-  catch(e){console.warn('No se pudo guardar mantención en Airtable',e);localStorage.setItem('printer_maint_sync_pending','1');toast('Mantención guardada localmente, pero Airtable no respondió. Seguirá visible y requiere sincronización.','info');}
+  catch(e){
+    console.warn('No se pudo guardar mantención en Airtable',e);
+    const pending=_pendingMaintRows();if(!pending.some(x=>_maintRecordKey(x)===_maintRecordKey(rec)))pending.push(rec);_setPendingMaintRows(pending);
+    localStorage.setItem('printer_maint_sync_pending','1');
+    toast('Mantención guardada localmente; queda en cola de sincronización y se reintentará contra el registro remoto.','info');
+  }
 }
 function openMaintConfig(){
   const cfg=getMaintConfig();
@@ -2343,15 +2384,22 @@ async function saveMaquinaEvento(){
   if(!fi||!ff){toast('Ingresa las fechas','error');return;}
   const pedidoId=document.getElementById('maquinaModalPedido')?.value||'';
   const start=new Date(fi+'T00:00:00'),end=new Date(ff+'T00:00:00');let count=0;
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const key=`${maqId}_${fmtDate(new Date(d))}`;if(tipo==='disponible') delete maquinaState.eventos[key];else{const ev={tipo,desc,tiempo:parseFloat(tiempo)||null};if(pedidoId) ev.pedidoId=pedidoId;maquinaState.eventos[key]=ev;}count++;}
-  closeMaquinaModal();renderMaquinasCalendar();toast(`✓ ${count} día${count>1?'s':''} marcados — guardando...`,'info');
-  try{await saveMaquinaEventosAirtable();toast('✓ Guardado en Airtable','success');}
-  catch(e){toast('Error al guardar: '+e.message,'error');}
+  const outboxOps=[];
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    const key=`${maqId}_${fmtDate(new Date(d))}`;
+    if(tipo==='disponible'){delete maquinaState.eventos[key];outboxOps.push({type:'delete',key});}
+    else{const ev={tipo,desc,tiempo:parseFloat(tiempo)||null};if(pedidoId)ev.pedidoId=pedidoId;maquinaState.eventos[key]=ev;outboxOps.push({type:'set',key,value:ev});}
+    count++;
+  }
+  _queueMachineEventOps(outboxOps);
+  closeMaquinaModal();renderMaquinasCalendar();toast(`✓ ${count} día${count>1?'s':''} marcados — sincronizando...`,'info');
+  const synced=await flushMachineEventOutbox();
+  toast(synced?'✓ Guardado en Airtable':'Guardado localmente · sincronización pendiente',synced?'success':'info');
 }
 async function deleteMaquinaEvento(maqId,dateStr){
-  delete maquinaState.eventos[`${maqId}_${dateStr}`];renderMaquinasCalendar();
-  try{await saveMaquinaEventosAirtable();toast('Evento eliminado','info');}
-  catch(e){toast('Error al eliminar: '+e.message,'error');}
+  const key=`${maqId}_${dateStr}`;delete maquinaState.eventos[key];_queueMachineEventOps([{type:'delete',key}]);renderMaquinasCalendar();
+  const synced=await flushMachineEventOutbox();
+  toast(synced?'Evento eliminado':'Eliminación guardada localmente · sincronización pendiente',synced?'info':'warning');
 }
 
 // ── EQUIPO ────────────────────────────────────────────────────
