@@ -172,7 +172,7 @@ test('el envío en lote deja fuera las que no dan y lo dice', () => {
   m.api.enviarATodas();
   assert.equal(m.subidas.length, 1, 'solo la que puede');
   assert.match(m.subidas[0], /10\.0\.0\.50/);
-  assert.match(m.preguntas.join(' '), /Impresora #2.*X máximo 300\.00 > 220 mm/s, 'y se nombra la que quedó fuera con la causa');
+  assert.match(m.preguntas.join(' '), /Impresora #2.*G-code generado para K2 Plus; destino K1/s, 'y se nombra la que quedó fuera con la causa');
 });
 
 test('el envelope final bloquea trayectorias negativas aunque la pieza geométrica quepa', () => {
