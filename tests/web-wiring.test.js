@@ -13,6 +13,7 @@ const MODULES=fs.existsSync(JS_DIR)
   ?fs.readdirSync(JS_DIR).filter(name=>name.endsWith('.js')).sort().map(name=>fs.readFileSync(path.join(JS_DIR,name),'utf8')).join('\n')
   :'';
 const SOURCE=`${INDEX}\n${MODULES}`;
+const CSS=fs.readFileSync(path.join(ROOT,'styles.css'),'utf8');
 
 function count(pattern,text=SOURCE){return(text.match(pattern)||[]).length;}
 function esc(value){return String(value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
@@ -48,6 +49,23 @@ test('las funciones críticas de WEB existen sin redefiniciones',()=>{
     'getCapacidadLineas','renderAdsCapacidad','renderAdsSugerencias','renderAdsAutopilot','adsAutopilotDecide',
     'loadWebStats','renderWebStats','getWebDemoData','adsExportOfflineConversions'
   ].forEach(assertUniqueFunction);
+});
+
+test('WEB tiene jerarquía didáctica y lectura progresiva',()=>{
+  assert.match(SOURCE,/function\s+webVisualMount\s*\(/,'falta montaje visual de WEB');
+  assert.match(SOURCE,/WEB EN 3 PREGUNTAS/,'debe explicar la sección antes de mostrar métricas');
+  assert.match(SOURCE,/¿La web está atrayendo, convirtiendo y creciendo\?/);
+  assert.match(SOURCE,/webVisualChapter\(webVisualContainer\(traffic\),'01','Tráfico del sitio'/,'Tráfico debe ser el primer capítulo');
+  assert.match(SOURCE,/webVisualChapter\(ads,'02','Publicidad y conversiones'/,'Ads debe ser el segundo capítulo');
+  assert.match(SOURCE,/webVisualChapter\(webVisualContainer\(seo\),'03','SEO y visibilidad orgánica'/,'SEO debe cerrar el recorrido');
+  assert.match(SOURCE,/ads\.after\(seoContainer\)/,'SEO debe quedar visualmente después de Ads');
+  assert.match(SOURCE,/classList\.add\('op-expert-only'\)/,'los controles técnicos deben salir del modo Simple');
+  assert.match(SOURCE,/webVisualExplainMetric\('ads-kpi-roas'/,'los KPI deben explicar qué significan');
+  assert.match(SOURCE,/MutationObserver/,'el resumen superior debe seguir los datos reales al actualizarse');
+  assert.match(SOURCE,/webVisualSetText/,'el espejo de KPI no debe repintar en bucle');
+  assert.match(CSS,/#tab-web \.web-guide/);
+  assert.match(CSS,/#tab-web \.web-guide-grid/);
+  assert.match(CSS,/#tab-web \.web-chapter-head/);
 });
 
 test('el panel de tráfico del sitio aparece antes de Google Ads',()=>{
