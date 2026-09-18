@@ -120,6 +120,17 @@ test('K2 evita doble consumidor y recupera su stack de cámara automáticamente'
   assert.match(MAQ,/↻ Reiniciar cámara/,'también debe existir recuperación manual en la tarjeta');
 });
 
+test('el primer ingreso a Máquinas no depende del primer polling para mostrar impresoras',()=>{
+  const init=fn(MAQ,'initMaquinas');
+  const paint=fn(MAQ,'_renderMaquinasMonitorNow');
+  assert.match(paint,/renderMonitorGrid\(\)/,'el grid debe pintarse desde el registry local inmediatamente');
+  assert.match(paint,/renderMonitorKPIs\(\)/);
+  assert.ok(init.indexOf('_renderMaquinasMonitorNow()')<init.indexOf('await loadMaquinasAirtable()'),'el primer paint debe ocurrir antes de Airtable');
+  const afterLoad=init.indexOf('_renderMaquinasMonitorNow()',init.indexOf('await loadMaquinasAirtable()'));
+  assert.ok(afterLoad>init.indexOf('await loadMaquinasAirtable()'),'debe repintar cuando llegue el registry remoto');
+  assert.ok(init.indexOf('ensurePrinterRealtimeService()',afterLoad)>afterLoad,'el realtime arranca sobre cards ya montadas');
+});
+
 test('cargas concurrentes de Máquinas comparten una sola inicialización',()=>{
   const init=fn(MAQ,'initMaquinas');
   assert.match(init,/_maquinasInitPromise/);
