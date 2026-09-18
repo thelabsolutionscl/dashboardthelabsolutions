@@ -98,10 +98,14 @@ test('el monitor evita falsos Offline y conserva el último estado bueno',()=>{
   assert.match(apply,/lastSeenAt:prev\?\.lastSeenAt\|\|0/);
 });
 
-test('el ciclo WebSocket se cierra fuera de Máquinas y no renderiza oculto',()=>{
-  assert.match(INDEX,/disconnectAllPrinterWs\(\)/,'al salir debe cerrarse la telemetría en vivo');
+test('la telemetría permanece viva al navegar y el render evita trabajo visible fuera de Máquinas',()=>{
+  const switchStart=INDEX.indexOf('function switchTab(name)');
+  const switchEnd=INDEX.indexOf('// ── OVERVIEW',switchStart);
+  const switchBody=INDEX.slice(switchStart,switchEnd);
+  assert.doesNotMatch(switchBody,/clearInterval\(_monitorInterval\)/,'cambiar de sección no debe detener el monitor');
+  assert.doesNotMatch(switchBody,/disconnectAllPrinterWs\(\)/,'cambiar de sección no debe cerrar WebSockets');
   const scheduled=functionSource(MAQ,'_wsScheduleRender');
-  assert.match(scheduled,/tab-maquinas|activeTab|active-tab|\.active/,'el render WebSocket debe comprobar que Máquinas esté visible');
+  assert.match(scheduled,/tab-maquinas|activeTab|active-tab|\.active/,'el render visual de ráfagas WS puede esperar si Máquinas no está visible');
 });
 
 test('estado administrativo y estado técnico conservan responsabilidades distintas',()=>{
