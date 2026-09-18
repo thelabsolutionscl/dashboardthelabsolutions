@@ -159,6 +159,15 @@ test('eventos automáticos no cuentan como incidentes confirmados hasta validaci
   assert.equal(ops.incidentIsConfirmed({source:'manual'}),true);
 });
 
+test('solo K1 #1 y K2 Plus están marcadas físicamente con CFS',()=>{
+  const ops=loadOps();
+  assert.equal(ops.machineHasCfs({id:'k1-1',modelo:'K1',numG:1}),true);
+  assert.equal(ops.machineHasCfs({id:'k1-2',modelo:'K1',numG:2}),false);
+  assert.equal(ops.machineHasCfs({id:'k2p-1',modelo:'K2 Plus',numG:11}),true);
+  assert.equal(ops.machineHasCfs({id:'k2-1',modelo:'K2',numG:12}),false);
+  assert.equal(ops.machineHasCfs({id:'k2-2',modelo:'K2',numG:13}),false);
+});
+
 test('CFS sin telemetría reciente queda como dato desconocido y no como falla',()=>{
   const ops=loadOps();
   const row=ops._filamentPhysicalSummary({id:'k2-1',modelo:'K2'});
