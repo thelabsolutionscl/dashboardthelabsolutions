@@ -576,7 +576,8 @@ const server = http.createServer(async (req, res) => {
       const id=decodeURIComponent(ready[1]),m=machineByIdentity({id});if(!m)return json(res,404,{ok:false,error:'máquina no registrada'});
       const body=JSON.parse((await readBody(req,64*1024)).toString('utf8')||'{}'),signature=String(body.signature||'').slice(0,240);
       if(!signature)return json(res,400,{ok:false,error:'signature requerida'});
-      m.bedClearSignature=signature;m.bedClearedAt=nowIso();m.updatedAt=nowIso();persistRegistry();
+      m.bedClearSignature=signature;m.bedClearedAt=nowIso();m.updatedAt=nowIso();
+      const durable=await persistRegistry();if(!durable)return json(res,503,{ok:false,error:'no se pudo persistir la confirmación de cama libre'});
       const released=requeueBedBlocked(id);setTimeout(queueWorker,0).unref?.();
       return json(res,200,{ok:true,released,machine:{id:m.id,bedClearSignature:m.bedClearSignature,bedClearedAt:m.bedClearedAt}});
     }catch(e){return json(res,400,{ok:false,error:e.message});}
@@ -622,8 +623,13 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/farm/registry' && (req.method === 'POST' || req.method === 'PATCH')) {
     const role = requireRole(req, res, 'admin'); if (!role) return;
-    try { const body = JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8') || '{}'); if (body.ip && !isPrivateIp(body.ip)) throw new Error('IP no válida'); const m = upsertMachine(body); return json(res, 200, { ok: true, machine: m }); }
-    catch (e) { return json(res, 400, { ok: false, error: e.message }); }
+    try {
+      const body=JSON.parse((await readBody(req,1024*1024)).toString('utf8')||'{}');
+      if(body.ip&&!isPrivateIp(body.ip))throw new Error('IP no válida');
+      const m=upsertMachine(body),durable=await persistRegistry();
+      if(!durable)return json(res,503,{ok:false,error:'no se pudo persistir Farm Registry'});
+      return json(res,200,{ok:true,machine:m});
+    }catch(e){return json(res,400,{ok:false,error:e.message});}
   }
   if (p === '/farm/discover' && req.method === 'POST') {
     const role = requireRole(req, res, 'admin'); if (!role) return;
