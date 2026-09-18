@@ -118,6 +118,15 @@ function _printerLightQuerySuffix(id){
 function _printerLightWsObjects(id){
   const objects={print_stats:null,heater_bed:null,extruder:null,display_status:null,virtual_sdcard:null,webhooks:null};
   const object=_printerLightCaps[id]?.object;if(object)objects[object]=null;
+  let machine=null;try{machine=(MAQUINAS||[]).find(m=>m.id===id)||null;}catch(_){}
+  const hasCfs=typeof machineHasPhysicalCfs==='function'?machineHasPhysicalCfs(machine):
+    !!machine&&(machine.modelo==='K2 Plus'||machine.id==='k1-1'||(machine.modelo==='K1'&&Number(machine.numG??machine.num)===1));
+  if(hasCfs){
+    objects['filament_switch_sensor filament_sensor']=null;
+    objects['temperature_sensor chamber_temp']=null;
+    objects.filament_rack=null;
+    objects.box=null;
+  }
   return objects;
 }
 
