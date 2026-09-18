@@ -103,6 +103,8 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 #clienteDetalleModal>.modal-card>div:first-child{position:sticky;top:-24px;z-index:3;background:var(--surface);padding-top:12px;padding-bottom:12px}
 #clienteDetalleModal>.modal-card>div:last-child{position:sticky;bottom:-24px;background:var(--surface);padding:12px 0;z-index:3;flex-wrap:wrap}
 @media(max-width:768px){
+ .modal-overlay:not(#clienteDetalleModal){overflow:hidden;padding:10px;align-items:center}
+ .modal-overlay:not(#clienteDetalleModal)>.modal-card{overflow-y:auto;max-height:calc(100dvh - 20px)}
  #clienteDetalleModal>.modal-card{width:100vw!important;max-width:100vw!important;border-radius:0;padding:16px}
  #clienteDetalleModal>.modal-card>div:first-child{top:-16px}
  #clienteDetalleModal>.modal-card>div:last-child{bottom:-16px;position:static}
