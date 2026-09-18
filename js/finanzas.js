@@ -2123,11 +2123,11 @@ function globalSearchOnInput(raw){
 }
 function _gsRun(idx){
   const fn=_gsResults[idx];
-  if(typeof fn==='function'){ globalSearchClear(true); fn(); }
+  if(typeof fn==='function'){ globalSearchClear(true); document.getElementById('globalSearch')?.classList.remove('mobile-open'); fn(); }
 }
 function _gsRunExtra(idx){
   const fn=_gsExtras[idx];
-  if(typeof fn==='function'){ globalSearchClear(true); fn(); }
+  if(typeof fn==='function'){ globalSearchClear(true); document.getElementById('globalSearch')?.classList.remove('mobile-open'); fn(); }
 }
 function _gsSetActive(idx){
   _gsActive=idx;
@@ -2141,7 +2141,7 @@ function _gsScrollActive(){
 }
 function globalSearchOnKey(e){
   const box=document.getElementById('globalSearchResults');
-  if(e.key==='Escape'){ globalSearchClear(true); e.target.blur(); return; }
+  if(e.key==='Escape'){ globalSearchClear(true); document.getElementById('globalSearch')?.classList.remove('mobile-open'); e.target.blur(); return; }
   if(!box||!box.classList.contains('open')){ if(e.key==='ArrowDown') globalSearchOnInput(e.target.value); return; }
   const n=_gsResults.length;
   if(e.key==='ArrowDown'){ e.preventDefault(); if(n){_gsSetActive((_gsActive+1)%n);_gsScrollActive();} }
@@ -2163,9 +2163,26 @@ function closeGlobalSearch(){
 }
 function initGlobalSearch(){
   if(_gsInited) return; _gsInited=true;
+  const gs=document.getElementById('globalSearch');
+  const menuBtn=document.querySelector('.mobile-menu-btn:not(#mobilePlusBtn)');
+  if(gs&&menuBtn&&!document.getElementById('mobileGlobalSearchBtn')){
+    const btn=document.createElement('button');
+    btn.id='mobileGlobalSearchBtn';
+    btn.type='button';
+    btn.setAttribute('aria-label','Buscar en el dashboard');
+    btn.setAttribute('title','Buscar');
+    btn.textContent='⌕';
+    btn.addEventListener('click',e=>{
+      e.stopPropagation();
+      gs.classList.add('mobile-open');
+      const inp=document.getElementById('globalSearchInput');
+      if(inp){requestAnimationFrame(()=>{inp.focus();inp.select();globalSearchOnInput(inp.value);});}
+    });
+    menuBtn.parentNode.insertBefore(btn,menuBtn);
+  }
   document.addEventListener('click',e=>{
     const gs=document.getElementById('globalSearch');
-    if(gs&&!gs.contains(e.target)) closeGlobalSearch();
+    if(gs&&!gs.contains(e.target)){closeGlobalSearch();gs.classList.remove('mobile-open');}
   });
   document.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){
@@ -2174,6 +2191,14 @@ function initGlobalSearch(){
       if(inp){inp.focus();inp.select();globalSearchOnInput(inp.value);}
     }
   });
+}
+
+function bootGlobalSearch(){
+  initGlobalSearch();
+}
+if(typeof document!=='undefined'){
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootGlobalSearch,{once:true});
+  else bootGlobalSearch();
 }
 
 // ── SII / DTE ─────────────────────────────────────────────────

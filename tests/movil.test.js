@@ -61,9 +61,9 @@ test('la regla del zoom no toca el escritorio', () => {
 test('los accesos principales se pueden tocar con el pulgar', () => {
   // Correo, notificaciones y el menú medían 32px de alto: por debajo de lo que
   // se acierta sin apuntar. En móvil son la navegación principal.
-  assert.match(MOVIL, /\.notif-btn\{[^}]*min-width:40px[^}]*min-height:40px/,
-    'correo y notificaciones necesitan 40px');
-  assert.match(MOVIL, /\.mobile-menu-btn:not\(#mobilePlusBtn\)\{[^}]*min-height:40px/,
+  assert.match(MOVIL, /\.notif-btn\{[^}]*min-width:44px[^}]*min-height:44px/,
+    'correo y notificaciones necesitan 44px');
+  assert.match(MOVIL, /\.mobile-menu-btn:not\(#mobilePlusBtn\)\{[^}]*min-height:44px/,
     'el menú hamburguesa también');
 });
 

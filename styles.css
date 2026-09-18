@@ -1,6 +1,6 @@
 /* styles.css — hoja principal del dashboard (extraída de index.html).
  * El deploy reemplaza %%BUILD%% en el <link> para bustear la caché de Pages. */
-:root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--border2:#333;--accent:#00d4cc;--accent2:#ff6b35;--accent3:#00d4aa;--accent4:#a78bfa;--text:#f0f0f0;--text2:#9a9a9a;--text3:#777;--danger:#ff4444;--warn:#ffaa00;--success:#00d4aa;}
+:root{--black:#0a0a0a;--surface:#111;--surface2:#1a1a1a;--surface3:#222;--border:#2a2a2a;--border2:#333;--accent:#00d4cc;--accent2:#ff6b35;--accent3:#00d4aa;--accent4:#a78bfa;--text:#f0f0f0;--text2:#9a9a9a;--text3:#8a8a8a;--danger:#ff4444;--warn:#ffaa00;--success:#00d4aa;--topbar-h:64px;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--black);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;display:flex;flex-direction:column;}
 /* Fondo global homogéneo con la web nueva: grilla "blueprint" que deriva + glows teal que respiran + viñeta inferior. */
@@ -13,7 +13,7 @@ body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradi
 @keyframes glow-breathe-a{0%,100%{transform:translate3d(0,0,0) scale(1);opacity:.55}50%{transform:translate3d(6%,4%,0) scale(1.12);opacity:.9}}
 @keyframes glow-breathe-b{0%,100%{transform:translate3d(0,0,0) scale(1.05);opacity:.4}50%{transform:translate3d(-5%,-6%,0) scale(.95);opacity:.72}}
 @media(prefers-reduced-motion:reduce){body::before,.site-bg-glow-a,.site-bg-glow-b{animation:none!important}}
-.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:none;padding:0 20px;height:64px;display:flex;align-items:center;gap:16px;}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:none;padding:0 20px;height:var(--topbar-h);display:flex;align-items:center;gap:16px;}
 .logo img{height:25px;width:auto;mix-blend-mode:screen;}
 .topbar-nav{display:flex;gap:3px;flex:1;margin-left:12px;overflow-x:auto;scrollbar-width:none;}
 .tab-btn{background:none;border:1px solid transparent;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all 0.15s;}
@@ -36,6 +36,7 @@ body::before{content:'';position:fixed;inset:-96px;background-image:linear-gradi
 .refresh-btn:disabled{opacity:0.4;cursor:not-allowed;}
 /* MOBILE */
 .mobile-menu-btn{display:none;background:none;border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:6px 10px;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;}
+#mobileGlobalSearchBtn{display:none;}
 .mobile-menu-btn:hover{border-color:var(--accent);color:var(--accent);}
 /* Botón de densidad (≡) oculto en todas las versiones: parecía un menú y confundía. */
 #densityBtn{display:none!important;}
@@ -117,7 +118,7 @@ body.kiosk .icon-dock{display:none!important;}
 .mgn-btn{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:var(--text2);-webkit-tap-highlight-color:transparent;transition:background .12s;}
 .mgn-btn:active{background:rgba(0,212,204,0.12);border-color:var(--accent);color:var(--accent);}
 body.kiosk{padding-left:0!important;}
-@media(min-width:769px){
+@media(min-width:901px){
   body{padding-left:64px;}
   /* El topbar abarca todo el ancho (por encima del rail lateral) para que el rail arranque limpio debajo del topbar, sin franja negra arriba. El logo se mantiene en su posición con el padding-left. */
   .topbar{margin-left:-64px;width:calc(100% + 64px);padding-left:84px;z-index:200;}
@@ -188,11 +189,26 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 .row-flash td{animation:rowFlash 1.6s ease-out;}
 .badge{display:inline-block;font-size:10px;font-weight:600;letter-spacing:0.4px;padding:3px 8px;border-radius:5px;text-transform:uppercase;white-space:nowrap;}
 .badge-green{background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);}
-.badge-yellow{background:rgba(0,212,204,0.1);color:var(--accent);border:1px solid rgba(0,212,204,0.25);}
+.badge-yellow{background:rgba(255,170,0,0.12);color:var(--warn);border:1px solid rgba(255,170,0,0.32);}
 .badge-orange{background:rgba(255,107,53,0.15);color:var(--accent2);border:1px solid rgba(255,107,53,0.3);}
 .badge-red{background:rgba(255,68,68,0.15);color:var(--danger);border:1px solid rgba(255,68,68,0.3);}
 .badge-purple{background:rgba(167,139,250,0.15);color:var(--accent4);border:1px solid rgba(167,139,250,0.3);}
 .badge-gray{background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border2);}
+/* Estado visual semántico compartido: el significado manda, no el nombre histórico del color. */
+[data-semantic-kind="badge"][data-semantic-tone="success"]{color:var(--success)!important;background:rgba(0,212,170,.13)!important;border-color:rgba(0,212,170,.32)!important}
+[data-semantic-kind="badge"][data-semantic-tone="production"]{color:var(--accent2)!important;background:rgba(255,107,53,.13)!important;border-color:rgba(255,107,53,.34)!important}
+[data-semantic-kind="badge"][data-semantic-tone="warning"]{color:var(--warn)!important;background:rgba(255,170,0,.12)!important;border-color:rgba(255,170,0,.32)!important}
+[data-semantic-kind="badge"][data-semantic-tone="danger"]{color:var(--danger)!important;background:rgba(255,68,68,.13)!important;border-color:rgba(255,68,68,.32)!important}
+[data-semantic-kind="badge"][data-semantic-tone="info"]{color:var(--accent)!important;background:rgba(0,212,204,.10)!important;border-color:rgba(0,212,204,.28)!important}
+[data-semantic-kind="badge"][data-semantic-tone="analysis"]{color:var(--accent4)!important;background:rgba(167,139,250,.11)!important;border-color:rgba(167,139,250,.3)!important}
+[data-semantic-kind="badge"][data-semantic-tone="neutral"]{color:var(--text2)!important;background:rgba(255,255,255,.05)!important;border-color:var(--border2)!important}
+[data-semantic-kind="metric"][data-semantic-tone="success"],[data-semantic-kind="fact"][data-semantic-tone="success"]{border-color:rgba(0,212,170,.28)!important;box-shadow:inset 3px 0 0 var(--success)}
+[data-semantic-kind="metric"][data-semantic-tone="production"],[data-semantic-kind="fact"][data-semantic-tone="production"]{border-color:rgba(255,107,53,.30)!important;box-shadow:inset 3px 0 0 var(--accent2)}
+[data-semantic-kind="metric"][data-semantic-tone="warning"],[data-semantic-kind="fact"][data-semantic-tone="warning"]{border-color:rgba(255,170,0,.30)!important;box-shadow:inset 3px 0 0 var(--warn)}
+[data-semantic-kind="metric"][data-semantic-tone="danger"],[data-semantic-kind="fact"][data-semantic-tone="danger"]{border-color:rgba(255,68,68,.30)!important;box-shadow:inset 3px 0 0 var(--danger)}
+[data-semantic-kind="metric"][data-semantic-tone="info"],[data-semantic-kind="fact"][data-semantic-tone="info"]{border-color:rgba(0,212,204,.24)!important;box-shadow:inset 3px 0 0 var(--accent)}
+[data-semantic-kind="metric"][data-semantic-tone="analysis"],[data-semantic-kind="fact"][data-semantic-tone="analysis"]{border-color:rgba(167,139,250,.26)!important;box-shadow:inset 3px 0 0 var(--accent4)}
+
 /* Badge Delta — indicador de tendencia (reconstrucción de 21st.dev/serafim, estilo Tremor). up=verde, down=rojo, flat=neutro. */
 .badge-delta{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;line-height:1;padding:3px 7px;border-radius:999px;border:1px solid;letter-spacing:0.2px;white-space:nowrap;margin-top:6px;}
 .badge-delta .bd-ico{font-size:7px;line-height:1;transform:translateY(-0.5px);}
@@ -693,6 +709,24 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
 .sort-th.desc::after{content:' ▼';color:var(--accent);}
 .row-selected td{background:rgba(0,212,204,0.06)!important;}
 #selectAllChk,.row-chk{width:14px;height:14px;}
+@media(max-width:900px){
+  #mobileGlobalSearchBtn{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;background:none;border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:18px;cursor:pointer}
+  .global-search.mobile-open{display:flex!important;position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));z-index:12000;max-width:none;padding:10px;border:1px solid var(--border2);border-radius:14px;background:rgba(17,17,17,.98);box-shadow:0 0 0 100vmax rgba(0,0,0,.72),0 16px 56px rgba(0,0,0,.65)}
+  .global-search.mobile-open #globalSearchInput{height:44px;font-size:16px}
+  .global-search.mobile-open .global-search-results{top:62px;max-height:min(68dvh,520px)}
+  #tab-visual .vai-frame-wrap{height:calc(100dvh - 150px);min-height:260px}
+}
+@media(min-width:769px) and (max-width:900px){
+  body{padding-left:0!important}
+  .topbar{padding:0 18px;gap:10px}
+  .topbar-nav,.global-search,.icon-dock{display:none}
+  .topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:auto}
+  .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai,.user-chip{display:none!important}
+  .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin-left:4px}
+  #nuevoDropdown{display:none!important}
+  .main{padding:18px}
+  #tab-maquinas .maq-workspace-nav{position:static}
+}
 @media(max-width:768px){
   body{padding-left:0!important;}
   .topbar{display:flex;align-items:center;padding:0 14px;gap:0;}
@@ -773,7 +807,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
     justify-content:flex-end!important;min-height:auto!important;padding:0 0 10px 0!important;
   }
   #clientesTableBody .td-etapa::before{display:none!important;}
-  #clientesTableBody .td-etapa select{font-size:9px!important;padding:3px 5px!important;max-width:none!important;}
+  #clientesTableBody .td-etapa select{font-size:12px!important;padding:3px 5px!important;max-width:none!important;}
   /* separator below header */
   #clientesTableBody .td-contacto{
     grid-area:contacto;border-top:1px solid var(--border)!important;
@@ -852,8 +886,8 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   /* Zonas de toque. En un teléfono estos son los accesos principales —correo,
      notificaciones y el menú— y medían 32px de alto: por debajo de lo que se
      acierta con el pulgar sin apuntar. */
-  .notif-btn{min-width:40px;min-height:40px;justify-content:center;}
-  .mobile-menu-btn:not(#mobilePlusBtn){min-width:40px;min-height:40px;}
+  .notif-btn{min-width:44px;min-height:44px;justify-content:center;}
+  .mobile-menu-btn:not(#mobilePlusBtn){min-width:44px;min-height:44px;}
 }
 #clientesTableBody tr.cliente-hidden{display:none!important;}
 body.kiosk .topbar{display:none!important;}
@@ -1349,7 +1383,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   #fin-panel-facturas [style*="justify-content:space-between"]:last-child{
     flex-direction:column!important;gap:8px!important;align-items:center!important;
   }
-  #fin-fact-totales{font-size:9px!important;text-align:center!important;line-height:1.6!important;}
+  #fin-fact-totales{font-size:11px!important;text-align:center!important;line-height:1.6!important;}
 
   /* Semestral: scroll horizontal, no card-view */
   .fin-semestral-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
@@ -1398,14 +1432,16 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
     padding-bottom:max(0px,env(safe-area-inset-bottom));
   }
 
+  /* ── Navegación táctil móvil ─────────────────────────── */
+  .mobile-nav-close,.mobile-tab-btn{min-height:44px}
   /* ── Typography ──────────────────────────────────────── */
   .section-title{font-size:20px!important;letter-spacing:1px!important;}
   .section-header{margin-bottom:12px;flex-wrap:wrap;gap:8px;align-items:center;}
-  .section-subtitle{font-size:10px!important;}
+  .section-subtitle{font-size:12px!important;}
   .kpi-value{font-size:26px!important;}
   .kpi-card{padding:12px 14px;}
-  .kpi-label{font-size:9px!important;}
-  .kpi-sub{font-size:9px!important;}
+  .kpi-label{font-size:11px!important;}
+  .kpi-sub{font-size:11px!important;}
 
   /* ── Grids ───────────────────────────────────────────── */
   .data-grid,.data-grid-3{gap:10px;margin-bottom:14px;}
@@ -1427,9 +1463,9 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .form-actions .btn{width:100%;justify-content:center;min-height:44px;font-size:13px!important;padding:10px 16px;}
 
   /* ── Buttons: touch targets ──────────────────────────── */
-  .btn{min-height:36px;}
-  .btn-sm{min-height:32px;padding:6px 12px;}
-  .btn-mini{padding:6px 10px!important;font-size:11px!important;min-height:32px;}
+  .btn{min-height:40px;}
+  .btn-sm{min-height:36px;padding:7px 12px;}
+  .btn-mini{padding:7px 10px!important;font-size:11px!important;min-height:34px;}
 
   /* ── Card-header: search inputs fill available width ─── */
   #clienteSearch,#proveedorSearch{width:100%!important;max-width:none!important;min-width:0;}
@@ -1465,6 +1501,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .cot-btns .btn-mini{flex:1;min-width:52px;justify-content:center;text-align:center;padding:7px 8px!important;}
 
   /* ── Modals ───────────────────────────────────────────── */
+  .modal-overlay{overflow:hidden;overscroll-behavior:contain;padding:10px}
   .modal-card{
     max-width:calc(100vw - 20px)!important;
     max-height:calc(100dvh - 20px);
@@ -1636,7 +1673,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 /* ═══════════════════════════════════════════════════════════
    MOBILE REFINEMENTS — LANDSCAPE  (height ≤ 500px)
    ═══════════════════════════════════════════════════════════ */
-@media(max-height:500px) and (orientation:landscape){
+@media(max-width:900px) and (max-height:500px) and (orientation:landscape){
 
   /* Topbar: misma altura que la web (64px) también en landscape */
   .topbar{
@@ -1661,7 +1698,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .section-header{margin-bottom:8px!important;}
   .kpi-value{font-size:22px!important;}
   .kpi-card{padding:8px 12px!important;}
-  .kpi-label{font-size:8px!important;}
+  .kpi-label{font-size:10px!important;}
 
   /* Grids landscape */
   .kpi-grid{
@@ -1691,8 +1728,16 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .section-subtitle{display:none!important;}
 }
 
+/* Piso de legibilidad para superficies operativas densas. */
+#tab-maquinas small{font-size:10.5px}
+#tab-agentes .avr-heading span,#tab-agentes .avr-status,#tab-agentes .avr-summary>span,#tab-agentes .avr-kpi-label,#tab-agentes .avr-special-title,#tab-agentes .avr-details>summary small,#tab-agentes .agent-card-view-switch>span{font-size:10px}
+@media(max-width:768px){
+  #tab-maquinas small{font-size:11.5px}
+  #tab-agentes .avr-heading span,#tab-agentes .avr-status,#tab-agentes .avr-summary>span,#tab-agentes .avr-kpi-label,#tab-agentes .avr-special-title,#tab-agentes .avr-details>summary small,#tab-agentes .agent-card-view-switch>span{font-size:11px}
+}
+
 /* ── Centro de producción 3D ─────────────────────────────────── */
-.maq-workspace-nav{display:flex;gap:7px;flex-wrap:wrap;position:sticky;top:0;z-index:18;padding:9px;margin:0 0 16px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px}
+.maq-workspace-nav{display:flex;gap:7px;flex-wrap:wrap;position:sticky;top:var(--topbar-h);z-index:18;padding:9px;margin:0 0 16px;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px}
 .maq-workspace-nav button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border2);background:var(--surface2);color:var(--text3);border-radius:8px;padding:7px 11px;font:600 12px 'DM Sans',sans-serif;cursor:pointer;transition:.15s ease}
 .maq-workspace-nav button:hover{color:var(--text);border-color:var(--accent)}
 .maq-workspace-nav button.active{color:#061513;background:var(--accent);border-color:var(--accent);box-shadow:0 5px 20px rgba(0,212,204,.18)}
@@ -1832,7 +1877,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-config-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px}.mops-config-grid label{display:flex;align-items:center;gap:7px;padding:8px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--text2)}.mops-config-grid label>span{display:block;flex:1}.mops-config-grid label>.field-input{width:80px;padding:5px 6px}.mops-config-grid input[type=checkbox]{accent-color:var(--accent)}
 .mops-preflight-summary{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:11px;border-radius:9px;border:1px solid var(--border2);background:var(--surface2)}.mops-preflight-summary.ok{border-color:rgba(0,212,170,.35);background:rgba(0,212,170,.06)}.mops-preflight-summary.blocked{border-color:rgba(255,68,68,.38);background:rgba(255,68,68,.06)}.mops-preflight-summary b{font-size:12px}.mops-preflight-summary span{font-size:10px;color:var(--text3)}
 .mops-preflight-list{display:grid;gap:6px;margin-top:10px}.mops-preflight-row{display:grid;grid-template-columns:25px 1fr;gap:8px;align-items:center;padding:8px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2)}.mops-preflight-row>span{display:grid;place-items:center;width:23px;height:23px;border-radius:50%;font-weight:900;background:var(--surface3)}.mops-preflight-row.pass>span{color:var(--accent3)}.mops-preflight-row.warn>span{color:var(--warn)}.mops-preflight-row.block>span{color:var(--danger)}.mops-preflight-row b,.mops-preflight-row small{display:block}.mops-preflight-row b{font-size:10.5px}.mops-preflight-row small{font-size:10px;color:var(--text3);margin-top:2px}
-@media(max-width:760px){
+@media(max-width:768px){
   .maq-workspace-nav{position:static;overflow-x:auto;flex-wrap:nowrap}
   .maq-workspace-nav button{flex:0 0 auto}
   .maq-form-grid{grid-template-columns:1fr}
@@ -1952,7 +1997,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 #tab-maquinas .mops-physical-details>summary>span:last-child{font-size:9.5px;color:var(--text3);white-space:nowrap;padding:4px 7px;border-radius:999px;background:var(--surface2);border:1px solid var(--border2)}
 #tab-maquinas .mops-physical-details>.mops-cfs-grid{padding:0 14px 14px}
 #tab-maquinas .mops-inline-overview{scroll-margin-top:90px}
-@media(max-width:760px){
+@media(max-width:768px){
   #tab-maquinas .mops-confidence-summary{justify-content:flex-start}
   #tab-maquinas .mops-incidents>article{grid-template-columns:minmax(0,1fr)}
   #tab-maquinas .mops-incidents img{width:100%;height:120px}
@@ -2040,7 +2085,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 #tab-maquinas .mops-gantt-machine>small{font-size:9px;line-height:1.3;color:var(--text3)}
 #tab-maquinas .mops-gantt-empty{padding:8px;color:var(--text3);font-size:10px}
 
-@media(max-width:760px){
+@media(max-width:768px){
   #tab-maquinas .mops-planning-trust{grid-template-columns:1fr}
   #tab-maquinas .mops-job-board{grid-template-columns:1fr}
   #tab-maquinas .mops-gantt-row{grid-template-columns:1fr}
@@ -2165,7 +2210,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 #tab-maquinas .mcap-day.info>div{border:1px solid rgba(56,189,248,.2);background:rgba(56,189,248,.04)}
 #tab-maquinas .mcap-day>button{position:absolute;right:5px;top:4px;border:0;background:none;color:var(--text3);font-size:10px;cursor:pointer;padding:0}
 
-@media(max-width:760px){
+@media(max-width:768px){
   #tab-maquinas .mcap-trust{grid-template-columns:1fr}
   #tab-maquinas .mcap-order{grid-template-columns:1fr}
   #tab-maquinas .mcap-machine-grid{grid-template-columns:1fr}

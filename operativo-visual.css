@@ -64,7 +64,7 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 #tab-finanzas[data-op-view=simple] #fin-panel-resumen>:not(#opFinance):not(.op-revealed):not(.op-detail-close),#tab-finanzas[data-op-view=simple] #fin-panel-cobrar>:not(#opCollections):not(.op-revealed):not(.op-detail-close){display:none!important}
 #tab-pedidos .section-desc,#tab-cotizaciones .section-desc,#tab-finanzas .section-desc{max-width:740px;font-size:13px;line-height:1.6}
 #tab-pedidos[data-op-view=expert] td,#tab-cotizaciones[data-op-view=expert] td{font-size:13px}
-@media(max-width:760px){.op-surface{padding:16px}.op-metrics{grid-template-columns:1fr}.op-priority{display:grid;grid-template-columns:1fr auto;gap:5px 12px}.op-priority>strong{grid-column:2;grid-row:1/3;margin:0}.op-priority>p{min-height:0}.op-priority>b{grid-column:1/-1}.op-section-heading{align-items:flex-start;flex-wrap:wrap}.op-section-heading h2{font-size:20px}.op-records{grid-template-columns:1fr}.op-record{padding:16px}.op-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}.op-buckets .op-metric:first-child{grid-column:1/-1}.op-toolbar input{width:100%;min-width:0}.op-switch{margin-left:0}.op-drawer{padding:16px}.op-record header{flex-wrap:wrap}.op-record footer{flex-wrap:wrap}.op-record footer>button{min-height:42px}.op-metric>strong{font-size:25px}#opClient .op-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}#opClient .op-metric{padding:10px}#opClient .op-metric small{font-size:11px}}
+@media(max-width:768px){.op-surface{padding:16px}.op-metrics{grid-template-columns:1fr}.op-priority{display:grid;grid-template-columns:1fr auto;gap:5px 12px}.op-priority>strong{grid-column:2;grid-row:1/3;margin:0}.op-priority>p{min-height:0}.op-priority>b{grid-column:1/-1}.op-section-heading{align-items:flex-start;flex-wrap:wrap}.op-section-heading h2{font-size:20px}.op-records{grid-template-columns:1fr}.op-record{padding:16px}.op-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}.op-buckets .op-metric:first-child{grid-column:1/-1}.op-toolbar input{width:100%;min-width:0}.op-switch{margin-left:0}.op-drawer{padding:16px}.op-record header{flex-wrap:wrap}.op-record footer{flex-wrap:wrap}.op-record footer>button{min-height:42px}.op-metric>strong{font-size:25px}#opClient .op-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}#opClient .op-metric{padding:10px}#opClient .op-metric small{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.op-metric,.op-priority{transition:none}}
 
 /* El formato (tarjetas / kanban / calendario) es independiente del detalle. */
@@ -82,7 +82,7 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-scope-note{font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5}
 .op-detail-close{margin:12px 0}
 #tab-clientes[data-op-view=simple] #clientesTableBody{font-size:13px}
-@media(max-width:760px){.op-disclosure{padding:10px}.op-disclosure .card{max-width:100%}.op-scope-note{font-size:12px}}
+@media(max-width:768px){.op-disclosure{padding:10px}.op-disclosure .card{max-width:100%}.op-scope-note{font-size:12px}}
 
 #simResultados[data-sim-mode=simple] .op-sim-extra{display:none}
 #opReports li{font-size:14px;line-height:1.6;margin:8px 0}
@@ -102,7 +102,9 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 #clienteDetalleModal>.modal-card{width:min(760px,100vw);height:100dvh;max-height:100dvh;max-width:100vw!important;margin:0;flex-shrink:0;overscroll-behavior:contain}
 #clienteDetalleModal>.modal-card>div:first-child{position:sticky;top:-24px;z-index:3;background:var(--surface);padding-top:12px;padding-bottom:12px}
 #clienteDetalleModal>.modal-card>div:last-child{position:sticky;bottom:-24px;background:var(--surface);padding:12px 0;z-index:3;flex-wrap:wrap}
-@media(max-width:760px){
+@media(max-width:768px){
+ .modal-overlay:not(#clienteDetalleModal){overflow:hidden;padding:10px;align-items:center}
+ .modal-overlay:not(#clienteDetalleModal)>.modal-card{overflow-y:auto;max-height:calc(100dvh - 20px)}
  #clienteDetalleModal>.modal-card{width:100vw!important;max-width:100vw!important;border-radius:0;padding:16px}
  #clienteDetalleModal>.modal-card>div:first-child{top:-16px}
  #clienteDetalleModal>.modal-card>div:last-child{bottom:-16px;position:static}
