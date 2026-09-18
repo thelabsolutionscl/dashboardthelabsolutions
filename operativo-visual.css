@@ -51,7 +51,7 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-budget-track{height:8px;background:var(--surface3);border-radius:8px;overflow:hidden;margin:14px 0}.op-budget-track i{display:block;height:100%;background:var(--accent);border-radius:8px}
 .op-drawer{position:fixed;inset:0 0 0 auto;width:min(640px,100%);max-width:100vw;height:100dvh;max-height:100dvh;margin:0;padding:24px;background:var(--surface);color:var(--text);border:0;border-left:1px solid var(--border);overflow:auto;box-sizing:border-box}
 .op-drawer::backdrop{background:rgba(0,0,0,.55)}.op-drawer-head{display:flex;justify-content:space-between;align-items:center}.op-drawer h2{font:600 24px 'DM Sans',sans-serif}.op-drawer-actions{display:flex;gap:9px;flex-wrap:wrap;margin:20px 0}
-#clienteDetalleModal{align-items:stretch;justify-content:flex-end;padding:0}#clienteDetalleModal>.modal-card{margin:0;border-radius:0;width:min(760px,100%);max-width:100%;max-height:100dvh;height:100dvh;overflow:auto;box-sizing:border-box}
+#clienteDetalleModal{align-items:center;justify-content:center;padding:24px}#clienteDetalleModal>.modal-card{margin:auto;border-radius:14px;width:min(960px,calc(100vw - 48px));max-width:960px;max-height:calc(100dvh - 48px);height:auto;overflow:auto;box-sizing:border-box}
 .op-telemetry{margin-top:10px}.op-telemetry summary,.op-post-actions summary{cursor:pointer;color:var(--text2);font-size:13px;padding:7px 0}.op-post-actions>div{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0}
 .op-post-excerpt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;line-height:1.6;color:var(--text2);white-space:pre-wrap}
 .op-social-thumb{width:100%;height:72px;object-fit:cover;border-radius:5px;display:block;margin:4px 0}
@@ -98,14 +98,15 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .main{z-index:auto}
 .modal-overlay{padding:12px;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;align-items:safe center}
 .modal-overlay>.modal-card{flex-shrink:0;max-height:calc(100dvh - 24px);overscroll-behavior:contain}
-#clienteDetalleModal{padding:0;align-items:flex-start;overflow:hidden}
-#clienteDetalleModal>.modal-card{width:min(760px,100vw);height:100dvh;max-height:100dvh;max-width:100vw!important;margin:0;flex-shrink:0;overscroll-behavior:contain}
+#clienteDetalleModal{padding:24px;align-items:center;justify-content:center;overflow:hidden}
+#clienteDetalleModal>.modal-card{width:min(960px,calc(100vw - 48px));height:auto;max-height:calc(100dvh - 48px);max-width:960px!important;margin:auto;flex-shrink:1;overflow-y:auto;overscroll-behavior:contain;border-radius:14px}
 #clienteDetalleModal>.modal-card>div:first-child{position:sticky;top:-24px;z-index:3;background:var(--surface);padding-top:12px;padding-bottom:12px}
 #clienteDetalleModal>.modal-card>div:last-child{position:sticky;bottom:-24px;background:var(--surface);padding:12px 0;z-index:3;flex-wrap:wrap}
 @media(max-width:768px){
  .modal-overlay:not(#clienteDetalleModal){overflow:hidden;padding:10px;align-items:center}
  .modal-overlay:not(#clienteDetalleModal)>.modal-card{overflow-y:auto;max-height:calc(100dvh - 20px)}
- #clienteDetalleModal>.modal-card{width:100vw!important;max-width:100vw!important;border-radius:0;padding:16px}
+ #clienteDetalleModal{padding:0;align-items:stretch;justify-content:flex-start}
+ #clienteDetalleModal>.modal-card{width:100vw!important;max-width:100vw!important;height:100dvh;max-height:100dvh;border-radius:0;padding:16px;margin:0;flex-shrink:0}
  #clienteDetalleModal>.modal-card>div:first-child{top:-16px}
  #clienteDetalleModal>.modal-card>div:last-child{bottom:-16px;position:static}
  #opClient .op-metrics{grid-template-columns:1fr}

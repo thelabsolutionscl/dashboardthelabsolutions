@@ -60,6 +60,14 @@ test('la semántica de estados tiene presentación visual compartida',()=>{
   assert.match(CSS,/\.badge-yellow\{[^}]*var\(--warn\)/);
 });
 
+test('el detalle de cliente se centra en escritorio y sólo es fullscreen en móvil',()=>{
+  assert.match(OP,/#clienteDetalleModal\{padding:24px;align-items:center;justify-content:center;overflow:hidden\}/);
+  assert.match(OP,/#clienteDetalleModal>\.modal-card\{width:min\(960px,calc\(100vw - 48px\)\);height:auto;max-height:calc\(100dvh - 48px\);max-width:960px!important;margin:auto;[^}]*border-radius:14px\}/);
+  assert.doesNotMatch(OP,/#clienteDetalleModal\{[^}]*justify-content:flex-end/);
+  assert.match(OP,/@media\(max-width:768px\)\{[\s\S]*?#clienteDetalleModal\{padding:0;align-items:stretch;justify-content:flex-start\}/);
+  assert.match(OP,/@media\(max-width:768px\)\{[\s\S]*?#clienteDetalleModal>\.modal-card\{[^}]*width:100vw!important[^}]*height:100dvh/);
+});
+
 test('móvil usa un único dueño de scroll para modales ordinarios',()=>{
   assert.match(OP,/@media\(max-width:768px\)\{[\s\S]*?\.modal-overlay:not\(#clienteDetalleModal\)\{overflow:hidden/);
   assert.match(OP,/\.modal-overlay:not\(#clienteDetalleModal\)>\.modal-card\{overflow-y:auto/);
