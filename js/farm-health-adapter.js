@@ -58,8 +58,10 @@ function status(){
 function install(root){
   if(installed||!root)return false;target=root;installed=true;
   setTimeout(()=>refresh(true),1200);
-  if(typeof root.setInterval==='function')root.setInterval(()=>{if(!root.document?.hidden)refresh(false);},30000);
-  if(typeof root.addEventListener==='function')root.addEventListener('focus',()=>refresh(true));
+  if(typeof root.setInterval==='function')root.setInterval(()=>refresh(false),30000);
+  const resume=()=>refresh(true);
+  if(typeof root.addEventListener==='function'){root.addEventListener('focus',resume);root.addEventListener('online',resume);}
+  try{root.document?.addEventListener?.('visibilitychange',()=>{if(!root.document.hidden)resume();});}catch(_){}
   return true;
 }
 return{install,refresh,probe,ack,status,_test:{}};
