@@ -183,7 +183,9 @@ const SL3D=(function(){
       area+=a2;
       vol+=(ax*(by*cz-bz*cyy)+bx*(cyy*az-cz*ay)+cxx*(ay*bz-az*by))/6;
       // voladizo: cara hacia abajo >55° de la vertical, no apoyada en cama
-      if(ln>0&&nz/ln<-0.57&&Math.min(az,bz,cz)>0.5)ovArea+=a2;
+      // Una cara inclinada que toca la cama sólo por un borde/punto sigue necesitando soporte.
+      // Se considera realmente apoyada sólo si TODA la cara está cerca de Z=0.
+      if(ln>0&&nz/ln<-0.57&&Math.max(az,bz,cz)>0.5)ovArea+=a2;
     }
     vol=Math.abs(vol);
     S.stats={dx,dy,dz,vol:vol/1000,area:area/100,tris:t.length/9,
@@ -289,7 +291,7 @@ const SL3D=(function(){
       const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx2=t[o+6],cy2=t[o+7],cz2=t[o+8];
       const Ux=bx-ax,Uy=by-ay,Uz=bz-az,Vx=cx2-ax,Vy=cy2-ay,Vz=cz2-az;
       const Nx=Uy*Vz-Uz*Vy,Ny=Uz*Vx-Ux*Vz,Nz=Ux*Vy-Uy*Vx,Nl=Math.hypot(Nx,Ny,Nz)||1;
-      const over=S.showSupports&&(Nz/Nl< (ovAng<-0.2?ovAng:-0.57))&&Math.min(az,bz,cz2)>0.5;
+      const over=S.showSupports&&(Nz/Nl< (ovAng<-0.2?ovAng:-0.57))&&Math.max(az,bz,cz2)>0.5;
       let diff=0,spec=0;
       for(let j=0;j<3;j++){
         const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
@@ -333,7 +335,7 @@ const SL3D=(function(){
     ctx.fillText(S.layFlatMode?'haz clic en una cara para apoyarla en la cama':(S.showSupports?`soportes: ${S.supSticks?S.supSticks.length:0} columnas · naranja = voladizos`:'arrastra para rotar · la rejilla es la cama'),10,h-10);
   }
 
-  // ── Auto-orientación: prueba orientaciones y elige la de menos voladizos ──
+  // ── Auto-orientación 360°: apoya caras reales y minimiza soporte ──
   function _rotTris(tris,rx,ry){
     const ca=Math.cos(rx),sa=Math.sin(rx),cb=Math.cos(ry),sb=Math.sin(ry),out=new Float32Array(tris.length);
     for(let i=0;i<tris.length;i+=3){
@@ -343,36 +345,97 @@ const SL3D=(function(){
     }
     return out;
   }
-  function _overhangMetric(tris){
-    let mnz=1e9,mxz=-1e9;for(let i=2;i<tris.length;i+=3){if(tris[i]<mnz)mnz=tris[i];if(tris[i]>mxz)mxz=tris[i];}
-    let ov=0,area=0;
-    for(let i=0;i<tris.length;i+=9){
-      const ax=tris[i],ay=tris[i+1],az=tris[i+2],bx=tris[i+3],by=tris[i+4],bz=tris[i+5],cxx=tris[i+6],cyy=tris[i+7],cz=tris[i+8];
-      const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cxx-ax,vy=cyy-ay,vz=cz-az;
-      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,ln=Math.sqrt(nx*nx+ny*ny+nz*nz),a2=ln/2;area+=a2;
-      if(ln>0&&nz/ln<-0.5&&Math.min(az,bz,cz)-mnz>0.5)ov+=a2;
+  function _orientationSample(tris,maxTriangles=8000){
+    const n=tris.length/9;if(n<=maxTriangles)return tris;
+    const step=n/maxTriangles,out=new Float32Array(maxTriangles*9);
+    for(let k=0;k<maxTriangles;k++){
+      const i=Math.min(n-1,Math.floor(k*step))*9;
+      out.set(tris.subarray(i,i+9),k*9);
     }
-    return{ov,area,h:mxz-mnz};
+    return out;
+  }
+  function _orientationCandidates(tris){
+    // Agrupa normales parecidas y prioriza las superficies con mayor área.
+    // Así podemos apoyar una cara inclinada a 17°, 32°, etc.; ya no sólo ±X/±Y/±Z.
+    const groups=new Map(),Q=10;
+    for(let i=0;i<tris.length;i+=9){
+      const ax=tris[i],ay=tris[i+1],az=tris[i+2],bx=tris[i+3],by=tris[i+4],bz=tris[i+5],cx=tris[i+6],cy=tris[i+7],cz=tris[i+8];
+      const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,ln=Math.hypot(nx,ny,nz);
+      if(ln<1e-7)continue;
+      const x=nx/ln,y=ny/ln,z=nz/ln,a=ln/2,key=Math.round(x*Q)+'_'+Math.round(y*Q)+'_'+Math.round(z*Q);
+      const g=groups.get(key)||{x:0,y:0,z:0,area:0};
+      g.x+=x*a;g.y+=y*a;g.z+=z*a;g.area+=a;groups.set(key,g);
+    }
+    const ranked=[...groups.values()].sort((a,b)=>b.area-a.area).slice(0,48),out=[];
+    const seen=new Set(),add=(n)=>{
+      const l=Math.hypot(n[0],n[1],n[2]);if(l<1e-7)return;
+      const v=[n[0]/l,n[1]/l,n[2]/l],key=v.map(x=>Math.round(x*100)).join('_');
+      if(seen.has(key))return;seen.add(key);out.push(v);
+    };
+    // Mantener orientación actual y sus ejes cardinales como candidatos de respaldo.
+    [[0,0,-1],[0,0,1],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]].forEach(add);
+    for(const g of ranked){add([g.x,g.y,g.z]);add([-g.x,-g.y,-g.z]);}
+    return out;
+  }
+  function _overhangMetric(tris){
+    let mnz=1e9,mxz=-1e9,mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
+    for(let i=0;i<tris.length;i+=3){
+      const x=tris[i],y=tris[i+1],z=tris[i+2];
+      if(z<mnz)mnz=z;if(z>mxz)mxz=z;if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;
+    }
+    let ov=0,area=0,contact=0,supportMoment=0;
+    for(let i=0;i<tris.length;i+=9){
+      const ax=tris[i],ay=tris[i+1],az=tris[i+2],bx=tris[i+3],by=tris[i+4],bz=tris[i+5],cx=tris[i+6],cy=tris[i+7],cz=tris[i+8];
+      const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,ln=Math.hypot(nx,ny,nz),a2=ln/2;
+      if(!(ln>0))continue;
+      area+=a2;
+      const nzN=nz/ln,lo=Math.min(az,bz,cz),hi=Math.max(az,bz,cz),czm=(az+bz+cz)/3;
+      // Contacto real: toda la cara está sobre la cama y mira hacia ella.
+      if(nzN<-0.90&&hi-mnz<=0.45)contact+=a2;
+      // Voladizo: cualquier parte relevante de una cara descendente queda fuera de la cama.
+      if(nzN<-0.57&&hi-mnz>0.5){
+        ov+=a2;
+        supportMoment+=a2*Math.max(0,czm-mnz);
+      }
+    }
+    const h=Math.max(0,mxz-mnz),diag=Math.hypot(mxx-mnx,mxy-mny,h)||1;
+    return{ov,area,h,diag,contact,supportMoment,ovPct:area?ov/area*100:0};
   }
   function _bestOrientation(tris){
-    const cands=[[0,0],[Math.PI,0],[Math.PI/2,0],[-Math.PI/2,0],[0,Math.PI/2],[0,-Math.PI/2]];
-    let best=tris,bestScore=1e18,bestI=0;
-    cands.forEach(([rx,ry],i)=>{const tt=_rotTris(tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
-    return{tris:best,index:bestI};
+    const sample=_orientationSample(tris),cands=_orientationCandidates(sample);
+    let bestN=[0,0,-1],bestScore=Infinity,bestMetric=null;
+    for(const n of cands){
+      const tt=_alignTris(sample,n),m=_overhangMetric(tt);
+      const ovRatio=m.area?m.ov/m.area:0,contactRatio=m.area?m.contact/m.area:0;
+      const momentNorm=(m.area&&m.h>0)?m.supportMoment/(m.area*m.h):0;
+      const heightNorm=m.diag?m.h/m.diag:0;
+      // Prioridad: 1) menos voladizo, 2) menos "voladizo alto", 3) base estable, 4) menor altura.
+      const score=ovRatio*10000+momentNorm*900-contactRatio*180+heightNorm*12;
+      if(score<bestScore-1e-9){bestScore=score;bestN=n;bestMetric=m;}
+    }
+    const full=_alignTris(tris,bestN);
+    return{tris:full,normal:bestN,metric:bestMetric,candidates:cands.length};
   }
   function autoOrient(){
     if(!S.tris){toast('Carga un modelo primero','error');return;}
+    const before=S.stats?.ovPct??null;
     if(S.objects&&S.objects.length>1){
-      S.objects=S.objects.map(o=>_centerTris(_bestOrientation(o).tris));
+      let totalCandidates=0;
+      S.objects=S.objects.map(o=>{const p=_bestOrientation(o);totalCandidates+=p.candidates;return _centerTris(p.tris);});
       S.modifiers=[];S.supRegions=[];S.supSticks=null;S.layFlatMode=false;_updLayFlatBtn();
       _replate();
-      toast(`✓ ${S.objects.length} piezas orientadas individualmente y reacomodadas en el plato`,'success');
+      toast(`✓ Auto-orientación 360°: ${S.objects.length} piezas · ${totalCandidates} apoyos evaluados · voladizos finales ${S.stats.ovPct.toFixed(1)}%`,'success');
       return;
     }
     const pick=_bestOrientation(S.tris);
     S.tris=pick.tris;S.objects=[S.tris];S.objBBs=null;_refreshGeometry();S.supSticks=null;render();renderStats();
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
-    toast(pick.index===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
+    const after=S.stats.ovPct,delta=before==null?null:before-after;
+    if(after<0.05)toast(`✓ Auto-orientación 360°: ${before?.toFixed(1)??'—'}% → 0.0% voladizos · ${pick.candidates} apoyos evaluados`,'success');
+    else if(delta!=null&&delta>0.05)toast(`✓ Auto-orientación 360°: ${before.toFixed(1)}% → ${after.toFixed(1)}% voladizos · ${pick.candidates} apoyos evaluados`,'success');
+    else toast(`Auto-orientación 360°: mínimo encontrado ${after.toFixed(1)}% de voladizos tras evaluar ${pick.candidates} apoyos reales`,'info');
   }
   // ── Apoyar cara en la cama (lay-flat por clic) ──────────────
   // Rota toda la malla para que la normal `n` apunte hacia abajo (−Z) → esa cara queda sobre la cama.
