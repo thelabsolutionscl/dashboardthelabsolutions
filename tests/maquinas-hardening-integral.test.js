@@ -141,3 +141,17 @@ test('planificador no usa multiplicadores hardcodeados de velocidad',()=>{
 test('seguridad del Controller no puede ser debilitada por token operator',()=>{
   assert.match(CTRL,/safeBody=role==='admin'\?body:\{\.\.\.body,config:safety\.config\}/);
 });
+
+
+test('Controller serializa transiciones por impresora, no sólo por job',()=>{
+  assert.match(CTRL,/activeMachineRuns=new Set\(\)/);
+  const run=fn(CTRL,'runQueuedJob');
+  assert.match(run,/activeMachineRuns\.has\(machineRunKey\)/);
+  assert.match(run,/activeMachineRuns\.add\(machineRunKey\)/);
+  assert.match(run,/activeMachineRuns\.delete\(machineRunKey\)/);
+});
+
+test('un trabajo MachineOps reutiliza la misma clave idempotente si se reintenta',()=>{
+  const start=fn(OPS,'startJob');
+  assert.match(start,/idempotencyKey:'machineops:'\+j\.id/);
+});
