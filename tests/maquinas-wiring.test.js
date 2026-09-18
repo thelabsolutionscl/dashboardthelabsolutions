@@ -55,17 +55,26 @@ test('la pestaña Máquinas y sus módulos se cargan una sola vez y en orden',()
   assert.ok(base>=0&&ops>base,'telemetría debe cargarse antes que MachineOps');
 });
 
-test('la inicialización respeta datos, render y conexión en vivo',()=>{
+test('la inicialización pinta el monitor de inmediato y luego reconcilia datos en vivo',()=>{
   const body=functionSource(MAQ,'initMaquinas');
+  const immediate=functionSource(MAQ,'_renderMaquinasMonitorNow');
   const service=functionSource(MAQ,'ensurePrinterRealtimeService');
+  const firstPaint=body.indexOf('_renderMaquinasMonitorNow()');
+  const guard=body.indexOf('if(_maquinasInitPromise)');
   const load=body.indexOf('await loadMaquinasAirtable()');
+  const secondPaint=body.indexOf('_renderMaquinasMonitorNow()',load);
+  const live=body.indexOf('ensurePrinterRealtimeService()',load);
   const events=body.indexOf('loadMaquinaEventosAirtable()');
   const render=body.indexOf('renderMaquinasCalendar()');
-  const live=body.indexOf('ensurePrinterRealtimeService()');
   const poll=service.indexOf('pollPrinters()');
   const ws=service.indexOf('connectAllPrinterWs()');
-  assert.ok(load>=0&&events>load&&render>events,'primero deben cargarse datos y luego renderizar');
-  assert.ok(live>render,'el servicio realtime debe arrancar después del render inicial');
+  assert.ok(firstPaint>=0&&firstPaint<guard,'la pestaña debe pintar cards incluso si ya existe una inicialización en curso');
+  assert.ok(load>guard&&secondPaint>load,'después de Airtable debe repintar el registry real');
+  assert.ok(live>secondPaint&&events>live,'telemetría y cámaras deben arrancar antes de esperar calendario/mantención');
+  assert.ok(render>events,'el calendario completo puede terminar después sin bloquear el monitor');
+  assert.match(immediate,/renderMonitorFilterTabs\(\)/);
+  assert.match(immediate,/renderMonitorKPIs\(\)/);
+  assert.match(immediate,/renderMonitorGrid\(\)/,'las tarjetas deben existir antes del primer polling');
   assert.ok(poll>=0&&ws>poll,'el servicio realtime debe arrancar polling antes de WebSocket');
   assert.match(body,/renderCargaMaquinas\(\)/,'debe enlazar la carga de pedidos por máquina');
 });
