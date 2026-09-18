@@ -93,6 +93,37 @@ test('el monitor en vivo se monta antes de Salud y fiabilidad sin destruir cáma
   assert.doesNotMatch(mount,/cloneNode|innerHTML\s*=/,'no debe duplicar ni recrear el monitor/cámaras');
 });
 
+test('Centro de granja distingue evidencia, eventos automáticos e historial',()=>{
+  const render=functionSource(OPS,'renderIntelligence');
+  const reliability=functionSource(OPS,'machineReliability');
+  const overview=functionSource(OPS,'renderOpsOverview');
+  const add=functionSource(OPS,'addIncident');
+  assert.match(render,/Estado y evidencia por impresora/);
+  assert.match(render,/No mostramos un porcentaje “mágico”/);
+  assert.doesNotMatch(render,/row\.score\.toFixed|disponibilidad \$\{row\.availability/,'no debe mostrar precisión inventada');
+  assert.match(render,/Pendientes por resolver/);
+  assert.match(render,/Confirmar falla/);
+  assert.match(render,/Descartar/);
+  assert.match(render,/Datos físicos y CFS/);
+  assert.match(render,/mops-physical-details/,'CFS debe quedar como detalle técnico contraíble');
+  assert.match(reliability,/PrinterHistory|printerHistoryEvidence/);
+  assert.match(reliability,/FarmHealth|centralHealthEvidence/);
+  assert.match(reliability,/liveFresh/,'salud actual debe exigir telemetría reciente');
+  assert.match(add,/source==='telemetry'\?30\*60000:5\*60000/,'telemetría debe tener deduplicación más robusta');
+  assert.match(overview,/Telemetría reciente/);
+  assert.doesNotMatch(overview,/Máquinas no listas/,'no debe inferir disponibilidad con un KPI ambiguo');
+});
+
+test('resumen operativo se integra con el Centro inteligente y no queda perdido al final',()=>{
+  const mount=functionSource(OPS,'_mountIntelligenceEmbeddedNodes');
+  const park=functionSource(OPS,'_parkIntelligenceEmbeddedNodes');
+  const render=functionSource(OPS,'renderIntelligence');
+  assert.match(render,/mopsOpsOverviewAnchor/);
+  assert.match(mount,/overviewAnchor\.replaceWith\(nodes\.overview\)/);
+  assert.match(park,/maquinaOpsOverview/);
+  assert.match(mount,/renderOpsOverview\(\)/);
+});
+
 test('las funciones críticas no están ausentes ni duplicadas',()=>{
   const base=['initMaquinas','renderMaquinasCalendar','renderMonitorGrid','renderMonitorKPIs','pollPrinters','connectAllPrinterWs','disconnectAllPrinterWs','getPrinterIp','printerUrl','openPrinterControl','openWebcamModal'];
   for(const name of base){
