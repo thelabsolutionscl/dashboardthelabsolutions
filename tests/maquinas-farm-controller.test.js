@@ -46,6 +46,9 @@ test('reimpresiones y cama libre pasan por Farm Controller',()=>{
   assert.match(src,/window\.FarmQueue=\{sync:syncQueue,startExisting,confirmBedClear/);
 });
 
-test('el registry comparte boquilla instalada además de IP e identidad',()=>{
+test('el registry comparte perfil físico además de IP e identidad',()=>{
   assert.match(src,/nozzleInstalled/);
+  assert.match(src,/physicalProfile/);
+  assert.match(src,/cfsInstalled/);
+  assert.match(src,/cameraConfigured/);
 });
