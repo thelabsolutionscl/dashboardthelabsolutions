@@ -51,7 +51,7 @@
       #tab-calendario .cal-section-collapsible > .card-header:hover .cal-section-collapse-chevron {
         background: var(--surface);
       }
-      #tab-calendario .cal-section-collapsible.is-collapsed > .cal-section-collapse-chevron {
+      #tab-calendario .cal-section-collapsible.is-collapsed > .card-header .cal-section-collapse-chevron {
         transform: rotate(-90deg);
       }
       #tab-calendario .cal-section-collapsible.is-collapsed > :not(.card-header) {
@@ -102,7 +102,7 @@
       header.setAttribute('tabindex', '0');
 
       header.addEventListener('click', event => {
-        if (isInteractive(event.target)) return;
+        if (event.target !== header && isInteractive(event.target)) return;
         const state = readState();
         state[key] = !(state[key] === true);
         writeState(state);
