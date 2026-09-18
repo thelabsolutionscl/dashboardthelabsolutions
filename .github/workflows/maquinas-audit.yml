@@ -11,6 +11,7 @@ on:
       - 'js/maquinas-operaciones.js'
       - 'js/maquinas-farm-controller.js'
       - 'js/maquinas-eta-clarity.js'
+      - 'js/maquinas-capacidad-confiable.js'
       - 'js/machineops-storage-adapter.js'
       - 'js/machineops-unattended-safety.js'
       - 'js/printer-history-adapter.js'
@@ -43,6 +44,7 @@ on:
       - 'js/maquinas-operaciones.js'
       - 'js/maquinas-farm-controller.js'
       - 'js/maquinas-eta-clarity.js'
+      - 'js/maquinas-capacidad-confiable.js'
       - 'js/machineops-storage-adapter.js'
       - 'js/machineops-unattended-safety.js'
       - 'js/printer-history-adapter.js'
@@ -95,6 +97,7 @@ jobs:
           node --check js/maquinas-operaciones.js
           node --check js/maquinas-farm-controller.js
           node --check js/maquinas-eta-clarity.js
+          node --check js/maquinas-capacidad-confiable.js
           node --check js/machineops-storage-adapter.js
           node --check js/machineops-unattended-safety.js
           node --check js/printer-history-adapter.js

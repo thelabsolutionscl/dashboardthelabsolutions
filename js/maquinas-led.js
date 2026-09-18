@@ -224,7 +224,7 @@ window.PrinterLights={_test:{parseOverride:_printerLightParseOverride,chooseCapa
   const current=document.currentScript;
   const raw=current?.src||'';
   const suffix=raw.includes('?')?'?'+raw.split('?').slice(1).join('?'):'';
-  const paths=['js/maquinas-farm-controller.js','js/machineops-storage-adapter.js'];
+  const paths=['js/maquinas-farm-controller.js','js/maquinas-capacidad-confiable.js','js/machineops-storage-adapter.js'];
   if(document.readyState==='loading'&&typeof document.write==='function'){
     document.write(paths.map(path=>`<script src="${path}${suffix}"><\/script>`).join(''));
     return;

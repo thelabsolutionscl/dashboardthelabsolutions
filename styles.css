@@ -2050,3 +2050,125 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   #tab-maquinas .mops-job-card-grid{grid-template-columns:1fr}
   #tab-maquinas .mops-job-card-actions .btn{flex:1 1 42%;justify-content:center}
 }
+
+
+/* Máquinas · Carga de producción y agenda semanal basadas en evidencia */
+#tab-maquinas .mcap-guide{margin:0 0 14px;padding:15px 16px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(0,212,204,.055),rgba(255,255,255,.012))}
+#tab-maquinas .mcap-guide>div:first-child>b,#tab-maquinas .mcap-guide>div:first-child>small{display:block}
+#tab-maquinas .mcap-guide>div:first-child>b{font-size:14px;color:var(--text)}
+#tab-maquinas .mcap-guide>div:first-child>small{margin-top:4px;font-size:10.5px;line-height:1.5;color:var(--text3)}
+#tab-maquinas .mcap-trust{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+#tab-maquinas .mcap-trust>span{padding:9px 10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2)}
+#tab-maquinas .mcap-trust>span.ok{border-color:rgba(0,212,170,.28);background:rgba(0,212,170,.05)}
+#tab-maquinas .mcap-trust>span.warning{border-color:rgba(255,170,0,.28);background:rgba(255,170,0,.05)}
+#tab-maquinas .mcap-trust b,#tab-maquinas .mcap-trust small{display:block}
+#tab-maquinas .mcap-trust b{font-size:8.8px;letter-spacing:.8px;color:var(--text2)}
+#tab-maquinas .mcap-trust small{margin-top:3px;font-size:9.6px;line-height:1.35;color:var(--text3)}
+#tab-maquinas .mcap-rule{margin-top:10px;padding-top:10px;border-top:1px solid var(--border2);font-size:10px;line-height:1.45;color:var(--text2)}
+#tab-maquinas .mcap-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin:0 0 16px}
+#tab-maquinas .mcap-kpis article{position:relative;overflow:hidden;padding:12px 13px;border:1px solid var(--border2);border-radius:10px;background:var(--surface)}
+#tab-maquinas .mcap-kpis article:before{content:'';position:absolute;left:0;top:0;right:0;height:2px;background:var(--border2)}
+#tab-maquinas .mcap-kpis article.ok:before{background:var(--accent3)}
+#tab-maquinas .mcap-kpis article.warning:before{background:var(--warn)}
+#tab-maquinas .mcap-kpis article.danger:before{background:var(--danger)}
+#tab-maquinas .mcap-kpis small,#tab-maquinas .mcap-kpis b,#tab-maquinas .mcap-kpis span{display:block}
+#tab-maquinas .mcap-kpis small{font-size:8.8px;font-weight:800;letter-spacing:.65px;color:var(--text3)}
+#tab-maquinas .mcap-kpis b{margin-top:5px;font:600 22px/1 'DM Sans',sans-serif;color:var(--text)}
+#tab-maquinas .mcap-kpis span{margin-top:5px;font-size:9.5px;line-height:1.35;color:var(--text3)}
+#tab-maquinas .mcap-section-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:18px 0 9px}
+#tab-maquinas .mcap-section-head b,#tab-maquinas .mcap-section-head small{display:block}
+#tab-maquinas .mcap-section-head b{font-size:12px;color:var(--text)}
+#tab-maquinas .mcap-section-head small{margin-top:3px;font-size:9.8px;line-height:1.4;color:var(--text3)}
+#tab-maquinas .mcap-section-head>span{font-size:9.5px;color:var(--text3);white-space:nowrap;padding:4px 7px;border:1px solid var(--border2);border-radius:999px;background:var(--surface2)}
+#tab-maquinas .mcap-machine-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:9px}
+#tab-maquinas .mcap-machine{position:relative;overflow:hidden;padding:12px;border:1px solid var(--border2);border-radius:11px;background:var(--surface)}
+#tab-maquinas .mcap-machine:before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border2)}
+#tab-maquinas .mcap-machine.ok:before{background:var(--accent3)}
+#tab-maquinas .mcap-machine.warning:before{background:var(--warn)}
+#tab-maquinas .mcap-machine.danger:before{background:var(--danger)}
+#tab-maquinas .mcap-machine-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+#tab-maquinas .mcap-machine-head>div{min-width:0}
+#tab-maquinas .mcap-machine-head b,#tab-maquinas .mcap-machine-head small{display:block}
+#tab-maquinas .mcap-machine-head b{font-size:11.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tab-maquinas .mcap-machine-head small{margin-top:2px;font-size:9px;color:var(--text3)}
+#tab-maquinas .mcap-live{font-size:8.5px;font-weight:800;letter-spacing:.35px;padding:3px 6px;border:1px solid var(--border2);border-radius:999px;color:var(--text3);white-space:nowrap}
+#tab-maquinas .mcap-live.ok{color:var(--accent3);border-color:rgba(0,212,170,.25);background:rgba(0,212,170,.05)}
+#tab-maquinas .mcap-live.warning{color:var(--warn);border-color:rgba(255,170,0,.25);background:rgba(255,170,0,.05)}
+#tab-maquinas .mcap-live.danger{color:var(--danger);border-color:rgba(255,68,68,.25);background:rgba(255,68,68,.05)}
+#tab-maquinas .mcap-machine-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:10px 0}
+#tab-maquinas .mcap-machine-stats>span{padding:6px 7px;border:1px solid var(--border2);border-radius:7px;background:var(--surface2);min-width:0}
+#tab-maquinas .mcap-machine-stats small,#tab-maquinas .mcap-machine-stats b{display:block}
+#tab-maquinas .mcap-machine-stats small{font-size:8px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3)}
+#tab-maquinas .mcap-machine-stats b{margin-top:2px;font-size:10px;color:var(--text2)}
+#tab-maquinas .mcap-jobs{display:grid;gap:4px}
+#tab-maquinas .mcap-job{display:flex;align-items:center;gap:8px;padding:6px 7px;border:1px solid var(--border2);border-radius:7px;background:var(--surface2)}
+#tab-maquinas .mcap-job>div{min-width:0;flex:1}
+#tab-maquinas .mcap-job b,#tab-maquinas .mcap-job small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tab-maquinas .mcap-job b{font-size:9.8px;color:var(--text2)}
+#tab-maquinas .mcap-job small{margin-top:2px;font-size:8.8px;color:var(--text3)}
+#tab-maquinas .mcap-job>span{font-size:9px;font-weight:700;color:var(--accent);white-space:nowrap}
+#tab-maquinas .mcap-empty{font-size:9.8px;line-height:1.4;color:var(--text3)}
+#tab-maquinas .mcap-empty.big{padding:17px;border:1px dashed var(--border2);border-radius:9px;text-align:center;background:var(--surface2)}
+#tab-maquinas .mcap-idle,#tab-maquinas .mcap-conflicts{margin-top:11px;border-top:1px solid var(--border);padding-top:9px}
+#tab-maquinas .mcap-idle>summary,#tab-maquinas .mcap-conflicts>summary{cursor:pointer;list-style:none;font-size:10px;font-weight:700;color:var(--text3)}
+#tab-maquinas .mcap-idle>summary::-webkit-details-marker,#tab-maquinas .mcap-conflicts>summary::-webkit-details-marker{display:none}
+#tab-maquinas .mcap-idle>summary:before,#tab-maquinas .mcap-conflicts>summary:before{content:'▸';display:inline-block;width:16px}
+#tab-maquinas .mcap-idle[open]>summary:before,#tab-maquinas .mcap-conflicts[open]>summary:before{content:'▾'}
+#tab-maquinas .mcap-idle>.mcap-machine-grid{margin-top:9px}
+#tab-maquinas .mcap-orders{display:grid;gap:6px}
+#tab-maquinas .mcap-order{display:grid;grid-template-columns:minmax(180px,1.5fr) minmax(180px,1fr) auto;gap:10px;align-items:center;padding:9px 11px;border:1px solid var(--border2);border-radius:9px;background:var(--surface)}
+#tab-maquinas .mcap-order-main b,#tab-maquinas .mcap-order-main span,#tab-maquinas .mcap-order-main small{display:block}
+#tab-maquinas .mcap-order-main b{font-size:10.5px;color:var(--accent)}
+#tab-maquinas .mcap-order-main span{margin-top:2px;font-size:10.5px;color:var(--text)}
+#tab-maquinas .mcap-order-main small{margin-top:2px;font-size:9px;color:var(--text3)}
+#tab-maquinas .mcap-order-evidence span,#tab-maquinas .mcap-order-evidence small{display:block}
+#tab-maquinas .mcap-order-evidence span{font-size:8.5px;font-weight:800;letter-spacing:.45px;color:var(--warn)}
+#tab-maquinas .mcap-order-evidence small{margin-top:3px;font-size:9px;color:var(--text3)}
+#tab-maquinas .mcap-conflicts>div{display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border2);font-size:9.5px}
+#tab-maquinas .mcap-conflicts>div b{color:var(--accent);min-width:100px}
+#tab-maquinas .mcap-conflicts>div span{color:var(--warn)}
+
+#tab-maquinas .mcap-week-guide{display:flex;justify-content:space-between;gap:10px;align-items:end;margin-bottom:7px}
+#tab-maquinas .mcap-week-guide b,#tab-maquinas .mcap-week-guide small{display:block}
+#tab-maquinas .mcap-week-guide b{font-size:10.5px;color:var(--text)}
+#tab-maquinas .mcap-week-guide small{font-size:9px;line-height:1.35;color:var(--text3);text-align:right}
+#tab-maquinas .mcap-weeks{display:flex;gap:6px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none}
+#tab-maquinas .mcap-week{display:grid;gap:2px;flex:0 0 auto;min-width:105px;text-align:left;padding:7px 8px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);cursor:pointer;color:var(--text2)}
+#tab-maquinas .mcap-week.active{border-color:var(--accent);background:rgba(0,212,204,.07)}
+#tab-maquinas .mcap-week small{font-size:8.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.45px}
+#tab-maquinas .mcap-week b{font-size:9.8px;color:var(--text2)}
+#tab-maquinas .mcap-week span{font-size:8.5px;color:var(--text3)}
+#tab-maquinas .mcap-sticky{position:sticky;background:var(--surface);z-index:3;border-bottom:1px solid var(--border);font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+#tab-maquinas .mcap-sticky.machine{left:0;min-width:165px;padding:8px 10px;text-align:left}
+#tab-maquinas .mcap-sticky.state{left:165px;min-width:78px;padding:8px 6px;text-align:center}
+#tab-maquinas .mcap-day-head{min-width:115px;padding:8px 5px;text-align:center;border-bottom:1px solid var(--border);font-size:9.5px;color:var(--text3);background:var(--surface)}
+#tab-maquinas .mcap-day-head.today{color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
+#tab-maquinas .mcap-model-row td{padding:7px 10px;background:rgba(0,0,0,.3);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+#tab-maquinas .mcap-model-row div{display:flex;justify-content:space-between;gap:12px;align-items:center}
+#tab-maquinas .mcap-model-row b{font-size:10px;letter-spacing:.7px;color:var(--text2)}
+#tab-maquinas .mcap-model-row span{font-size:8.8px;color:var(--text3)}
+#tab-maquinas td.mcap-sticky.machine{text-transform:none;letter-spacing:0;z-index:2}
+#tab-maquinas td.mcap-sticky.machine b{display:block;font-size:10.5px;color:var(--text);white-space:nowrap}
+#tab-maquinas td.mcap-sticky.machine i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px}
+#tab-maquinas td.mcap-sticky.machine small{display:block;margin:2px 0 0 12px;font-size:8.5px;color:var(--text3)}
+#tab-maquinas td.mcap-sticky.state{z-index:2}
+#tab-maquinas .mcap-day{position:relative;padding:4px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);cursor:pointer;vertical-align:middle}
+#tab-maquinas .mcap-day.today{box-shadow:inset 2px 0 rgba(0,212,204,.45)}
+#tab-maquinas .mcap-day>div{display:grid;gap:2px;min-height:42px;align-content:center;padding:5px 6px;border-radius:7px;background:var(--surface2)}
+#tab-maquinas .mcap-day b,#tab-maquinas .mcap-day span,#tab-maquinas .mcap-day small{display:block}
+#tab-maquinas .mcap-day b{font-size:9px;color:var(--text2)}
+#tab-maquinas .mcap-day span{font-size:8.3px;line-height:1.25;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px}
+#tab-maquinas .mcap-day small{font-size:8px;color:var(--text3)}
+#tab-maquinas .mcap-day.ok>div{border:1px solid rgba(0,212,170,.18);background:rgba(0,212,170,.04)}
+#tab-maquinas .mcap-day.warning>div{border:1px solid rgba(255,170,0,.2);background:rgba(255,170,0,.04)}
+#tab-maquinas .mcap-day.danger>div{border:1px solid rgba(255,68,68,.2);background:rgba(255,68,68,.04)}
+#tab-maquinas .mcap-day.info>div{border:1px solid rgba(56,189,248,.2);background:rgba(56,189,248,.04)}
+#tab-maquinas .mcap-day>button{position:absolute;right:5px;top:4px;border:0;background:none;color:var(--text3);font-size:10px;cursor:pointer;padding:0}
+
+@media(max-width:760px){
+  #tab-maquinas .mcap-trust{grid-template-columns:1fr}
+  #tab-maquinas .mcap-order{grid-template-columns:1fr}
+  #tab-maquinas .mcap-machine-grid{grid-template-columns:1fr}
+  #tab-maquinas .mcap-week-guide{align-items:flex-start;flex-direction:column}
+  #tab-maquinas .mcap-week-guide small{text-align:left}
+}
