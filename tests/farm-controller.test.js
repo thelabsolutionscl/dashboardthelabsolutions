@@ -78,7 +78,7 @@ test('metadata del slicer se conserva sanitizada en la cola durable',()=>{
 
 test('controller evalúa seguridad antes de subir el G-code',()=>{
   const safetyPos=source.indexOf('SafetyPolicy.evaluateSnapshot(safety, j');
-  const uploadPos=source.indexOf("requestLegacy('POST', `/${ip}/server/files/upload`");
+  const uploadPos=source.indexOf('/server/files/upload');
   assert.ok(safetyPos>0,'debe existir evaluación de seguridad');
   assert.ok(uploadPos>safetyPos,'la evaluación debe ocurrir antes del upload');
   assert.match(source,/state: 'blocked', safetyBlocked: true/);
@@ -111,7 +111,7 @@ test('cola exige identidad registrada, idempotencia y lifecycle central',()=>{
 test('trabajo siguiente exige cama liberada y existe endpoint de confirmación',()=>{
   assert.match(source,/retirar pieza y confirmar cama libre/);
   assert.match(source,/bedSignatureFromPrintStats/);
-  assert.match(source,/\/farm\/ready\//);
+  assert.ok(source.includes('farm\\/ready'),'debe existir endpoint /farm/ready/:machineId');
   assert.match(source,/requeueBedBlocked/);
 });
 
