@@ -63,7 +63,7 @@ const INCIDENT_TYPES={
   electrical:'Eléctrico / conexión',quality:'Calidad dimensional',other:'Otro',
 };
 
-let _data=null,_remoteTimer=null,_initialized=false,_initPromise=null,_activeView='operacion';
+let _data=null,_remoteTimer=null,_initialized=false,_initPromise=null,_activeView='operacion',_activeWorkshopView='taller';
 const _techRefreshPending={};
 let _techStatusListenerBound=false;
 const _telemetryWatch={};
@@ -684,8 +684,39 @@ function workshopSummary(now=Date.now()){
   const maintRecords=(()=>{try{return getMaintLog().length;}catch(_){return 0;}})();
   return{spools:spools.length,stockFree,stockRegistered,lowStock,maintSoon,maintOverdue,maintUnknown,maintRecords,reading,safety,safetyAge,profiles:profiles.length,readyProfiles,invalidApproved,history};
 }
+const WORKSHOP_CARD_META={
+  materiales:{icon:'spool',accent:'cyan'},
+  mantenimiento:{icon:'wrench',accent:'amber'},
+  seguridad:{icon:'shield',accent:'red'},
+  capacidad:{icon:'capacity',accent:'violet'},
+  perfiles:{icon:'sliders',accent:'cyan'},
+  laminado:{icon:'printer',accent:'violet'},
+  analitica:{icon:'chart',accent:'green'},
+  automatizacion:{icon:'gear',accent:'slate'},
+};
+function workshopIcon(name){
+  const paths={
+    spool:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4"/><path d="M4 12h5m6 0h5M7 6.4l3.1 3.1m3.8 3.8L17 16.4M17 7.6l-3.1 3.1m-3.8 3.8L7 17.6"/>',
+    wrench:'<path d="M14.7 6.3a4 4 0 0 0-5-5l2.2 2.2-2.8 2.8-2.2-2.2a4 4 0 0 0 5 5l7.1 7.1a2 2 0 1 1-2.8 2.8L10 12.8"/><circle cx="17.8" cy="17.8" r=".7"/>',
+    shield:'<path d="M12 2.5 19 5v5.7c0 4.6-2.9 8.5-7 10.8-4.1-2.3-7-6.2-7-10.8V5l7-2.5Z"/><path d="m8.8 12 2 2 4.4-4.4"/>',
+    capacity:'<rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/><path d="M4 10.5 10 5l4 2.2 6-5"/>',
+    sliders:'<path d="M4 6h7m4 0h5M4 12h3m4 0h9M4 18h9m4 0h3"/><circle cx="13" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="18" r="2"/>',
+    printer:'<rect x="5" y="3" width="14" height="5" rx="1.5"/><path d="M7 8v5h10V8M9 13v3h6v-3M7 21h10M12 16v5"/><path d="M9 6h6"/>',
+    chart:'<path d="M4 20V10m5 10V5m5 15v-7m5 7V3"/><path d="m4 8 5-3 5 5 5-7"/>',
+    gear:'<circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2.1-.7a7.1 7.1 0 0 0-.7-1.7l1-2-2.2-2.2-2 1a7.1 7.1 0 0 0-1.7-.7L10.5 2h-3l-.7 2.1a7.1 7.1 0 0 0-1.7.7l-2-1L.9 6l1 2a7.1 7.1 0 0 0-.7 1.7L-1 10.5v3l2.1.7a7.1 7.1 0 0 0 .7 1.7l-1 2L3 20.1l2-1a7.1 7.1 0 0 0 1.7.7l.8 2.2h3l.7-2.1a7.1 7.1 0 0 0 1.7-.7l2 1 2.2-2.2-1-2a7.1 7.1 0 0 0 .7-1.7L19 13.5Z" transform="translate(3 0) scale(.75)"/>'
+  };
+  return`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths[name]||paths.gear}</svg>`;
+}
 function workshopNavCard(view,title,subtitle,value,tone='neutral'){
-  return`<button class="mops-workshop-card ${tone}" type="button" onclick="MachineOps.showView('${view}')"><span class="mops-workshop-card-top"><b>${title}</b><i>→</i></span><strong>${value}</strong><small>${subtitle}</small></button>`;
+  const meta=WORKSHOP_CARD_META[view]||{icon:'gear',accent:'slate'},active=_activeWorkshopView===view?' active':'';
+  return`<button class="mops-workshop-tile ${tone} accent-${meta.accent}${active}" type="button" onclick="MachineOps.showView('${view}')" aria-label="${esc(title)}">
+    <span class="mops-workshop-tile-icon">${workshopIcon(meta.icon)}</span>
+    <span class="mops-workshop-tile-body">
+      <span class="mops-workshop-tile-head"><b>${esc(title)}</b><i aria-hidden="true">→</i></span>
+      <strong>${esc(String(value))}</strong>
+      <small>${esc(subtitle)}</small>
+    </span>
+  </button>`;
 }
 function renderWorkshopHome(){
   const el=ensureWorkshopShell();if(!el)return;const s=workshopSummary();
@@ -712,22 +743,23 @@ function renderWorkshopHome(){
     </div>
     <div class="mops-workshop-section-title"><div><b>Operación física</b><small>Lo que normalmente revisas en el taller.</small></div></div>
     <div class="mops-workshop-nav-grid">
-      ${workshopNavCard('materiales','🧵 Materiales','Stock registrado, reservas y rollos bajos',s.lowStock?s.lowStock+' bajo stock':(s.stockFree/1000).toFixed(2)+' kg libres',s.lowStock?'warning':'ok')}
-      ${workshopNavCard('mantenimiento','🔧 Mantención','Horas, registros y próximos servicios',maintActions?maintActions+' por revisar':'sin alertas',maintActions?'warning':'ok')}
-      ${workshopNavCard('seguridad','🛡 Seguridad','Sensor/lectura manual y reglas de preflight',safetyState,safetyTone)}
-      ${workshopNavCard('capacidad','🧮 Capacidad','Simulador de escenario; no promesa automática','Simular','neutral')}
+      ${workshopNavCard('materiales','Materiales','Stock registrado, reservas y rollos bajos',s.lowStock?s.lowStock+' bajo stock':(s.stockFree/1000).toFixed(2)+' kg libres',s.lowStock?'warning':'ok')}
+      ${workshopNavCard('mantenimiento','Mantención','Horas, registros y próximos servicios',maintActions?maintActions+' por revisar':'sin alertas',maintActions?'warning':'ok')}
+      ${workshopNavCard('seguridad','Seguridad','Sensor/lectura manual y reglas de preflight',safetyState,safetyTone)}
+      ${workshopNavCard('capacidad','Capacidad','Simulador de escenario; no promesa automática','Simular','neutral')}
     </div>
     <div class="mops-workshop-section-title"><div><b>Herramientas avanzadas</b><small>Configuración y análisis; no necesitas tenerlas abiertas todo el tiempo.</small></div></div>
     <div class="mops-workshop-nav-grid advanced">
-      ${workshopNavCard('perfiles','🎛 Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
-      ${workshopNavCard('laminado','🖨 Laminador','Agente 3D, G-code y preflight','Abrir','neutral')}
-      ${workshopNavCard('analitica','📊 Analítica','QA, tiempos reales y costos modelados','Abrir','neutral')}
-      ${workshopNavCard('automatizacion','⚙ Configuración','Umbrales, automatización y costos','Avanzado','neutral')}
+      ${workshopNavCard('perfiles','Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
+      ${workshopNavCard('laminado','Laminador','Agente 3D, G-code y preflight','Abrir','neutral')}
+      ${workshopNavCard('analitica','Analítica','QA, tiempos reales y costos modelados','Abrir','neutral')}
+      ${workshopNavCard('automatizacion','Configuración','Umbrales, automatización y costos','Avanzado','neutral')}
     </div>
     <div class="mops-workshop-legend"><span><i class="ok"></i><b>Confirmado</b> sensor/controller reciente</span><span><i class="warning"></i><b>Registrado</b> dato ingresado/sincronizado</span><span><i></i><b>Estimado</b> simulación o modelo de costo</span></div>`;
 }
 function showView(view,button){
   const target=view||'hoy',group=groupOf(target);_activeView=group;
+  if(group==='taller')_activeWorkshopView=target;else _activeWorkshopView='taller';
   const members=VIEW_GROUPS[group]||[];
   ensureWorkshopShell();
   document.querySelectorAll('[data-maq-view]').forEach(node=>{
