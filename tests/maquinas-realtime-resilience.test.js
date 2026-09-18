@@ -76,7 +76,7 @@ test('navegar por el dashboard no destruye el monitor de Máquinas',()=>{
 
 test('cámaras permanecen montadas aunque cambie estado, orden o filtro',()=>{
   const render=fn(MAQ,'renderMonitorGrid');
-  assert.match(render,/const showCam=!!ip/,'Moonraker caído no debe apagar la cámara');
+  assert.match(render,/const showCam=!!_rawCam/,'Moonraker caído no debe apagar una cámara configurada');
   assert.match(render,/sortedList\(MAQUINAS\)/,'los filtros no deben desmontar cámaras');
   assert.match(render,/appendChild\(node\)/,'reordenar debe mover nodos, no recrearlos');
   assert.doesNotMatch(render,/el\.innerHTML=__cards/,'no debe vaciar el grid al cambiar orden');
@@ -97,6 +97,8 @@ test('cámaras hacen autoretry y K2 espera cada frame antes de pedir el siguient
   const refresh=fn(MAQ,'_refreshSnapshotCams');
   assert.match(refresh,/camLoading/,'el watchdog no debe abortar una petición aún en vuelo');
   assert.match(MAQ,/const _CAM_LOAD_TIMEOUT_MS=25000/,'K2 necesita margen para negociar WebRTC');
+  const refreshNow=fn(MAQ,'_cameraRefreshNow');
+  assert.match(refreshNow,/camKind==='snapshot'/,'el timeout de frame no debe reiniciar un MJPEG sano');
 });
 
 test('cargas concurrentes de Máquinas comparten una sola inicialización',()=>{
