@@ -101,6 +101,25 @@ test('cámaras hacen autoretry y K2 espera cada frame antes de pedir el siguient
   assert.match(refreshNow,/camKind==='snapshot'/,'el timeout de frame no debe reiniciar un MJPEG sano');
 });
 
+test('K2 evita doble consumidor y recupera su stack de cámara automáticamente',()=>{
+  const open=fn(MAQ,'openWebcamModal');
+  const close=fn(MAQ,'closeWebcamModal');
+  const err=fn(MAQ,'_cameraLoadError');
+  const recover=fn(MAQ,'recoverPrinterCamera');
+  const refresh=fn(MAQ,'_refreshSnapshotCams');
+  assert.match(open,/_printerCamRaw\(id\)/,'el modal debe usar también la cámara por defecto, no solo overrides');
+  assert.doesNotMatch(open,/localStorage\.getItem\('printer_cam_'/,'la ausencia de override no puede ocultar una cámara K2 válida');
+  assert.match(open,/camSuspended='1'/,'al abrir una K2 debe congelar el polling de la tarjeta');
+  assert.match(close,/delete cardImg\.dataset\.camSuspended/,'al cerrar debe liberar la tarjeta');
+  assert.match(close,/_cameraRefreshNow\(cardImg\)/,'al cerrar debe retomar imagen inmediatamente');
+  assert.match(refresh,/camSuspended/,'el watchdog global no puede reactivar la tarjeta mientras el modal consume la K2');
+  assert.match(err,/_CAM_AUTORECOVER_FAILS/,'la cámara caída debe escalar de retry a recuperación');
+  assert.match(err,/recoverPrinterCamera\(machineId,true\)/,'la recuperación automática debe ser silenciosa');
+  assert.match(recover,/\/recover-camera\/\$\{ip\}/,'la recuperación física va por el bridge del taller');
+  assert.match(recover,/_CAM_AUTORECOVER_COOLDOWN_MS/,'debe tener cooldown para no reiniciar en bucle');
+  assert.match(MAQ,/↻ Reiniciar cámara/,'también debe existir recuperación manual en la tarjeta');
+});
+
 test('cargas concurrentes de Máquinas comparten una sola inicialización',()=>{
   const init=fn(MAQ,'initMaquinas');
   assert.match(init,/_maquinasInitPromise/);
