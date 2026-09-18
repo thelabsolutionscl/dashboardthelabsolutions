@@ -1712,6 +1712,9 @@ function handlePrinterTransition(m,s,previous){
     watch.progress=progress;watch.lastSeenAt=Date.now();
   }else{watch.progress=null;watch.unchangedAt=Date.now();}
   watch.state=s.state;_telemetryWatch[m.id]=watch;
+  if(s.state==='printing'&&previous!=='printing'&&data().bedClearAcks?.[m.id]){
+    delete data().bedClearAcks[m.id];writeLocal();scheduleRemote();
+  }
   if(s.state==='printing'&&data().automation.enabled&&data().automation.autoLink){
     const active=data().jobs.find(x=>x.machineId===m.id&&!x.archived&&x.status==='imprimiendo'),j=active||findJobForPrint(m.id,s.filename);
     if(j&&j.status!=='imprimiendo'){j.status='imprimiendo';j.startedAt=j.startedAt||new Date(Date.now()-num(s.elapsed)*1000).toISOString();j.updatedAt=nowIso();persist('Trabajo detectado y vinculado por G-code',{render:true});}
