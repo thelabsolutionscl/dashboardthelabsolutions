@@ -13,6 +13,7 @@ const OPS=fs.readFileSync(path.join(ROOT,'js','maquinas-operaciones.js'),'utf8')
 const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
 const MAQ=fs.readFileSync(path.join(ROOT,'js','maquinas.js'),'utf8');
 const SLICER=fs.readFileSync(path.join(ROOT,'js','slicer3d.js'),'utf8');
+const CSS=fs.readFileSync(path.join(ROOT,'styles.css'),'utf8');
 
 function storage(){
   const map=new Map();
@@ -246,6 +247,21 @@ test('planificación distingue plan local, telemetría y cola durable',()=>{
 test('planificación no inventa un minuto de carga en máquinas vacías',()=>{
   assert.doesNotMatch(OPS,/const total=Math\.max\(1,jobs\.reduce/);
   assert.match(OPS,/const total=jobs\.reduce\(\(s,j\)=>s\+jobMinutes\(j\),0\)/);
+});
+
+test('plan por impresora prioriza carga y pliega máquinas vacías',()=>{
+  assert.match(OPS,/Primero mostramos las impresoras con carga/);
+  assert.match(OPS,/mops-plan-machine-grid/);
+  assert.match(OPS,/mops-plan-idle/);
+  assert.match(OPS,/Ver \$\{visibleIdle\.length\} impresora\(s\) sin trabajos planificados/);
+  assert.match(OPS,/setGanttFilter/);
+  assert.match(OPS,/setGanttFamily/);
+  assert.match(OPS,/Sin telemetría/);
+  assert.match(OPS,/Controller sin confirmar/);
+  assert.match(CSS,/Plan estimado por impresora · vista clara/);
+  assert.match(CSS,/mops-plan-summary/);
+  assert.match(CSS,/mops-plan-machine/);
+  assert.match(CSS,/mops-plan-idle-grid/);
 });
 
 test('sincronización conserva la versión más nueva de cada registro',()=>{
