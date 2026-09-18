@@ -77,7 +77,10 @@ async function patchRegistryMachine(m,forcedIp){
   const fallback=forced?String(forcedIp||''):(original.getIp?original.getIp(m):(m.ip||''));
   if(!forced&&!fallback)return null;
   const nozzle=localStorage.getItem('printer_nozzle_'+m.id)||m.nozzleInstalled||'';
-  const body={id:m.id,ip:fallback,name:m.nombre||m.name||'',model:m.modelo||m.model||'',num:m.numG||m.num||'',nozzleInstalled:nozzle};
+  let cfsInstalled=false;try{cfsInstalled=typeof machineHasPhysicalCfs==='function'?machineHasPhysicalCfs(m):false;}catch(_){}
+  let cameraConfigured=false;try{cameraConfigured=!!(localStorage.getItem('printer_cam_'+m.id)||m.cam||(typeof _defaultCamUrl==='function'&&_defaultCamUrl(m)));}catch(_){}
+  const body={id:m.id,ip:fallback,name:m.nombre||m.name||'',model:m.modelo||m.model||'',num:m.numG||m.num||'',nozzleInstalled:nozzle,
+    physicalProfile:{cfsInstalled,cameraConfigured,profileVersion:1}};
   const r=await fetch(url('/farm/registry'),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(6000)});
   const d=await readJson(r);
   if(d.machine){
