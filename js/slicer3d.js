@@ -2311,22 +2311,30 @@ self.onmessage=function(ev){
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
         <span class="badge badge-gray">${kb} KB</span>
-        ${machines.length?`<select class="field-select" id="slCalTarget" style="width:auto;min-width:150px">${opts}</select><button class="btn btn-ghost" id="slBtnCalSend" onclick="SL3D.enviarCal()">📤 Enviar e imprimir</button>`:''}
+        ${machines.length?`<select class="field-select" id="slCalTarget" style="width:auto;min-width:150px">${opts}</select><button class="btn btn-ghost" id="slBtnCalSend" onclick="SL3D.enviarCal()">📤 Subir y revisar</button>`:''}
       </div></div>`;
     toast('Test de calibración generado ✓','success');
   }
   function enviarCal(){
     const id=el('slCalTarget')?.value;if(!id||!S.gcode)return;
     const m=MAQUINAS.find(x=>x.id===id),ip=getPrinterIp(m);if(!ip){toast('Esa impresora no tiene IP','error');return;}
-    if(typeof _isPrinterBusy==='function'&&_isPrinterBusy((_printerStatus[id]||{}).state)){toast('🔒 La impresora está ocupada — no se interrumpe','error');return;}
+    const model=el('slPrinter')?.value;
+    if(m?.modelo!==model){toast(`La calibración fue generada para ${model}; elige una impresora física de ese mismo modelo.`,'error');return;}
+    const ready=_machineReadiness(m,true);if(!ready.ready){toast('Calibración bloqueada: la impresora no está confirmada libre con telemetría reciente.','error');return;}
+    const fit=_validateGcodeForSpec(S.gcode,SPECS[m.modelo]);if(!fit.ok){toast('Calibración fuera del volumen seguro: '+fit.issues.join(' · '),'error');return;}
+    if(!_abrasiveCheck(m,true))return;
     const fname=gcodeFileName(),btn=el('slBtnCalSend');btn.disabled=true;btn.textContent='⏳ Subiendo…';
-    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';toast(`▶ DEMO: calibración simulada en ${m.nombre} #${m.numG}`,'success');},250);return;}
+    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{btn.disabled=false;btn.textContent='📤 Subir y revisar';toast(`▶ DEMO: calibración simulada en ${m.nombre} #${m.numG}`,'success');},250);return;}
     const fd=new FormData();fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);fd.append('root','gcodes');
     const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
-    xhr.onload=async()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';
-      if(xhr.status>=200&&xhr.status<300){try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(fname)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});toast(r.ok?`▶ Calibrando en ${m.nombre} #${m.numG}`:'Subido, no se pudo iniciar',r.ok?'success':'error');if(typeof pollPrinters==='function')pollPrinters();}catch(e){toast('Subido, no se pudo iniciar: '+e.message,'error');}}else toast('Error al subir ('+xhr.status+')','error');};
-    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';toast('Impresora inaccesible','error');};
+    xhr.onload=()=>{btn.disabled=false;btn.textContent='📤 Subir y revisar';
+      if(xhr.status>=200&&xhr.status<300){
+        const meta={source:'slicer3d-calibration',name:S.name||'Calibración',material:el('slMaterial')?.value||'',nozzle:String(el('slNozzle')?.value||''),model,machineId:id,gcodeFile:fname,grams:0,secs:0};
+        if(window.MachineOps?.startUploadedSlicerJob){window.MachineOps.startUploadedSlicerJob(meta);toast('Calibración subida · completa el preflight antes de iniciar','success');}
+        else toast('Calibración subida. No se inició porque MachineOps/preflight no está disponible.','info');
+      }else toast('Error al subir ('+xhr.status+')','error');};
+    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Subir y revisar';toast('Impresora inaccesible','error');};
     xhr.send(fd);
   }
   function _money(n){return '$'+Math.round(n||0).toLocaleString('es-CL');}
