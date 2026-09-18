@@ -147,12 +147,12 @@ test('se niega a mandar una pieza que no cabe en la impresora destino', () => {
   assert.match(m.avisos.join(' '), /X máximo 300\.00 > 220 mm/, 'debe decir el límite real del G-code');
 });
 
-test('si cabe pero es otro modelo, avisa y deja decidir', () => {
+test('aunque quepa, un G-code de otro modelo se bloquea', () => {
   const m = montar({ maquinas: [K1(1)], stats: CUBO20, laminadoPara: 'K2 Plus' });
   m.campos.slTarget.value = 'p1';
   m.api.enviar();
-  assert.equal(m.subidas.length, 1, 'con el sí, se envía');
-  assert.match(m.preguntas.join(' '), /K2 Plus.*K1/s, 'la pregunta nombra los dos modelos');
+  assert.equal(m.subidas.length, 0, 'no se sube un arranque/aceleración de otro modelo');
+  assert.match(m.avisos.join(' '), /generado para K2 Plus.*destino es K1/s);
 });
 
 test('mismo modelo: no molesta con preguntas', () => {
