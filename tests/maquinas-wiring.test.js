@@ -117,7 +117,7 @@ test('Centro de granja distingue evidencia, eventos automáticos e historial',()
   const incidentCard=functionSource(OPS,'_incidentCard');
   assert.match(incidentCard,/Confirmar falla/);
   assert.match(incidentCard,/Descartar/);
-  assert.match(render,/Datos físicos y CFS/);
+  assert.match(render,/CFS físico/);
   assert.match(render,/mops-physical-details/,'CFS debe quedar como detalle técnico contraíble');
   assert.match(reliability,/PrinterHistory|printerHistoryEvidence/);
   assert.match(reliability,/FarmHealth|centralHealthEvidence/);
