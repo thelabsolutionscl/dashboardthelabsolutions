@@ -66,6 +66,28 @@ test('reconciliación reconoce el mismo archivo aunque Moonraker entregue una ru
   assert.equal(api.samePrintFilename('otro.gcode','test.gcode'),false);
 });
 
+test('payload G-code vive fuera de queue.json y la persistencia no bloquea el event loop',()=>{
+  assert.match(source,/const PAYLOAD_DIR/);
+  assert.match(source,/async function writePayload\(/);
+  assert.match(source,/async function readPayload\(/);
+  assert.match(source,/payloadFile:payloadStored\.file/);
+  assert.match(source,/const gcode=await readPayload\(j\)/);
+  assert.match(source,/await deletePayload\(j\)/);
+  assert.match(source,/async function atomicWrite\(/);
+  assert.match(source,/fs\.promises\.writeFile/);
+  assert.match(source,/fs\.promises\.rename/);
+  assert.doesNotMatch(source,/fs\.writeFileSync\(/,'el controller no debe bloquear Node al persistir queue/registry/safety');
+  assert.doesNotMatch(source,/fs\.renameSync\(/,'la rotación atómica debe ser asíncrona');
+  assert.match(source,/const j = await enqueue\(body\)/);
+  assert.match(source,/const j=await enqueue\(\{\.\.\.body,existingFile:true/);
+});
+
+test('la ruta de payload neutraliza traversal en ids',()=>{
+  const p=api.payloadPath('../cliente/../../pieza');
+  assert.ok(p.endsWith('.._cliente_.._.._pieza.gcode')||p.endsWith('__cliente_.._.._pieza.gcode'));
+  assert.equal(path.basename(p).includes('/'),false);
+});
+
 test('metadata del slicer se conserva sanitizada en la cola durable',()=>{
   const meta=api.cleanJobMetadata({source:'slicer3d',name:'pieza',material:'PETG',nozzle:'0.6',model:'K2',sizeX:120,sizeY:80,sizeZ:40,grams:83,secs:5400,
     params:{layerHeight:.28,infillPct:25,infillType:'gyroid',supports:true,maxVolumetricFlow:10},mesh:{volumeReliable:true,openEdges:0,nonManifoldEdges:0},secret:'no'});
