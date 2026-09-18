@@ -142,6 +142,31 @@ test('ficha prioriza sensor físico de filamento sobre inventario manual',()=>{
   assert.equal(unknown.value,'Sin datos');
 });
 
+test('fiabilidad no inventa 100% cuando no existen datos suficientes',()=>{
+  const ops=loadOps();
+  const row=ops.machineReliability('k1-1');
+  assert.equal(row.level,'unknown');
+  assert.equal(row.label,'Sin datos actuales');
+  assert.equal(row.confidence,'baja');
+  assert.equal(row.history.total,0);
+  assert.equal(row.completion,null);
+});
+
+test('eventos automáticos no cuentan como incidentes confirmados hasta validación humana',()=>{
+  const ops=loadOps();
+  assert.equal(ops.incidentIsConfirmed({source:'telemetry',confirmedAt:''}),false);
+  assert.equal(ops.incidentIsConfirmed({source:'telemetry',confirmedAt:'2026-09-18T10:00:00Z'}),true);
+  assert.equal(ops.incidentIsConfirmed({source:'manual'}),true);
+});
+
+test('CFS sin telemetría reciente queda como dato desconocido y no como falla',()=>{
+  const ops=loadOps();
+  const row=ops._filamentPhysicalSummary({id:'k2-1',modelo:'K2'});
+  assert.equal(row.level,'unknown');
+  assert.equal(row.label,'Sin dato reciente');
+  assert.match(row.detail,/más de 60 s|aún no llegó/);
+});
+
 test('sincronización conserva la versión más nueva de cada registro',()=>{
   const ops=loadOps();
   const local=ops.defaultData();
