@@ -1195,7 +1195,7 @@ async function startJob(id,options={}){
     toast('No se inicia sin Farm Controller: evita ejecuciones fuera del registro central','error');return false;
   }
   try{
-    const execution=await window.FarmQueue.startExisting(j.machineId,j.gcodeFile,{jobId:j.id,name:j.name,material:j.material,nozzle:j.nozzle,source:'machineops'});
+    const execution=await window.FarmQueue.startExisting(j.machineId,j.gcodeFile,{jobId:j.id,idempotencyKey:'machineops:'+j.id,name:j.name,material:j.material,nozzle:j.nozzle,source:'machineops'});
     if(!execution)throw new Error('Controller no confirmó la ejecución');
     j.farmJobId=execution.id||j.farmJobId;j.executionId=execution.idempotencyKey||j.executionId;
     j.status='en_cola';j.startRequestedAt=nowIso();j.updatedAt=nowIso();persist('Inicio solicitado al Controller');
