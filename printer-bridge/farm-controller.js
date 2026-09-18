@@ -341,11 +341,12 @@ function recordProductionEvent(j,result,ps={}){
     req.on('timeout',()=>{req.destroy();resolve();});req.on('error',()=>resolve());req.end(body);
   });
 }
-const activeJobRuns=new Set();
+const activeJobRuns=new Set(),activeMachineRuns=new Set();
 async function runQueuedJob(j) {
-  if (!j || !['queued', 'retry'].includes(j.state) || activeJobRuns.has(j.id)) return;
-  activeJobRuns.add(j.id);
-  const queuedState = j.state;
+  const machineRunKey=String(j?.machineId||j?.ip||'');
+  if(!j||!['queued','retry'].includes(j.state)||activeJobRuns.has(j.id)||!machineRunKey||activeMachineRuns.has(machineRunKey))return;
+  activeJobRuns.add(j.id);activeMachineRuns.add(machineRunKey);
+  const queuedState=j.state;
   try {
     markJob(j.id, { state: 'checking', lastError: '' });
     const machine = machineByIdentity({ id: j.machineId }) || machineByIdentity({ ip: j.ip });
@@ -394,7 +395,7 @@ async function runQueuedJob(j) {
     if(machine?.bedClearSignature){delete machine.bedClearSignature;delete machine.bedClearedAt;machine.updatedAt=nowIso();persistRegistry();}
     return markJob(j.id,{state:'started',startedAt:nowIso(),gcodeBase64:'',lastError:''});
   } finally {
-    activeJobRuns.delete(j.id);
+    activeJobRuns.delete(j.id);activeMachineRuns.delete(machineRunKey);
   }
 }
 async function reconcileStartedJobs(){
