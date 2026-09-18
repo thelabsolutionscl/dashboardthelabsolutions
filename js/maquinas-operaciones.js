@@ -279,15 +279,45 @@ function jobCostBreakdown(job){
   const base=material+electricity+labor+wear,failure=job?.status==='fallido'?base*num(cfg.failureOverheadPct)/100:0;
   return{minutes,hours,grams,material,electricity,labor,wear,failure,total:base+failure};
 }
+function incidentIsConfirmed(row){
+  if(!row)return false;
+  return row.source!=='telemetry'||!!row.confirmedAt;
+}
+function printerHistoryEvidence(machineId){
+  let status={};try{status=window.PrinterHistory?.status?.()||{};}catch(_){}
+  const odo=status.odometer?.[machineId]||{};
+  let completed=Math.max(0,num(odo.prints)),notCompleted=Math.max(0,num(odo.failures));
+  let source=status.mode==='durable'?'Historial central':status.mode==='local-fallback'?'Caché local':'';
+  if(completed+notCompleted===0){
+    const jobs=data().jobs.filter(j=>j.machineId===machineId&&(['terminado','fallido'].includes(j.status)||['terminado','fallido'].includes(j.archivedFromStatus)));
+    completed=jobs.filter(j=>j.status==='terminado'||j.archivedFromStatus==='terminado').length;
+    notCompleted=jobs.filter(j=>j.status==='fallido'||j.archivedFromStatus==='fallido').length;
+    if(completed+notCompleted)source='Trabajos registrados';
+  }
+  return{completed,notCompleted,total:completed+notCompleted,source:source||'Sin historial',durable:status.mode==='durable',lastSync:num(status.lastSync)};
+}
+function centralHealthEvidence(machineId){
+  let status={};try{status=window.FarmHealth?.status?.()||{};}catch(_){}
+  const row=(status.machines||[]).find(x=>String(x.id||'')===String(machineId))||null;
+  const generated=num(status.generatedAt||status.lastSync),fresh=!!generated&&Date.now()-generated<120000;
+  return{row,fresh,central:status.mode==='central',generatedAt:generated};
+}
 function machineReliability(machineId){
-  const jobs=data().jobs.filter(j=>j.machineId===machineId&&(['terminado','fallido'].includes(j.status)||['terminado','fallido'].includes(j.archivedFromStatus)));
-  const done=jobs.filter(j=>j.status==='terminado'||j.archivedFromStatus==='terminado').length,failed=jobs.filter(j=>j.status==='fallido'||j.archivedFromStatus==='fallido').length,total=done+failed;
-  const success=total?done/total*100:100,cut=Date.now()-30*86400000;
-  const incidents=data().incidents.filter(i=>i.machineId===machineId&&Date.parse(i.at||0)>=cut),connectionIncidents=incidents.filter(i=>i.type==='electrical').length;
-  let maintenance=100;try{maintenance=Math.max(0,100-getMaintAlerts(getMachine(machineId)).length*18);}catch(_){ }
-  const stateNow=liveState(machineId),availability=clamp(100-connectionIncidents*4-(['offline','noip'].includes(stateNow)?18:0),0,100);
-  const score=clamp(success*.6+availability*.25+maintenance*.15,0,100);
-  return{score,success,availability,maintenance,done,failed,incidents:incidents.length};
+  const history=printerHistoryEvidence(machineId),central=centralHealthEvidence(machineId);
+  const current=liveState(machineId),cut=Date.now()-30*86400000;
+  const confirmed=data().incidents.filter(i=>i.machineId===machineId&&!i.resolvedAt&&incidentIsConfirmed(i)&&Date.parse(i.at||0)>=cut);
+  const detected=data().incidents.filter(i=>i.machineId===machineId&&!i.resolvedAt&&!incidentIsConfirmed(i)&&Date.parse(i.at||0)>=cut);
+  let maintenanceAlerts=[];try{maintenanceAlerts=getMaintAlerts(getMachine(machineId))||[];}catch(_){}
+  const sample=history.total,completion=sample?history.completed/sample*100:null;
+  const centralBad=central.fresh&&central.row&&(central.row.health==='offline'||['shutdown','error'].includes(String(central.row.klipperState||'')));
+  const liveBad=['offline','noip','shutdown','error','apidown'].includes(current);
+  let level='unknown',label='Sin datos suficientes';
+  if(centralBad||liveBad||confirmed.length){level='critical';label='Requiere atención';}
+  else if(maintenanceAlerts.length||(sample>=4&&completion<80)){level='warning';label='Conviene revisar';}
+  else if((central.fresh&&central.row?.online)||sample>=3){level='ok';label='Sin problemas detectados';}
+  const confidence=history.durable&&central.central&&central.fresh&&sample>=5?'alta':
+    ((history.durable||central.fresh)&&sample>=2?'media':'baja');
+  return{level,label,confidence,history,central,current,completion,confirmed:confirmed.length,detected:detected.length,maintenance:maintenanceAlerts.length};
 }
 function preflightFromFacts(facts){
   const checks=[];
@@ -371,10 +401,24 @@ function createJobFromLive(machineId){
   data().jobs.push(job);persist('Trabajo creado desde impresión en vivo');toast('Impresión incorporada al control de producción ✓','success');
 }
 function addIncident({machineId='',jobId='',type='other',note='',photo='',source='manual'}={}){
-  const recent=data().incidents.find(row=>row.machineId===machineId&&row.type===type&&row.source===source&&!row.resolvedAt&&Date.now()-Date.parse(row.at||0)<5*60000);
+  const dedupeMs=source==='telemetry'?30*60000:5*60000;
+  const recent=data().incidents.find(row=>row.machineId===machineId&&row.type===type&&row.source===source&&!row.resolvedAt&&
+    (jobId?row.jobId===jobId:true)&&Date.now()-Date.parse(row.at||0)<dedupeMs);
   if(recent)return recent;
-  const incident={id:uid('incident'),machineId,jobId,type:INCIDENT_TYPES[type]?type:'other',note:String(note||''),photo:String(photo||''),source,at:nowIso(),actor:actor(),resolvedAt:'',resolvedBy:'',updatedAt:nowIso()};
+  const manual=source!=='telemetry';
+  const incident={id:uid('incident'),machineId,jobId,type:INCIDENT_TYPES[type]?type:'other',note:String(note||''),photo:String(photo||''),source,
+    confirmedAt:manual?nowIso():'',confirmedBy:manual?actor():'',at:nowIso(),actor:actor(),resolvedAt:'',resolvedBy:'',resolution:'',updatedAt:nowIso()};
   data().incidents.unshift(incident);if(data().incidents.length>300)data().incidents.length=300;return incident;
+}
+function confirmIncident(id){
+  const row=data().incidents.find(item=>item.id===id);if(!row||row.resolvedAt)return;
+  row.confirmedAt=nowIso();row.confirmedBy=actor();row.updatedAt=nowIso();
+  persist('Evento automático confirmado como incidente');
+}
+function dismissIncident(id){
+  const row=data().incidents.find(item=>item.id===id);if(!row||row.resolvedAt)return;
+  row.resolvedAt=nowIso();row.resolvedBy=actor();row.resolution='dismissed';row.updatedAt=nowIso();
+  persist('Evento automático descartado');
 }
 function openIncident(machineId='',jobId=''){
   const machine=input('mopsIncidentMachine'),job=input('mopsIncidentJob');if(!machine||!job)return;
@@ -431,6 +475,24 @@ function _mountLiveMonitorBeforeReliability(el,monitor){
   // contenido esté pintado por si éste fue el primer ingreso a Máquinas.
   try{renderMonitorFilterTabs();renderMonitorKPIs();renderMonitorGrid();}catch(_){}
 }
+function _statusColor(level){return level==='critical'?'var(--danger)':level==='warning'?'var(--warn)':level==='ok'?'var(--accent3)':'var(--text3)';}
+function _statusIcon(level){return level==='critical'?'!':level==='warning'?'⚠':level==='ok'?'✓':'?';}
+function _incidentRowsForUi(){
+  const all=[...data().incidents].sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0));
+  const pending=all.filter(row=>!row.resolvedAt).filter(row=>incidentIsConfirmed(row)||Date.now()-Date.parse(row.at||0)<24*3600000);
+  const history=all.filter(row=>row.resolvedAt||(!incidentIsConfirmed(row)&&Date.now()-Date.parse(row.at||0)>=24*3600000));
+  return{pending,history};
+}
+function _filamentPhysicalSummary(machine){
+  const s=typeof _printerStatus!=='undefined'?_printerStatus[machine.id]||{}:{},f=s.filament||null;
+  const fresh=!!s.lastSeenAt&&Date.now()-num(s.lastSeenAt)<60000;
+  if(!fresh)return{level:'unknown',label:'Sin dato reciente',detail:'La telemetría física tiene más de 60 s o aún no llegó.',f:null};
+  if(f?.cfsConnected)return{level:'ok',label:'CFS conectado',detail:`${f.cfsSlots?.length||0} slot${(f.cfsSlots?.length||0)===1?'':'s'} con lectura física.`,f};
+  if(f?.detected===true)return{level:'ok',label:'Filamento detectado',detail:'Sensor físico activo; CFS no detectado.',f};
+  if(f?.detected===false)return{level:'warning',label:'Sin filamento',detail:'El sensor físico reporta vacío.',f};
+  return{level:'unknown',label:'CFS no detectado',detail:'No se interpreta como falla; no hay lectura física suficiente.',f};
+}
+
 function renderIntelligence(){
   const el=input('mopsIntelligence');if(!el)return;
   const liveMonitor=_parkLiveMonitorBeforeIntelligenceRender(el);
@@ -525,22 +587,19 @@ function showView(view,button){
 
 function renderOpsOverview(){
   const el=document.getElementById('maquinaOpsOverview');if(!el)return;
-  const jobs=activeJobs(),printing=jobs.filter(j=>j.status==='imprimiendo').length;
-  const qa=jobs.filter(j=>j.status==='qa').length,unassigned=jobs.filter(j=>!j.machineId).length;
-  const grams=jobs.reduce((s,j)=>s+num(j.grams),0);
-  const availableSpools=data().spools.filter(s=>!s.archived&&spoolAvailable(s)>0).length;
-  const notReady=(MAQUINAS||[]).filter(m=>!machineOperational(m)).length;
-  // Aquí había tres avisos —atrasados, sin máquina, esperando QA— que repetían
-  // datos ya visibles en la misma pantalla: los dos últimos son literalmente el
-  // número del indicador de al lado, y los atrasados salen uno por uno en el
-  // panel de alertas, ahí sí con botón para actuar. Quedan solo indicadores.
-  el.innerHTML=`<div class="mops-kpis">
-    ${kpi('Trabajos activos',jobs.length,`${printing} imprimiendo`,'var(--accent)')}
+  const jobs=activeJobs(),qa=jobs.filter(j=>j.status==='qa').length,unassigned=jobs.filter(j=>!j.machineId).length;
+  const printingLive=(MAQUINAS||[]).filter(m=>liveState(m.id)==='printing').length;
+  const trusted=(MAQUINAS||[]).filter(m=>{
+    const s=typeof _printerStatus!=='undefined'?_printerStatus[m.id]||{}:{};
+    return !!s.lastSeenAt&&Date.now()-num(s.lastSeenAt)<60000&&!['connecting','unknown'].includes(String(s.state||''));
+  }).length;
+  el.innerHTML=`<div class="mops-kpis mops-kpis-trust">
+    ${kpi('Imprimiendo ahora',printingLive,'telemetría en vivo',printingLive?'var(--accent)':'var(--text)')}
+    ${kpi('Trabajos abiertos',jobs.length,'planificados o en proceso')}
     ${kpi('Esperando QA',qa,'requieren revisión',qa?'var(--warn)':'var(--accent3)')}
-    ${kpi('Sin asignar',unassigned,'pendientes de planificar',unassigned?'var(--danger)':'var(--accent3)')}
-    ${kpi('Carga estimada',fmtMin(jobs.reduce((s,j)=>s+jobMinutes(j),0)),`${(grams/1000).toFixed(2)} kg reservados`)}
-    ${kpi('Máquinas no listas',notReady,`de ${(MAQUINAS||[]).length}`,notReady?'var(--warn)':'var(--accent3)')}
-    ${kpi('Rollos disponibles',availableSpools,'con saldo utilizable')}
+    ${kpi('Sin máquina',unassigned,'pendientes de asignar',unassigned?'var(--danger)':'var(--accent3)')}
+    ${kpi('Carga pendiente',fmtMin(jobs.reduce((s,j)=>s+jobMinutes(j),0)),'estimación de trabajos abiertos')}
+    ${kpi('Telemetría reciente',trusted+'/'+(MAQUINAS||[]).length,'lectura física < 60 s',trusted===(MAQUINAS||[]).length?'var(--accent3)':'var(--warn)')}
   </div>`;
 }
 
