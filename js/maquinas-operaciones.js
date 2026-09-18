@@ -410,8 +410,31 @@ function saveIntelligenceConfig(){
 }
 function restartBridgeTimer(){clearInterval(_bridgeTimer);_bridgeTimer=null;if(data().automation.enabled)_bridgeTimer=setInterval(()=>{if(!document.hidden)checkBridgeHealth(true);},num(data().automation.bridgeIntervalSeconds,60)*1000);}
 
+function _parkLiveMonitorBeforeIntelligenceRender(el){
+  // renderIntelligence reemplaza su innerHTML varias veces (bridge, alertas,
+  // telemetría). Si el monitor ya está incrustado aquí, lo sacamos primero para
+  // NO destruir sus tarjetas, cámaras ni listeners y luego lo volvemos a montar.
+  const monitor=input('maquinaMonitorView');
+  if(!monitor||monitor.parentElement!==el)return monitor;
+  const intelligenceView=el.closest('[data-maq-view="inteligencia"]');
+  if(intelligenceView?.parentElement)intelligenceView.insertAdjacentElement('afterend',monitor);
+  return monitor;
+}
+function _mountLiveMonitorBeforeReliability(el,monitor){
+  const anchor=input('mopsLiveMonitorAnchor');
+  if(!el||!monitor||!anchor)return;
+  anchor.replaceWith(monitor);
+  monitor.classList.add('mops-inline-monitor');
+  monitor.style.marginTop='14px';
+  monitor.style.marginBottom='14px';
+  // Al mover el nodo no se recrean cámaras ni tarjetas. Solo aseguramos que el
+  // contenido esté pintado por si éste fue el primer ingreso a Máquinas.
+  try{renderMonitorFilterTabs();renderMonitorKPIs();renderMonitorGrid();}catch(_){}
+}
 function renderIntelligence(){
-  const el=input('mopsIntelligence');if(!el)return;const alerts=buildSmartAlerts(),critical=alerts.filter(row=>row.severity==='critical').length;
+  const el=input('mopsIntelligence');if(!el)return;
+  const liveMonitor=_parkLiveMonitorBeforeIntelligenceRender(el);
+  const alerts=buildSmartAlerts(),critical=alerts.filter(row=>row.severity==='critical').length;
   const unlinked=(MAQUINAS||[]).filter(m=>liveState(m.id)==='printing'&&!data().jobs.some(j=>j.machineId===m.id&&j.status==='imprimiendo'&&!j.archived)).length;
   // El promedio de fiabilidad de la flota tenía su propio indicador arriba,
   // justo encima de la grilla que muestra el puntaje de cada máquina: el mismo
@@ -426,11 +449,13 @@ function renderIntelligence(){
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Priorizadas por impacto; una alerta atendida reaparece en 4 horas si persiste.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Sin alertas operacionales activas.</div>'}</div></section>
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Considera compatibilidad, carga, telemetría, material y mantenimiento.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>{return`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:'<span class="mops-status" style="color:var(--danger)">Sin opción</span>'}</article>`;}).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
     </div>
+    <div id="mopsLiveMonitorAnchor" aria-hidden="true"></div>
     <section class="card mops-intel-panel" style="margin-top:12px"><div class="mops-intel-head"><div><b>📈 Salud y fiabilidad por impresora</b><small>El puntaje combina éxito de trabajos, disponibilidad, incidentes y mantenciones.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident()">+ Incidente</button></div><div class="mops-reliability-grid">${reliability.map(row=>`<article><div class="mops-reliability-title"><b>${esc(machineLabel(row.machine.id))}</b><span style="color:${row.score<70?'var(--danger)':row.score<85?'var(--warn)':'var(--accent3)'}">${row.score.toFixed(0)}%</span></div><div class="mops-reliability-bar"><i style="width:${row.score}%;background:${row.score<70?'var(--danger)':row.score<85?'var(--warn)':'var(--accent3)'}"></i></div><small>Éxito ${row.success.toFixed(0)}% · disponibilidad ${row.availability.toFixed(0)}% · ${row.incidents} incidentes/30d</small><div><button class="btn btn-ghost btn-sm" onclick="MachineOps.openTech('${row.machine.id}')">Ficha</button><button class="btn btn-ghost btn-sm" onclick="openHistoryModal('${row.machine.id}')">Historial</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident('${row.machine.id}')">Reportar</button></div></article>`).join('')}</div></section>
     <div class="mops-intel-grid" style="margin-top:12px">
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🧵 CFS y filamento físico</b><small>Lectura real de las K2; no se confunde con el inventario manual.</small></div></div><div class="mops-cfs-grid">${cfs.map(({machine,filament})=>`<article><div><b>${esc(machineLabel(machine.id))}</b><span class="mops-cfs-state ${filament?.cfsConnected?'online':'offline'}">${filament?.cfsConnected?'CFS conectado':'Sin lectura CFS'}</span></div>${filament?.cfsSlots?.length?`<div class="mops-cfs-slots">${filament.cfsSlots.map(slot=>`<span><i style="background:${cssColor(slot.color)}"></i><b>${esc(slot.slot)}</b><small>${esc(slot.material||'—')} · ${Math.round(num(slot.remain))} restante</small></span>`).join('')}</div>`:`<small>${filament?.detected===true?'Filamento detectado':filament?.detected===false?'Sensor reporta vacío':'Esperando telemetría física'}</small>`}</article>`).join('')||'<div class="mops-intel-empty">No hay equipos CFS configurados.</div>'}</div></section>
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🧰 Incidentes recientes</b><small>Registro trazable con causa, responsable y evidencia.</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.openIncident()">Registrar</button></div><div class="mops-incidents">${data().incidents.slice(0,10).map(row=>`<article class="${row.resolvedAt?'resolved':''}">${row.photo?`<img src="${esc(row.photo)}" alt="Evidencia">`:''}<div><b>${esc(INCIDENT_TYPES[row.type]||INCIDENT_TYPES.other)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(fmtStamp(row.at))} · ${esc(row.actor||'Sistema')}</small><p>${esc(row.note||'Sin observaciones')}</p></div>${row.resolvedAt?'<span class="mops-status" style="color:var(--accent3)">Resuelto</span>':`<button class="btn btn-ghost btn-sm" onclick="MachineOps.resolveIncident('${row.id}')">Resolver</button>`}</article>`).join('')||'<div class="mops-intel-empty">Sin incidentes registrados.</div>'}</div></section>
     </div>`;
+  _mountLiveMonitorBeforeReliability(el,liveMonitor);
 }
 
 // La configuración de automatización y costos se ajusta cada varios meses, no
