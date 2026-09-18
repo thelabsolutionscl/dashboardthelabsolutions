@@ -2501,8 +2501,8 @@ self.onmessage=function(ev){
       const r=_machineReadiness(m,true),spec=SPECS[m.modelo]||SPECS[model]||{},fits=S.bounds?(S.bounds.dx<=(spec.x||0)-2&&S.bounds.dy<=(spec.y||0)-2&&S.bounds.dz<=(spec.z||0)-2):false;
       const gfit=S.gcode?_gcodeFitsMachine(m).ok:fits;
       let score=-Infinity;
-      if(r.ready&&fits&&gfit){
-        score=10+(m.modelo===model?5:0)+(!_queueCount(m.id)?3:0);
+      if(r.ready&&fits&&gfit&&m.modelo===model){
+        score=15+(!_queueCount(m.id)?3:0);
         if(_abrasiveKnown(m))score+=1;
       }
       return{m,score};
@@ -2620,8 +2620,8 @@ self.onmessage=function(ev){
       }
     }catch(_){}
     if(!_abrasiveCheck(m,true)){toast('Envío cancelado: confirma una boquilla apta para material abrasivo.','error');return false;}
-    if(!m.modelo||m.modelo===laminado)return true;
-    return confirm(`Este G-code se laminó para ${laminado} y se enviará a ${m.nombre} #${m.numG} (${m.modelo}).\n\nEl envelope cabe, pero el G-code de arranque/aceleraciones pertenece a ${laminado}.\n\n¿Subir el archivo de todas formas? (No se iniciará sin preflight.)`);
+    if(!m.modelo||m.modelo!==laminado){toast(`No se envía: este G-code fue generado para ${laminado} y el destino es ${m?.modelo||'modelo desconocido'}. Vuelve a laminar para el modelo físico de destino.`,'error');return false;}
+    return true;
   }
   // idExplicito: al enviar a varias, cada llamada trae SU impresora. Antes la
   // función no recibía nada y siempre leía el selector, así que "enviar a todas"
@@ -2690,7 +2690,8 @@ self.onmessage=function(ev){
   // ── Enviar a todas las impresoras libres ──
   function enviarATodas(){
     if(!S.gcode){toast('Genera el G-code primero','error');return;}
-    const candidatas=MAQUINAS.filter(m=>typeof getPrinterIp==='function'&&getPrinterIp(m)&&_machineReadiness(m,true).ready);
+    const laminado=el('slPrinter')?.value;
+    const candidatas=MAQUINAS.filter(m=>typeof getPrinterIp==='function'&&getPrinterIp(m)&&m.modelo===laminado&&_machineReadiness(m,true).ready);
     if(!candidatas.length){toast('No hay impresoras confirmadas libres con telemetría reciente e IP válida','error');return;}
     const aptas=[],fuera=[];
     for(const m of candidatas){
