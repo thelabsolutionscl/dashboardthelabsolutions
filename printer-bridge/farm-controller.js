@@ -208,7 +208,7 @@ function routeMinimumRole(req, pathname) {
   if (pathname === '/healthz') return null;
   if (pathname === '/authcheck') return 'viewer';
   if (pathname.startsWith('/farm/')) return null;
-  if (pathname === '/restart' || pathname === '/update' || pathname === '/pubkey' || pathname.startsWith('/sshcheck/') || pathname.startsWith('/recover/') || pathname.startsWith('/maint/')) return 'admin';
+  if (pathname === '/restart' || pathname === '/update' || pathname === '/pubkey' || pathname.startsWith('/sshcheck/') || pathname.startsWith('/recover/') || pathname.startsWith('/recover-camera/') || pathname.startsWith('/maint/')) return 'admin';
   if (req.method === 'GET' || req.method === 'HEAD') return 'viewer';
   if (/\/printer\/(print|gcode|objects\/subscribe|emergency_stop)/.test(pathname) || /\/server\/files\/(upload|delete)/.test(pathname)) return 'operator';
   return 'admin';
