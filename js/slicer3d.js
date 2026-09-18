@@ -2691,10 +2691,11 @@ self.onmessage=function(ev){
   function enviarATodas(){
     if(!S.gcode){toast('Genera el G-code primero','error');return;}
     const laminado=el('slPrinter')?.value;
-    const candidatas=MAQUINAS.filter(m=>typeof getPrinterIp==='function'&&getPrinterIp(m)&&m.modelo===laminado&&_machineReadiness(m,true).ready);
+    const candidatas=MAQUINAS.filter(m=>typeof getPrinterIp==='function'&&getPrinterIp(m)&&_machineReadiness(m,true).ready);
     if(!candidatas.length){toast('No hay impresoras confirmadas libres con telemetría reciente e IP válida','error');return;}
     const aptas=[],fuera=[];
     for(const m of candidatas){
+      if(m.modelo!==laminado){fuera.push({m,why:`G-code generado para ${laminado}; destino ${m.modelo||'desconocido'}`});continue;}
       const g=_gcodeFitsMachine(m);
       if(!g.ok)fuera.push({m,why:g.issues.join(' · ')});
       else if(!_abrasiveCheck(m,false))fuera.push({m,why:'boquilla endurecida no confirmada para material abrasivo'});
