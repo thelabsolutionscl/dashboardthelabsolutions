@@ -300,7 +300,7 @@ test('credenciales Moonraker quedan limitadas a la sesión',()=>{
   // El token viaja en la URL (?bt=), no como cabecera: una cabecera propia
   // dispara un preflight OPTIONS que en redes móviles tumba la petición entera.
   assert.match(MAQ,/function printerUrl\(ip,path\)[\s\S]*?return _appendBridgeToken\(`\$\{getPrinterTunnel\(\)\}\/\$\{ip\}\$\{path\}`\)/);
-  const session=MAQ.slice(MAQ.indexOf('async function refreshPrinterTunnelSession('),MAQ.indexOf('// El token viaja',MAQ.indexOf('async function refreshPrinterTunnelSession(')));
+  const session=MAQ.slice(MAQ.indexOf('async function refreshPrinterTunnelSession('),MAQ.indexOf('// Media/WebSocket',MAQ.indexOf('async function refreshPrinterTunnelSession(')));
   assert.match(session,/X-Bridge-Token/,'sólo el canje de sesión puede usar cabecera; media/ws siguen sin preflight');
   const printerUrl=MAQ.slice(MAQ.indexOf('function printerUrl('),MAQ.indexOf('function printerMediaUrl('));
   assert.doesNotMatch(printerUrl,/X-Bridge-Token/);
