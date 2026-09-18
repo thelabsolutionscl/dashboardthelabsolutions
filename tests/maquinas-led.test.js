@@ -105,3 +105,11 @@ test('el botón detecta y enciende la luz aun durante una impresión',async()=>{
   assert.equal(sent[0].script,'SET_PIN PIN=LED VALUE=1');
   assert.equal(sent[0].opts.allowBusy,true);
 });
+
+
+test('WebSocket suscribe CFS sólo cuando la máquina lo tiene físicamente',()=>{
+  assert.match(LED,/machineHasPhysicalCfs/);
+  assert.match(LED,/objects\.box=null/);
+  assert.match(LED,/objects\.filament_rack=null/);
+  assert.match(LED,/filament_switch_sensor filament_sensor/);
+});
