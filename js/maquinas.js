@@ -604,7 +604,7 @@ function savePrinterConn(){
   if(nozzle)localStorage.setItem('printer_nozzle_'+id,nozzle);else localStorage.removeItem('printer_nozzle_'+id);
   delete _printerLightCaps[id];
   const m=MAQUINAS.find(x=>x.id===id);
-  if(m&&m._airtableId){m.ip=ip||m.ip;if(hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
+  if(m){m.ip=ip||null;if(m._airtableId&&hasAirtableAccess())_atFetch(`/${BASE_ID}/Maquinas/${m._airtableId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields:{ip:ip||''}})});}
   closePrinterConnModal();
   toast(`Conexión guardada · ${m?.nombre} #${m?.numG}`,'success');
   pollPrinters();
