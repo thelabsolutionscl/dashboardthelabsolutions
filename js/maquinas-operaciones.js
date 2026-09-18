@@ -233,7 +233,7 @@ function farmQueueEvidence(now=Date.now()){
 function farmQueueMatch(job,evidence=farmQueueEvidence()){
   if(!job?.machineId||!job?.gcodeFile)return null;
   const target=fileKey(job.gcodeFile);
-  return evidence.jobs.find(row=>row.machineId===job.machineId&&target&&fileKey(row.filename)===target&&['queued','retry','checking','uploading','uploaded','started'].includes(String(row.state||'')))||null;
+  return evidence.jobs.find(row=>row.machineId===job.machineId&&target&&fileKey(row.filename)===target&&['queued','retry','checking','uploading','uploaded','started','printing','paused'].includes(String(row.state||'')))||null;
 }
 function machineOperational(m){
   if(!m||getMaquinaEstadoGlobal(m.id)!=='disponible')return false;
@@ -1164,9 +1164,9 @@ async function startJob(id,options={}){
     const execution=await window.FarmQueue.startExisting(j.machineId,j.gcodeFile,{jobId:j.id,name:j.name,material:j.material,nozzle:j.nozzle,source:'machineops'});
     if(!execution)throw new Error('Controller no confirmó la ejecución');
     j.farmJobId=execution.id||j.farmJobId;j.executionId=execution.idempotencyKey||j.executionId;
-    j.status='imprimiendo';j.startedAt=nowIso();j.updatedAt=nowIso();persist('Impresión iniciada por Controller');
-    audit('Ejecución Controller',m.id,`START ${j.gcodeFile} · ${j.farmJobId||''}`,'control');
-    toast('Inicio aceptado por Farm Controller ✓','success');setTimeout(pollPrinters,1200);return true;
+    j.status='en_cola';j.startRequestedAt=nowIso();j.updatedAt=nowIso();persist('Inicio solicitado al Controller');
+    audit('Ejecución Controller',m.id,`START solicitado ${j.gcodeFile} · ${j.farmJobId||''}`,'control');
+    toast('Controller aceptó el inicio; esperando confirmación de telemetría ✓','success');setTimeout(pollPrinters,1200);return true;
   }catch(e){audit('Fallo Controller',m.id,e.message,'error');toast('No se pudo iniciar: '+e.message,'error');return false;}
 }
 function startExistingFile(machineId,filename){
