@@ -14,6 +14,13 @@ test('la integración reemplaza la cola en memoria por la cola durable con fallb
   assert.match(src,/usando cola local/);
 });
 
+test('la cola durable propaga metadata a Farm Controller y MachineOps',()=>{
+  assert.match(src,/async function durableAdd\(id,gcode,filename,secs,grams,meta=\{\}\)/);
+  assert.match(src,/metadata/);
+  assert.match(src,/MachineOps\?\.onLegacyQueueAdd/);
+  assert.match(src,/original\.add\(id,gcode,filename,secs,grams,meta\)/);
+});
+
 test('el registry pasa a ser la fuente preferida de IP y se actualiza al guardar manualmente',()=>{
   assert.match(src,/window\.getPrinterIp=durableGetPrinterIp/);
   assert.match(src,/registryById\[m\.id\]/);

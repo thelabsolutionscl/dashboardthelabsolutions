@@ -234,6 +234,18 @@ function proxyLegacy(req, res, role) {
 }
 
 function queueJobById(id) { return queue.jobs.find(j => j.id === id); }
+function cleanJobMetadata(value) {
+  const v=value&&typeof value==='object'?value:{},out={};
+  const strings=['source','name','material','nozzle','model','profileName'];
+  for(const k of strings)if(v[k]!=null)out[k]=String(v[k]).slice(0,160);
+  for(const k of['sizeX','sizeY','sizeZ','grams','secs'])if(Number.isFinite(Number(v[k])))out[k]=Number(v[k]);
+  if(v.params&&typeof v.params==='object')out.params={
+    layerHeight:Number(v.params.layerHeight)||0,infillPct:Number(v.params.infillPct)||0,infillType:String(v.params.infillType||'').slice(0,32),
+    supports:!!v.params.supports,maxVolumetricFlow:Number(v.params.maxVolumetricFlow)||0
+  };
+  if(v.mesh&&typeof v.mesh==='object')out.mesh={volumeReliable:!!v.mesh.volumeReliable,openEdges:Number(v.mesh.openEdges)||0,nonManifoldEdges:Number(v.mesh.nonManifoldEdges)||0};
+  return out;
+}
 function enqueue(payload) {
   const machineId = String(payload.machineId || '');
   const machine = machineByIdentity({ id: machineId }) || machineByIdentity({ ip: payload.ip });
@@ -252,7 +264,7 @@ function enqueue(payload) {
     grams: Number(payload.grams || 0), secs: Number(payload.secs || 0),
     priority: Math.max(0, Math.min(100, Number(payload.priority || 50))),
     state: 'queued', attempts: 0, createdAt: nowIso(), updatedAt: nowIso(),
-    source: String(payload.source || 'dashboard'), lastError: '', safetyBlocked: false,
+    source: String(payload.source || 'dashboard'), metadata: cleanJobMetadata(payload.metadata), lastError: '', safetyBlocked: false,
   };
   queue.jobs.push(j);
   queue.jobs.sort((a, b) => b.priority - a.priority || Date.parse(a.createdAt) - Date.parse(b.createdAt));
@@ -505,5 +517,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, normalizeRegistry, roleForToken, routeMinimumRole, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, normalizeRegistry, roleForToken, routeMinimumRole, cleanJobMetadata, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };

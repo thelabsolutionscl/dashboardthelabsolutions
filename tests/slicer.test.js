@@ -35,28 +35,50 @@ const SL = fs.readFileSync(path.join(RAIZ, 'js', 'slicer3d.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');
 
 function bloque(marca) {
-  const i = SL.indexOf(marca);
-  assert.ok(i > 0, `debe existir ${marca}`);
-  let d = 0;
-  for (let x = SL.indexOf('{', i); x < SL.length; x++) {
-    if (SL[x] === '{') d++;
-    if (SL[x] === '}') { d--; if (!d) return SL.slice(i, x + 1); }
+  const i=SL.indexOf(marca);
+  assert.ok(i>=0,`debe existir ${marca}`);
+  const p0=SL.indexOf('(',i);
+  assert.ok(p0>=0,`debe tener parámetros ${marca}`);
+  let par=0,open=-1,quote='',escape=false,line=false,block=false;
+  for(let x=p0;x<SL.length;x++){
+    const ch=SL[x],next=SL[x+1];
+    if(line){if(ch==='\n')line=false;continue;}
+    if(block){if(ch==='*'&&next==='/'){block=false;x++;}continue;}
+    if(quote){if(escape){escape=false;continue;}if(ch==='\\'){escape=true;continue;}if(ch===quote)quote='';continue;}
+    if(ch==='/'&&next==='/'){line=true;x++;continue;}
+    if(ch==='/'&&next==='*'){block=true;x++;continue;}
+    if(ch==='"'||ch==="'"||ch===String.fromCharCode(96)){quote=ch;continue;}
+    if(ch==='(')par++;
+    else if(ch===')'&&--par===0){open=SL.indexOf('{',x);break;}
+  }
+  assert.ok(open>=0,`no se pudo ubicar el cuerpo de ${marca}`);
+  let depth=0;quote='';escape=false;line=false;block=false;
+  for(let x=open;x<SL.length;x++){
+    const ch=SL[x],next=SL[x+1];
+    if(line){if(ch==='\n')line=false;continue;}
+    if(block){if(ch==='*'&&next==='/'){block=false;x++;}continue;}
+    if(quote){if(escape){escape=false;continue;}if(ch==='\\'){escape=true;continue;}if(ch===quote)quote='';continue;}
+    if(ch==='/'&&next==='/'){line=true;x++;continue;}
+    if(ch==='/'&&next==='*'){block=true;x++;continue;}
+    if(ch==='"'||ch==="'"||ch===String.fromCharCode(96)){quote=ch;continue;}
+    if(ch==='{')depth++;
+    else if(ch==='}'&&--depth===0)return SL.slice(i,x+1);
   }
   assert.fail(`no se pudo cerrar ${marca}`);
 }
 
 // ── El módulo real, con el entorno simulado alrededor ────────────────────
-function montar({ maquinas = [], estados = {}, stats = null, laminadoPara = 'K1', margen = '' } = {}) {
+function montar({ maquinas = [], estados = {}, stats = null, laminadoPara = 'K1', margen = '', gcode = 'G90\nG1 X20 Y20 Z20' } = {}) {
   const subidas = [], avisos = [], preguntas = [];
   const campos = {
-    slPrinter: { value: laminadoPara }, slMaterial: { value: 'PLA' }, slTarget: { value: '' },
+    slPrinter: { value: laminadoPara }, slMaterial: { value: 'PLA' }, slNozzle: { value: '0.4' }, slProfileSel: { value: '' }, slTarget: { value: '' },
     slAutoStart: { checked: false }, slBtnSend: { disabled: false, textContent: '' },
     slMargen: { value: margen }, slPriceKg: { value: '15000' }, slRateH: { value: '1500' },
     slCostOut: { innerHTML: '' }, slPriceSuggest: { innerHTML: '' }, 'cot-notas': { value: '' },
   };
   const almacen = {};
   const ctx = {
-    S: { gcode: 'G1 X0 Y0', stats, est: { grams: 100, secs: 3600, filM: 30 }, params: { layerHeight: 0.2 }, name: 'pieza' },
+    S: { gcode, stats, meshHealth:{volumeReliable:true,openEdges:0,nonManifoldEdges:0}, est: { grams: 100, secs: 3600, filM: 30 }, params: { layerHeight: 0.2, maxVolumetricFlow:18 }, name: 'pieza' },
     MAQUINAS: maquinas,
     _printerStatus: estados,
     el: (id) => campos[id] || null,
@@ -79,13 +101,17 @@ function montar({ maquinas = [], estados = {}, stats = null, laminadoPara = 'K1'
       this.send = () => { subidas.push(this._u); setTimeout(() => this.onload && this.onload(), 0); };
     },
     fetch: async () => ({ ok: true }),
+    window:{},
     FormData: class { append() {} },
     Blob: class { constructor() {} },
   };
 
   const piezas = [
     SL.slice(SL.indexOf('const SPECS='), SL.indexOf('};', SL.indexOf('const SPECS=')) + 2),
-    bloque('function fitsIn('), bloque('function _cabeEn('), bloque('function _destinoOk('),
+    SL.slice(SL.indexOf('const MATS='), SL.indexOf('};', SL.indexOf('const MATS=')) + 2),
+    bloque('function fitsIn('), bloque('function _gcodeEnvelope('), bloque('function _validateGcodeForSpec('),
+    bloque('function _machineReadiness('), bloque('function _abrasiveKnown('), bloque('function _abrasiveCheck('),
+    bloque('function _gcodeFitsMachine('), bloque('function _slicerJobMeta('), bloque('function _cabeEn('), bloque('function _destinoOk('),
     bloque('function gcodeFileName('), bloque('function enviar('), bloque('function enviarATodas('),
     bloque('function _money('), bloque('function _margenObj('), bloque('function _precioSug('),
     bloque('function costRecalc('), bloque('function slicerToCot('),
@@ -100,7 +126,7 @@ function montar({ maquinas = [], estados = {}, stats = null, laminadoPara = 'K1'
 }
 
 const K1 = (i) => ({ id: 'p' + i, nombre: 'Impresora', numG: i, modelo: 'K1', ip: '10.0.0.' + i });
-const LIBRE = { state: 'idle' };
+const LIBRE = { state: 'idle', lastSeenAt: Date.now() };
 const CUBO20 = { dx: 20, dy: 20, dz: 20 };
 const CUBO300 = { dx: 300, dy: 300, dz: 300 };
 
@@ -136,20 +162,20 @@ test('no queda ninguna referencia al elemento fantasma', () => {
 
 test('se niega a mandar una pieza que no cabe en la impresora destino', () => {
   // G-code laminado para K2 Plus (cama 500) enviado a una K1 (cama 220).
-  const m = montar({ maquinas: [K1(9)], estados: { p9: LIBRE }, stats: CUBO300, laminadoPara: 'K2 Plus' });
+  const m = montar({ maquinas: [K1(9)], estados: { p9: LIBRE }, stats: CUBO300, laminadoPara: 'K2 Plus', gcode:'G90\nG1 X300 Y300 Z300' });
   m.campos.slTarget.value = 'p9';
   m.api.enviar();
   assert.equal(m.subidas.length, 0, 'no puede subir nada');
   assert.equal(m.preguntas.length, 0, 'y ni siquiera pregunta: no es cosa de opinión');
-  assert.match(m.avisos.join(' '), /300×300×300mm.*no cabe.*K1/, 'debe decir la medida y el modelo');
+  assert.match(m.avisos.join(' '), /X máximo 300\.00 > 220 mm/, 'debe decir el límite real del G-code');
 });
 
-test('si cabe pero es otro modelo, avisa y deja decidir', () => {
+test('aunque quepa, un G-code de otro modelo se bloquea', () => {
   const m = montar({ maquinas: [K1(1)], stats: CUBO20, laminadoPara: 'K2 Plus' });
   m.campos.slTarget.value = 'p1';
   m.api.enviar();
-  assert.equal(m.subidas.length, 1, 'con el sí, se envía');
-  assert.match(m.preguntas.join(' '), /K2 Plus.*K1/s, 'la pregunta nombra los dos modelos');
+  assert.equal(m.subidas.length, 0, 'no se sube un arranque/aceleración de otro modelo');
+  assert.match(m.avisos.join(' '), /generado para K2 Plus.*destino es K1/s);
 });
 
 test('mismo modelo: no molesta con preguntas', () => {
@@ -164,12 +190,33 @@ test('el envío en lote deja fuera las que no dan y lo dice', () => {
   const grande = { id: 'g1', nombre: 'Grande', numG: 1, modelo: 'K2 Plus', ip: '10.0.0.50' };
   const m = montar({
     maquinas: [grande, K1(2)], estados: { g1: LIBRE, p2: LIBRE },
-    stats: CUBO300, laminadoPara: 'K2 Plus',
+    stats: CUBO300, laminadoPara: 'K2 Plus', gcode:'G90\nG1 X300 Y300 Z300',
   });
   m.api.enviarATodas();
   assert.equal(m.subidas.length, 1, 'solo la que puede');
   assert.match(m.subidas[0], /10\.0\.0\.50/);
-  assert.match(m.preguntas.join(' '), /no cabe.*Impresora #2/s, 'y se nombra la que quedó fuera');
+  assert.match(m.preguntas.join(' '), /Impresora #2.*G-code generado para K2 Plus; destino K1/s, 'y se nombra la que quedó fuera con la causa');
+});
+
+test('el envelope final bloquea trayectorias negativas aunque la pieza geométrica quepa', () => {
+  const m = montar({ maquinas:[K1(1)], estados:{p1:LIBRE}, stats:CUBO20, gcode:'G90\nG1 X-1 Y10 Z0.2' });
+  m.campos.slTarget.value='p1';
+  m.api.enviar();
+  assert.equal(m.subidas.length,0);
+  assert.match(m.avisos.join(' '),/X mínimo -1\.00 mm/);
+});
+
+test('“revisar e iniciar” nunca llama start directo: deriva a MachineOps', async () => {
+  const m = montar({ maquinas:[K1(1)], estados:{p1:LIBRE}, stats:CUBO20 });
+  m.campos.slTarget.value='p1';m.campos.slAutoStart.checked=true;
+  let meta=null;m.ctx.window.MachineOps={startUploadedSlicerJob:x=>{meta=x;}};
+  m.api.enviar();
+  await new Promise(r=>setTimeout(r,30));
+  assert.equal(m.subidas.length,1);
+  assert.ok(meta,'debe abrir el flujo de preflight');
+  assert.equal(meta.material,'PLA');
+  assert.equal(meta.nozzle,'0.4');
+  assert.equal(meta.machineId,'p1');
 });
 
 // ── Margen y precio ─────────────────────────────────────────────────────

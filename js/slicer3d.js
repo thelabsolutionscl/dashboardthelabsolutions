@@ -12,21 +12,22 @@ const SL3D=(function(){
     'Ender-5 Max':{x:400,y:400,z:600,vmax:250},
     'Giga':{x:800,y:800,z:800,vmax:150},
   };
+  // Límites conservadores: defensa dura ante una IA/perfil malformado.
   const MATS={
-    PLA:    {noz:210,bed:60, fan:100,dens:1.24},
-    'PLA+': {noz:215,bed:65, fan:100,dens:1.24},
-    PETG:   {noz:240,bed:80, fan:40, dens:1.27},
-    ABS:    {noz:250,bed:100,fan:25, dens:1.04},
-    ASA:    {noz:250,bed:100,fan:15, dens:1.07},
-    TPU:    {noz:225,bed:50, fan:60, dens:1.21,vcap:35},
-    'TPU-95A':{noz:230,bed:55,fan:50,dens:1.22,vcap:30},
-    'ABS-CF':{noz:255,bed:105,fan:10,dens:1.09},
-    'PETG-CF':{noz:245,bed:85,fan:30,dens:1.28},
-    PA:     {noz:270,bed:90, fan:0,  dens:1.13,vcap:40},
-    'PA-CF':{noz:275,bed:90, fan:0,  dens:1.22,vcap:40},
-    PC:     {noz:280,bed:110,fan:0,  dens:1.20},
-    HIPS:   {noz:240,bed:100,fan:25, dens:1.04},
-    PVA:    {noz:215,bed:60, fan:50, dens:1.23,vcap:25},
+    PLA:    {noz:210,bed:60, fan:100,dens:1.24,nozMin:185,nozMax:235,bedMax:75, flow:18},
+    'PLA+': {noz:215,bed:65, fan:100,dens:1.24,nozMin:190,nozMax:240,bedMax:80, flow:18},
+    PETG:   {noz:240,bed:80, fan:40, dens:1.27,nozMin:215,nozMax:250,bedMax:95, flow:12},
+    ABS:    {noz:250,bed:100,fan:25, dens:1.04,nozMin:225,nozMax:275,bedMax:110,flow:12},
+    ASA:    {noz:250,bed:100,fan:15, dens:1.07,nozMin:225,nozMax:275,bedMax:110,flow:12},
+    TPU:    {noz:225,bed:50, fan:60, dens:1.21,vcap:35,nozMin:195,nozMax:245,bedMax:70,flow:4},
+    'TPU-95A':{noz:230,bed:55,fan:50,dens:1.22,vcap:30,nozMin:200,nozMax:245,bedMax:70,flow:4},
+    'ABS-CF':{noz:255,bed:105,fan:10,dens:1.09,nozMin:235,nozMax:280,bedMax:110,flow:8,abrasive:true},
+    'PETG-CF':{noz:245,bed:85,fan:30,dens:1.28,nozMin:225,nozMax:265,bedMax:100,flow:8,abrasive:true},
+    PA:     {noz:270,bed:90, fan:0,  dens:1.13,vcap:40,nozMin:245,nozMax:300,bedMax:110,flow:8},
+    'PA-CF':{noz:275,bed:90, fan:0,  dens:1.22,vcap:40,nozMin:250,nozMax:300,bedMax:110,flow:7,abrasive:true},
+    PC:     {noz:280,bed:110,fan:0,  dens:1.20,nozMin:245,nozMax:300,bedMax:110,flow:8},
+    HIPS:   {noz:240,bed:100,fan:25, dens:1.04,nozMin:220,nozMax:260,bedMax:110,flow:12},
+    PVA:    {noz:215,bed:60, fan:50, dens:1.23,vcap:25,nozMin:185,nozMax:230,bedMax:75,flow:4},
   };
   const FIELDS=[
     {k:'layerHeight',l:'Altura capa (mm)',s:0.04},{k:'firstLayerHeight',l:'1ª capa (mm)',s:0.04},
@@ -42,12 +43,12 @@ const SL3D=(function(){
     {k:'infillOverlap',l:'Solape relleno/pared (%)',s:5},{k:'pauseAtZ',l:'Pausa a Z (mm, 0=off)',s:1},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
     {k:'minLayerTime',l:'Tiempo mín. capa (s)',s:1},{k:'overhangSpeed',l:'Vel. voladizo (mm/s)',s:5},
-    {k:'flowRatio',l:'Flujo (%)',s:1},{k:'pressureAdvance',l:'Pressure Advance',s:0.005},{k:'wipeDist',l:'Wipe (mm)',s:0.2},
+    {k:'flowRatio',l:'Flujo (%)',s:1},{k:'maxVolumetricFlow',l:'Caudal máx. (mm³/s)',s:0.5},{k:'pressureAdvance',l:'Pressure Advance',s:0.005},{k:'wipeDist',l:'Wipe (mm)',s:0.2},
     {k:'widthOuter',l:'Ancho pared ext. (mm)',s:0.02},{k:'widthInfill',l:'Ancho relleno (mm)',s:0.02},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo','aleatorio']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
     {k:'seamScarf',l:'Costura scarf (oculta)',sel:['no','sí']},{k:'scarfLen',l:'Scarf: largo (mm)',s:0.5},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
-    {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},{k:'sequential',l:'Impresión secuencial',sel:['no','sí']},
+    {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},{k:'sequential',l:'Impresión secuencial',sel:['no','sí']},{k:'sequentialClearance',l:'Secuencial: despeje cabezal (mm)',s:1},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
     {k:'fuzzyAll',l:'Piel rugosa: todas paredes',sel:['no','sí']},{k:'fuzzyPointDist',l:'Piel rugosa: paso (mm)',s:0.1},{k:'draftShield',l:'Pantalla anti-corriente',sel:['no','sí']},
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
@@ -73,8 +74,9 @@ const SL3D=(function(){
     }
     if(buf.byteLength<84)throw new Error('STL inválido (muy corto)');
     const dv=new DataView(buf);
-    const n=Math.min(dv.getUint32(80,true),Math.floor((buf.byteLength-84)/50));
+    const n=dv.getUint32(80,true),expected=84+n*50;
     if(!n)throw new Error('STL binario sin triángulos');
+    if(expected>buf.byteLength)throw new Error(`STL binario truncado: declara ${n} triángulos pero faltan ${expected-buf.byteLength} bytes`);
     const out=new Float32Array(n*9);let o=84;
     for(let i=0;i<n;i++){o+=12;for(let j=0;j<9;j++){out[i*9+j]=dv.getFloat32(o,true);o+=4;}o+=2;}
     return out;
@@ -94,35 +96,72 @@ const SL3D=(function(){
   // 3MF = ZIP con 3D/3dmodel.model (XML). Descomprime con DecompressionStream (sin librerías).
   async function parse3MF(buf){
     const dv=new DataView(buf),u8=new Uint8Array(buf);
-    // Buscar End Of Central Directory (firma 0x06054b50) desde el final
-    let eocd=-1;for(let i=buf.byteLength-22;i>=0;i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}}
-    if(eocd<0)throw new Error('3MF inválido (no es ZIP)');
+    let eocd=-1;for(let i=buf.byteLength-22;i>=Math.max(0,buf.byteLength-65557);i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}}
+    if(eocd<0)throw new Error('3MF inválido (ZIP sin directorio central)');
     const cdOff=dv.getUint32(eocd+16,true),cdCount=dv.getUint16(eocd+10,true);
-    let p=cdOff,modelEntry=null;
-    for(let e=0;e<cdCount&&p<buf.byteLength;e++){
-      if(dv.getUint32(p,true)!==0x02014b50)break;
+    let p=cdOff;const models=[];
+    for(let e=0;e<cdCount&&p+46<=buf.byteLength;e++){
+      if(dv.getUint32(p,true)!==0x02014b50)throw new Error('3MF inválido (directorio ZIP corrupto)');
       const method=dv.getUint16(p+10,true),compSize=dv.getUint32(p+20,true),nameLen=dv.getUint16(p+28,true),extraLen=dv.getUint16(p+30,true),commLen=dv.getUint16(p+32,true),lho=dv.getUint32(p+42,true);
       const name=new TextDecoder().decode(u8.subarray(p+46,p+46+nameLen));
-      if(/\.model$/i.test(name)){modelEntry={method,compSize,lho};}
+      if(/\.model$/i.test(name))models.push({name,method,compSize,lho});
       p+=46+nameLen+extraLen+commLen;
     }
-    if(!modelEntry)throw new Error('3MF sin modelo .model');
-    // Cabecera local para saltar al dato comprimido
-    const lh=modelEntry.lho,lnameLen=dv.getUint16(lh+26,true),lextraLen=dv.getUint16(lh+28,true),dataStart=lh+30+lnameLen+lextraLen;
+    if(!models.length)throw new Error('3MF sin archivo .model');
+    const modelEntry=models.find(x=>/^3D\/3dmodel\.model$/i.test(x.name))||models[0];
+    const lh=modelEntry.lho;
+    if(lh<0||lh+30>buf.byteLength||dv.getUint32(lh,true)!==0x04034b50)throw new Error('3MF inválido (entrada .model corrupta)');
+    const lnameLen=dv.getUint16(lh+26,true),lextraLen=dv.getUint16(lh+28,true),dataStart=lh+30+lnameLen+lextraLen;
     const comp=u8.subarray(dataStart,dataStart+modelEntry.compSize);
     let xml;
-    if(modelEntry.method===0){xml=new TextDecoder().decode(comp);}
-    else{
+    if(modelEntry.method===0)xml=new TextDecoder().decode(comp);
+    else if(modelEntry.method===8){
+      if(typeof DecompressionStream!=='function')throw new Error('Este navegador no puede descomprimir 3MF');
       const ds=new DecompressionStream('deflate-raw');
       const ab=await new Response(new Blob([comp]).stream().pipeThrough(ds)).arrayBuffer();
       xml=new TextDecoder().decode(ab);
+    }else throw new Error('3MF usa una compresión ZIP no soportada (método '+modelEntry.method+')');
+    if(typeof DOMParser!=='function')throw new Error('DOMParser no disponible para leer 3MF');
+    const doc=new DOMParser().parseFromString(xml,'application/xml');
+    if([...doc.getElementsByTagName('*')].some(n=>String(n.localName||n.nodeName).toLowerCase()==='parsererror'))throw new Error('3MF contiene XML inválido');
+    const model=[...doc.getElementsByTagName('*')].find(n=>String(n.localName||n.nodeName).toLowerCase()==='model');
+    if(!model)throw new Error('3MF sin elemento model');
+    const unit=String(model.getAttribute('unit')||'millimeter').toLowerCase();
+    const unitScale={micron:.001,millimeter:1,centimeter:10,inch:25.4,foot:304.8,meter:1000}[unit];
+    if(!unitScale)throw new Error('Unidad 3MF no soportada: '+unit);
+    const kids=(node,name)=>[...node.childNodes].filter(n=>n.nodeType===1&&String(n.localName||n.nodeName).toLowerCase()===name);
+    const all=(node,name)=>[...node.getElementsByTagName('*')].filter(n=>String(n.localName||n.nodeName).toLowerCase()===name);
+    const ident=[1,0,0,0,1,0,0,0,1,0,0,0];
+    const tf=s=>{if(!s)return ident;const a=String(s).trim().split(/\s+/).map(Number);return a.length===12&&a.every(Number.isFinite)?a:ident;};
+    const apply=(pt,T)=>[pt[0]*T[0]+pt[1]*T[3]+pt[2]*T[6]+T[9],pt[0]*T[1]+pt[1]*T[4]+pt[2]*T[7]+T[10],pt[0]*T[2]+pt[1]*T[5]+pt[2]*T[8]+T[11]];
+    const resources=all(model,'resources')[0]||model,objects=new Map();
+    for(const o of kids(resources,'object')){
+      const id=String(o.getAttribute('id')||'');if(!id)continue;
+      const mesh=kids(o,'mesh')[0],components=kids(o,'components')[0];
+      if(mesh){
+        const vertsNode=kids(mesh,'vertices')[0],trisNode=kids(mesh,'triangles')[0];
+        const verts=(vertsNode?kids(vertsNode,'vertex'):[]).map(v=>[+v.getAttribute('x'),+v.getAttribute('y'),+v.getAttribute('z')]);
+        if(verts.some(v=>v.some(x=>!Number.isFinite(x))))throw new Error('3MF contiene vértices inválidos');
+        const tris=(trisNode?kids(trisNode,'triangle'):[]).map(t=>[+t.getAttribute('v1'),+t.getAttribute('v2'),+t.getAttribute('v3')]);
+        objects.set(id,{mesh:{verts,tris},components:[]});
+      }else if(components)objects.set(id,{mesh:null,components:kids(components,'component').map(q=>({id:String(q.getAttribute('objectid')||''),transform:tf(q.getAttribute('transform'))}))});
+      else objects.set(id,{mesh:null,components:[]});
     }
-    // Parsear vértices y triángulos del XML
-    const vs=[],vre=/<vertex\s+x="([-\d.eE+]+)"\s+y="([-\d.eE+]+)"\s+z="([-\d.eE+]+)"/g;let m;
-    while((m=vre.exec(xml)))vs.push(+m[1],+m[2],+m[3]);
-    const out=[],tre=/<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/g;
-    while((m=tre.exec(xml))){const a=+m[1],b=+m[2],c=+m[3];for(const k of[a,b,c])out.push(vs[k*3],vs[k*3+1],vs[k*3+2]);}
-    if(!out.length)throw new Error('3MF sin geometría');
+    const out=[];
+    const emit=(id,transforms,stack)=>{
+      if(stack.length>32||stack.includes(id))throw new Error('3MF contiene componentes cíclicos');
+      const o=objects.get(id);if(!o)throw new Error('3MF referencia objeto inexistente '+id);
+      if(o.mesh)for(const tri of o.mesh.tris)for(const vi of tri){
+        if(!Number.isInteger(vi)||vi<0||vi>=o.mesh.verts.length)throw new Error('3MF contiene un índice de triángulo inválido');
+        let pt=o.mesh.verts[vi];for(const T of transforms)pt=apply(pt,T);
+        out.push(pt[0]*unitScale,pt[1]*unitScale,pt[2]*unitScale);
+      }
+      for(const co of o.components)emit(co.id,[co.transform,...transforms],[...stack,id]);
+    };
+    const build=all(model,'build')[0],items=build?kids(build,'item'):[];
+    if(items.length){for(const item of items){const id=String(item.getAttribute('objectid')||'');if(id)emit(id,[tf(item.getAttribute('transform'))],[]);}}
+    else{for(const[id,o]of objects)if(o.mesh)emit(id,[ident],[]);}
+    if(!out.length)throw new Error('3MF sin geometría imprimible');
     return new Float32Array(out);
   }
 
@@ -315,14 +354,25 @@ const SL3D=(function(){
     }
     return{ov,area,h:mxz-mnz};
   }
+  function _bestOrientation(tris){
+    const cands=[[0,0],[Math.PI,0],[Math.PI/2,0],[-Math.PI/2,0],[0,Math.PI/2],[0,-Math.PI/2]];
+    let best=tris,bestScore=1e18,bestI=0;
+    cands.forEach(([rx,ry],i)=>{const tt=_rotTris(tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
+    return{tris:best,index:bestI};
+  }
   function autoOrient(){
     if(!S.tris){toast('Carga un modelo primero','error');return;}
-    const cands=[[0,0],[Math.PI,0],[Math.PI/2,0],[-Math.PI/2,0],[0,Math.PI/2],[0,-Math.PI/2]];
-    let best=S.tris,bestScore=1e18,bestI=0;
-    cands.forEach(([rx,ry],i)=>{const tt=_rotTris(S.tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
-    S.tris=best;S.objBBs=null;analyze(S.tris);buildPreview();S.supSticks=null;render();renderStats();
+    if(S.objects&&S.objects.length>1){
+      S.objects=S.objects.map(o=>_centerTris(_bestOrientation(o).tris));
+      S.modifiers=[];S.supRegions=[];S.supSticks=null;S.layFlatMode=false;_updLayFlatBtn();
+      _replate();
+      toast(`✓ ${S.objects.length} piezas orientadas individualmente y reacomodadas en el plato`,'success');
+      return;
+    }
+    const pick=_bestOrientation(S.tris);
+    S.tris=pick.tris;S.objects=[S.tris];S.objBBs=null;_refreshGeometry();S.supSticks=null;render();renderStats();
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
-    toast(bestI===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
+    toast(pick.index===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
   }
   // ── Apoyar cara en la cama (lay-flat por clic) ──────────────
   // Rota toda la malla para que la normal `n` apunte hacia abajo (−Z) → esa cara queda sobre la cama.
@@ -355,6 +405,7 @@ const SL3D=(function(){
   // Raycast 2D sobre el visor: encuentra la cara frontal bajo el cursor y la apoya en la cama.
   function _layFlatAt(px,py){
     if(!S.tris||!S.stats)return;
+    if(S.objects&&S.objects.length>1){toast('No se modifica un plato múltiple desde “Apoyar cara”. Usa Auto-orientar o carga una sola pieza.','info');return;}
     const cv=el('slCanvas'),w=cv.clientWidth||420,h=300;
     const st=S.stats,zm=st.dz/2,ca=Math.cos(S.rot.a),sa=Math.sin(S.rot.a),cb=Math.cos(S.rot.b),sb=Math.sin(S.rot.b);
     const rad=Math.sqrt(st.dx*st.dx+st.dy*st.dy+st.dz*st.dz)/2||1,sc=0.42*Math.min(w,h)/rad;
@@ -376,8 +427,8 @@ const SL3D=(function(){
       }
     }
     if(!bestN){toast('No se detectó cara ahí — haz clic sobre la figura','error');return;}
-    S.tris=_alignTris(S.tris,bestN);S.objBBs=null;
-    analyze(S.tris);buildPreview();S.supSticks=null;
+    S.tris=_alignTris(S.tris,bestN);S.objects=[S.tris];S.objBBs=null;
+    _refreshGeometry();S.supSticks=null;
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     renderModifiers();renderSupRegions();renderObjSettings();
@@ -392,6 +443,7 @@ const SL3D=(function(){
   }
   function toggleLayFlat(){
     if(!S.tris){toast('Carga un modelo primero','error');return;}
+    if(S.objects&&S.objects.length>1){toast('“Apoyar cara” trabaja sobre una pieza a la vez. Carga esa pieza sola o usa Auto-orientar para el plato completo.','info');return;}
     S.layFlatMode=!S.layFlatMode;_updLayFlatBtn();render();
     if(S.layFlatMode)toast('Haz clic en la cara que quieres apoyar en la cama','success');
   }
@@ -431,7 +483,7 @@ const SL3D=(function(){
     S.tris=S.objects.length>1?_plate(S.objects):S.objects[0];
     S.objBBs=S.objects.length>1?S._plateBBs:null; // EXCLUDE_OBJECT sólo con 2+ piezas
     S.objSettings=S.objects.length>1?(S._plateBBs||[]).map((_,i)=>(S.objSettings&&S.objSettings[i])||{}):null; // ajustes por pieza
-    analyze(S.tris);buildPreview();
+    _refreshGeometry();
     const fn=el('slFileName');fn.style.display='block';fn.textContent=S.objects.length>1?`✓ ${S.objects.length} piezas en el plato`:'✓ '+S.name;
     el('slCanvas').style.display='block';render();renderStats();
     el('slBtnIA').disabled=false;el('slBtnBase').disabled=false;
@@ -461,6 +513,17 @@ const SL3D=(function(){
     }
     return{tris:out.subarray(0,o),removed,welded:Math.round(welded/3)};
   }
+  function _meshHealth(t){
+    if(!t||!t.length)return{closed:false,openEdges:0,nonManifoldEdges:0,inconsistentEdges:0,volumeReliable:false};
+    const EPS=0.001,key=(x,y,z)=>Math.round(x/EPS)+','+Math.round(y/EPS)+','+Math.round(z/EPS),edges=new Map();
+    const add=(a,b)=>{const ka=key(a[0],a[1],a[2]),kb=key(b[0],b[1],b[2]);if(ka===kb)return;const lo=ka<kb?ka:kb,hi=ka<kb?kb:ka,k=lo+'|'+hi,dir=ka<kb?1:-1,e=edges.get(k)||{n:0,balance:0};e.n++;e.balance+=dir;edges.set(k,e);};
+    for(let i=0;i<t.length;i+=9){const a=[t[i],t[i+1],t[i+2]],b=[t[i+3],t[i+4],t[i+5]],d=[t[i+6],t[i+7],t[i+8]];add(a,b);add(b,d);add(d,a);}
+    let openEdges=0,nonManifoldEdges=0,inconsistentEdges=0;
+    for(const e of edges.values()){if(e.n===1)openEdges++;else if(e.n>2)nonManifoldEdges++;else if(e.n===2&&e.balance!==0)inconsistentEdges++;}
+    const closed=openEdges===0&&nonManifoldEdges===0;
+    return{closed,openEdges,nonManifoldEdges,inconsistentEdges,volumeReliable:closed&&inconsistentEdges===0};
+  }
+  function _refreshGeometry(){S.meshHealth=_meshHealth(S.tris);analyze(S.tris);buildPreview();}
   async function _parseFile(file){
     const ext=(file.name.split('.').pop()||'').toLowerCase();
     const buf=await file.arrayBuffer();
@@ -499,26 +562,30 @@ const SL3D=(function(){
   function fitsIn(spec){const st=S.stats;return st.dx<=spec.x-2&&st.dy<=spec.y-2&&st.dz<=spec.z-2;}
   function renderStats(){
     const st=S.stats,spec=SPECS[el('slPrinter').value]||SPECS.K1;
-    const fits=fitsIn(spec);
+    const fits=fitsIn(spec),mh=S.meshHealth||{};
+    const meshBadge=mh.volumeReliable?'<span class="badge badge-green">✓ malla cerrada/manifold</span>':`<span class="badge badge-yellow">⚠ malla a revisar · bordes abiertos ${mh.openEdges||0} · non-manifold ${mh.nonManifoldEdges||0}</span>`;
     el('slStats').style.display='block';
     el('slStats').innerHTML=`
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <span class="badge badge-gray">📐 ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm</span>
-        <span class="badge badge-gray">🧊 ${st.vol.toFixed(1)} cm³</span>
+        <span class="badge badge-gray">🧊 ${mh.volumeReliable?'Volumen sólido':'Volumen geométrico estimado'}: ${st.vol.toFixed(1)} cm³</span>
         <span class="badge badge-gray">▲ ${st.tris.toLocaleString('es-CL')} tris</span>
         <span class="badge ${st.ovPct>8?'badge-yellow':'badge-green'}">⛰ voladizos ${st.ovPct.toFixed(1)}%</span>
         ${st.hr>3?'<span class="badge badge-yellow">⚠ pieza alta y delgada</span>':''}
+        ${meshBadge}
         <span class="badge ${fits?'badge-green':'badge-red'}">${fits?'✓ cabe en '+el('slPrinter').value:'✕ NO cabe en '+el('slPrinter').value}</span>
-      </div>`;
+      </div>
+      <div style="margin-top:7px;font-size:9.5px;line-height:1.45;color:var(--text3)">Privacidad: el modelo STL/OBJ/3MF se procesa localmente. Al usar “Analizar con IA” se envían únicamente nombre, métricas geométricas, impresora/material, objetivo y notas; no los triángulos del archivo.</div>`;
   }
 
   // ── IA: selección de parámetros ─────────────────────────────
   function resumen(){
-    const st=S.stats,model=el('slPrinter').value,spec=SPECS[model],mat=el('slMaterial').value;
+    const st=S.stats,model=el('slPrinter').value,spec=SPECS[model],mat=el('slMaterial').value,mh=S.meshHealth||{};
     const obj=el('slObjetivo').selectedOptions[0].textContent,noz=el('slNozzle').value,notas=el('slNotas').value.trim();
     return`PIEZA: ${S.name}
 - Dimensiones (X×Y×Z): ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm
-- Volumen sólido: ${st.vol.toFixed(1)} cm³ · Área: ${st.area.toFixed(0)} cm² · ${st.tris} triángulos
+- Volumen ${mh.volumeReliable?'sólido verificado por topología':'geométrico NO confiable como sólido'}: ${st.vol.toFixed(1)} cm³ · Área: ${st.area.toFixed(0)} cm² · ${st.tris} triángulos
+- Salud malla: ${mh.volumeReliable?'cerrada/manifold':'REVISAR'} · bordes abiertos ${mh.openEdges||0} · non-manifold ${mh.nonManifoldEdges||0} · orientación inconsistente ${mh.inconsistentEdges||0}
 - Voladizos >55° sin apoyo: ${st.ovPct.toFixed(1)}% del área
 - Relación altura/base: ${st.hr.toFixed(1)} ${st.hr>3?'(riesgo de volcarse — considerar brim)':'(estable)'}
 IMPRESORA: ${model} — volumen ${spec.x}×${spec.y}×${spec.z}mm, velocidad máx ${spec.vmax}mm/s, boquilla ${noz}mm
@@ -529,9 +596,9 @@ Eliges parámetros de laminado óptimos según geometría de la pieza, material,
 REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 250°C. ABS cama 95-105°C, ventilador ≤30%, ideal brim. Voladizos >55° o >8% del área → soportes (el slicer genera columnas bajo voladizos). Si activas soportes (supports=true), pon SIEMPRE treeSupports=true por defecto (troncos de celosía con base ancha, estables y fáciles de retirar); usa treeSupports=false solo si el voladizo es una superficie plana grande y continua que necesita interfaz densa. adaptiveLayerHeight=true en piezas con curvas pronunciadas o detalles finos: reduce capas en zonas planas y usa capas finas en curvas. Pieza alta/delgada (ratio >3) → brim 6-10 líneas. Primera capa: más gruesa y lenta. Altura de capa entre 25% y 75% del diámetro de boquilla. Piezas funcionales: 3-4 perímetros y relleno gyroid 30-50%. Piezas estéticas: capa fina, velocidad moderada, activa ironing para cara superior lisa. Patrones de relleno: grid (general), gyroid (resistente isótropo), triangle/hex (rígido), cubic (3D resistente), concentric (sigue el contorno, bueno para flexibles/sellos), linear (rápido).
 COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético), "agudo" en esquinas, "cercano" minimiza viaje. outerWallLast=true imprime la pared exterior al final → mejor acabado. bridgeDetect=true para voladizos horizontales. elephantFoot (mm, 0-0.3): encoge la 1ª capa. xyCompensation (mm, -0.3 a 0.3): negativo agranda agujeros. arcFitting=false salvo que se indique (requiere [gcode_arcs] en Klipper).
 VELOCIDAD: outerSpeed (mm/s, 0=auto) baja la pared exterior para mejor acabado (60% de speed en piezas vistosas). infillSpeed (0=auto) sube el relleno. accel (mm/s², 0=no tocar) limita aceleración para reducir ringing en piezas finas. ADHESIÓN: skirt (líneas, ceba el filamento sin pegarse a la pieza), brim (pegado, para piezas altas o ABS), raft=true (base completa bajo la pieza, para superficies difíciles o ABS — encarece). DETALLE: gapFill=true rellena paredes finas sin huecos. fuzzySkin (mm, 0.1-0.3) da textura rugosa mate a la pared exterior. coasting (mm, 0.1-0.3) corta la extrusión antes del fin del perímetro para evitar el blob de costura.
-CALIDAD (estilo OrcaSlicer): minLayerTime (s, 5-12) ralentiza capas chicas para que enfríen → mejor en piezas pequeñas/torres. overhangSpeed (mm/s, 0=off) baja la velocidad de la pared exterior sobre voladizos. flowRatio (%, 95-105) ajusta extrusión. pressureAdvance (mm, 0=off; típico 0.02-0.05 en Klipper) reduce blobbing en esquinas — déjalo en 0 salvo que conozcas el valor de la impresora. wipeDist (mm, 0.5-1.5) limpia la boquilla al retraer → menos stringing. widthOuter/widthInfill (mm, 0=auto) anchos de línea por feature (outer un poco más fino = más nítido). seamMode también acepta "aleatorio" (costura dispersa).
+CALIDAD (estilo OrcaSlicer): minLayerTime (s, 5-12) ralentiza capas chicas para que enfríen → mejor en piezas pequeñas/torres. overhangSpeed (mm/s, 0=off) baja la velocidad de la pared exterior sobre voladizos. flowRatio (%, 95-105) ajusta extrusión. maxVolumetricFlow (mm³/s) limita físicamente el caudal: respeta el valor conservador del material y NO lo eleves por encima sin una calibración. Si la salud de malla dice REVISAR, adviértelo: no supongas que el volumen es fiable. pressureAdvance (mm, 0=off; típico 0.02-0.05 en Klipper) reduce blobbing en esquinas — déjalo en 0 salvo que conozcas el valor de la impresora. wipeDist (mm, 0.5-1.5) limpia la boquilla al retraer → menos stringing. widthOuter/widthInfill (mm, 0=auto) anchos de línea por feature (outer un poco más fino = más nítido). seamMode también acepta "aleatorio" (costura dispersa).
 RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|lightning|adaptive|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|lightning|adaptive|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"maxVolumetricFlow":12,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
   async function analizarIA(){
     if(!S.stats)return;
     if(!(typeof hasClaudeAccess==='function'?hasClaudeAccess():getAnthropicKey())){showAnthropicModal(()=>analizarIA());return;}
@@ -566,9 +633,9 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       firstLayerSpeed:Math.min(30,Math.round(vbase/2)),travelSpeed:Math.min(spec.vmax,300),accel:0,
       nozzleTemp:mat.noz,bedTemp:mat.bed,fanPct:mat.fan,
       supports:st.ovPct>8,treeSupports:st.ovPct>8,supportAngle:50,supGrid:3,supZGap:0.2,supDensity:25,supInterface:2,supOnPlate:false,infillOverlap:15,pauseAtZ:0,brimGap:0,ironingFlow:12,retractMinTravel:1,fuzzyAll:false,fuzzyPointDist:0.4,draftShield:false,
-      minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
+      minLayerTime:8,overhangSpeed:obj==='rapido'?0:Math.min(30,Math.round(vbase*0.4)),flowRatio:100,maxVolumetricFlow:mat.flow||0,pressureAdvance:0,wipeDist:0.8,widthOuter:0,widthInfill:0,
       adaptiveLayerHeight:obj==='calidad',
-      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',seamScarf:false,scarfLen:5,accelOuter:0,accelInfill:0,jerk:0,bridgeFlow:100,
+      seamMode:obj==='calidad'?'alineado':'cercano',outerWallLast:obj==='calidad'||obj==='resistente',seamScarf:false,scarfLen:5,accelOuter:0,accelInfill:0,jerk:0,bridgeFlow:100,sequentialClearance:0,
       bridgeDetect:st.ovPct>8,arcFitting:false,gradualTemp: obj!=='rapido',
       spiralize:false,monotonic:obj==='calidad',arachne:obj==='calidad',
       gapFill:obj!=='rapido',fuzzySkin:0,coasting:obj==='calidad'?0.2:0,
@@ -582,34 +649,40 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     renderParams();
   }
   function clampParams(p){
+    p=p||{};
     const noz=+el('slNozzle').value,spec=SPECS[el('slPrinter').value];
-    const mat=MATS[el('slMaterial').value]||{};
-    const vmax=Math.min(spec.vmax,mat.vcap||spec.vmax); // tope de velocidad por impresora Y material (TPU 35mm/s)
-    const cl=(v,a,b,d)=>{v=+v;return Math.min(b,Math.max(a,isFinite(v)?v:d));}; // el default también se acota: speed=60 no debe superar el tope del material (TPU 35mm/s) si la IA omite el campo
+    const mat=MATS[el('slMaterial').value]||MATS.PLA;
+    const cl=(v,a,b,d)=>{v=+v;const base=isFinite(v)?v:d;return Math.min(b,Math.max(a,base));};
+    const layerHeight=cl(p.layerHeight,0.05,noz*0.8,noz*0.5);
+    const materialFlowCap=mat.flow||60,maxVolumetricFlow=cl(p.maxVolumetricFlow,0,materialFlowCap,mat.flow||0);
+    const materialVmax=Math.min(spec.vmax,mat.vcap||spec.vmax);
+    const widest=Math.max(noz*1.05,+p.widthOuter||0,+p.widthInfill||0);
+    const flowVmax=maxVolumetricFlow>0?maxVolumetricFlow/Math.max(0.01,widest*layerHeight):materialVmax;
+    const vmax=Math.max(1,Math.min(materialVmax,flowVmax));
+    const speedClamp=(v,d,allowZero=false)=>{if(allowZero&&(+v===0||v===''||v===null||v===undefined))return 0;return Math.round(cl(v,Math.min(5,vmax),vmax,Math.min(d,vmax)));};
     return{
-      layerHeight:cl(p.layerHeight,0.05,noz*0.8,noz*0.5),
+      layerHeight,
       firstLayerHeight:cl(p.firstLayerHeight,0.1,noz*0.9,noz*0.6),
       shells:Math.round(cl(p.shells,1,8,2)),topLayers:Math.round(cl(p.topLayers,0,10,4)),bottomLayers:Math.round(cl(p.bottomLayers,0,10,3)),
       infillPct:Math.round(cl(p.infillPct,0,100,15)),
       infillType:['grid','gyroid','triangle','hex','honeycomb','cubic','concentric','lightning','adaptive','linear'].includes(p.infillType)?p.infillType:'grid',
-      speed:Math.round(cl(p.speed,10,vmax,60)),
-      outerSpeed:Math.round(cl(p.outerSpeed,0,vmax,0)),infillSpeed:Math.round(cl(p.infillSpeed,0,vmax,0)),
-      firstLayerSpeed:Math.round(cl(p.firstLayerSpeed,5,Math.min(80,vmax),30)),
-      travelSpeed:Math.round(cl(p.travelSpeed,30,500,200)),accel:Math.round(cl(p.accel,0,30000,0)),
+      speed:speedClamp(p.speed,60),
+      outerSpeed:speedClamp(p.outerSpeed,0,true),infillSpeed:speedClamp(p.infillSpeed,0,true),
+      firstLayerSpeed:speedClamp(p.firstLayerSpeed,30),
+      travelSpeed:Math.round(cl(p.travelSpeed,30,Math.max(30,spec.vmax),Math.min(200,spec.vmax))),accel:Math.round(cl(p.accel,0,30000,0)),
       accelOuter:Math.round(cl(p.accelOuter,0,30000,0)),accelInfill:Math.round(cl(p.accelInfill,0,30000,0)),jerk:cl(p.jerk,0,40,0),bridgeFlow:Math.round(cl(p.bridgeFlow,40,150,100)),
-      nozzleTemp:Math.round(cl(p.nozzleTemp,170,300,210)),bedTemp:Math.round(cl(p.bedTemp,0,110,60)),
-      fanPct:Math.round(cl(p.fanPct,0,100,100)),
+      nozzleTemp:Math.round(cl(p.nozzleTemp,mat.nozMin||170,mat.nozMax||300,mat.noz||210)),bedTemp:Math.round(cl(p.bedTemp,0,mat.bedMax||110,mat.bed||60)),
+      fanPct:Math.round(cl(p.fanPct,0,100,mat.fan??100)),
       supports:!!p.supports&&p.supports!=='no',treeSupports:!!p.treeSupports&&p.treeSupports!=='no',supportAngle:Math.round(cl(p.supportAngle,20,80,50)),
       supGrid:cl(p.supGrid,1.5,8,3),supZGap:cl(p.supZGap,0,0.6,0.2),supDensity:Math.round(cl(p.supDensity,10,90,25)),
       supInterface:Math.round(cl(p.supInterface,0,5,2)),supOnPlate:!!p.supOnPlate&&p.supOnPlate!=='no',infillOverlap:Math.round(cl(p.infillOverlap,0,40,15)),pauseAtZ:cl(p.pauseAtZ,0,1000,0),
       brimGap:cl(p.brimGap,0,1,0),ironingFlow:Math.round(cl(p.ironingFlow,5,30,12)),retractMinTravel:cl(p.retractMinTravel,0,10,1),
       fuzzyAll:!!p.fuzzyAll&&p.fuzzyAll!=='no',fuzzyPointDist:cl(p.fuzzyPointDist,0.2,2,0.4),draftShield:!!p.draftShield&&p.draftShield!=='no',
       seamScarf:!!p.seamScarf&&p.seamScarf!=='no',scarfLen:cl(p.scarfLen,1,15,5),
-      minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:Math.round(cl(p.overhangSpeed,0,vmax,0)),flowRatio:cl(p.flowRatio,80,120,100),pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
-      excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',
+      minLayerTime:Math.round(cl(p.minLayerTime,0,30,8)),overhangSpeed:speedClamp(p.overhangSpeed,0,true),flowRatio:cl(p.flowRatio,80,120,100),maxVolumetricFlow,pressureAdvance:cl(p.pressureAdvance,0,1.5,0),wipeDist:cl(p.wipeDist,0,5,0.8),widthOuter:cl(p.widthOuter,0,2,0),widthInfill:cl(p.widthInfill,0,2,0),
+      excludeObject:!!p.excludeObject&&p.excludeObject!=='no',sequential:!!p.sequential&&p.sequential!=='no',sequentialClearance:cl(p.sequentialClearance,0,150,0),
       adaptiveLayerHeight:!!p.adaptiveLayerHeight&&p.adaptiveLayerHeight!=='no',
-      seamMode:['cercano','alineado','agudo','aleatorio'].includes(p.seamMode)?p.seamMode:'cercano', // 'aleatorio' lo ofrece la UI, lo pide el prompt y lo implementa _seamStart; sin él aquí se descartaba en silencio
-
+      seamMode:['cercano','alineado','agudo','aleatorio'].includes(p.seamMode)?p.seamMode:'cercano',
       outerWallLast:!!p.outerWallLast&&p.outerWallLast!=='no',
       bridgeDetect:!!p.bridgeDetect&&p.bridgeDetect!=='no',
       arcFitting:!!p.arcFitting&&p.arcFitting!=='no',
@@ -1344,7 +1417,13 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     E+=p.retractDist;gc.push(`G1 E${E.toFixed(4)} F${p.retractSpeed*60}`);
     return[E,sx,sy];
   }
+  function _flowFeed(feed,width,lh,p){
+    const f=Math.max(1,+feed||1),cap=+(p&&p.maxVolumetricFlow)||0;
+    if(!(cap>0)||!(width>0)||!(lh>0))return Math.round(f);
+    return Math.max(60,Math.round(Math.min(f,cap/(width*lh)*60)));
+  }
   function _printPoly(gc,poly,z,ox,oy,cX,cY,E,lh,extW,feed,p,fuzzy,ohTest,ohFeed,scarf){
+    feed=_flowFeed(feed,extW,lh,p);if(ohFeed)ohFeed=_flowFeed(ohFeed,extW,lh,p);
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     let ord=[...poly.slice(bi),...poly.slice(0,bi)];
     // Piel rugosa (fuzzy skin): resamplea el contorno al paso indicado y perturba cada punto a lo largo de su normal
@@ -1413,6 +1492,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   // Arachne: pared de ancho variable — igual que _printPoly pero con E escalado por wRatio (0..1)
   function _printPolyScaled(gc,poly,z,ox,oy,cX,cY,E,lh,extW,wRatio,feed,p){
+    feed=_flowFeed(feed,extW*Math.max(0.05,wRatio||1),lh,p);
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy,td=Math.hypot(sx-cX,sy-cY);
@@ -1431,6 +1511,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
   }
   // Spiralize: imprime el perímetro exterior con Z creciendo continuamente (sin costura de capa)
   function _printPolySpiralZ(gc,poly,zStart,zEnd,ox,oy,cX,cY,E,lh,extW,feed,p){
+    feed=_flowFeed(feed,extW,lh,p);
     const bi=_seamStart(poly,p&&p.seamMode,cX,cY,ox,oy);
     const ord=[...poly.slice(bi),...poly.slice(0,bi)];
     const sx=ord[0][0]+ox,sy=ord[0][1]+oy,td=Math.hypot(sx-cX,sy-cY);
@@ -1470,6 +1551,7 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
     return out;
   }
   function _printLines(gc,lines,z,ox,oy,cX,cY,E,lh,extW,feed,p,retractThresh,optimize){
+    feed=_flowFeed(feed,extW,lh,p);
     if(optimize)lines=_orderLines(lines,cX-ox,cY-oy); // reordena para minimizar viajes (soporte)
     const rt=Math.max(retractThresh||extW*3,(p.retractMinTravel||0)); // combing + viaje mínimo: menos retracciones
     for(const[p1,p2]of lines){
@@ -1975,7 +2057,8 @@ self.onmessage=function(ev){
   // Impresión secuencial: lamina cada pieza por separado y la imprime completa antes de la siguiente.
   // Seguridad: sube a Z libre sobre lo ya impreso antes de viajar a la pieza siguiente; aborta si no caben con separación.
   async function _sliceSequential(p,spec,nozD,matName,model){
-    const objs=S.objects,CLR=18; // separación generosa entre piezas (clearance del cabezal)
+    const objs=S.objects,CLR=+p.sequentialClearance||0;
+    if(!(CLR>0))throw new Error('secuencial bloqueado: ingresa el despeje físico medido del cabezal antes de usar este modo');
     const items=objs.map((t)=>{let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;for(let i=0;i<t.length;i+=3){if(t[i]<mnx)mnx=t[i];if(t[i]>mxx)mxx=t[i];if(t[i+1]<mny)mny=t[i+1];if(t[i+1]>mxy)mxy=t[i+1];if(t[i+2]>mxz)mxz=t[i+2];}return{t,w:mxx-mnx,d:mxy-mny,h:mxz};});
     items.sort((a,b)=>a.h-b.h); // bajas primero
     const usableW=spec.x-20;let curX=10,curY=10,rowH=0;
@@ -2071,12 +2154,46 @@ self.onmessage=function(ev){
       `; filament used [g] = ${G}`,
       `; total filament used [g] = ${G}`].join('\n');
   }
+  function _gcodeEnvelope(gc){
+    let x=0,y=0,z=0,abs=true,mnx=Infinity,mny=Infinity,mnz=Infinity,mxx=-Infinity,mxy=-Infinity,mxz=-Infinity,moves=0;
+    const add=(X,Y,Z)=>{if(![X,Y,Z].every(Number.isFinite))return;mnx=Math.min(mnx,X);mny=Math.min(mny,Y);mnz=Math.min(mnz,Z);mxx=Math.max(mxx,X);mxy=Math.max(mxy,Y);mxz=Math.max(mxz,Z);moves++;};
+    add(x,y,z);
+    const norm=a=>{a%=Math.PI*2;return a<0?a+Math.PI*2:a;};
+    const onArc=(a,a0,a1,cw)=>{a=norm(a);a0=norm(a0);a1=norm(a1);if(cw){const span=norm(a0-a1),pos=norm(a0-a);return pos<=span+1e-9;}const span=norm(a1-a0),pos=norm(a-a0);return pos<=span+1e-9;};
+    for(const raw of String(gc||'').split('\n')){
+      const line=raw.replace(/;.*/,'').trim();if(!line)continue;
+      if(/^G90(?:\s|$)/.test(line)){abs=true;continue;}if(/^G91(?:\s|$)/.test(line)){abs=false;continue;}
+      if(/^G92(?:\s|$)/.test(line)){for(const w of line.split(/\s+/)){const v=+w.slice(1);if(!Number.isFinite(v))continue;if(w[0]==='X')x=v;else if(w[0]==='Y')y=v;else if(w[0]==='Z')z=v;}add(x,y,z);continue;}
+      const arc=/^G[23](?:\s|$)/.test(line),linear=/^G[01](?:\s|$)/.test(line);if(!arc&&!linear)continue;
+      let nx=x,ny=y,nz=z,I=null,J=null;
+      for(const w of line.split(/\s+/)){const v=+w.slice(1);if(!Number.isFinite(v))continue;if(w[0]==='X')nx=abs?v:x+v;else if(w[0]==='Y')ny=abs?v:y+v;else if(w[0]==='Z')nz=abs?v:z+v;else if(w[0]==='I')I=v;else if(w[0]==='J')J=v;}
+      add(nx,ny,nz);
+      if(arc&&I!==null&&J!==null){
+        const cx=x+I,cy=y+J,r=Math.hypot(I,J),a0=Math.atan2(y-cy,x-cx),a1=Math.atan2(ny-cy,nx-cx),cw=line.startsWith('G2');
+        for(const a of[0,Math.PI/2,Math.PI,Math.PI*1.5])if(onArc(a,a0,a1,cw))add(cx+r*Math.cos(a),cy+r*Math.sin(a),Math.max(z,nz));
+      }
+      x=nx;y=ny;z=nz;
+    }
+    return{minX:mnx,minY:mny,minZ:mnz,maxX:mxx,maxY:mxy,maxZ:mxz,moves};
+  }
+  function _validateGcodeForSpec(gc,spec){
+    const e=_gcodeEnvelope(gc),tol=.08,issues=[];
+    if(!e.moves)issues.push('G-code sin movimientos XYZ verificables');
+    if(e.minX<-tol)issues.push(`X mínimo ${e.minX.toFixed(2)} mm`);
+    if(e.minY<-tol)issues.push(`Y mínimo ${e.minY.toFixed(2)} mm`);
+    if(e.minZ<-tol)issues.push(`Z mínimo ${e.minZ.toFixed(2)} mm`);
+    if(e.maxX>spec.x+tol)issues.push(`X máximo ${e.maxX.toFixed(2)} > ${spec.x} mm`);
+    if(e.maxY>spec.y+tol)issues.push(`Y máximo ${e.maxY.toFixed(2)} > ${spec.y} mm`);
+    if(e.maxZ>spec.z+tol)issues.push(`Z máximo ${e.maxZ.toFixed(2)} > ${spec.z} mm`);
+    return{ok:issues.length===0,issues,envelope:e};
+  }
   async function generarGcode(){
     if(!S.stats)return;
     const p=readParams();S.params=p;
     const model=el('slPrinter').value,spec=SPECS[model];
     // En secuencial cada pieza se reempaqueta y _sliceSequential hace su propio chequeo de espacio → no aplica el límite del plato combinado
     const _seqMode=p.sequential&&S.objects&&S.objects.length>1;
+    if(_seqMode&&!(p.sequentialClearance>0)){toast('Impresión secuencial bloqueada: ingresa el despeje físico medido del cabezal (mm).','error');return;}
     if(!_seqMode&&!fitsIn(spec)){toast(`La pieza (${S.stats.dx.toFixed(0)}×${S.stats.dy.toFixed(0)}×${S.stats.dz.toFixed(0)}mm) no cabe en ${model} — elige otra impresora o escala el modelo`,'error');return;}
     const btn=el('slBtnGcode');btn.disabled=true;el('slResult').style.display='none';
     try{
@@ -2094,8 +2211,10 @@ self.onmessage=function(ev){
       if(p.arcFitting){setProg(98,'Optimizando arcos (G2/G3)…');await new Promise(r=>setTimeout(r,0));gcode=_arcWeld(gcode);}
       gcode=_tagFeatures(gcode); // ";TYPE:"/"; FEATURE:" → desglose por tipo de línea (y llena "Estimación total" por roles)
       gcode=gcode+'\n'+_footerStats(_est); // comentarios neutros (Moonraker), sin disparar error de carga
-      S.gcode=gcode;
-      setProg(100,'✓ G-code listo');
+      const audit=_validateGcodeForSpec(gcode,spec);
+      if(!audit.ok)throw new Error('G-code fuera del volumen seguro: '+audit.issues.join(' · '));
+      S.gcode=gcode;S.gcodeAudit=audit;
+      setProg(100,'✓ G-code validado y listo');
       localStorage.setItem('sl_last_est_secs',_est.secs.toFixed(1));
       renderResult(_est);
     }catch(e){
@@ -2192,22 +2311,30 @@ self.onmessage=function(ev){
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary" onclick="SL3D.descargar()">⬇ Descargar .gcode</button>
         <span class="badge badge-gray">${kb} KB</span>
-        ${machines.length?`<select class="field-select" id="slCalTarget" style="width:auto;min-width:150px">${opts}</select><button class="btn btn-ghost" id="slBtnCalSend" onclick="SL3D.enviarCal()">📤 Enviar e imprimir</button>`:''}
+        ${machines.length?`<select class="field-select" id="slCalTarget" style="width:auto;min-width:150px">${opts}</select><button class="btn btn-ghost" id="slBtnCalSend" onclick="SL3D.enviarCal()">📤 Subir y revisar</button>`:''}
       </div></div>`;
     toast('Test de calibración generado ✓','success');
   }
   function enviarCal(){
     const id=el('slCalTarget')?.value;if(!id||!S.gcode)return;
     const m=MAQUINAS.find(x=>x.id===id),ip=getPrinterIp(m);if(!ip){toast('Esa impresora no tiene IP','error');return;}
-    if(typeof _isPrinterBusy==='function'&&_isPrinterBusy((_printerStatus[id]||{}).state)){toast('🔒 La impresora está ocupada — no se interrumpe','error');return;}
+    const model=el('slPrinter')?.value;
+    if(m?.modelo!==model){toast(`La calibración fue generada para ${model}; elige una impresora física de ese mismo modelo.`,'error');return;}
+    const ready=_machineReadiness(m,true);if(!ready.ready){toast('Calibración bloqueada: la impresora no está confirmada libre con telemetría reciente.','error');return;}
+    const fit=_validateGcodeForSpec(S.gcode,SPECS[m.modelo]);if(!fit.ok){toast('Calibración fuera del volumen seguro: '+fit.issues.join(' · '),'error');return;}
+    if(!_abrasiveCheck(m,true))return;
     const fname=gcodeFileName(),btn=el('slBtnCalSend');btn.disabled=true;btn.textContent='⏳ Subiendo…';
-    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';toast(`▶ DEMO: calibración simulada en ${m.nombre} #${m.numG}`,'success');},250);return;}
+    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{btn.disabled=false;btn.textContent='📤 Subir y revisar';toast(`▶ DEMO: calibración simulada en ${m.nombre} #${m.numG}`,'success');},250);return;}
     const fd=new FormData();fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);fd.append('root','gcodes');
     const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
-    xhr.onload=async()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';
-      if(xhr.status>=200&&xhr.status<300){try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(fname)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});toast(r.ok?`▶ Calibrando en ${m.nombre} #${m.numG}`:'Subido, no se pudo iniciar',r.ok?'success':'error');if(typeof pollPrinters==='function')pollPrinters();}catch(e){toast('Subido, no se pudo iniciar: '+e.message,'error');}}else toast('Error al subir ('+xhr.status+')','error');};
-    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Enviar e imprimir';toast('Impresora inaccesible','error');};
+    xhr.onload=()=>{btn.disabled=false;btn.textContent='📤 Subir y revisar';
+      if(xhr.status>=200&&xhr.status<300){
+        const meta={source:'slicer3d-calibration',name:S.name||'Calibración',material:el('slMaterial')?.value||'',nozzle:String(el('slNozzle')?.value||''),model,machineId:id,gcodeFile:fname,grams:0,secs:0};
+        if(window.MachineOps?.startUploadedSlicerJob){window.MachineOps.startUploadedSlicerJob(meta);toast('Calibración subida · completa el preflight antes de iniciar','success');}
+        else toast('Calibración subida. No se inició porque MachineOps/preflight no está disponible.','info');
+      }else toast('Error al subir ('+xhr.status+')','error');};
+    xhr.onerror=()=>{btn.disabled=false;btn.textContent='📤 Subir y revisar';toast('Impresora inaccesible','error');};
     xhr.send(fd);
   }
   function _money(n){return '$'+Math.round(n||0).toLocaleString('es-CL');}
@@ -2335,23 +2462,51 @@ self.onmessage=function(ev){
   }
   function previewSlide(v){_drawGcodeLayer(+v);}
   function toggleTravel(on){S.showTravel=on;_drawGcodeLayer(S.previewIdx||0);}
+  function _machineReadiness(m,requireIdle=true){
+    const st=(typeof _printerStatus!=='undefined'&&_printerStatus[m.id])||{},state=String(st.state||'offline');
+    const last=Number(st.lastSeenAt||0),fresh=!!last&&Date.now()-last<60000;
+    let admin=true;try{if(typeof getMaquinaEstadoGlobal==='function')admin=getMaquinaEstadoGlobal(m.id)==='disponible';}catch(_){}
+    const known=fresh&&!['','connecting','unknown','startup','offline','noip','shutdown','error','apidown'].includes(state);
+    const idle=['idle','ready','standby'].includes(state);
+    return{ready:admin&&known&&(!requireIdle||idle),admin,known,idle,state,fresh,lastSeenAt:last};
+  }
+  function _abrasiveKnown(m){
+    const mat=MATS[el('slMaterial')?.value]||{};if(!mat.abrasive)return true;
+    const v=String(localStorage.getItem('printer_nozzle_material_'+m.id)||'').toLowerCase();
+    return /(harden|endurec|steel|acero|ruby|rubi|tungsten|carbide|ceramic)/.test(v);
+  }
+  function _abrasiveCheck(m,interactive=true){
+    const matName=el('slMaterial')?.value,mat=MATS[matName]||{};if(!mat.abrasive)return true;
+    if(_abrasiveKnown(m))return true;
+    if(!interactive)return false;
+    const ok=confirm(`${matName} es abrasivo y no hay material de boquilla registrado para ${m.nombre} #${m.numG}.\n\n¿Confirmas físicamente que esta impresora tiene boquilla endurecida/apta para fibra?`);
+    if(ok)try{localStorage.setItem('printer_nozzle_material_'+m.id,'hardened-confirmed');}catch(_){}
+    return ok;
+  }
+  function _gcodeFitsMachine(m){
+    const spec=SPECS[m&&m.modelo];if(!spec||!S.gcode)return{ok:false,issues:['modelo o G-code no disponible']};
+    return _validateGcodeForSpec(S.gcode,spec);
+  }
+  function _slicerJobMeta(m){
+    const st=S.stats||{},params=S.params||{},mat=el('slMaterial')?.value||'';
+    return{name:S.name||'Pieza 3D',source:'slicer3d',material:mat,nozzle:String(el('slNozzle')?.value||''),model:el('slPrinter')?.value||'',
+      sizeX:+st.dx||0,sizeY:+st.dy||0,sizeZ:+st.dz||0,grams:+S.est?.grams||0,secs:+S.est?.secs||0,profileName:el('slProfileSel')?.value||'',
+      params:{layerHeight:params.layerHeight,infillPct:params.infillPct,infillType:params.infillType,supports:!!params.supports,maxVolumetricFlow:params.maxVolumetricFlow},
+      mesh:{volumeReliable:!!S.meshHealth?.volumeReliable,openEdges:S.meshHealth?.openEdges||0,nonManifoldEdges:S.meshHealth?.nonManifoldEdges||0},
+      machineId:m?.id||''};
+  }
   function _suggestPrinter(machines,est){
-    // Score each machine: idle>standby>other; model match bonus; queue empty bonus
     const model=el('slPrinter').value;
     const scores=machines.map(m=>{
-      const st=(_printerStatus[m.id]||{}).state||'offline';
-      const busy=st==='printing'||st==='paused';
-      const idle=st==='idle'||st==='standby'||st==='ready';
-      const spec=SPECS[m.modelo]||SPECS[model]||{};
-      const fits=S.bounds?(S.bounds.dx<=(spec.x||300)&&S.bounds.dy<=(spec.y||300)&&S.bounds.dz<=(spec.z||300)):true;
-      let score=0;
-      if(busy)score-=100;
-      if(idle)score+=10;
-      if(m.modelo===model)score+=5;
-      if(fits)score+=8;
-      if(!_queueCount(m.id))score+=3;
-      return{m,score,idle,busy,fits};
-    });
+      const r=_machineReadiness(m,true),spec=SPECS[m.modelo]||SPECS[model]||{},fits=S.bounds?(S.bounds.dx<=(spec.x||0)-2&&S.bounds.dy<=(spec.y||0)-2&&S.bounds.dz<=(spec.z||0)-2):false;
+      const gfit=S.gcode?_gcodeFitsMachine(m).ok:fits;
+      let score=-Infinity;
+      if(r.ready&&fits&&gfit&&m.modelo===model){
+        score=15+(!_queueCount(m.id)?3:0);
+        if(_abrasiveKnown(m))score+=1;
+      }
+      return{m,score};
+    }).filter(x=>Number.isFinite(x.score));
     scores.sort((a,b)=>b.score-a.score);
     return scores[0]?.m||null;
   }
@@ -2371,9 +2526,13 @@ self.onmessage=function(ev){
     // Precio del filamento: usa el ya configurado en Máquinas (filament_cost_clp) si el slicer no tiene uno propio, para mantener un solo número en toda la app
     const pk=localStorage.getItem('sl_price_kg')||localStorage.getItem('filament_cost_clp')||'15000',rh=localStorage.getItem('sl_rate_h')||'1500';
     const warns=[];
-    if(S.params.supports)warns.push('<b>Soportes activados</b>: '+(S.params.treeSupports?'tipo árbol (ramas que se fusionan en troncos, fáciles de retirar)':'columnas en rejilla bajo los voladizos, retirar a mano')+'. Para voladizos muy complejos un slicer dedicado dará mejor acabado.');
-    if(S.params.raft)warns.push('Se pidió <b>raft</b>: no está soportado — se imprime brim como adhesión alternativa.');
-    if(S.params.arcFitting)warns.push('<b>Arcos G2/G3 activados</b>: el archivo es más liviano, pero tu Klipper debe tener <code>[gcode_arcs]</code> habilitado (las K1/K2 modernas lo traen). Si la impresora rechaza G2/G3, vuelve a desactivar esta opción.');
+    if(S.params.supports)warns.push('<b>Soportes activados</b>: '+(S.params.treeSupports?'tipo árbol (motor nativo)':'columnas en rejilla bajo voladizos')+'. En geometrías críticas/series largas, valida primero una pieza piloto o compara con OrcaSlicer.');
+    if(S.params.raft)warns.push('<b>Raft activado</b>: el motor nativo genera base + interfaz y eleva el modelo; el envelope final se valida contra la cama antes de habilitar el envío.');
+    if(S.params.arcFitting)warns.push('<b>Arcos G2/G3 activados</b>: el archivo requiere que el firmware destino admita arcos. Si la impresora rechaza G2/G3, vuelve a desactivar esta opción.');
+    if(['gyroid','adaptive','lightning'].includes(S.params.infillType)||S.params.arachne||S.params.treeSupports)warns.push('<b>Motor nativo con funciones aproximadas</b>: la seguridad geométrica se valida, pero la equivalencia de calidad con OrcaSlicer no se presume. Para producción repetitiva, aprueba una pieza piloto y guarda el perfil validado.');
+    if(!S.meshHealth?.volumeReliable)warns.push('<b>Malla no verificada como sólido cerrado</b>: el laminado puede funcionar, pero volumen/peso geométrico y algunas superficies no deben tratarse como evidencia exacta.');
+    if((MATS[el('slMaterial').value]||{}).abrasive)warns.push('<b>Material abrasivo</b>: antes de enviar se exigirá confirmar una boquilla endurecida/apta para fibra en la impresora destino.');
+    const audit=S.gcodeAudit||_validateGcodeForSpec(S.gcode,SPECS[model]),auditTxt=audit.ok?'G-code dentro del volumen':'G-code fuera de límites';
     const suggHint=suggested?`<div style="font-size:10px;color:var(--accent);margin-bottom:8px">💡 Impresora sugerida: <b>${escapeHtml(suggested.nombre)} #${suggested.numG}</b> — ${((_printerStatus[suggested.id]||{}).state||'offline')}</div>`:'';
     el('slResult').style.display='block';
     el('slResult').innerHTML=`
@@ -2384,6 +2543,8 @@ self.onmessage=function(ev){
           <span class="badge badge-green">🧵 ${est.filM.toFixed(1)} m</span>
           <span class="badge badge-green">⚖ ~${est.grams.toFixed(0)} g</span>
           <span class="badge badge-gray">📄 ${kb.toLocaleString('es-CL')} KB</span>
+          <span class="badge ${audit.ok?'badge-green':'badge-red'}">🛡 ${auditTxt}</span>
+          <span class="badge badge-gray">Motor nativo · validación geométrica</span>
         </div>
         <!-- COSTO -->
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px;background:var(--surface2);border-radius:8px;margin-bottom:12px">
@@ -2407,10 +2568,10 @@ self.onmessage=function(ev){
             ${suggHint}
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <select class="field-select" id="slTarget" style="width:auto;min-width:180px">${opts}</select>
-              <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Iniciar al subir</label>
+              <label style="font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="slAutoStart"> Revisar e iniciar al subir</label>
               <button class="btn btn-ghost" id="slBtnSend" onclick="SL3D.enviar()">📤 Enviar</button>
-              <button class="btn btn-ghost" id="slBtnQueue" onclick="SL3D.encolar()" title="Encolar: el trabajo se iniciará automáticamente cuando la impresora quede libre">🔁 Encolar</button>
-              <button class="btn btn-ghost" onclick="SL3D.enviarATodas()" title="Enviar a todas las impresoras libres simultáneamente">📤 Todas las libres</button>
+              <button class="btn btn-ghost" id="slBtnQueue" onclick="SL3D.encolar()" title="Guardar en la cola durable con metadata real de material, boquilla y tiempo">🔁 Encolar seguro</button>
+              <button class="btn btn-ghost" onclick="SL3D.enviarATodas()" title="Subir a máquinas confirmadas libres; nunca inicia en lote">📤 Subir a libres</button>
             </div>
           </div>
           `:'<span style="font-size:10px;color:var(--text3)">Configura la IP de una impresora para enviar directo</span>'}
@@ -2448,62 +2609,59 @@ self.onmessage=function(ev){
   }
   function _destinoOk(m){
     const laminado=el('slPrinter')?.value;
-    if(!m||!m.modelo||m.modelo===laminado)return true;
-    if(!_cabeEn(m)){
-      const st=S.stats;
-      toast(`No se envía: la pieza (${st.dx.toFixed(0)}×${st.dy.toFixed(0)}×${st.dz.toFixed(0)}mm) no cabe en ${m.nombre} #${m.numG}, que es ${m.modelo}. Lamina para esa impresora.`,'error');
-      return false;
-    }
-    return confirm(`Este G-code se laminó para ${laminado} y lo vas a mandar a ${m.nombre} #${m.numG}, que es ${m.modelo}.\n\nCabe en la cama, pero la aceleración y el G-code de arranque son los de ${laminado}.\n\n¿Enviar igual?`);
+    if(!m)return false;
+    const gf=_gcodeFitsMachine(m);
+    if(!gf.ok){toast(`No se envía a ${m.nombre} #${m.numG}: ${gf.issues.join(' · ')}`,'error');return false;}
+    try{
+      const modelCanRun=window.MachineOps?._test?.modelCanRun;
+      if(typeof modelCanRun==='function'){
+        const meta=_slicerJobMeta(m);
+        if(!modelCanRun(m.modelo,meta)){toast(`No se envía: ${m.modelo} no está habilitada para ${meta.material} o para estas dimensiones en MachineOps.`,'error');return false;}
+      }
+    }catch(_){}
+    if(!_abrasiveCheck(m,true)){toast('Envío cancelado: confirma una boquilla apta para material abrasivo.','error');return false;}
+    if(!m.modelo||m.modelo!==laminado){toast(`No se envía: este G-code fue generado para ${laminado} y el destino es ${m?.modelo||'modelo desconocido'}. Vuelve a laminar para el modelo físico de destino.`,'error');return false;}
+    return true;
   }
   // idExplicito: al enviar a varias, cada llamada trae SU impresora. Antes la
   // función no recibía nada y siempre leía el selector, así que "enviar a todas"
   // mandaba el mismo archivo N veces a la misma máquina.
-  function enviar(idExplicito,yaChequeado){
+  function enviar(idExplicito,yaChequeado,opts={}){
     const id=idExplicito||el('slTarget')?.value;if(!id||!S.gcode)return;
     const m=MAQUINAS.find(x=>x.id===id);const ip=getPrinterIp(m);
     if(!ip){toast('Esa impresora no tiene IP configurada','error');return;}
     if(!yaChequeado&&!_destinoOk(m))return;
-    const fname=gcodeFileName(),autoStart=el('slAutoStart')?.checked;
-    // Con varias en vuelo el botón es uno solo: no se toca desde los envíos en lote.
+    const fname=gcodeFileName(),wantsPreflight=!opts.noStart&&!!el('slAutoStart')?.checked;
     const btn=idExplicito?null:el('slBtnSend');
     if(btn){btn.disabled=true;btn.textContent='⏳ Subiendo…';}
-    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}toast(`✓ DEMO: ${fname} enviado de forma simulada a ${m.nombre} #${m.numG}`,'success');},250);return;}
+    if(typeof window!=='undefined'&&window._DEMO_MODE){setTimeout(()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar';}toast(`✓ DEMO: ${fname} enviado de forma simulada a ${m.nombre} #${m.numG}`,'success');},250);return;}
     const fd=new FormData();
-    fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);
-    fd.append('root','gcodes');
-    const xhr=new XMLHttpRequest();
-    xhr.open('POST',printerUrl(ip,'/server/files/upload'));
+    fd.append('file',new Blob([S.gcode],{type:'text/plain'}),fname);fd.append('root','gcodes');
+    const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
     xhr.upload.onprogress=ev=>{if(btn&&ev.lengthComputable)btn.textContent='⏳ '+Math.round(ev.loaded/ev.total*100)+'%';};
-    xhr.onload=async()=>{
-      if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}
+    xhr.onload=()=>{
+      if(btn){btn.disabled=false;btn.textContent='📤 Enviar';}
       if(xhr.status>=200&&xhr.status<300){
         toast(`✓ ${fname} subido a ${m.nombre} #${m.numG}`,'success');
-        if(autoStart){
-          try{
-            const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(fname)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
-            toast(r.ok?`▶ Imprimiendo en ${m.nombre} #${m.numG}`:'No se pudo iniciar la impresión',r.ok?'success':'error');
-            if(typeof pollPrinters==='function')pollPrinters();
-          }catch(e){toast('No se pudo iniciar: '+e.message,'error');}
+        if(wantsPreflight){
+          const meta={..._slicerJobMeta(m),machineId:id,gcodeFile:fname};
+          if(window.MachineOps?.startUploadedSlicerJob)window.MachineOps.startUploadedSlicerJob(meta);
+          else toast('Archivo subido. No se inició: el preflight de MachineOps no está disponible.','info');
         }
       }else toast('Error al subir ('+xhr.status+')','error');
     };
-    xhr.onerror=()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar a impresora';}toast(`${m.nombre} #${m.numG}: impresora inaccesible — revisa modo Local/Remoto y el túnel`,'error');};
+    xhr.onerror=()=>{if(btn){btn.disabled=false;btn.textContent='📤 Enviar';}toast(`${m.nombre} #${m.numG}: impresora inaccesible — revisa modo Local/Remoto y el túnel`,'error');};
     xhr.send(fd);
   }
   function encolar(){
     const id=el('slTarget')?.value;if(!id||!S.gcode)return;
     const m=MAQUINAS.find(x=>x.id===id);if(!m){toast('Impresora no encontrada','error');return;}
-    const st=(_printerStatus[id]||{}).state||'offline';
-    const busy=st==='printing'||st==='paused';
-    if(!busy){
-      // printer is free: just send + auto-start
-      const autoOld=el('slAutoStart');if(autoOld)autoOld.checked=true;
-      enviar();return;
-    }
-    const fname=gcodeFileName();
-    _queueAdd(id,S.gcode,fname,S.est?.secs,S.est?.grams);
+    if(!_destinoOk(m))return;
+    const r=_machineReadiness(m,false);
+    if(!r.ready){toast('No se encola: la máquina no está administrativamente disponible o su telemetría no es reciente/confiable.','error');return;}
+    const fname=gcodeFileName(),meta=_slicerJobMeta(m);
+    _queueAdd(id,S.gcode,fname,S.est?.secs,S.est?.grams,meta);
   }
 
   // ── Cotizar desde slicer: transfiere datos a la pestaña de cotización ──
@@ -2532,25 +2690,26 @@ self.onmessage=function(ev){
   // ── Enviar a todas las impresoras libres ──
   function enviarATodas(){
     if(!S.gcode){toast('Genera el G-code primero','error');return;}
-    const libres=MAQUINAS.filter(m=>{
-      const st=(typeof _printerStatus!=='undefined'&&_printerStatus[m.id]||{}).state||'offline';
-      return(st==='idle'||st==='ready'||st==='standby')&&(typeof getPrinterIp==='function'&&getPrinterIp(m));
-    });
-    if(!libres.length){toast('No hay impresoras libres con IP configurada','error');return;}
-    // La pieza tiene que caber en CADA destino: el G-code es uno solo, laminado
-    // para la cama de un modelo. Las que no dan se dejan fuera y se dicen.
-    const aptas=libres.filter(_cabeEn),fuera=libres.filter(m=>!_cabeEn(m));
-    if(!aptas.length){
-      toast(`La pieza no cabe en ninguna de las ${libres.length} impresoras libres. Lamina para una de ellas.`,'error');return;
-    }
     const laminado=el('slPrinter')?.value;
-    const distintas=aptas.filter(m=>m.modelo&&m.modelo!==laminado);
-    const aviso=`¿Enviar a ${aptas.length} impresora(s) libre(s)?\n${aptas.map(m=>m.nombre+' #'+m.numG).join(', ')}`
-      +(fuera.length?`\n\nSe dejan fuera (la pieza no cabe): ${fuera.map(m=>m.nombre+' #'+m.numG).join(', ')}`:'')
-      +(distintas.length?`\n\nOJO: el G-code se laminó para ${laminado}. Estas son de otro modelo y usarán la aceleración y el arranque de ${laminado}: ${distintas.map(m=>m.nombre+' ('+m.modelo+')').join(', ')}`:'');
+    const candidatas=MAQUINAS.filter(m=>typeof getPrinterIp==='function'&&getPrinterIp(m)&&_machineReadiness(m,true).ready);
+    if(!candidatas.length){toast('No hay impresoras confirmadas libres con telemetría reciente e IP válida','error');return;}
+    const aptas=[],fuera=[];
+    for(const m of candidatas){
+      if(m.modelo!==laminado){fuera.push({m,why:`G-code generado para ${laminado}; destino ${m.modelo||'desconocido'}`});continue;}
+      const g=_gcodeFitsMachine(m);
+      if(!g.ok)fuera.push({m,why:g.issues.join(' · ')});
+      else if(!_abrasiveCheck(m,false))fuera.push({m,why:'boquilla endurecida no confirmada para material abrasivo'});
+      else{
+        let compatible=true;try{const fn=window.MachineOps?._test?.modelCanRun;if(typeof fn==='function')compatible=fn(m.modelo,_slicerJobMeta(m));}catch(_){}
+        if(compatible)aptas.push(m);else fuera.push({m,why:'modelo/material no compatible según MachineOps'});
+      }
+    }
+    if(!aptas.length){toast('Ninguna impresora libre pasó todos los controles de compatibilidad. Revisa el detalle o envía individualmente.','error');return;}
+    const aviso=`¿Subir el archivo a ${aptas.length} impresora(s) confirmadas libres?\n${aptas.map(m=>m.nombre+' #'+m.numG).join(', ')}\n\nEsto SOLO sube el G-code; no inicia impresiones en lote.`
+      +(fuera.length?`\n\nFuera por seguridad/compatibilidad:\n${fuera.map(x=>'- '+x.m.nombre+' #'+x.m.numG+': '+x.why).join('\n')}`:'');
     if(!confirm(aviso))return;
-    aptas.forEach(m=>enviar(m.id,true));   // ya chequeadas aquí arriba
-    toast(`Enviando a ${aptas.length} impresora(s)…`,'success');
+    aptas.forEach(m=>enviar(m.id,true,{noStart:true}));
+    toast(`Subiendo a ${aptas.length} impresora(s)… sin auto-inicio`,'success');
   }
   // ── Init ────────────────────────────────────────────────────
   function onPrinterChange(){if(S.stats)renderStats();loadMachineGcode();}
@@ -2558,6 +2717,7 @@ self.onmessage=function(ev){
     const sel=el('slPrinter');if(!sel)return;
     sel.innerHTML=Object.keys(SPECS).map(k=>`<option value="${k}">${k} — ${SPECS[k].x}×${SPECS[k].y}×${SPECS[k].z}mm</option>`).join('');
     const drop=el('slDrop');
+    if(drop&&!drop.querySelector?.('[data-sl-privacy]')){const n=document.createElement('div');n.setAttribute('data-sl-privacy','1');n.style.cssText='margin-top:7px;font-size:9px;color:var(--text3);line-height:1.4';n.textContent='Archivo 3D: procesamiento local. Si usas IA se envían métricas, nombre y notas; no la malla/triángulos.';drop.appendChild(n);}
     ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--accent)';drop.style.background='rgba(0,212,204,0.05)';}));
     ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--border2)';drop.style.background='';}));
     drop.addEventListener('drop',e=>loadFiles(e.dataTransfer.files));
