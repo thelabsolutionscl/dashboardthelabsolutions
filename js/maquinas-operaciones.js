@@ -14,7 +14,7 @@ const ACTIVE_JOB_STATES=['pendiente','planificado','en_cola','imprimiendo','qa']
 const JOB_META={
   pendiente:{label:'Pendiente',color:'#94a3b8'},
   planificado:{label:'Planificado',color:'#a78bfa'},
-  en_cola:{label:'En cola',color:'#ffaa00'},
+  en_cola:{label:'Lista para iniciar',color:'#ffaa00'},
   imprimiendo:{label:'Imprimiendo',color:'#00d4aa'},
   qa:{label:'Esperando QA',color:'#38bdf8'},
   terminado:{label:'Terminado',color:'#22c55e'},
@@ -186,11 +186,32 @@ function audit(action,machineId='',detail='',severity='info'){
 function getMachine(id){return (typeof MAQUINAS!=='undefined'?MAQUINAS:[]).find(m=>m.id===id);}
 function machineLabel(id){const m=getMachine(id);return m?`${m.nombre} #${m.numG||m.num}`:'Sin asignar';}
 function liveState(id){try{return (_printerStatus[id]||{}).state||'';}catch(_){return'';}}
+function liveEvidence(id,now=Date.now()){
+  const live=typeof _printerStatus!=='undefined'?_printerStatus[id]||{}:{};
+  const state=String(live.state||''),lastSeen=num(live.lastSeenAt);
+  const fresh=!!lastSeen&&now-lastSeen<60000;
+  const known=fresh&&!['','connecting','unknown','startup'].includes(state);
+  return{live,state,lastSeen,fresh,known};
+}
+function farmQueueEvidence(now=Date.now()){
+  let status={};try{status=window.FarmQueue?.status?.()||{};}catch(_){}
+  const lastSync=num(status.lastSync),jobs=Array.isArray(status.jobs)?status.jobs:[],counts=status.counts&&typeof status.counts==='object'?status.counts:{};
+  const fresh=status.controllerOk===true&&!!lastSync&&now-lastSync<30000;
+  return{controllerOk:status.controllerOk===true,lastSync,fresh,jobs,counts};
+}
+function farmQueueMatch(job,evidence=farmQueueEvidence()){
+  if(!job?.machineId||!job?.gcodeFile)return null;
+  const target=fileKey(job.gcodeFile);
+  return evidence.jobs.find(row=>row.machineId===job.machineId&&target&&fileKey(row.filename)===target&&['queued','retry','checking','uploading','uploaded','started'].includes(String(row.state||'')))||null;
+}
 function machineOperational(m){
   if(!m||getMaquinaEstadoGlobal(m.id)!=='disponible')return false;
-  // 'apidown' = la máquina responde pero Moonraker no. No se puede planificar
-  // sobre ella: no sabemos si está libre ni podríamos lanzarle un archivo.
-  return !['offline','apidown','noip','shutdown','error'].includes(liveState(m.id));
+  // La planificación automática sólo usa máquinas cuyo estado técnico está
+  // confirmado recientemente. "Sin datos", connecting o startup no equivalen
+  // a una impresora disponible.
+  const evidence=liveEvidence(m.id);
+  if(!evidence.known)return false;
+  return !['offline','apidown','noip','shutdown','error'].includes(evidence.state);
 }
 function machineCapabilities(m){return MODEL_CAPS[m?.modelo]||MODEL_CAPS.K1;}
 function jobMinutes(j){return Math.max(1,num(j.cycles,1))*Math.max(1,num(j.minutesPerCycle,60));}
@@ -261,7 +282,7 @@ function recommendationForJob(job){
   const loads=new Map((MAQUINAS||[]).map(m=>[m.id,jobsForMachine(m.id).filter(j=>j.id!==job.id).reduce((sum,j)=>sum+jobMinutes(j),0)]));
   const candidates=(MAQUINAS||[]).map(machine=>{
     const score=machineScore(job,machine,loads.get(machine.id)||0),reasons=[];
-    if(!Number.isFinite(score))return{machine,score,reasons:['No operativa o incompatible']};
+    if(!Number.isFinite(score))return{machine,score,reasons:['Sin telemetría reciente, no operativa o incompatible']};
     const live=liveState(machine.id)||'sin telemetría';reasons.push(live==='standby'||live==='idle'?'Libre ahora':live==='printing'?'Disponible al terminar':live==='unknown'?'Sin telemetría de impresión':'Estado '+live);
     const spool=compatibleSpools(job,machine.id).find(s=>spoolAvailable(s)>=num(job.grams));
     reasons.push(spool?`Material disponible: ${spool.name}`:'Sin rollo suficiente asignado');
@@ -664,56 +685,123 @@ function renderOpsOverview(){
   </div>`;
 }
 
+function planningJobState(job,now=Date.now()){
+  const machine=job.machineId?getMachine(job.machineId):null,live=machine?liveEvidence(machine.id,now):{state:'',fresh:false,known:false,live:{}};
+  const farm=farmQueueEvidence(now),farmJob=farmQueueMatch(job,farm);
+  const late=!!job.dueDate&&dateValue(job.dueDate)<now;
+  const missing=[];
+  if(!job.machineId)missing.push('máquina');
+  if(!job.gcodeFile)missing.push('archivo G-code');
+  if(num(job.grams)>0&&!job.spoolId)missing.push('rollo reservado');
+  let level='info',label='Revisar trabajo',detail='Comprueba la configuración antes de continuar.';
+  if(job.status==='imprimiendo'){
+    if(live.known&&live.state==='printing'){level='ok';label='Impresión confirmada';detail='Moonraker reporta este equipo imprimiendo ahora.';}
+    else{level='warning';label='Verificar impresión';detail='El trabajo figura imprimiendo, pero la telemetría reciente no lo confirma.';}
+  }else if(job.status==='qa'){level='warning';label='Realizar QA';detail='La impresión terminó y necesita revisión antes de cerrar.';}
+  else if(job.status==='en_cola'){
+    if(!job.machineId||!job.gcodeFile){level='danger';label='Completar preparación';detail=`Falta ${missing.filter(x=>x!=='rollo reservado').join(' y ')||'información crítica'} antes de iniciar.`;}
+    else if(!live.known){level='warning';label='Recuperar telemetría';detail='No se iniciará automáticamente: primero confirma un estado reciente de la impresora.';}
+    else if(['printing','paused'].includes(live.state)){level='info';label='Esperar máquina libre';detail=`La impresora está ${live.state==='paused'?'pausada':'ocupada'}; el trabajo permanece solo planificado.`;}
+    else{level='ok';label='Revisar preflight e iniciar';detail='Máquina y archivo definidos. El preflight volverá a validar seguridad, material y mantención.';}
+  }else if(['pendiente','planificado'].includes(job.status)){
+    if(!job.machineId){level='warning';label='Asignar máquina';detail='La planificación automática solo usará impresoras con telemetría reciente y compatibilidad confirmada.';}
+    else if(!job.gcodeFile){level='warning';label='Indicar archivo G-code';detail='El dashboard necesita saber qué archivo existente debe iniciar en Moonraker.';}
+    else if(!live.known){level='warning';label='Validar telemetría';detail='La máquina está asignada, pero su estado actual no está confirmado.';}
+    else{level='info';label='Preparar para iniciar';detail='La ficha está completa. Al preparar, seguirá siendo planificación del dashboard hasta iniciar o confirmar cola durable.';}
+  }else if(job.status==='terminado'){level='ok';label='Trabajo terminado';detail='Cierre registrado.';}
+  else if(job.status==='fallido'){level='danger';label='Revisar falla';detail='Revisa incidente, desperdicio y eventual reimpresión.';}
+  return{machine,live,farm,farmJob,late,missing,next:{level,label,detail}};
+}
+function planningBadge(label,level='neutral'){
+  return`<span class="mops-plan-badge ${level}">${esc(label)}</span>`;
+}
+function planningJobCard(j){
+  const p=planningJobState(j),cycles=Math.max(1,num(j.cycles,1)),produced=num(j.completedCycles);
+  const order=orderLabel(j.pedidoId),machine=j.machineId?machineLabel(j.machineId):'Sin máquina';
+  const liveLabel=!j.machineId?'Sin máquina':p.live.known?`Telemetría: ${p.live.state}`:'Telemetría sin confirmar';
+  const evidence=[
+    planningBadge(order?'Pedido vinculado':'Sin pedido',order?'ok':'neutral'),
+    planningBadge(liveLabel,p.live.known?'ok':j.machineId?'warning':'neutral'),
+  ];
+  if(j.status==='en_cola')evidence.push(p.farmJob?planningBadge('Controller confirmado','ok'):planningBadge(p.farm.fresh?'Solo plan dashboard':'Controller sin confirmar',p.farm.fresh?'warning':'neutral'));
+  if(num(j.grams)>0)evidence.push(planningBadge(j.spoolId?'Rollo reservado':'Sin rollo reservado',j.spoolId?'ok':'warning'));
+  const actions=[
+    `<button class="btn btn-ghost btn-sm" onclick="MachineOps.openJob('${j.id}')">Editar</button>`,
+    !j.machineId?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.planOne('${j.id}')">Asignar</button>`:'',
+    ['pendiente','planificado'].includes(j.status)?`<button class="btn btn-primary btn-sm" onclick="MachineOps.enqueueJob('${j.id}')">Preparar</button>`:'',
+    j.status==='en_cola'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.startJob('${j.id}')">Revisar e iniciar</button>`:'',
+    j.status==='qa'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.openQA('${j.id}')">Abrir QA</button>`:'',
+    `<button class="btn btn-ghost btn-sm" onclick="MachineOps.printEntityLabel('job','${j.id}')">QR</button>`,
+    `<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveJob('${j.id}')">Archivar</button>`,
+  ].join('');
+  return`<article class="mops-job-card ${p.next.level}">
+    <div class="mops-job-card-head"><div><b>${esc(j.name)}</b><small>${esc(order||'Sin pedido')}${j.dueDate?' · entrega '+esc(j.dueDate):''}${p.late?' · ATRASADO':''}</small></div>${statusBadge(j.status)}</div>
+    <div class="mops-job-card-grid">
+      <span><small>Máquina</small><b>${esc(machine)}</b></span>
+      <span><small>Producción</small><b>${num(j.qty,1)} u · ${produced}/${cycles} ciclos</b></span>
+      <span><small>Material</small><b>${esc(j.material||'—')} ${esc(j.color||'')} · ${Math.round(num(j.grams))} g</b></span>
+      <span><small>Duración estimada</small><b>${fmtMin(jobMinutes(j))}</b></span>
+    </div>
+    <div class="mops-job-next ${p.next.level}"><span>PRÓXIMO PASO</span><b>${esc(p.next.label)}</b><small>${esc(p.next.detail)}</small></div>
+    <div class="mops-job-evidence">${evidence.join('')}</div>
+    <div class="mops-job-card-actions">${actions}</div>
+  </article>`;
+}
 function renderPlanning(){
   const summary=document.getElementById('mopsPlanningSummary'),list=document.getElementById('mopsJobs');
   if(!summary||!list)return;
-  const all=data().jobs.filter(j=>!j.archived);
-  const active=all.filter(j=>ACTIVE_JOB_STATES.includes(j.status));
-  const assigned=active.filter(j=>j.machineId),hours=active.reduce((s,j)=>s+jobMinutes(j),0)/60;
+  const all=data().jobs.filter(j=>!j.archived),active=all.filter(j=>ACTIVE_JOB_STATES.includes(j.status));
+  const farm=farmQueueEvidence(),printing=(MAQUINAS||[]).filter(m=>liveEvidence(m.id).known&&liveState(m.id)==='printing').length;
+  const telemetry=(MAQUINAS||[]).filter(m=>liveEvidence(m.id).known).length;
+  const prepared=active.filter(j=>j.status==='en_cola').length,qa=active.filter(j=>j.status==='qa').length;
+  const needsPrep=active.filter(j=>['pendiente','planificado'].includes(j.status)&&(!j.machineId||!j.gcodeFile)).length;
+  const durable=farm.fresh?farm.jobs.filter(j=>['queued','retry','checking','uploading','uploaded'].includes(String(j.state||''))).length:null;
   const dueSoon=active.filter(j=>j.dueDate&&(dateValue(j.dueDate)-Date.now())<3*86400000).length;
-  summary.innerHTML=`<div class="mops-kpis">${kpi('Activos',active.length,'trabajos abiertos')}${kpi('Planificados',assigned.length,`${active.length-assigned.length} sin asignar`)}${kpi('Horas pendientes',hours.toFixed(1)+' h','estimación total')}${kpi('Entrega ≤ 3 días',dueSoon,'trabajos próximos',dueSoon?'var(--warn)':'var(--accent3)')}</div>`;
+  const statusSelect=document.getElementById('mopsJobStatus'),queueOption=statusSelect?.querySelector('option[value="en_cola"]');if(queueOption)queueOption.textContent='Lista para iniciar';
+  summary.innerHTML=`<div class="mops-planning-guide">
+      <div><b>Centro de planificación confiable</b><small>Separamos lo que está guardado, lo que confirma la telemetría y lo que realmente existe en la cola de ejecución.</small></div>
+      <div class="mops-planning-trust">
+        <span><b>TRABAJOS</b><small>MachineOps + respaldo remoto</small></span>
+        <span class="${telemetry===(MAQUINAS||[]).length?'ok':'warning'}"><b>TIEMPO REAL</b><small>${telemetry}/${(MAQUINAS||[]).length} impresoras con lectura &lt; 60 s</small></span>
+        <span class="${farm.fresh?'ok':'warning'}"><b>CONTROLLER</b><small>${farm.fresh?`${durable} trabajo(s) en cola durable`:'cola durable sin confirmación reciente'}</small></span>
+      </div>
+      <div class="mops-planning-rule">Planificación del dashboard ≠ cola de ejecución. Solo “Controller confirmado” significa que existe un trabajo durable en el Farm Controller.</div>
+    </div>
+    <div class="mops-kpis mops-planning-kpis">
+      ${kpi('Imprimiendo ahora',printing,'confirmado por telemetría',printing?'var(--accent)':'var(--text)')}
+      ${kpi('Por preparar',needsPrep,'faltan máquina o G-code',needsPrep?'var(--warn)':'var(--accent3)')}
+      ${kpi('Listos para iniciar',prepared,'requieren preflight')}
+      ${kpi('Esperando QA',qa,'requieren revisión',qa?'var(--warn)':'var(--accent3)')}
+      ${kpi('Entrega ≤ 3 días',dueSoon,'trabajos abiertos',dueSoon?'var(--warn)':'var(--accent3)')}
+    </div>`;
   renderGantt();
-  const q=(document.getElementById('mopsJobSearch')?.value||'').trim().toLowerCase();
-  const st=document.getElementById('mopsJobStatus')?.value||'';
+  const q=(document.getElementById('mopsJobSearch')?.value||'').trim().toLowerCase(),st=statusSelect?.value||'';
   const rows=all.filter(j=>(!st||j.status===st)&&(!q||[j.name,j.material,j.color,j.gcodeFile,orderLabel(j.pedidoId),machineLabel(j.machineId)].join(' ').toLowerCase().includes(q)))
     .sort((a,b)=>dueUrgency(a)-dueUrgency(b)||Date.parse(a.createdAt||0)-Date.parse(b.createdAt||0));
-  list.innerHTML=rows.length?`<div style="overflow-x:auto"><table class="mops-job-table"><thead><tr><th>Trabajo</th><th>Pedido</th><th>Producción</th><th>Material</th><th>Máquina</th><th>Entrega</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${rows.map(j=>{
-    const produced=num(j.completedCycles),cycles=Math.max(1,num(j.cycles,1));
-    const actions=[
-      `<button class="btn btn-ghost btn-sm" onclick="MachineOps.openJob('${j.id}')" title="Editar">✎</button>`,
-      !j.machineId?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.planOne('${j.id}')" title="Asignar automáticamente">🎯</button>`:'',
-      ['pendiente','planificado'].includes(j.status)?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.enqueueJob('${j.id}')" title="Enviar a cola">＋ Cola</button>`:'',
-      j.status==='en_cola'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.startJob('${j.id}')" title="Iniciar archivo en Moonraker">▶</button>`:'',
-      j.status==='qa'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.openQA('${j.id}')">QA</button>`:'',
-      `<button class="btn btn-ghost btn-sm" onclick="MachineOps.printEntityLabel('job','${j.id}')" title="Etiqueta QR">▦</button>`,
-      `<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveJob('${j.id}')" title="Archivar">🗄</button>`,
-    ].join('');
-    return`<tr>
-      <td><b style="color:var(--text)">${esc(j.name)}</b><div style="font-size:10px;color:var(--text3);margin-top:2px">${esc(j.gcodeFile||'sin archivo')}${j.profileId?` · ${esc(profileLabel(j.profileId))}`:''}</div>${j.postStages?.length?`<div style="font-size:10px;color:var(--accent4);margin-top:2px">${j.postStages.map(k=>postStageMeta(k).icon+' '+esc(postStageMeta(k).label)).join(' · ')}</div>`:''}</td>
-      <td>${esc(orderLabel(j.pedidoId)||'—')}</td>
-      <td>${num(j.qty,1)} u · ${cycles} ciclos<div style="font-size:10px;color:var(--text3)">${produced}/${cycles} completados · ${fmtMin(jobMinutes(j))}</div></td>
-      <td>${esc(j.material||'—')} · ${esc(j.color||'—')}<div style="font-size:10px;color:var(--text3)">${num(j.grams)} g</div></td>
-      <td>${esc(machineLabel(j.machineId))}</td>
-      <td style="color:${j.dueDate&&dateValue(j.dueDate)<Date.now()?'var(--danger)':'var(--text2)'}">${esc(j.dueDate||'—')}<div style="font-size:10px;color:var(--text3)">${esc(j.priority||'normal')}</div></td>
-      <td>${statusBadge(j.status)}</td>
-      <td><div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${actions}</div></td>
-    </tr>`;
-  }).join('')}</tbody></table></div>`:'<div class="empty-state" style="padding:24px">No hay trabajos que coincidan con los filtros.</div>';
+  const openRows=rows.filter(j=>ACTIVE_JOB_STATES.includes(j.status)),closedRows=rows.filter(j=>!ACTIVE_JOB_STATES.includes(j.status));
+  if(!rows.length){list.innerHTML='<div class="empty-state" style="padding:24px">No hay trabajos que coincidan con los filtros.</div>';return;}
+  const showClosed=!!q||!!st;
+  list.innerHTML=`<div class="mops-job-board-head"><div><b>Trabajos activos</b><small>Ordenados por prioridad y fecha de entrega. Cada tarjeta muestra su próximo paso y la evidencia disponible.</small></div><span>${openRows.length} activo(s)</span></div>
+    <div class="mops-job-board">${openRows.length?openRows.map(planningJobCard).join(''):'<div class="mops-intel-empty">✓ No hay trabajos activos.</div>'}</div>
+    ${closedRows.length?(showClosed?`<div class="mops-job-board mops-job-history-grid">${closedRows.map(planningJobCard).join('')}</div>`:`<details class="mops-job-history"><summary>Historial cerrado · ${closedRows.length}</summary><div class="mops-job-board mops-job-history-grid">${closedRows.sort((a,b)=>Date.parse(b.completedAt||b.updatedAt||0)-Date.parse(a.completedAt||a.updatedAt||0)).slice(0,20).map(planningJobCard).join('')}</div></details>`):''}`;
 }
 function renderGantt(){
   const el=document.getElementById('mopsGantt');if(!el)return;
+  const farm=farmQueueEvidence();
   const rows=(MAQUINAS||[]).map(m=>{
     const jobs=jobsForMachine(m.id).sort((a,b)=>num(a.position)-num(b.position)||dueUrgency(a)-dueUrgency(b));
-    const total=Math.max(1,jobs.reduce((s,j)=>s+jobMinutes(j),0));
+    const total=jobs.reduce((s,j)=>s+jobMinutes(j),0),live=liveEvidence(m.id),durable=farm.fresh?num(farm.counts?.[m.id]):null;
     const blocks=jobs.map(j=>{
-      const width=clamp(jobMinutes(j)/total*100,10,100);
-      const col=JOB_META[j.status]?.color||m.color;
+      const width=total?clamp(jobMinutes(j)/total*100,10,100):100,col=JOB_META[j.status]?.color||m.color;
       return`<div class="mops-gantt-job" onclick="MachineOps.openJob('${j.id}')" title="${esc(j.name)} · ${fmtMin(jobMinutes(j))}" style="width:${width}%;background:${col}">${esc(j.name)}</div>`;
     }).join('');
-    const st=liveState(m.id)||'sin datos';
-    return`<div class="mops-gantt-row"><div class="mops-gantt-machine"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${m.color};margin-right:6px"></span>${esc(m.nombre)} #${m.numG}<span style="display:block;font-size:10px;color:var(--text3);margin-left:13px">${esc(st)} · ${fmtMin(total)} en cola</span></div><div class="mops-gantt-track">${blocks||'<span style="padding:8px;color:var(--text3);font-size:10px">Sin trabajos planificados</span>'}</div></div>`;
+    const stateLabel=live.known?live.state:'sin telemetría reciente';
+    return`<div class="mops-gantt-row ${live.known?'trusted':'untrusted'}">
+      <div class="mops-gantt-machine"><b><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${m.color};margin-right:6px"></span>${esc(m.nombre)} #${m.numG}</b><span>${esc(stateLabel)}</span><small>${jobs.length} planificado(s) · ${fmtMin(total)} estimados · Controller: ${durable===null?'sin confirmar':durable+' durable(s)'}</small></div>
+      <div class="mops-gantt-track">${blocks||'<span class="mops-gantt-empty">Sin trabajos planificados</span>'}</div>
+    </div>`;
   }).join('');
-  el.innerHTML=`<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:11px">Carga secuencial por máquina</div><div class="mops-gantt">${rows}</div>`;
+  el.innerHTML=`<div class="mops-gantt-head"><div><b>Plan estimado por impresora</b><small>Las barras son una secuencia de planificación, no una garantía de ejecución. El contador Controller es la única confirmación de cola durable.</small></div></div><div class="mops-gantt">${rows}</div>`;
 }
 
 function orderLabel(id){
@@ -810,10 +898,10 @@ function autoPlan(){
 }
 function enqueueJob(id){
   const j=data().jobs.find(x=>x.id===id);if(!j)return;
-  if(!j.machineId&&!planOne(id,true)){toast('Asigna una máquina antes de encolar','error');return;}
+  if(!j.machineId&&!planOne(id,true)){toast('Asigna una máquina con telemetría reciente antes de preparar','error');return;}
   const errors=validateJob(j);if(errors.length){toast(errors[0],'error');return;}
-  j.status='en_cola';j.queuedAt=nowIso();j.updatedAt=nowIso();persist('Trabajo encolado');
-  toast(`${j.name} agregado a la cola de ${machineLabel(j.machineId)}`,'success');
+  j.status='en_cola';j.queuedAt=nowIso();j.updatedAt=nowIso();persist('Trabajo preparado para iniciar');
+  toast(`${j.name} preparado en ${machineLabel(j.machineId)} · esto aún no crea una cola durable`,'success');
 }
 function openPreflight(id){
   const j=data().jobs.find(x=>x.id===id);if(!j||!j.machineId){toast('Asigna una máquina antes de iniciar','error');return;}
@@ -1666,7 +1754,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState},
 };
 window.MachineOps=api;
 
