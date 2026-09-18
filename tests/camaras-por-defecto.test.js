@@ -30,7 +30,7 @@ function api(store={},maquinas=[],local=false){
     _appendBridgeToken:u=>u+(u.includes('?')?'&':'?')+'bt=TK',
   };
   vm.createContext(ctx);
-  vm.runInContext([fn('_defaultCamUrl'),fn('_printerCamRaw'),fn('_camIsSnapshot'),fn('printerCamUrl'),
+  vm.runInContext([fn('_defaultCamUrl'),fn('_camFollowLivePrinterIp'),fn('_printerCamRaw'),fn('_camIsSnapshot'),fn('printerCamUrl'),
     'this.api={def:_defaultCamUrl,raw:_printerCamRaw,snap:_camIsSnapshot,url:printerCamUrl};'].join('\n'),ctx);
   return ctx.api;
 }
@@ -61,14 +61,21 @@ test('sin IP no hay cámara (no inventa URL rota)',()=>{
   assert.equal(a.raw('x'),'');
 });
 
-test('lo que el usuario fija a mano gana al default',()=>{
-  const a=api({'printer_cam_k1-3':'http://10.0.0.9:8080/?action=stream'},[K1]);
-  assert.equal(a.raw('k1-3'),'http://10.0.0.9:8080/?action=stream');
+test('un override realmente personalizado gana al default',()=>{
+  const a=api({'printer_cam_k1-3':'http://10.0.0.9:8080/custom-stream'},[K1]);
+  assert.equal(a.raw('k1-3'),'http://10.0.0.9:8080/custom-stream');
 });
 
-test('m.cam (Airtable) gana al default pero no a localStorage',()=>{
-  const conCam={...K1,cam:'http://172.16.0.5:8080/?action=stream'};
-  assert.equal(api({},[conCam]).raw('k1-3'),'http://172.16.0.5:8080/?action=stream');
+test('una URL estándar guardada sigue la IP viva después de un cambio DHCP',()=>{
+  const a=api({'printer_cam_k1-3':'http://192.168.100.126:8080/?action=stream'},[K1]);
+  assert.equal(a.raw('k1-3'),'http://192.168.100.7:8080/?action=stream');
+  const conCam={...K2,cam:'http://192.168.100.99:1984/api/frame.jpeg?src=k2plus'};
+  assert.equal(api({},[conCam]).raw('k2-1'),'http://192.168.100.70:1984/api/frame.jpeg?src=k2plus');
+});
+
+test('m.cam personalizado gana al default pero no a localStorage',()=>{
+  const conCam={...K1,cam:'http://172.16.0.5:8080/custom-stream'};
+  assert.equal(api({},[conCam]).raw('k1-3'),'http://172.16.0.5:8080/custom-stream');
   assert.equal(api({'printer_cam_k1-3':'http://10.0.0.9/x'},[conCam]).raw('k1-3'),'http://10.0.0.9/x');
 });
 
