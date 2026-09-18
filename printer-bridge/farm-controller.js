@@ -107,6 +107,17 @@ const TOKENS = {
 };
 const INTERNAL_TOKEN = crypto.randomBytes(32).toString('base64url');
 const ROLE_RANK = { viewer: 1, operator: 2, admin: 3 };
+const SESSION_TTL_MS = Math.max(60_000, Math.min(30*60_000, Number(process.env.BRIDGE_SESSION_TTL_MS || 10*60_000)));
+const sessionTokens = new Map();
+function purgeSessions(now=Date.now()) {
+  for(const [token,row] of sessionTokens)if(!row||row.expiresAt<=now)sessionTokens.delete(token);
+}
+function issueSession(role) {
+  purgeSessions();
+  const token=crypto.randomBytes(24).toString('base64url'),expiresAt=Date.now()+SESSION_TTL_MS;
+  sessionTokens.set(token,{role,expiresAt});
+  return{token,role,expiresAt};
+}
 function tokenFromReq(req) {
   const u = new URL(req.url, 'http://farm.local');
   return String(req.headers['x-bridge-token'] || u.searchParams.get('bt') || '');
@@ -115,7 +126,9 @@ function roleForToken(token) {
   if (TOKENS.admin && safeEq(token, TOKENS.admin)) return 'admin';
   if (TOKENS.operator && safeEq(token, TOKENS.operator)) return 'operator';
   if (TOKENS.viewer && safeEq(token, TOKENS.viewer)) return 'viewer';
-  return '';
+  purgeSessions();
+  const session=sessionTokens.get(String(token||''));
+  return session&&session.expiresAt>Date.now()?session.role:'';
 }
 function requireRole(req, res, minimum) {
   const role = roleForToken(tokenFromReq(req));
@@ -524,6 +537,11 @@ const server = http.createServer(async (req, res) => {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
+  if (p === '/farm/session' && req.method === 'POST') {
+    const role=requireRole(req,res,'viewer');if(!role)return;
+    const session=issueSession(role);
+    return json(res,201,{ok:true,token:session.token,role:session.role,expiresAt:session.expiresAt,ttlMs:SESSION_TTL_MS},{'X-Farm-Role':role});
+  }
   if (p === '/farm/queue' && req.method === 'GET') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, updatedAt: queue.updatedAt, jobs: queue.jobs.map(publicJob) });
@@ -639,5 +657,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
