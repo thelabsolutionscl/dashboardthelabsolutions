@@ -1679,3 +1679,174 @@ async function loadAdsData(){
     if(dot){dot.style.background='var(--danger)';dot.title='Error: '+e.message;}
   }
 }
+
+
+// ══════════════════════════════════════════════════════════════
+// WEB · PRESENTACIÓN DIDÁCTICA
+// Mantiene toda la funcionalidad existente, pero organiza la lectura de arriba
+// hacia abajo: Tráfico → Publicidad → SEO. En Simple deja a la vista lo que
+// sirve para decidir; en Experto siguen disponibles todos los controles.
+// ══════════════════════════════════════════════════════════════
+function webVisualAdsPanel(){
+  const dot=document.getElementById('adsStatusDot');
+  if(!dot)return null;
+  const header=dot.closest('.section-header');
+  return header?.parentElement||null;
+}
+function webVisualContainer(node){
+  return node?.closest('details.op-disclosure')||node||null;
+}
+function webVisualChapter(node,step,title,question){
+  if(!node||node.previousElementSibling?.classList?.contains('web-chapter-head'))return;
+  const head=document.createElement('div');
+  head.className='web-chapter-head';
+  head.innerHTML=`<span class="web-chapter-num">${step}</span><div><strong>${title}</strong><small>${question}</small></div>`;
+  node.before(head);
+}
+function webVisualGo(target){
+  const ids={traffic:'webTrafficPanel',ads:'webAdsPanel',seo:'seoAuditPanel'};
+  const el=document.getElementById(ids[target]||target);if(!el)return;
+  const disclosure=el.closest('details.op-disclosure');
+  if(disclosure)disclosure.open=true;
+  el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function webVisualText(id,fallback='—'){
+  const t=(document.getElementById(id)?.textContent||'').trim();
+  return t&&t!=='—'?t:fallback;
+}
+function webVisualNumber(text){
+  const n=parseFloat(String(text||'').replace(/[^0-9,.-]/g,'').replace(',','.'));
+  return Number.isFinite(n)?n:null;
+}
+function webVisualSetText(el,value){
+  if(el&&el.textContent!==String(value))el.textContent=String(value);
+}
+function webVisualSetAction(el,html,target){
+  if(!el)return;
+  if(el.innerHTML!==html)el.innerHTML=html;
+  if(el.dataset.webGo!==target)el.dataset.webGo=target;
+}
+function webVisualSyncGuide(){
+  const visitors=document.getElementById('webGuideTrafficValue');
+  const trafficMeta=document.getElementById('webGuideTrafficMeta');
+  const ads=document.getElementById('webGuideAdsValue');
+  const adsMeta=document.getElementById('webGuideAdsMeta');
+  const seo=document.getElementById('webGuideSeoValue');
+  const seoMeta=document.getElementById('webGuideSeoMeta');
+  const action=document.getElementById('webGuideAction');
+  webVisualSetText(visitors,webVisualText('web-kpi-usuarios'));
+  if(trafficMeta){
+    const sessions=webVisualText('web-kpi-sesiones','sin datos');
+    webVisualSetText(trafficMeta,sessions==='sin datos'?'Personas que llegan a tu sitio':'Sesiones: '+sessions);
+  }
+  webVisualSetText(ads,webVisualText('ads-kpi-roas'));
+  if(adsMeta){
+    const conv=webVisualText('ads-kpi-conv','sin datos');
+    webVisualSetText(adsMeta,conv==='sin datos'?'Retorno por cada $1 invertido':'Conversiones: '+conv);
+  }
+  webVisualSetText(seo,webVisualText('seoAuditScore','Pendiente'));
+  if(seoMeta){
+    const score=webVisualNumber(webVisualText('seoAuditScore',''));
+    webVisualSetText(seoMeta,score===null?'Analiza el sitio para obtener una nota':score>=90?'SEO saludable':score>=70?'Hay mejoras importantes':'Requiere atención');
+  }
+  if(action){
+    const stale=document.getElementById('adsStaleWarning');
+    const pending=document.getElementById('adsPendingPanel');
+    const score=webVisualNumber(webVisualText('seoAuditScore',''));
+    if(stale&&getComputedStyle(stale).display!=='none'){
+      webVisualSetAction(action,'<b>1.</b> Actualiza Google Ads: los datos están desactualizados.','ads');
+    }else if(pending&&getComputedStyle(pending).display!=='none'){
+      webVisualSetAction(action,'<b>1.</b> Revisa los cambios de Google Ads que aún están pendientes.','ads');
+    }else if(score!==null&&score<90){
+      webVisualSetAction(action,'<b>1.</b> Revisa SEO: hay oportunidades para mejorar visibilidad.','seo');
+    }else{
+      webVisualSetAction(action,'<b>1.</b> Empieza por Tráfico: mira cuántas personas llegaron y desde dónde.','traffic');
+    }
+  }
+}
+function webVisualExplainMetric(id,help){
+  const value=document.getElementById(id),card=value?.closest('.stat-card');
+  if(!card||card.querySelector('.web-metric-help'))return;
+  const note=document.createElement('div');note.className='web-metric-help';note.textContent=help;
+  card.appendChild(note);
+}
+function webVisualMount(){
+  const tab=document.getElementById('tab-web');if(!tab||tab.dataset.webVisualReady==='1')return;
+  tab.dataset.webVisualReady='1';
+
+  const header=tab.querySelector(':scope > .section-header');
+  if(header){
+    const guide=document.createElement('section');
+    guide.id='webOverviewGuide';guide.className='web-guide';
+    guide.innerHTML=`
+      <div class="web-guide-intro">
+        <div><span class="web-guide-eyebrow">WEB EN 3 PREGUNTAS</span>
+          <h2>¿La web está atrayendo, convirtiendo y creciendo?</h2>
+          <p>Lee esta sección en orden. Primero mira el tráfico, después si la publicidad convierte y finalmente la salud SEO. Los detalles técnicos quedan abajo.</p>
+        </div>
+        <button type="button" id="webGuideAction" class="web-guide-action" data-web-go="traffic"></button>
+      </div>
+      <div class="web-guide-grid">
+        <button type="button" class="web-guide-card" data-web-go="traffic"><span>01 · TRÁFICO</span><strong id="webGuideTrafficValue">—</strong><small id="webGuideTrafficMeta">Personas que llegan a tu sitio</small><em>¿Nos están encontrando?</em></button>
+        <button type="button" class="web-guide-card" data-web-go="ads"><span>02 · GOOGLE ADS</span><strong id="webGuideAdsValue">—</strong><small id="webGuideAdsMeta">Retorno por cada $1 invertido</small><em>¿La inversión está generando negocio?</em></button>
+        <button type="button" class="web-guide-card" data-web-go="seo"><span>03 · SEO</span><strong id="webGuideSeoValue">Pendiente</strong><small id="webGuideSeoMeta">Analiza el sitio para obtener una nota</small><em>¿Google entiende bien nuestras páginas?</em></button>
+      </div>
+      <details class="web-concepts">
+        <summary>¿Qué significan los indicadores?</summary>
+        <div><span><b>Visitantes</b> personas únicas que entraron al sitio.</span><span><b>CTR</b> porcentaje de personas que hicieron clic después de ver un anuncio.</span><span><b>Costo/Conv.</b> cuánto gastamos para conseguir una conversión.</span><span><b>ROAS</b> cuánto ingreso atribuimos por cada $1 invertido en Ads.</span><span><b>SEO</b> qué tan preparada está cada página para ser entendida e indexada por buscadores.</span></div>
+      </details>`;
+    header.after(guide);
+  }
+
+  const traffic=document.getElementById('webTrafficPanel');
+  const ads=webVisualAdsPanel();
+  const seo=document.getElementById('seoAuditPanel');
+  if(ads){ads.id='webAdsPanel';ads.classList.add('web-chapter-panel');}
+  traffic?.classList.add('web-chapter-panel');
+  seo?.classList.add('web-chapter-panel');
+
+  // Orden de lectura más natural: adquisición → conversión pagada → optimización orgánica.
+  if(ads&&seo){
+    const seoContainer=webVisualContainer(seo);
+    if(seoContainer&&seoContainer.previousElementSibling!==ads)ads.after(seoContainer);
+  }
+
+  webVisualChapter(webVisualContainer(traffic),'01','Tráfico del sitio','¿Cuánta gente llega, cómo llega y qué páginas mira?');
+  webVisualChapter(ads,'02','Publicidad y conversiones','¿La inversión en Google Ads está devolviendo resultados?');
+  webVisualChapter(webVisualContainer(seo),'03','SEO y visibilidad orgánica','¿Qué debemos mejorar para aparecer mejor en Google?');
+
+  // En Simple dejamos solo los controles que ayudan a decidir o actuar hoy.
+  ['toggleAdsConfig()','openAdsOfflineModal()','setAdsTopeDiario()'].forEach(code=>{
+    tab.querySelectorAll(`button[onclick*="${code}"]`).forEach(b=>b.classList.add('op-expert-only'));
+  });
+  const adsQuick=[...tab.querySelectorAll('a[href*="ads.google.com"],a[href*="lookerstudio.google.com"]')];
+  if(adsQuick.length){
+    const parent=adsQuick[0].parentElement;
+    if(parent&&adsQuick.every(a=>a.parentElement===parent))parent.classList.add('web-tool-links','op-expert-only');
+  }
+  const external=[...tab.querySelectorAll('a[href*="search.google.com/search-console"],a[href*="analytics.google.com"]')];
+  if(external.length){
+    const parent=external[0].parentElement;
+    if(parent&&external.every(a=>a.parentElement===parent))parent.classList.add('web-tool-links','op-expert-only');
+  }
+
+  webVisualExplainMetric('web-kpi-usuarios','Personas únicas que visitaron el sitio.');
+  webVisualExplainMetric('web-kpi-sesiones','Visitas totales; una persona puede generar varias.');
+  webVisualExplainMetric('web-kpi-duracion','Tiempo promedio que dura cada visita.');
+  webVisualExplainMetric('ads-kpi-gasto','Dinero invertido en el período seleccionado.');
+  webVisualExplainMetric('ads-kpi-conv','Acciones que Google Ads registró como conversión.');
+  webVisualExplainMetric('ads-kpi-cpa','Costo promedio para conseguir una conversión.');
+  webVisualExplainMetric('ads-kpi-roas','Retorno atribuido por cada $1 invertido.');
+
+  tab.addEventListener('click',e=>{
+    const b=e.target.closest('[data-web-go]');if(b)webVisualGo(b.dataset.webGo);
+  });
+
+  const observer=new MutationObserver(()=>webVisualSyncGuide());
+  observer.observe(tab,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['style','class']});
+  tab.__webVisualObserver=observer;
+  webVisualSyncGuide();
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(webVisualMount,0),{once:true});
+}else setTimeout(webVisualMount,0);
