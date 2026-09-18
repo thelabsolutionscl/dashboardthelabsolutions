@@ -2123,11 +2123,11 @@ function globalSearchOnInput(raw){
 }
 function _gsRun(idx){
   const fn=_gsResults[idx];
-  if(typeof fn==='function'){ globalSearchClear(true); fn(); }
+  if(typeof fn==='function'){ globalSearchClear(true); document.getElementById('globalSearch')?.classList.remove('mobile-open'); fn(); }
 }
 function _gsRunExtra(idx){
   const fn=_gsExtras[idx];
-  if(typeof fn==='function'){ globalSearchClear(true); fn(); }
+  if(typeof fn==='function'){ globalSearchClear(true); document.getElementById('globalSearch')?.classList.remove('mobile-open'); fn(); }
 }
 function _gsSetActive(idx){
   _gsActive=idx;
@@ -2172,7 +2172,8 @@ function initGlobalSearch(){
     btn.setAttribute('aria-label','Buscar en el dashboard');
     btn.setAttribute('title','Buscar');
     btn.textContent='⌕';
-    btn.addEventListener('click',()=>{
+    btn.addEventListener('click',e=>{
+      e.stopPropagation();
       gs.classList.add('mobile-open');
       const inp=document.getElementById('globalSearchInput');
       if(inp){requestAnimationFrame(()=>{inp.focus();inp.select();globalSearchOnInput(inp.value);});}
