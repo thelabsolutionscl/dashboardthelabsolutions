@@ -1858,3 +1858,56 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .mops-job-table{min-width:760px}
   .mops-smart-alert{grid-template-columns:24px minmax(0,1fr)}.mops-smart-actions{grid-column:2;justify-content:flex-start}.mops-recommendations>article{grid-template-columns:1fr}.mops-intel-head{align-items:stretch}.mops-intel-head>.btn{flex:0 0 auto}.mops-config-grid{grid-template-columns:1fr}
 }
+
+
+/* WEB · presentación didáctica */
+#tab-web .web-guide{margin:0 0 22px;padding:20px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(180deg,rgba(0,212,204,.055),rgba(255,255,255,.015));box-shadow:0 12px 34px rgba(0,0,0,.08)}
+#tab-web .web-guide-intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,360px);gap:20px;align-items:end;margin-bottom:18px}
+#tab-web .web-guide-eyebrow{display:block;font:700 10px 'DM Sans',sans-serif;letter-spacing:1.6px;color:var(--accent);margin-bottom:7px}
+#tab-web .web-guide h2{font:600 24px/1.25 'DM Sans',sans-serif;letter-spacing:-.45px;color:var(--text);margin:0 0 7px}
+#tab-web .web-guide p{font:400 12.5px/1.6 'DM Sans',sans-serif;color:var(--text2);margin:0;max-width:760px}
+#tab-web .web-guide-action{width:100%;text-align:left;border:1px solid rgba(0,212,204,.28);background:rgba(0,212,204,.07);color:var(--text2);border-radius:11px;padding:12px 14px;font:500 12px/1.5 'DM Sans',sans-serif;cursor:pointer}
+#tab-web .web-guide-action:hover{border-color:var(--accent);color:var(--text)}
+#tab-web .web-guide-action b{color:var(--accent);margin-right:5px}
+#tab-web .web-guide-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
+#tab-web .web-guide-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:145px;padding:16px;text-align:left;background:var(--surface2);border:1px solid var(--border);border-radius:13px;color:var(--text);cursor:pointer;transition:border-color .16s,transform .16s,background .16s}
+#tab-web .web-guide-card:hover{border-color:var(--accent);background:rgba(0,212,204,.045);transform:translateY(-1px)}
+#tab-web .web-guide-card>span{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text3)}
+#tab-web .web-guide-card>strong{font:600 27px/1.25 'DM Sans',sans-serif;letter-spacing:-.45px;color:var(--text);margin-top:3px;overflow-wrap:anywhere}
+#tab-web .web-guide-card>small{font-size:11px;color:var(--text2);line-height:1.45}
+#tab-web .web-guide-card>em{margin-top:auto;font-style:normal;font-size:11px;line-height:1.45;color:var(--accent)}
+#tab-web .web-concepts{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+#tab-web .web-concepts>summary{cursor:pointer;color:var(--text2);font-size:11px;font-weight:600;list-style:none}
+#tab-web .web-concepts>summary::-webkit-details-marker{display:none}
+#tab-web .web-concepts>summary:before{content:'＋';display:inline-block;width:18px;color:var(--accent)}
+#tab-web .web-concepts[open]>summary:before{content:'−'}
+#tab-web .web-concepts>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 14px;padding:12px 0 2px}
+#tab-web .web-concepts span{font-size:11px;line-height:1.5;color:var(--text2)}
+#tab-web .web-concepts b{color:var(--text);font-weight:700}
+#tab-web .web-chapter-head{display:flex;align-items:center;gap:11px;margin:24px 0 10px;padding:0 2px}
+#tab-web .web-chapter-num{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;background:rgba(0,212,204,.08);border:1px solid rgba(0,212,204,.22);font:700 11px 'JetBrains Mono',monospace;color:var(--accent);flex:0 0 auto}
+#tab-web .web-chapter-head strong{display:block;font:600 16px/1.35 'DM Sans',sans-serif;color:var(--text)}
+#tab-web .web-chapter-head small{display:block;font-size:11px;line-height:1.4;color:var(--text2);margin-top:1px}
+#tab-web .web-chapter-panel{scroll-margin-top:96px}
+#tab-web .web-metric-help{font-size:9.5px;line-height:1.4;color:var(--text3);margin-top:6px;max-width:170px}
+#tab-web[data-op-view=simple] #webTrafficPanel .stat-card,
+#tab-web[data-op-view=simple] #adsKPIs .stat-card{min-height:105px}
+#tab-web[data-op-view=simple] #webTrafficPanel .stat-value,
+#tab-web[data-op-view=simple] #adsKPIs .stat-value{font-size:24px}
+#tab-web[data-op-view=simple] #webAdsPanel>.section-header{padding:14px 0 10px}
+#tab-web[data-op-view=simple] #webAdsPanel>.section-header .section-title{font-size:17px}
+#tab-web .web-tool-links{opacity:.9}
+#tab-web .web-tool-links a{min-height:38px}
+#tab-web details.op-disclosure>.web-chapter-head{margin-top:0}
+#tab-web .op-disclosure:has(#seoAuditPanel){margin-top:0}
+@media(max-width:900px){
+  #tab-web .web-guide-intro{grid-template-columns:1fr}
+  #tab-web .web-guide-grid{grid-template-columns:1fr}
+  #tab-web .web-guide-card{min-height:118px}
+}
+@media(max-width:600px){
+  #tab-web .web-guide{padding:15px;border-radius:13px}
+  #tab-web .web-guide h2{font-size:20px}
+  #tab-web .web-chapter-head{margin-top:18px}
+  #tab-web .web-concepts>div{grid-template-columns:1fr}
+}
