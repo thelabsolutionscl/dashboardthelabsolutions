@@ -309,8 +309,9 @@ let _wsRpcId=0,_wsRenderTimer=null,_wsHeartbeatTimer=null,_printerLifecycleBound
 const _printQueue={};// { [printerId]: [{gcode,filename,secs,grams},...] }
 function _queueGet(id){return _printQueue[id]||(_printQueue[id]=[]);}
 function _queueCount(id){return(_printQueue[id]||[]).length;}
-function _queueAdd(id,gcode,filename,secs,grams){
-  _queueGet(id).push({gcode,filename,secs,grams,added:Date.now()});
+function _queueAdd(id,gcode,filename,secs,grams,meta={}){
+  const metadata=meta&&typeof meta==='object'?JSON.parse(JSON.stringify(meta)):{};
+  _queueGet(id).push({gcode,filename,secs,grams,meta:metadata,added:Date.now()});
   toast(`📋 Encolado en ${(MAQUINAS.find(m=>m.id===id)||{}).nombre||id} (#${_queueCount(id)} en cola)`,'success');
   renderMonitorGrid();
 }
