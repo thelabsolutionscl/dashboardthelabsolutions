@@ -57,13 +57,16 @@ test('la pestaña Máquinas y sus módulos se cargan una sola vez y en orden',()
 
 test('la inicialización respeta datos, render y conexión en vivo',()=>{
   const body=functionSource(MAQ,'initMaquinas');
+  const service=functionSource(MAQ,'ensurePrinterRealtimeService');
   const load=body.indexOf('await loadMaquinasAirtable()');
   const events=body.indexOf('loadMaquinaEventosAirtable()');
   const render=body.indexOf('renderMaquinasCalendar()');
-  const poll=body.indexOf('pollPrinters()');
-  const ws=body.indexOf('connectAllPrinterWs()');
+  const live=body.indexOf('ensurePrinterRealtimeService()');
+  const poll=service.indexOf('pollPrinters()');
+  const ws=service.indexOf('connectAllPrinterWs()');
   assert.ok(load>=0&&events>load&&render>events,'primero deben cargarse datos y luego renderizar');
-  assert.ok(poll>render&&ws>poll,'polling inicial debe anteceder al WebSocket');
+  assert.ok(live>render,'el servicio realtime debe arrancar después del render inicial');
+  assert.ok(poll>=0&&ws>poll,'el servicio realtime debe arrancar polling antes de WebSocket');
   assert.match(body,/renderCargaMaquinas\(\)/,'debe enlazar la carga de pedidos por máquina');
 });
 
@@ -98,10 +101,14 @@ test('el monitor evita falsos Offline y conserva el último estado bueno',()=>{
   assert.match(apply,/lastSeenAt:prev\?\.lastSeenAt\|\|0/);
 });
 
-test('el ciclo WebSocket se cierra fuera de Máquinas y no renderiza oculto',()=>{
-  assert.match(INDEX,/disconnectAllPrinterWs\(\)/,'al salir debe cerrarse la telemetría en vivo');
+test('la telemetría permanece viva al navegar y el render evita trabajo visible fuera de Máquinas',()=>{
+  const switchStart=INDEX.indexOf('function switchTab(name)');
+  const switchEnd=INDEX.indexOf('// ── OVERVIEW',switchStart);
+  const switchBody=INDEX.slice(switchStart,switchEnd);
+  assert.doesNotMatch(switchBody,/clearInterval\(_monitorInterval\)/,'cambiar de sección no debe detener el monitor');
+  assert.doesNotMatch(switchBody,/disconnectAllPrinterWs\(\)/,'cambiar de sección no debe cerrar WebSockets');
   const scheduled=functionSource(MAQ,'_wsScheduleRender');
-  assert.match(scheduled,/tab-maquinas|activeTab|active-tab|\.active/,'el render WebSocket debe comprobar que Máquinas esté visible');
+  assert.match(scheduled,/tab-maquinas|activeTab|active-tab|\.active/,'el render visual de ráfagas WS puede esperar si Máquinas no está visible');
 });
 
 test('estado administrativo y estado técnico conservan responsabilidades distintas',()=>{

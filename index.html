@@ -8708,8 +8708,9 @@ function switchTab(name){
   if(name==='redes') initRedes();
   if(name==='newsletter') initNewsletter();
   if(name==='simulacion') initSimulacion();
+  // Una vez iniciado, el monitor de Máquinas queda vivo durante toda la sesión.
+  // Cambiar de sección NO corta WebSockets ni cámaras.
   if(name==='maquinas') initMaquinas();
-  else{clearInterval(_monitorInterval);_monitorInterval=null;if(typeof disconnectAllPrinterWs==='function')disconnectAllPrinterWs();}
   if(name==='equipo') initEquipo();
   if(name==='calendario') try{renderCalendario();}catch(e){}
   if(name==='inventario') loadInventario();

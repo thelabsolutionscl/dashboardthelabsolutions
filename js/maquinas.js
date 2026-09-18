@@ -31,23 +31,24 @@ async function toggleMaquinaEstado(id){
   try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);}
 }
 async function initMaquinas(){
-  await loadMaquinasAirtable();
-  await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
-  seedOdometerIfNeeded();
-  renderMaquinasCalendar();
-  renderMonitorFilterTabs();
-  renderMonitorKPIs();
-  renderMaintenanceTable();
-  try{audit3DLoadDaily();}catch(_){}
-  renderProductionAnalytics();
-  try{renderCargaMaquinas();}catch(e){}
-  requestNotificationPermission(false);
-  if(!_monitorInterval){
-    pollPrinters();
-    _monitorInterval=setInterval(pollPrinters,_MONITOR_INTERVAL_MS);
-    connectAllPrinterWs();   // estado en vivo por WebSocket (el polling queda de respaldo)
-  }
-  if(!_camSnapInterval) _camSnapInterval=setInterval(_refreshSnapshotCams,1000);
+  if(_maquinasInitPromise)return _maquinasInitPromise;
+  _maquinasInitPromise=(async()=>{
+    await loadMaquinasAirtable();
+    await Promise.all([loadMaquinaEventosAirtable(), loadMaintLogAirtable()]);
+    seedOdometerIfNeeded();
+    renderMaquinasCalendar();
+    renderMonitorFilterTabs();
+    renderMonitorKPIs();
+    renderMaintenanceTable();
+    try{audit3DLoadDaily();}catch(_){}
+    renderProductionAnalytics();
+    try{renderCargaMaquinas();}catch(e){}
+    requestNotificationPermission(false);
+    ensurePrinterRealtimeService();
+    _resumePrinterRealtime();
+  })();
+  try{return await _maquinasInitPromise;}
+  finally{_maquinasInitPromise=null;}
 }
 
 // ── PRINTER LIVE MONITOR ──────────────────────────────────────
@@ -55,10 +56,16 @@ const MOONRAKER_PORT=7125;
 // Cadencia y tolerancia a fallos del monitor. El intervalo es mayor que el
 // peor caso de un ciclo (timeouts más cortos + backoff) para que no se salten
 // ciclos. El umbral de fallos evita marcar "Offline" por un hipo de red.
-const _MONITOR_INTERVAL_MS=20000;   // sondeo base (el WebSocket lo hace casi irrelevante)
+const _MONITOR_INTERVAL_MS=15000;   // respaldo periódico; WS entrega los cambios en vivo
 const _STATUS_TIMEOUT_MS=9000;      // túnel/WiFi lento del taller necesita margen (la histéresis evita falsos Offline)
 const _THUMB_TIMEOUT_MS=2000;       // antes 3000
 const _OFFLINE_AFTER_FAILS=3;       // fallos consecutivos antes de declarar Offline
+const _WS_HEARTBEAT_MS=15000;       // una consulta ligera mantiene vivo el socket incluso cuando la impresora está idle
+const _WS_STALE_MS=45000;           // un socket sin mensajes deja de ser autoritativo; vuelve a polling y se reconecta
+const _WS_OPEN_TIMEOUT_MS=12000;    // evita conexiones TCP/WebSocket medio abiertas para siempre
+const _CAM_SNAPSHOT_MS=1200;        // siguiente frame sólo DESPUÉS de recibir el anterior
+const _CAM_LOAD_TIMEOUT_MS=25000;   // K2 puede tardar ~20s negociando WebRTC
+const _CAM_RETRY_MAX_MS=30000;
 function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 function getPrinterTunnelToken(){
   const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';
@@ -120,13 +127,22 @@ function _defaultCamUrl(m){
     ? `http://${ip}:1984/api/frame.jpeg?src=k2plus`
     : `http://${ip}:8080/?action=stream`;
 }
-// Fuente única de la URL de cámara: primero lo que el usuario fijó a mano
-// (localStorage o Airtable vía m.cam), y si no, el default por modelo.
+// Las URLs estándar de la cámara integrada siguen la IP viva del registry.
+// Así una IP DHCP antigua guardada en Airtable/localStorage no deja la cámara
+// apuntando para siempre al dueño anterior de esa dirección.
+function _camFollowLivePrinterIp(raw,m){
+  const s=String(raw||'').trim();if(!s||!m)return s;
+  const standardMjpeg=/^http:\/\/\d{1,3}(?:\.\d{1,3}){3}:8080\/\?action=stream(?:&.*)?$/i.test(s);
+  const standardK2=/^http:\/\/\d{1,3}(?:\.\d{1,3}){3}:1984\/api\/frame\.jpe?g\?src=k2plus(?:&.*)?$/i.test(s);
+  return standardMjpeg||standardK2?_defaultCamUrl(m):s;
+}
+// Fuente única: override manual/Airtable para casos especiales; las rutas
+// estándar integradas se normalizan a la IP viva de la máquina.
 function _printerCamRaw(id){
-  const ex=localStorage.getItem('printer_cam_'+id);
-  if(ex)return ex;
   const m=(typeof MAQUINAS!=='undefined')?MAQUINAS.find(x=>x.id===id):null;
-  if(m&&m.cam)return m.cam;
+  const ex=localStorage.getItem('printer_cam_'+id);
+  if(ex)return _camFollowLivePrinterIp(ex,m);
+  if(m&&m.cam)return _camFollowLivePrinterIp(m.cam,m);
   return m?_defaultCamUrl(m):'';
 }
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
@@ -150,12 +166,50 @@ function _safePrinterMediaUrl(raw){
   }catch(e){return'';}
 }
 let _camSnapInterval=null;
-function _refreshSnapshotCams(){
-  if(document.hidden)return;
+const _camRetryTimers={};
+function _cameraTimerKey(im){return im?.dataset?.machineId||im?.id||'';}
+function _cameraClearTimer(im){
+  const key=_cameraTimerKey(im);if(!key)return;
+  clearTimeout(_camRetryTimers[key]);delete _camRetryTimers[key];
+}
+function _cameraRefreshNow(im){
+  if(!im||!im.isConnected)return;
+  const base=im.dataset.camBase||im.getAttribute('data-snap')||'';if(!base)return;
+  _cameraClearTimer(im);
+  im.dataset.camLoading='1';
+  im.src=base+(base.includes('?')?'&':'?')+'_cam='+Date.now();
+  const key=_cameraTimerKey(im);
+  if(key&&im.dataset.camKind==='snapshot')_camRetryTimers[key]=setTimeout(()=>{
+    if(!im.isConnected){delete _camRetryTimers[key];return;}
+    im.dataset.camLoading='0';_cameraRefreshNow(im);
+  },_CAM_LOAD_TIMEOUT_MS);
+}
+function _cameraSchedule(im,delay){
+  if(!im||!im.isConnected)return;
+  const key=_cameraTimerKey(im);if(!key)return;
+  _cameraClearTimer(im);
+  _camRetryTimers[key]=setTimeout(()=>_cameraRefreshNow(im),Math.max(0,delay||0));
+}
+function _cameraLoadOk(im){
+  if(!im)return;
+  im.dataset.camLoading='0';im.dataset.camFails='0';im.style.opacity='1';
+  const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display='none';
+  _cameraClearTimer(im);
+  if(im.dataset.camKind==='snapshot')_cameraSchedule(im,_CAM_SNAPSHOT_MS);
+}
+function _cameraLoadError(im){
+  if(!im)return;
+  im.dataset.camLoading='0';im.style.opacity='0';
+  const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display='flex';
+  const n=(parseInt(im.dataset.camFails||'0',10)||0)+1;im.dataset.camFails=String(n);
+  const delay=Math.min(_CAM_RETRY_MAX_MS,1000*Math.pow(2,Math.min(n-1,5)));
+  _cameraSchedule(im,delay);
+}
+function _refreshSnapshotCams(force=false){
   document.querySelectorAll('img[data-snap]').forEach(im=>{
-    if(im.offsetParent===null)return;            // saltar las ocultas (otra sección / modal cerrado)
-    const base=im.getAttribute('data-snap');if(!base)return;
-    im.src=base+(base.includes('?')?'&':'?')+'_='+Date.now();
+    if(force){im.dataset.camLoading='0';_cameraRefreshNow(im);return;}
+    const key=_cameraTimerKey(im);
+    if(im.dataset.camLoading!=='1'&&(!key||!_camRetryTimers[key]))_cameraRefreshNow(im);
   });
 }
 const HIST_KEY='printer_history_v1';
@@ -191,7 +245,8 @@ const _printerStatus={},_tempHistory={},_prevState={},_sessions={},_thumbCache={
 // Tolerancia a fallos / backoff por máquina, y conexiones WebSocket en vivo.
 const _failCount={},_nextPollAt={};
 const _wsConn={},_wsConnected={},_wsRaw={},_wsAttempts={},_wsTimers={};
-let _wsRpcId=0,_wsRenderTimer=null;
+const _wsLastMessage={},_wsLastProbe={},_wsOpenTimers={};
+let _wsRpcId=0,_wsRenderTimer=null,_wsHeartbeatTimer=null,_printerLifecycleBound=false,_maquinasInitPromise=null;
 // ── Print queue ──────────────────────────────────────────────
 const _printQueue={};// { [printerId]: [{gcode,filename,secs,grams},...] }
 function _queueGet(id){return _printQueue[id]||(_printQueue[id]=[]);}
@@ -471,7 +526,13 @@ async function fetchPrinterStatus(m){
 // Fluidd/Mainsail). En remoto el bridge hace de proxy WS. Esto da estado en
 // tiempo real SIN sondear; si el WS se cae, el polling toma el relevo solo.
 // Desactivable con localStorage 'printer_ws_enabled'='0'.
-function _wsEnabled(){if(window._DEMO_MODE)return false;const ov=localStorage.getItem('printer_ws_enabled');if(ov!==null)return ov!=='0';return (typeof _isLocalMode==='function')?_isLocalMode():true;/* por defecto WS solo en modo local; en remoto el WS del túnel es inestable, se usa polling */}
+function _wsEnabled(){
+  if(window._DEMO_MODE||typeof WebSocket==='undefined')return false;
+  const ov=localStorage.getItem('printer_ws_enabled');if(ov!==null)return ov!=='0';
+  if(typeof _isLocalMode==='function'&&_isLocalMode())return true;
+  return !!getPrinterTunnelToken();
+}
+function _wsFresh(id,now=Date.now()){return !!_wsConnected[id]&&!!_wsLastMessage[id]&&now-_wsLastMessage[id]<_WS_STALE_MS;}
 function _printerWsUrl(ip){
   if(typeof _isLocalMode==='function'&&_isLocalMode())return `ws://${ip}:${MOONRAKER_PORT}/websocket`;
   const base=getPrinterTunnel().replace(/^http/,'ws');   // https→wss, http→ws
@@ -506,40 +567,105 @@ function _wsMergeStatus(m,ip,status){
 }
 function connectPrinterWs(m){
   if(!_wsEnabled())return;
-  const ip=getPrinterIp(m);if(!ip)return;
-  if(typeof WebSocket==='undefined')return;
-  if(_wsConn[m.id]){try{_wsConn[m.id].onclose=null;_wsConn[m.id].close();}catch(e){}_wsConn[m.id]=null;}
+  const ip=getPrinterIp(m);if(!ip||typeof WebSocket==='undefined')return;
+  const current=_wsConn[m.id];
+  if(current&&current.__printerIp===ip&&(current.readyState===WebSocket.OPEN||current.readyState===WebSocket.CONNECTING))return;
+  if(current){try{current.onclose=null;current.close();}catch(e){}}
+  clearTimeout(_wsOpenTimers[m.id]);
   let ws;
-  try{ws=new WebSocket(_printerWsUrl(ip));}catch(e){return;}
-  _wsConn[m.id]=ws;
-  ws.onopen=()=>{try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.subscribe',params:{objects:_printerLightWsObjects(m.id)},id:++_wsRpcId}));}catch(e){}};
+  try{ws=new WebSocket(_printerWsUrl(ip));}catch(e){_scheduleWsReconnect(m);return;}
+  ws.__printerIp=ip;_wsConn[m.id]=ws;
+  _wsOpenTimers[m.id]=setTimeout(()=>{
+    if(_wsConn[m.id]===ws&&ws.readyState!==WebSocket.OPEN){try{ws.close();}catch(e){}}
+  },_WS_OPEN_TIMEOUT_MS);
+  ws.onopen=()=>{
+    clearTimeout(_wsOpenTimers[m.id]);delete _wsOpenTimers[m.id];
+    _wsAttempts[m.id]=0;_wsLastMessage[m.id]=Date.now();
+    try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.subscribe',params:{objects:_printerLightWsObjects(m.id)},id:++_wsRpcId}));}catch(e){}
+  };
   ws.onmessage=ev=>{
+    _wsLastMessage[m.id]=Date.now();
     let msg;try{msg=JSON.parse(ev.data);}catch(e){return;}
     let status=null;
-    if(msg.result&&msg.result.status)status=msg.result.status;                              // respuesta a subscribe/query
-    else if(msg.method==='notify_status_update'&&Array.isArray(msg.params))status=msg.params[0]; // push en vivo
+    if(msg.result&&msg.result.status)status=msg.result.status;
+    else if(msg.method==='notify_status_update'&&Array.isArray(msg.params))status=msg.params[0];
     if(status&&typeof status==='object')_wsMergeStatus(m,ip,status);
   };
   ws.onerror=()=>{try{ws.close();}catch(e){}};
-  ws.onclose=()=>{if(_wsConn[m.id]===ws)_wsConn[m.id]=null;_wsConnected[m.id]=false;_scheduleWsReconnect(m);};
+  ws.onclose=()=>{
+    clearTimeout(_wsOpenTimers[m.id]);delete _wsOpenTimers[m.id];
+    if(_wsConn[m.id]===ws)_wsConn[m.id]=null;
+    _wsConnected[m.id]=false;
+    _scheduleWsReconnect(m);
+  };
 }
 function _scheduleWsReconnect(m){
   if(!_wsEnabled())return;
   const n=(_wsAttempts[m.id]=(_wsAttempts[m.id]||0)+1);
   const delay=Math.min(30000,1000*Math.pow(2,Math.min(n,5)))+Math.floor(Math.random()*1000);
   clearTimeout(_wsTimers[m.id]);
-  _wsTimers[m.id]=setTimeout(()=>{if(!document.hidden&&getPrinterIp(m))connectPrinterWs(m);},delay);
+  _wsTimers[m.id]=setTimeout(()=>{if(getPrinterIp(m))connectPrinterWs(m);},delay);
 }
-function connectAllPrinterWs(){if(!_wsEnabled())return;MAQUINAS.forEach(m=>{if(getPrinterIp(m))connectPrinterWs(m);});}
+function connectAllPrinterWs(){
+  if(!_wsEnabled())return;
+  const liveIds=new Set(MAQUINAS.map(m=>m.id));
+  Object.keys(_wsConn).forEach(id=>{
+    if(liveIds.has(id))return;
+    clearTimeout(_wsTimers[id]);clearTimeout(_wsOpenTimers[id]);
+    const ws=_wsConn[id];if(ws){try{ws.onclose=null;ws.close();}catch(e){}}
+    delete _wsConn[id];delete _wsConnected[id];delete _wsRaw[id];delete _wsLastMessage[id];delete _wsLastProbe[id];
+  });
+  MAQUINAS.forEach(m=>{if(getPrinterIp(m))connectPrinterWs(m);});
+}
 function disconnectAllPrinterWs(){
   MAQUINAS.forEach(m=>{
-    clearTimeout(_wsTimers[m.id]);
+    clearTimeout(_wsTimers[m.id]);clearTimeout(_wsOpenTimers[m.id]);
     const ws=_wsConn[m.id];if(ws){try{ws.onclose=null;ws.close();}catch(e){}}
     _wsConn[m.id]=null;_wsConnected[m.id]=false;_wsRaw[m.id]=null;_wsAttempts[m.id]=0;
+    _wsLastMessage[m.id]=0;_wsLastProbe[m.id]=0;
   });
 }
 function reconnectAllPrinterWs(){disconnectAllPrinterWs();connectAllPrinterWs();}
-
+function _printerWsHeartbeat(){
+  if(!_wsEnabled())return;
+  const now=Date.now();
+  MAQUINAS.forEach(m=>{
+    const ip=getPrinterIp(m);if(!ip)return;
+    const ws=_wsConn[m.id];
+    if(!ws||ws.readyState===WebSocket.CLOSED||ws.readyState===WebSocket.CLOSING){connectPrinterWs(m);return;}
+    if(ws.readyState!==WebSocket.OPEN)return;
+    if(_wsLastMessage[m.id]&&now-_wsLastMessage[m.id]>=_WS_STALE_MS){
+      _wsConnected[m.id]=false;
+      try{ws.close();}catch(e){}
+      return;
+    }
+    if(now-(_wsLastProbe[m.id]||0)>=_WS_HEARTBEAT_MS){
+      _wsLastProbe[m.id]=now;
+      try{ws.send(JSON.stringify({jsonrpc:'2.0',method:'printer.objects.query',params:{objects:{webhooks:null,print_stats:null,virtual_sdcard:null}},id:++_wsRpcId}));}
+      catch(e){try{ws.close();}catch(_){}}
+    }
+  });
+}
+function _resumePrinterRealtime(){
+  if(window._DEMO_MODE)return;
+  try{pollPrinters();}catch(e){}
+  try{connectAllPrinterWs();_printerWsHeartbeat();}catch(e){}
+  try{_refreshSnapshotCams(true);}catch(e){}
+  try{window.FarmHealth?.refresh?.(true);}catch(e){}
+  try{window.FarmRegistry?.sync?.(true);window.FarmQueue?.sync?.(true);}catch(e){}
+}
+function ensurePrinterRealtimeService(){
+  if(!_monitorInterval){pollPrinters();_monitorInterval=setInterval(pollPrinters,_MONITOR_INTERVAL_MS);}
+  if(!_wsHeartbeatTimer)_wsHeartbeatTimer=setInterval(_printerWsHeartbeat,_WS_HEARTBEAT_MS);
+  if(!_camSnapInterval)_camSnapInterval=setInterval(()=>_refreshSnapshotCams(false),10000);
+  connectAllPrinterWs();_printerWsHeartbeat();
+  if(!_printerLifecycleBound){
+    _printerLifecycleBound=true;
+    window.addEventListener('focus',_resumePrinterRealtime);
+    window.addEventListener('online',_resumePrinterRealtime);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)_resumePrinterRealtime();});
+  }
+}
 function fmtSecs(s){if(!s||s<=0)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>0?`${h}h ${m}m`:`${m}m`;}
 function fmtPrinterSeen(ts){
   const age=Math.max(0,Date.now()-Number(ts||0));if(!ts)return'Sin lectura previa';
@@ -704,9 +830,11 @@ function renderMaqOcupacion(){
 
 function renderMonitorGrid(){
   const el=document.getElementById('maquinaMonGrid');if(!el)return;
-  const base=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
-  const lista=sortedList(base);
+  // Las tarjetas permanecen montadas aunque un filtro las oculte: las cámaras
+  // no se reinician al cambiar K1/K2/Ender/Todas.
+  const lista=sortedList(MAQUINAS);
   const __cards=lista.map(m=>{
+    const visible=_monitorFilter==='all'||m.modelo===_monitorFilter;
     const s=_printerStatus[m.id]||_printerInitialStatus(m);
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
@@ -725,12 +853,14 @@ function renderMonitorGrid(){
     const idleWarn=idleHours>0;
     // La cámara se monta en un nodo aparte y persistente (no se recrea en cada
     // ciclo) para que el stream no parpadee. camKey cambia solo si cambia la URL.
-    const showCam=!(s.state==='noip'||s.state==='offline'||s.state==='shutdown');
-    const camKey=(_rawCam&&showCam)?(_camU+'|'+(_camSnap?'s':'m')):'';
+    // Cámara y Moonraker son canales independientes. Mantener la cámara viva
+    // incluso con telemetría caída permite verificar físicamente la impresión.
+    const showCam=!!_rawCam;
+    const camKey=showCam?(_camU+'|'+(_camSnap?'s':'m')):'';
     // Huella estructural: SOLO lo que cambia qué ramas se dibujan. Excluye
     // progreso/eta/temperaturas (se parchean en vivo) → la tarjeta no se
     // reconstruye cada 15s mientras imprime, evitando el parpadeo.
-    const structFP=[s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0),_printerLightFingerprint(m.id)].join('~');
+    const structFP=[visible?1:0,s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0),_printerLightFingerprint(m.id)].join('~');
 
     let body='';
     if(s.state==='connecting'){
@@ -821,7 +951,7 @@ function renderMonitorGrid(){
         </div>`;
     }
 
-    const cardHtml=`<div id="mcard_${m.id}" class="pcard${isActive?' active':''}${s.stale?' stale':''}" style="--acc:${sm.color};background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:flex;flex-direction:column">
+    const cardHtml=`<div id="mcard_${m.id}" class="pcard${isActive?' active':''}${s.stale?' stale':''}" style="--acc:${sm.color};background:var(--surface);border:1px solid ${maintAlerts.length?'rgba(255,170,0,0.4)':isActive?sm.color+'55':'var(--border2)'};border-top:3px solid ${gc?.color||'var(--border2)'};border-radius:13px;padding:13px;display:${visible?'flex':'none'};flex-direction:column">
       <div style="display:flex;align-items:center;gap:8px">
         ${img?`<img loading="lazy" decoding="async" src="${img}" style="width:34px;height:34px;object-fit:contain;border-radius:7px;background:var(--surface2);flex-shrink:0" onerror="this.style.display='none'">`:''}
         <div style="flex:1;min-width:0">
@@ -840,55 +970,73 @@ function renderMonitorGrid(){
     </div>`;
     return{id:m.id,fp:structFP,camKey,html:cardHtml};
   });
-  // Render selectivo en dos niveles + parche en vivo:
-  //  · structFP (forma de la tarjeta) → solo se reescribe el DOM si cambió.
-  //  · cámara → nodo propio (#mccam_), se (re)monta solo si cambia su URL,
-  //    así el stream MJPEG/snapshot NO parpadea en cada ciclo.
-  //  · números en vivo (progreso/eta/temps/sparkline) → se parchean en sitio
-  //    cada ciclo sin reconstruir DOM (no reinicia animaciones ni roba foco).
-  // El grid completo solo se reconstruye si cambia el conjunto/orden de máquinas.
+  // Reconciliación incremental: jamás vaciamos el grid por un cambio de orden.
+  // appendChild mueve nodos existentes y conserva los streams abiertos.
   const __ids=__cards.map(c=>c.id).join('|');
-  if(el.__order!==__ids){
-    el.innerHTML=__cards.map(c=>c.html).join('');
-    el.__order=__ids;el.__fp={};el.__cam={};
-    __cards.forEach(c=>{el.__fp[c.id]=c.fp;_syncPrinterCam(c.id,c.camKey,true);el.__cam[c.id]=c.camKey;_patchLivePrinter(c.id,_printerStatus[c.id]);});
-  }else{
-    __cards.forEach(c=>{
-      if(el.__fp[c.id]!==c.fp){
-        const node=document.getElementById('mcard_'+c.id);
-        if(node)node.outerHTML=c.html;else el.insertAdjacentHTML('beforeend',c.html);
-        el.__fp[c.id]=c.fp;
-        _syncPrinterCam(c.id,c.camKey,true);   // la tarjeta se rehízo → re-montar cámara
-        el.__cam[c.id]=c.camKey;
-      }else if(el.__cam[c.id]!==c.camKey){
-        _syncPrinterCam(c.id,c.camKey,false);  // solo cambió la cámara
-        el.__cam[c.id]=c.camKey;
-      }
-      _patchLivePrinter(c.id,_printerStatus[c.id]);
-    });
-  }
+  el.__fp=el.__fp||{};el.__cam=el.__cam||{};
+  const wanted=new Set(__cards.map(c=>c.id));
+  Array.from(el.children).forEach(node=>{
+    const id=String(node.id||'').replace(/^mcard_/,'');
+    if(node.id?.startsWith('mcard_')&&!wanted.has(id)){
+      const im=node.querySelector('img[data-machine-id]');if(im)_cameraClearTimer(im);
+      node.remove();
+    }
+  });
+  __cards.forEach(c=>{
+    let node=document.getElementById('mcard_'+c.id);
+    if(!node){
+      el.insertAdjacentHTML('beforeend',c.html);
+      node=document.getElementById('mcard_'+c.id);
+      el.__fp[c.id]=c.fp;
+      _syncPrinterCam(c.id,c.camKey,true);
+    }else if(el.__fp[c.id]!==c.fp){
+      node=_replaceMonitorCardPreservingCamera(c.id,c.html)||node;
+      el.__fp[c.id]=c.fp;
+      _syncPrinterCam(c.id,c.camKey,false);
+    }
+    const slot=document.getElementById('mccam_'+c.id);
+    if((slot?.__camKey||'')!==c.camKey)_syncPrinterCam(c.id,c.camKey,false);
+    el.__cam[c.id]=c.camKey;
+    if(node&&node.parentElement===el)el.appendChild(node);
+    _patchLivePrinter(c.id,_printerStatus[c.id]);
+  });
+  el.__order=__ids;
   const lu=document.getElementById('monitorLastUpdate');
   if(lu)lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function _replaceMonitorCardPreservingCamera(id,html){
+  const old=document.getElementById('mcard_'+id);if(!old)return null;
+  const tpl=document.createElement('template');tpl.innerHTML=html.trim();
+  const next=tpl.content.firstElementChild;if(!next)return old;
+  const oldSlot=old.querySelector('.pcam-slot'),newSlot=next.querySelector('.pcam-slot');
+  if(oldSlot&&newSlot)newSlot.replaceWith(oldSlot);
+  old.replaceWith(next);
+  return next;
 }
 // Monta/actualiza la cámara en su nodo persistente. Sin force, no toca el <img>
 // si la URL no cambió → el stream sigue vivo entre ciclos (cero parpadeo).
 function _syncPrinterCam(id,camKey,force){
   const slot=document.getElementById('mccam_'+id);if(!slot)return;
   if(!force&&slot.__camKey===camKey)return;
+  const prev=slot.querySelector('img');if(prev)_cameraClearTimer(prev);
   if(!camKey){slot.innerHTML='';slot.__camKey='';return;}
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   const raw=_printerCamRaw(id);
   const camU=_safePrinterMediaUrl(printerCamUrl(id)),snap=_camIsSnapshot(raw);
   if(!camU){slot.innerHTML='';slot.__camKey='';return;}
-  // El <img> se conserva SIEMPRE (para snapshots se refresca cada 1s vía data-snap,
-  // así se recupera solo cuando la cámara vuelve). En vez de romper el nodo al fallar,
-  // mostramos una capa "sin señal" superpuesta y ocultamos la imagen — al primer frame
-  // bueno (onload) la capa se esconde de nuevo.
   slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative;min-height:56px">
-    <img loading="lazy" decoding="async" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="this.style.opacity='1';var o=this.parentElement.querySelector('.pcam-off');if(o)o.style.display='none'" onerror="this.style.opacity='0';var o=this.parentElement.querySelector('.pcam-off');if(o)o.style.display='flex'">
-    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:10px;color:#666">${snap?'reintentando…':'verifica la URL'}</span></div>
+    <img loading="eager" decoding="async" data-machine-id="${id}" data-cam-base="${camU}" data-cam-kind="${snap?'snapshot':'mjpeg'}" data-cam-loading="1" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="_cameraLoadOk(this)" onerror="_cameraLoadError(this)">
+    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:10px;color:#666">reconectando automáticamente…</span></div>
   </div>`;
   slot.__camKey=camKey;
+  const im=slot.querySelector('img');
+  if(im&&snap){
+    const key=_cameraTimerKey(im);
+    if(key)_camRetryTimers[key]=setTimeout(()=>{
+      if(!im.isConnected){delete _camRetryTimers[key];return;}
+      if(im.dataset.camLoading==='1'){im.dataset.camLoading='0';_cameraRefreshNow(im);}
+    },_CAM_LOAD_TIMEOUT_MS);
+  }
 }
 // Parchea los valores que cambian a cada lectura, en sitio, sin reconstruir la
 // tarjeta. Si el elemento no existe (estado no activo), simplemente no hace nada.
@@ -1851,14 +1999,13 @@ function _applyStatus(m,s){
 }
 async function pollPrinters(){
   if(window._DEMO_MODE){await pollPrintersDemoTick();return;}
-  if(_pollInFlight)return;            // no solapar ciclos lentos (timeouts)
-  if(document.hidden)return;          // no machacar bridge/impresoras con la pestaña oculta
+  if(_pollInFlight)return;
   _pollInFlight=true;
   try{
     const now=Date.now();
     await _mapLimit(MAQUINAS,4,async m=>{
-      if(_wsConnected[m.id])return;                          // el WebSocket ya da estado en vivo
-      if(_nextPollAt[m.id]&&now<_nextPollAt[m.id])return;    // en backoff: máquina caída
+      if(_wsFresh(m.id,now))return;
+      if(_nextPollAt[m.id]&&now<_nextPollAt[m.id])return;
       const s=await fetchPrinterStatus(m);
       _applyStatus(m,s);
     });
