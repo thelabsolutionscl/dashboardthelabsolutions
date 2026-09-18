@@ -83,6 +83,18 @@ test('Taller tiene dashboard inicial y módulos bajo demanda',()=>{
   assert.match(CSS,/mops-workshop-nav-grid/);
 });
 
+test('Operación física y Herramientas avanzadas usan botones visuales TLS con iconos temáticos',()=>{
+  assert.match(OPS,/WORKSHOP_CARD_META/);
+  for(const icon of ['spool','wrench','shield','capacity','sliders','printer','chart','gear'])assert.match(OPS,new RegExp(icon));
+  assert.match(OPS,/mops-workshop-tile/);
+  assert.match(OPS,/_activeWorkshopView===view/);
+  assert.doesNotMatch(functionSource(OPS,'workshopNavCard'),/mops-workshop-card/);
+  assert.match(CSS,/Taller · accesos TLS en formato botón/);
+  assert.match(CSS,/border-radius:18px/);
+  assert.match(CSS,/mops-workshop-tile-icon svg/);
+  assert.match(CSS,/mops-workshop-tile\.active/);
+});
+
 test('capacidad excluye QA y evita doble conteo de impresión activa',()=>{
   const src=functionSource(OPS,'capacityLoadMinutes');
   assert.match(src,/\['pendiente','planificado','en_cola'\]/);
