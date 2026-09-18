@@ -127,11 +127,15 @@ test('Centro de granja distingue evidencia, eventos automáticos e historial',()
   assert.doesNotMatch(overview,/Máquinas no listas/,'no debe inferir disponibilidad con un KPI ambiguo');
 });
 
-test('resumen operativo se integra con el Centro inteligente y no queda perdido al final',()=>{
+test('resumen operativo queda dentro del Centro inteligente antes de alertas y monitor',()=>{
   const mount=functionSource(OPS,'_mountIntelligenceEmbeddedNodes');
   const park=functionSource(OPS,'_parkIntelligenceEmbeddedNodes');
   const render=functionSource(OPS,'renderIntelligence');
-  assert.match(render,/mopsOpsOverviewAnchor/);
+  const overviewPos=render.indexOf('mopsOpsOverviewAnchor');
+  const alertsPos=render.indexOf('mops-intel-grid');
+  const monitorPos=render.indexOf('mopsLiveMonitorAnchor');
+  assert.ok(overviewPos>=0&&alertsPos>overviewPos,'el resumen operativo debe formar parte de la cabecera del Centro inteligente');
+  assert.ok(monitorPos>overviewPos,'el resumen operativo debe quedar antes del monitor de impresoras');
   assert.match(mount,/overviewAnchor\.replaceWith\(nodes\.overview\)/);
   assert.match(park,/maquinaOpsOverview/);
   assert.match(mount,/renderOpsOverview\(\)/);
