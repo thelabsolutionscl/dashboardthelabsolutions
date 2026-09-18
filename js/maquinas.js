@@ -9,7 +9,30 @@ function fmtDayLabel(d){return['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.ge
 function getMaquinaSemanaLunes(){const t=new Date();t.setHours(0,0,0,0);const day=t.getDay();const l=new Date(t);l.setDate(t.getDate()-(day===0?6:day-1)+(maquinaState.semanaOffset*7));return l;}
 function navSemana(d){maquinaState.semanaOffset+=d;renderMaquinasCalendar();}
 function goToday(){maquinaState.semanaOffset=0;renderMaquinasCalendar();}
-function getMaquinaEstadoGlobal(id){const m=MAQUINAS.find(x=>x.id===id);return m?.estado||localStorage.getItem('estado_maq_'+id)||'disponible';}
+function _machineStatePendingKey(id){return 'estado_maq_pending_'+id;}
+function getMaquinaEstadoGlobal(id){
+  const m=MAQUINAS.find(x=>x.id===id);
+  let pending='';try{pending=JSON.parse(localStorage.getItem(_machineStatePendingKey(id))||'null')?.value||'';}catch(_){}
+  return pending||m?.estado||localStorage.getItem('estado_maq_'+id)||'disponible';
+}
+async function _saveMachineStateReliable(id,value){
+  const payload={value,updatedAt:Date.now()};
+  localStorage.setItem('estado_maq_'+id,value);
+  localStorage.setItem(_machineStatePendingKey(id),JSON.stringify(payload));
+  try{
+    await saveMaquinaEstadoAirtable(id,value);
+    localStorage.removeItem(_machineStatePendingKey(id));
+    return true;
+  }catch(e){return false;}
+}
+async function flushMachineStateOutbox(){
+  for(const m of (MAQUINAS||[])){
+    let pending=null;try{pending=JSON.parse(localStorage.getItem(_machineStatePendingKey(m.id))||'null');}catch(_){}
+    if(!pending?.value)continue;
+    try{await saveMaquinaEstadoAirtable(m.id,pending.value);m.estado=pending.value;localStorage.removeItem(_machineStatePendingKey(m.id));}
+    catch(_){}
+  }
+}
 const MAQUINA_ESTADOS={
   disponible:{label:'Disponible',short:'✓ Disp.',color:'green',icon:'✓'},
   reservada:{label:'Reservada',short:'◷ Res.',color:'yellow',icon:'◷'},
@@ -21,14 +44,19 @@ const MAQUINA_ESTADOS={
 };
 function maquinaEstadoMeta(estado){return MAQUINA_ESTADOS[estado]||MAQUINA_ESTADOS.disponible;}
 async function toggleMaquinaEstado(id){
-  const m=MAQUINAS.find(x=>x.id===id);if(!m) return;
-  const nv=m.estado==='disponible'?'mantencion':'disponible';
-  m.estado=nv;
-  localStorage.setItem('estado_maq_'+id,nv);
-  renderMaquinasCalendar();
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  const current=getMaquinaEstadoGlobal(id);
+  if(!['disponible','mantencion'].includes(current)){
+    toast(`${m.nombre} #${m.numG||m.num}: ${maquinaEstadoMeta(current).label}. Para reactivarla usa la ficha técnica y confirma el cambio.`,'info');
+    try{window.MachineOps?.openTech?.(id);}catch(_){}
+    return;
+  }
+  const nv=current==='disponible'?'mantencion':'disponible';
+  if(current==='mantencion'&&nv==='disponible'&&!confirm(`¿Marcar ${m.nombre} #${m.numG||m.num} como DISPONIBLE?\n\nConfirma que la mantención terminó y la máquina fue revisada físicamente.`))return;
+  m.estado=nv;renderMaquinasCalendar();
   const meta=maquinaEstadoMeta(nv);
-  toast(`${m.nombre} #${m.num}: ${meta.icon} ${meta.label}`,nv==='disponible'?'success':'error');
-  try{await saveMaquinaEstadoAirtable(id,nv);}catch(e){console.warn('No se pudo guardar estado en Airtable',e);toast('Estado guardado sólo en este dispositivo; Airtable no respondió','info');}
+  const synced=await _saveMachineStateReliable(id,nv);
+  toast(`${m.nombre} #${m.numG||m.num}: ${meta.icon} ${meta.label}${synced?"":" · pendiente de sincronizar"}`,synced?(nv==='disponible'?'success':'error'):'info');
 }
 function _renderMaquinasMonitorNow(){
   // El monitor debe existir desde el primer frame de la pestaña. MAQUINAS ya
@@ -45,6 +73,7 @@ async function initMaquinas(){
   if(_maquinasInitPromise)return _maquinasInitPromise;
   _maquinasInitPromise=(async()=>{
     await loadMaquinasAirtable();
+    await flushMachineStateOutbox();
 
     // Reconciliado el registry real, repintamos inmediatamente y arrancamos
     // telemetría/cámaras ANTES de esperar eventos de calendario/mantención.
@@ -342,11 +371,14 @@ async function _queueStartNext(id){
     const hdrs=getPrinterAuthHeaders(id);for(const k in hdrs)xhr.setRequestHeader(k,hdrs[k]);
     xhr.onload=async()=>{
       if(xhr.status>=200&&xhr.status<300){
-        job._starting=false;
-        if(_printQueue[id]&&_printQueue[id][0]===job){_printQueue[id].shift();renderMonitorGrid();}  // recién ahora se consume
-        try{await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});}catch(_){}
-        toast(`▶ Cola: iniciando ${job.filename} en ${m?.nombre||id}`,'success');
-        if(typeof pollPrinters==='function')pollPrinters();
+        try{
+          const started=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(job.filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});
+          if(!started.ok){reintentar('Cola: G-code subido, pero no se pudo iniciar ('+started.status+')');return;}
+          job._starting=false;
+          if(_printQueue[id]&&_printQueue[id][0]===job){_printQueue[id].shift();renderMonitorGrid();}
+          toast(`▶ Cola: ${job.filename} iniciado en ${m?.nombre||id}`,'success');
+          if(typeof pollPrinters==='function')pollPrinters();
+        }catch(e){reintentar('Cola: G-code subido, pero START no fue confirmado');}
       }else reintentar('Cola: no se pudo subir el trabajo ('+xhr.status+')');
     };
     xhr.onerror=()=>reintentar('Cola: impresora inaccesible');
@@ -362,6 +394,12 @@ const MONITOR_GRUPOS=[
   {key:'Ender-5 Max',label:'Ender-5 Max',color:'#ffaa00'},
   {key:'Giga',label:'Giga',color:'#ff4444'},
 ];
+
+function machineHasPhysicalCfs(machine){
+  if(!machine)return false;
+  const id=String(machine.id||''),globalNo=Number(machine.numG??machine.num??0);
+  return machine.modelo==='K2 Plus'||id==='k1-1'||(machine.modelo==='K1'&&globalNo===1);
+}
 
 function getPrinterIp(m){return localStorage.getItem('printer_ip_'+m.id)||m.ip||null;}
 function getPrinterApiKey(id){
@@ -566,7 +604,7 @@ async function fetchPrinterStatus(m){
   const headers=getPrinterAuthHeaders(m.id);
   try{
     const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks'];
-    if(m.modelo==='K2'||m.modelo==='K2 Plus')objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
+    if(machineHasPhysicalCfs(m))objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
     const path='/printer/objects/query?'+objects.map(encodeURIComponent).join('&')+_printerLightQuerySuffix(m.id);
     const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
     if(!r.ok){
@@ -1331,7 +1369,10 @@ function printerEmergencyStop(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   if(!confirm(`⛔ PARADA DE EMERGENCIA — ${m.nombre} #${m.numG}\n\nDetiene TODO de inmediato (incluido cualquier print en curso) y deja el firmware apagado hasta reiniciarlo desde Fluidd/Mainsail. Úsalo solo ante un peligro real.\n\n¿Continuar?`))return;
   const ip=getPrinterIp(m);
-  fetch(printerUrl(ip,'/printer/emergency_stop'),{method:'POST',headers:getPrinterAuthHeaders(id)}).then(()=>{toast('⛔ Parada de emergencia enviada','info');setTimeout(pollPrinters,1500);}).catch(()=>toast('Sin conexión','error'));
+  fetch(printerUrl(ip,'/printer/emergency_stop'),{method:'POST',headers:getPrinterAuthHeaders(id),signal:AbortSignal.timeout(6000)}).then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    toast('⛔ Parada de emergencia confirmada','info');setTimeout(pollPrinters,1500);
+  }).catch(e=>toast('No se pudo confirmar la parada de emergencia: '+(e?.message||'sin conexión'),'error'));
 }
 // Archivos en la impresora
 async function loadPrinterFiles(id){
@@ -1352,9 +1393,11 @@ async function loadPrinterFiles(id){
 async function reprintFile(id,filename){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   if(_isPrinterBusy(_pcState(id))){toast('🔒 La impresora ya está ocupada','error');return;}
-  if(!confirm(`Imprimir "${filename}" en ${m.nombre} #${m.numG}?`))return;
-  const ip=getPrinterIp(m);
-  try{const r=await fetch(printerUrl(ip,`/printer/print/start?filename=${encodeURIComponent(filename)}`),{method:'POST',signal:AbortSignal.timeout(8000),headers:getPrinterAuthHeaders(id)});if(r.ok){toast(`▶ Imprimiendo ${filename}`,'success');closePrinterControl();setTimeout(pollPrinters,1500);}else toast('Error al iniciar: '+r.status,'error');}catch(e){toast('Sin conexión','error');}
+  if(window.MachineOps?.startExistingFile){
+    closePrinterControl();
+    return window.MachineOps.startExistingFile(id,filename);
+  }
+  toast('Centro de operaciones no disponible: no se inicia una impresión sin preflight','error');
 }
 // Historial real de Moonraker (para costos)
 async function loadPrinterHistory(id){
