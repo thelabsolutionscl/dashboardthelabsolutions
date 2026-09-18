@@ -25,6 +25,15 @@ test('tokens se separan en viewer operator admin',()=>{
   assert.equal(api.roleForToken('incorrecto'),'');
 });
 
+test('sesiones efímeras conservan el rol y evitan reutilizar el secreto largo en media/ws',()=>{
+  const session=api.issueSession('operator');
+  assert.ok(session.token&&session.token.length>=24);
+  assert.equal(api.roleForToken(session.token),'operator');
+  assert.ok(session.expiresAt>Date.now());
+  assert.match(source,/\/farm\/session/);
+  assert.match(source,/SESSION_TTL_MS/);
+});
+
 test('rutas destructivas exigen admin y lectura solo viewer',()=>{
   assert.equal(api.routeMinimumRole({method:'GET'},'/192.168.100.51/printer/info'),'viewer');
   assert.equal(api.routeMinimumRole({method:'POST'},'/192.168.100.51/printer/print/start'),'operator');
@@ -64,6 +73,29 @@ test('reconciliación reconoce el mismo archivo aunque Moonraker entregue una ru
   assert.equal(api.samePrintFilename('/gcodes/Cliente%20A.gcode','Cliente A.gcode'),true);
   assert.equal(api.samePrintFilename('TEST.GCODE','test.gcode'),true);
   assert.equal(api.samePrintFilename('otro.gcode','test.gcode'),false);
+});
+
+test('payload G-code vive fuera de queue.json y la persistencia no bloquea el event loop',()=>{
+  assert.match(source,/const PAYLOAD_DIR/);
+  assert.match(source,/async function writePayload\(/);
+  assert.match(source,/async function readPayload\(/);
+  assert.match(source,/payloadFile:payloadStored\.file/);
+  assert.match(source,/const gcode=await readPayload\(j\)/);
+  assert.match(source,/await deletePayload\(j\)/);
+  assert.match(source,/async function atomicWrite\(/);
+  assert.match(source,/fs\.promises\.writeFile/);
+  assert.match(source,/fs\.promises\.rename/);
+  const atomic=source.slice(source.indexOf('async function atomicWrite('),source.indexOf('function payloadPath('));
+  assert.doesNotMatch(atomic,/fs\.writeFileSync\(/,'queue/registry/safety no deben bloquear Node');
+  assert.doesNotMatch(atomic,/fs\.renameSync\(/,'la rotación atómica de estado debe ser asíncrona');
+  assert.match(source,/const j = await enqueue\(body\)/);
+  assert.match(source,/const j=await enqueue\(\{\.\.\.body,existingFile:true/);
+});
+
+test('la ruta de payload neutraliza traversal en ids',()=>{
+  const p=api.payloadPath('../cliente/../../pieza');
+  assert.ok(p.endsWith('.._cliente_.._.._pieza.gcode')||p.endsWith('__cliente_.._.._pieza.gcode'));
+  assert.equal(path.basename(p).includes('/'),false);
 });
 
 test('metadata del slicer se conserva sanitizada en la cola durable',()=>{

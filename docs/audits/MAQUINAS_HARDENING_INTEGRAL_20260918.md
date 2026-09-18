@@ -105,3 +105,36 @@ Los tests nuevos comprueban, entre otros:
 - Los estados críticos no vuelven a disponible con un click.
 - Agenda/estado/mantención tienen recuperación de sincronización.
 - No existen multiplicadores ocultos de velocidad por modelo.
+
+## Cierre de infraestructura
+
+La ronda final de la auditoría elimina dos riesgos que todavía quedaban bajo la capa operativa:
+
+### Payload durable separado
+- `queue.json` deja de almacenar G-code Base64 nuevo.
+- Cada payload se guarda como archivo privado `0600` en `data/payloads/`.
+- La cola conserva sólo metadata y una referencia interna al payload.
+- El Controller confirma el alta sólo después de persistir la cola en disco.
+- Si la persistencia falla, revierte el trabajo y elimina el payload huérfano.
+- Al iniciar, eliminar o podar un trabajo, su payload se limpia.
+- Colas antiguas con `gcodeBase64` siguen siendo legibles para una migración sin corte.
+
+### I/O del Controller
+- Las escrituras atómicas de queue/registry/safety usan `fs.promises`.
+- Se elimina `writeFileSync/renameSync` del camino caliente para no congelar telemetría, proxy o worker mientras se escribe un G-code/estado.
+- Registry y la confirmación de cama libre sólo responden éxito después de una persistencia durable.
+
+### Credenciales del túnel
+- El secreto largo puede canjearse por un **ticket efímero** del Farm Controller.
+- Media y WebSocket usan ese ticket breve cuando el canje funciona.
+- El ticket conserva el rol viewer/operator/admin y expira automáticamente.
+- Si una red móvil bloquea el preflight del canje, el dashboard mantiene el fallback compatible anterior para no convertir la mejora de seguridad en una caída de servicio.
+
+### Perfil físico central
+Farm Registry refleja además de identidad/IP:
+- boquilla instalada;
+- CFS físico;
+- cámara configurada;
+- versión de perfil físico.
+
+La regla autoritativa de CFS se mantiene explícita: **K1 #1 y K2 Plus**.

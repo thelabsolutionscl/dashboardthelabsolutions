@@ -138,10 +138,26 @@ test('planificador no usa multiplicadores hardcodeados de velocidad',()=>{
   assert.doesNotMatch(OPS,/\/cap\.speed/);
 });
 
+test('Registry y cama libre sólo confirman éxito después de persistir',()=>{
+  assert.match(CTRL,/const durable=await persistRegistry\(\)/);
+  assert.match(CTRL,/no se pudo persistir Farm Registry/);
+  assert.match(CTRL,/no se pudo persistir la confirmación de cama libre/);
+});
+
 test('seguridad del Controller no puede ser debilitada por token operator',()=>{
   assert.match(CTRL,/safeBody=role==='admin'\?body:\{\.\.\.body,config:safety\.config\}/);
 });
 
+
+test('Controller separa payloads y el navegador usa ticket efímero cuando está disponible',()=>{
+  assert.match(CTRL,/const PAYLOAD_DIR/);
+  assert.match(CTRL,/async function writePayload\(/);
+  assert.match(CTRL,/payloadFile:payloadStored\.file/);
+  assert.match(CTRL,/\/farm\/session/);
+  assert.match(MAQ,/async function refreshPrinterTunnelSession\(/);
+  assert.match(MAQ,/X-Bridge-Token/);
+  assert.match(MAQ,/_printerTunnelSessionExpires/);
+});
 
 test('Controller serializa transiciones por impresora, no sólo por job',()=>{
   assert.match(CTRL,/activeMachineRuns=new Set\(\)/);

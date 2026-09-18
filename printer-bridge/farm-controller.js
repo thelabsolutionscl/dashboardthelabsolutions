@@ -22,6 +22,7 @@ const DATA_DIR = process.env.FARM_DATA_DIR || path.join(ROOT, 'data');
 const QUEUE_FILE = process.env.FARM_QUEUE_FILE || path.join(DATA_DIR, 'queue.json');
 const REGISTRY_FILE = process.env.FARM_REGISTRY_FILE || path.join(DATA_DIR, 'registry.json');
 const SAFETY_FILE = process.env.FARM_SAFETY_FILE || path.join(DATA_DIR, 'safety.json');
+const PAYLOAD_DIR = process.env.FARM_PAYLOAD_DIR || path.join(DATA_DIR, 'payloads');
 const PUBLIC_PORT = Number(process.env.BRIDGE_PORT || 8347);
 const LEGACY_PORT = Number(process.env.LEGACY_BRIDGE_PORT || 8348);
 const DASHBOARD_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || 'https://dashboard.thelab.solutions';
@@ -30,11 +31,36 @@ const DISCOVERY_INTERVAL_MS = Math.max(60_000, Number(process.env.FARM_DISCOVERY
 const MAX_BODY = 64 * 1024 * 1024;
 
 fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+fs.mkdirSync(PAYLOAD_DIR, { recursive: true, mode: 0o700 });
 
-function atomicWrite(file, value) {
+async function atomicWrite(file, value) {
   const tmp = file + '.tmp-' + process.pid + '-' + Date.now();
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-  fs.renameSync(tmp, file);
+  await fs.promises.writeFile(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
+  await fs.promises.rename(tmp, file);
+}
+function payloadPath(jobOrId) {
+  const id=String(typeof jobOrId==='object'?jobOrId?.id:jobOrId||'').replace(/[^A-Za-z0-9_.-]/g,'_');
+  return id?path.join(PAYLOAD_DIR,id+'.gcode'):'';
+}
+async function writePayload(id,base64) {
+  const file=payloadPath(id),tmp=file+'.tmp-'+process.pid+'-'+Date.now();
+  if(!file)throw new Error('id de payload inválido');
+  const bytes=Buffer.from(String(base64||''),'base64');
+  if(!bytes.length)throw new Error('payload G-code vacío');
+  await fs.promises.writeFile(tmp,bytes,{mode:0o600});
+  await fs.promises.rename(tmp,file);
+  return{file:path.basename(file),bytes:bytes.length};
+}
+async function readPayload(job) {
+  const file=job?.payloadFile?path.join(PAYLOAD_DIR,path.basename(String(job.payloadFile))):payloadPath(job);
+  try{return await fs.promises.readFile(file);}catch(_){
+    return Buffer.from(String(job?.gcodeBase64||''),'base64');
+  }
+}
+async function deletePayload(job) {
+  const file=job?.payloadFile?path.join(PAYLOAD_DIR,path.basename(String(job.payloadFile))):payloadPath(job);
+  if(!file)return;
+  try{await fs.promises.unlink(file);}catch(e){if(e?.code!=='ENOENT')console.warn('[queue] payload cleanup',e.message);}
 }
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return fallback; } }
 function uid(prefix) { return prefix + '-' + Date.now().toString(36) + '-' + crypto.randomBytes(5).toString('hex'); }
@@ -81,6 +107,17 @@ const TOKENS = {
 };
 const INTERNAL_TOKEN = crypto.randomBytes(32).toString('base64url');
 const ROLE_RANK = { viewer: 1, operator: 2, admin: 3 };
+const SESSION_TTL_MS = Math.max(60_000, Math.min(30*60_000, Number(process.env.BRIDGE_SESSION_TTL_MS || 10*60_000)));
+const sessionTokens = new Map();
+function purgeSessions(now=Date.now()) {
+  for(const [token,row] of sessionTokens)if(!row||row.expiresAt<=now)sessionTokens.delete(token);
+}
+function issueSession(role) {
+  purgeSessions();
+  const token=crypto.randomBytes(24).toString('base64url'),expiresAt=Date.now()+SESSION_TTL_MS;
+  sessionTokens.set(token,{role,expiresAt});
+  return{token,role,expiresAt};
+}
 function tokenFromReq(req) {
   const u = new URL(req.url, 'http://farm.local');
   return String(req.headers['x-bridge-token'] || u.searchParams.get('bt') || '');
@@ -89,7 +126,9 @@ function roleForToken(token) {
   if (TOKENS.admin && safeEq(token, TOKENS.admin)) return 'admin';
   if (TOKENS.operator && safeEq(token, TOKENS.operator)) return 'operator';
   if (TOKENS.viewer && safeEq(token, TOKENS.viewer)) return 'viewer';
-  return '';
+  purgeSessions();
+  const session=sessionTokens.get(String(token||''));
+  return session&&session.expiresAt>Date.now()?session.role:'';
 }
 function requireRole(req, res, minimum) {
   const role = roleForToken(tokenFromReq(req));
@@ -125,18 +164,21 @@ let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
 let safety = SafetyPolicy.normalizeSnapshot(readJson(SAFETY_FILE, null));
 let queueWrite = Promise.resolve(), registryWrite = Promise.resolve(), safetyWrite = Promise.resolve();
 function persistQueue() {
-  queue.updatedAt = Date.now();
-  queueWrite = queueWrite.then(() => atomicWrite(QUEUE_FILE, queue)).catch(e => console.error('[queue] persist', e));
+  queue.updatedAt=Date.now();
+  const snapshot=JSON.parse(JSON.stringify(queue));
+  queueWrite=queueWrite.then(()=>atomicWrite(QUEUE_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[queue] persist',e);return false;});
   return queueWrite;
 }
 function persistRegistry() {
-  registry.updatedAt = Date.now();
-  registryWrite = registryWrite.then(() => atomicWrite(REGISTRY_FILE, registry)).catch(e => console.error('[registry] persist', e));
+  registry.updatedAt=Date.now();
+  const snapshot=JSON.parse(JSON.stringify(registry));
+  registryWrite=registryWrite.then(()=>atomicWrite(REGISTRY_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[registry] persist',e);return false;});
   return registryWrite;
 }
 function persistSafety() {
-  safety.updatedAt = Date.now();
-  safetyWrite = safetyWrite.then(() => atomicWrite(SAFETY_FILE, safety)).catch(e => console.error('[safety] persist', e));
+  safety.updatedAt=Date.now();
+  const snapshot=JSON.parse(JSON.stringify(safety));
+  safetyWrite=safetyWrite.then(()=>atomicWrite(SAFETY_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[safety] persist',e);return false;});
   return safetyWrite;
 }
 const recoveredAtBoot = recoverQueueJobs(queue);
@@ -144,7 +186,7 @@ if (recoveredAtBoot) {
   console.warn(`[queue] ${recoveredAtBoot} trabajo(s) intermedio(s) recuperado(s) tras reinicio`);
   persistQueue();
 }
-function publicJob(j) { const { gcodeBase64, ...rest } = j; return { ...rest, hasPayload: !!gcodeBase64 }; }
+function publicJob(j) { const { gcodeBase64, payloadFile, ...rest } = j; return { ...rest, hasPayload: !!payloadFile || !!gcodeBase64 }; }
 function machineByIdentity({ id, serial, mac, hostname, ip } = {}) {
   let hit = registry.machines.find(m =>
     (id && m.id === id) || (serial && m.serial && m.serial === serial) ||
@@ -254,7 +296,7 @@ function cleanJobMetadata(value) {
   if(v.mesh&&typeof v.mesh==='object')out.mesh={volumeReliable:!!v.mesh.volumeReliable,openEdges:Number(v.mesh.openEdges)||0,nonManifoldEdges:Number(v.mesh.nonManifoldEdges)||0};
   return out;
 }
-function enqueue(payload) {
+async function enqueue(payload) {
   const requestedId=String(payload.machineId||'');
   const machine=machineByIdentity({id:requestedId})||machineByIdentity({ip:String(payload.ip||'')});
   if(!machine?.id||!isPrivateIp(machine.ip))throw new Error('máquina no registrada o sin IP válida en Farm Registry');
@@ -269,9 +311,12 @@ function enqueue(payload) {
     const previous=queue.jobs.find(j=>j.idempotencyKey===idempotencyKey);
     if(previous)return previous;
   }
+  const id=payload.id||uid('print');
+  let payloadStored={file:'',bytes:0};
+  if(!existingFile)payloadStored=await writePayload(id,gcodeBase64);
   const j={
-    id:payload.id||uid('print'),idempotencyKey,machineId,ip,filename,gcodeBase64,existingFile,
-    bytes:gcodeBase64?Buffer.byteLength(gcodeBase64,'base64'):0,
+    id,idempotencyKey,machineId,ip,filename,payloadFile:payloadStored.file,existingFile,
+    bytes:payloadStored.bytes,
     grams:Number(payload.grams||0),secs:Number(payload.secs||0),
     priority:Math.max(0,Math.min(100,Number(payload.priority||50))),
     state:'queued',attempts:0,createdAt:nowIso(),updatedAt:nowIso(),
@@ -279,7 +324,12 @@ function enqueue(payload) {
   };
   queue.jobs.push(j);
   queue.jobs.sort((a,b)=>b.priority-a.priority||Date.parse(a.createdAt)-Date.parse(b.createdAt));
-  persistQueue();
+  const durable=await persistQueue();
+  if(!durable){
+    queue.jobs=queue.jobs.filter(row=>row!==j);
+    await deletePayload(j);
+    throw new Error('no se pudo persistir la cola durable');
+  }
   return j;
 }
 function markJob(id, patch) {
@@ -306,12 +356,17 @@ function requeueBedBlocked(machineId){
   if(changed)persistQueue();
   return changed;
 }
-function pruneQueue(now=Date.now()){
+async function pruneQueue(now=Date.now()){
   const cutoff=now-30*86400000;
   const active=queue.jobs.filter(j=>!QUEUE_TERMINAL_STATES.has(String(j.state||'')));
   const terminal=queue.jobs.filter(j=>QUEUE_TERMINAL_STATES.has(String(j.state||''))&&(Date.parse(j.updatedAt||j.createdAt||0)||0)>=cutoff)
     .sort((a,b)=>Date.parse(b.updatedAt||0)-Date.parse(a.updatedAt||0)).slice(0,1000);
-  if(active.length+terminal.length!==queue.jobs.length){queue.jobs=[...active,...terminal];persistQueue();}
+  if(active.length+terminal.length!==queue.jobs.length){
+    const next=[...active,...terminal],kept=new Set(next.map(j=>j.id)),removed=queue.jobs.filter(j=>!kept.has(j.id));
+    const previous=queue.jobs;queue.jobs=next;
+    const durable=await persistQueue();
+    if(durable)await Promise.all(removed.map(deletePayload));else queue.jobs=previous;
+  }
 }
 function requestLegacy(method, targetPath, body, headers = {}) {
   return new Promise(resolve => {
@@ -370,7 +425,8 @@ async function runQueuedJob(j) {
       const printState = String(ps.state || '').toLowerCase();
       if(['printing','paused'].includes(printState)){
         if(samePrintFilename(ps.filename,j.filename)){
-          return markJob(j.id,{state:printState==='paused'?'paused':'printing',ip,startedAt:j.startedAt||nowIso(),recovered:true,gcodeBase64:'',lastError:''});
+          await deletePayload(j);
+          return markJob(j.id,{state:printState==='paused'?'paused':'printing',ip,startedAt:j.startedAt||nowIso(),recovered:true,payloadFile:'',gcodeBase64:'',lastError:''});
         }
         return markJob(j.id,{state:queuedState,lastError:`esperando: impresora ${printState}`});
       }
@@ -383,7 +439,7 @@ async function runQueuedJob(j) {
     const nextAttempts=Number(j.attempts||0)+1;
     if(!j.existingFile){
       markJob(j.id,{state:'uploading',ip,attempts:nextAttempts,lastError:''});
-      const gcode=Buffer.from(j.gcodeBase64||'','base64');
+      const gcode=await readPayload(j);
       if(!gcode.length)return markJob(j.id,{state:'failed',lastError:'payload G-code ausente'});
       const mp=multipartUpload(j.filename,gcode);
       const upload=await requestLegacy('POST',`/${ip}/server/files/upload`,mp.body,{'content-type':mp.contentType});
@@ -393,7 +449,8 @@ async function runQueuedJob(j) {
     const start=await requestLegacy('POST',`/${ip}/printer/print/start?filename=${encodeURIComponent(j.filename)}`);
     if(!start.ok)return markJob(j.id,{state:nextAttempts<4?'retry':'failed',lastError:`start HTTP ${start.status}: ${start.body.toString('utf8').slice(0,300)}`});
     if(machine?.bedClearSignature){delete machine.bedClearSignature;delete machine.bedClearedAt;machine.updatedAt=nowIso();persistRegistry();}
-    return markJob(j.id,{state:'started',startedAt:nowIso(),gcodeBase64:'',lastError:''});
+    await deletePayload(j);
+    return markJob(j.id,{state:'started',startedAt:nowIso(),payloadFile:'',gcodeBase64:'',lastError:''});
   } finally {
     activeJobRuns.delete(j.id);activeMachineRuns.delete(machineRunKey);
   }
@@ -424,7 +481,7 @@ async function queueWorker() {
   queueWorkerBusy = true;
   try {
     await reconcileStartedJobs();
-    pruneQueue();
+    await pruneQueue();
     const candidates=queue.jobs.filter(j=>['queued','retry'].includes(j.state));
     for (const j of candidates) {
       // `started` es histórico, NO un lock: el estado vivo de Moonraker decide
@@ -489,20 +546,25 @@ const server = http.createServer(async (req, res) => {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
+  if (p === '/farm/session' && req.method === 'POST') {
+    const role=requireRole(req,res,'viewer');if(!role)return;
+    const session=issueSession(role);
+    return json(res,201,{ok:true,token:session.token,role:session.role,expiresAt:session.expiresAt,ttlMs:SESSION_TTL_MS},{'X-Farm-Role':role});
+  }
   if (p === '/farm/queue' && req.method === 'GET') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, updatedAt: queue.updatedAt, jobs: queue.jobs.map(publicJob) });
   }
   if (p === '/farm/queue' && req.method === 'POST') {
     const role = requireRole(req, res, 'operator'); if (!role) return;
-    try { const body = JSON.parse((await readBody(req, 48 * 1024 * 1024)).toString('utf8') || '{}'); const j = enqueue(body); return json(res, 201, { ok: true, job: publicJob(j) }); }
+    try { const body = JSON.parse((await readBody(req, 48 * 1024 * 1024)).toString('utf8') || '{}'); const j = await enqueue(body); return json(res, 201, { ok: true, job: publicJob(j) }); }
     catch (e) { return json(res, 400, { ok: false, error: e.message }); }
   }
   if(p==='/farm/queue/existing'&&req.method==='POST'){
     const role=requireRole(req,res,'operator');if(!role)return;
     try{
       const body=JSON.parse((await readBody(req,1024*1024)).toString('utf8')||'{}');
-      const j=enqueue({...body,existingFile:true,gcodeBase64:''});
+      const j=await enqueue({...body,existingFile:true,gcodeBase64:''});
       runQueuedJob(j).catch(e=>markJob(j.id,{state:'failed',lastError:e.message}));
       return json(res,202,{ok:true,job:publicJob(j)});
     }catch(e){return json(res,400,{ok:false,error:e.message});}
@@ -514,7 +576,8 @@ const server = http.createServer(async (req, res) => {
       const id=decodeURIComponent(ready[1]),m=machineByIdentity({id});if(!m)return json(res,404,{ok:false,error:'máquina no registrada'});
       const body=JSON.parse((await readBody(req,64*1024)).toString('utf8')||'{}'),signature=String(body.signature||'').slice(0,240);
       if(!signature)return json(res,400,{ok:false,error:'signature requerida'});
-      m.bedClearSignature=signature;m.bedClearedAt=nowIso();m.updatedAt=nowIso();persistRegistry();
+      m.bedClearSignature=signature;m.bedClearedAt=nowIso();m.updatedAt=nowIso();
+      const durable=await persistRegistry();if(!durable)return json(res,503,{ok:false,error:'no se pudo persistir la confirmación de cama libre'});
       const released=requeueBedBlocked(id);setTimeout(queueWorker,0).unref?.();
       return json(res,200,{ok:true,released,machine:{id:m.id,bedClearSignature:m.bedClearSignature,bedClearedAt:m.bedClearedAt}});
     }catch(e){return json(res,400,{ok:false,error:e.message});}
@@ -530,9 +593,13 @@ const server = http.createServer(async (req, res) => {
   if (qDel && req.method === 'DELETE') {
     const role = requireRole(req, res, 'operator'); if (!role) return;
     const id = decodeURIComponent(qDel[1]), before = queue.jobs.length;
+    const removed=queue.jobs.find(j=>j.id===id&&!['checking','uploading','started','printing','paused'].includes(j.state));
     queue.jobs = queue.jobs.filter(j => j.id !== id || ['checking','uploading','started','printing','paused'].includes(j.state));
     if (queue.jobs.length === before) return json(res, 409, { ok: false, error: 'job no encontrado o ya está ejecutándose' });
-    persistQueue(); return json(res, 200, { ok: true });
+    const durable=await persistQueue();
+    if(!durable){if(removed)queue.jobs.push(removed);return json(res,503,{ok:false,error:'no se pudo persistir la eliminación'});}
+    if(removed)await deletePayload(removed);
+    return json(res, 200, { ok: true });
   }
   if (p === '/farm/safety' && req.method === 'GET') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
@@ -556,8 +623,13 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/farm/registry' && (req.method === 'POST' || req.method === 'PATCH')) {
     const role = requireRole(req, res, 'admin'); if (!role) return;
-    try { const body = JSON.parse((await readBody(req, 1024 * 1024)).toString('utf8') || '{}'); if (body.ip && !isPrivateIp(body.ip)) throw new Error('IP no válida'); const m = upsertMachine(body); return json(res, 200, { ok: true, machine: m }); }
-    catch (e) { return json(res, 400, { ok: false, error: e.message }); }
+    try {
+      const body=JSON.parse((await readBody(req,1024*1024)).toString('utf8')||'{}');
+      if(body.ip&&!isPrivateIp(body.ip))throw new Error('IP no válida');
+      const m=upsertMachine(body),durable=await persistRegistry();
+      if(!durable)return json(res,503,{ok:false,error:'no se pudo persistir Farm Registry'});
+      return json(res,200,{ok:true,machine:m});
+    }catch(e){return json(res,400,{ok:false,error:e.message});}
   }
   if (p === '/farm/discover' && req.method === 'POST') {
     const role = requireRole(req, res, 'admin'); if (!role) return;
@@ -587,6 +659,7 @@ function start(){
     console.log(`  Queue           : ${QUEUE_FILE}`);
     console.log(`  Registry        : ${REGISTRY_FILE}`);
     console.log(`  Safety          : ${SAFETY_FILE}`);
+    console.log(`  Payloads        : ${PAYLOAD_DIR}`);
     console.log(`  Roles           : viewer=${TOKENS.viewer ? 'sí' : 'fallback'} operator=${TOKENS.operator ? 'sí' : 'fallback'} admin=sí`);
     console.log('─'.repeat(64));
   });
@@ -601,5 +674,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, roleForToken, routeMinimumRole, cleanJobMetadata, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };

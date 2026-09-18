@@ -134,20 +134,47 @@ const _CAM_AUTORECOVER_FAILS=3;     // tras varios fallos reales, reinicia el st
 const _CAM_AUTORECOVER_COOLDOWN_MS=10*60*1000;
 const _CAM_RECOVER_TIMEOUT_MS=95000;
 function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
-function getPrinterTunnelToken(){
+let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0;
+function _getPrinterTunnelLongToken(){
   const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';
   let local=sessionStorage.getItem('printer_tunnel_token')||'';const legacy=localStorage.getItem('printer_tunnel_token')||'';
   if(!local&&legacy){local=legacy;sessionStorage.setItem('printer_tunnel_token',legacy);localStorage.removeItem('printer_tunnel_token');}
   const custom=(localStorage.getItem('printer_tunnel')||'').replace(/\/$/,'');
   const defaultTunnel=((!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL).replace(/\/$/,'');
-  // En el túnel oficial, el token del deploy es la versión vigente. Así un
-  // token antiguo guardado en un teléfono no invalida silenciosamente la ficha.
   return !custom||custom===defaultTunnel?(d||local):(local||d);
 }
-// El token viaja en la URL, no en una cabecera: una cabecera propia obliga al
-// navegador a un preflight OPTIONS, y en redes móviles ese preflight se cae —
-// el fetch se rechaza y la máquina parece muerta. Con ?bt= no hay preflight.
-// Idempotente: printerMediaUrl lo aplica sobre URLs que ya lo traen.
+function getPrinterTunnelToken(){
+  if(_printerTunnelSessionToken&&Date.now()<_printerTunnelSessionExpires-15000)return _printerTunnelSessionToken;
+  return _getPrinterTunnelLongToken();
+}
+async function refreshPrinterTunnelSession(force=false){
+  if(window._DEMO_MODE)return false;
+  const longToken=_getPrinterTunnelLongToken(),base=getPrinterTunnel(),now=Date.now();
+  if(!longToken||!base)return false;
+  if(_printerTunnelSessionSync)return _printerTunnelSessionSync;
+  if(!force&&_printerTunnelSessionToken&&now<_printerTunnelSessionExpires-120000)return true;
+  if(!force&&now-_printerTunnelSessionLastTry<30000)return false;
+  _printerTunnelSessionLastTry=now;
+  _printerTunnelSessionSync=(async()=>{
+    try{
+      const r=await fetch(base+'/farm/session',{method:'POST',headers:{'X-Bridge-Token':longToken},signal:AbortSignal.timeout(6000),cache:'no-store'});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      if(!d?.token||!Number(d.expiresAt))throw new Error('sesión inválida');
+      _printerTunnelSessionToken=String(d.token);_printerTunnelSessionExpires=Number(d.expiresAt);
+      // Los sockets existentes siguen autenticados; los nuevos y las cámaras usan desde ahora el ticket breve.
+      return true;
+    }catch(e){
+      // Compatibilidad: si el túnel móvil bloquea el preflight, seguimos con el token largo.
+      return false;
+    }finally{_printerTunnelSessionSync=null;}
+  })();
+  return _printerTunnelSessionSync;
+}
+// Media/WebSocket siguen necesitando autenticación en URL, pero el dashboard intenta
+// canjear el secreto largo por un ticket efímero del Controller. Si una red móvil
+// bloquea el preflight del canje, conserva compatibilidad usando el token largo.
+ // Idempotente: printerMediaUrl lo aplica sobre URLs que ya lo traen.
 function _appendBridgeToken(u){if(/[?&]bt=/.test(u))return u;const tk=getPrinterTunnelToken();return tk?u+(u.includes('?')?'&':'?')+'bt='+encodeURIComponent(tk):u;}
 // Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
 async function testPrinterBridge(statusId){
@@ -799,6 +826,7 @@ function _printerWsHeartbeat(){
 }
 function _resumePrinterRealtime(){
   if(window._DEMO_MODE)return;
+  refreshPrinterTunnelSession(false).then(ok=>{if(ok){try{reconnectAllPrinterWs();_refreshSnapshotCams(true);}catch(_){}}}).catch(()=>{});
   try{pollPrinters();}catch(e){}
   try{connectAllPrinterWs();_printerWsHeartbeat();}catch(e){}
   try{_refreshSnapshotCams(true);}catch(e){}
@@ -806,6 +834,7 @@ function _resumePrinterRealtime(){
   try{window.FarmRegistry?.sync?.(true);window.FarmQueue?.sync?.(true);}catch(e){}
 }
 function ensurePrinterRealtimeService(){
+  refreshPrinterTunnelSession(false).catch(()=>{});
   if(!_monitorInterval){pollPrinters();_monitorInterval=setInterval(pollPrinters,_MONITOR_INTERVAL_MS);}
   if(!_wsHeartbeatTimer)_wsHeartbeatTimer=setInterval(_printerWsHeartbeat,_WS_HEARTBEAT_MS);
   if(!_camSnapInterval)_camSnapInterval=setInterval(()=>_refreshSnapshotCams(false),10000);
