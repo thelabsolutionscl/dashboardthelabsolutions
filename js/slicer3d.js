@@ -12,21 +12,22 @@ const SL3D=(function(){
     'Ender-5 Max':{x:400,y:400,z:600,vmax:250},
     'Giga':{x:800,y:800,z:800,vmax:150},
   };
+  // Límites conservadores: defensa dura ante una IA/perfil malformado.
   const MATS={
-    PLA:    {noz:210,bed:60, fan:100,dens:1.24},
-    'PLA+': {noz:215,bed:65, fan:100,dens:1.24},
-    PETG:   {noz:240,bed:80, fan:40, dens:1.27},
-    ABS:    {noz:250,bed:100,fan:25, dens:1.04},
-    ASA:    {noz:250,bed:100,fan:15, dens:1.07},
-    TPU:    {noz:225,bed:50, fan:60, dens:1.21,vcap:35},
-    'TPU-95A':{noz:230,bed:55,fan:50,dens:1.22,vcap:30},
-    'ABS-CF':{noz:255,bed:105,fan:10,dens:1.09},
-    'PETG-CF':{noz:245,bed:85,fan:30,dens:1.28},
-    PA:     {noz:270,bed:90, fan:0,  dens:1.13,vcap:40},
-    'PA-CF':{noz:275,bed:90, fan:0,  dens:1.22,vcap:40},
-    PC:     {noz:280,bed:110,fan:0,  dens:1.20},
-    HIPS:   {noz:240,bed:100,fan:25, dens:1.04},
-    PVA:    {noz:215,bed:60, fan:50, dens:1.23,vcap:25},
+    PLA:    {noz:210,bed:60, fan:100,dens:1.24,nozMin:185,nozMax:235,bedMax:75, flow:18},
+    'PLA+': {noz:215,bed:65, fan:100,dens:1.24,nozMin:190,nozMax:240,bedMax:80, flow:18},
+    PETG:   {noz:240,bed:80, fan:40, dens:1.27,nozMin:215,nozMax:250,bedMax:95, flow:12},
+    ABS:    {noz:250,bed:100,fan:25, dens:1.04,nozMin:225,nozMax:275,bedMax:110,flow:12},
+    ASA:    {noz:250,bed:100,fan:15, dens:1.07,nozMin:225,nozMax:275,bedMax:110,flow:12},
+    TPU:    {noz:225,bed:50, fan:60, dens:1.21,vcap:35,nozMin:195,nozMax:245,bedMax:70,flow:4},
+    'TPU-95A':{noz:230,bed:55,fan:50,dens:1.22,vcap:30,nozMin:200,nozMax:245,bedMax:70,flow:4},
+    'ABS-CF':{noz:255,bed:105,fan:10,dens:1.09,nozMin:235,nozMax:280,bedMax:110,flow:8,abrasive:true},
+    'PETG-CF':{noz:245,bed:85,fan:30,dens:1.28,nozMin:225,nozMax:265,bedMax:100,flow:8,abrasive:true},
+    PA:     {noz:270,bed:90, fan:0,  dens:1.13,vcap:40,nozMin:245,nozMax:300,bedMax:110,flow:8},
+    'PA-CF':{noz:275,bed:90, fan:0,  dens:1.22,vcap:40,nozMin:250,nozMax:300,bedMax:110,flow:7,abrasive:true},
+    PC:     {noz:280,bed:110,fan:0,  dens:1.20,nozMin:245,nozMax:300,bedMax:110,flow:8},
+    HIPS:   {noz:240,bed:100,fan:25, dens:1.04,nozMin:220,nozMax:260,bedMax:110,flow:12},
+    PVA:    {noz:215,bed:60, fan:50, dens:1.23,vcap:25,nozMin:185,nozMax:230,bedMax:75,flow:4},
   };
   const FIELDS=[
     {k:'layerHeight',l:'Altura capa (mm)',s:0.04},{k:'firstLayerHeight',l:'1ª capa (mm)',s:0.04},
@@ -42,12 +43,12 @@ const SL3D=(function(){
     {k:'infillOverlap',l:'Solape relleno/pared (%)',s:5},{k:'pauseAtZ',l:'Pausa a Z (mm, 0=off)',s:1},
     {k:'adaptiveLayerHeight',l:'Capa adaptativa',sel:['no','sí']},
     {k:'minLayerTime',l:'Tiempo mín. capa (s)',s:1},{k:'overhangSpeed',l:'Vel. voladizo (mm/s)',s:5},
-    {k:'flowRatio',l:'Flujo (%)',s:1},{k:'pressureAdvance',l:'Pressure Advance',s:0.005},{k:'wipeDist',l:'Wipe (mm)',s:0.2},
+    {k:'flowRatio',l:'Flujo (%)',s:1},{k:'maxVolumetricFlow',l:'Caudal máx. (mm³/s)',s:0.5},{k:'pressureAdvance',l:'Pressure Advance',s:0.005},{k:'wipeDist',l:'Wipe (mm)',s:0.2},
     {k:'widthOuter',l:'Ancho pared ext. (mm)',s:0.02},{k:'widthInfill',l:'Ancho relleno (mm)',s:0.02},
     {k:'seamMode',l:'Costura',sel:['cercano','alineado','agudo','aleatorio']},{k:'outerWallLast',l:'Pared ext. al final',sel:['no','sí']},
     {k:'seamScarf',l:'Costura scarf (oculta)',sel:['no','sí']},{k:'scarfLen',l:'Scarf: largo (mm)',s:0.5},
     {k:'bridgeDetect',l:'Detectar puentes',sel:['no','sí']},{k:'arcFitting',l:'Arcos G2/G3',sel:['no','sí']},{k:'gradualTemp',l:'Temp. gradual',sel:['no','sí']},
-    {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},{k:'sequential',l:'Impresión secuencial',sel:['no','sí']},
+    {k:'excludeObject',l:'Exclude Object (Klipper)',sel:['no','sí']},{k:'sequential',l:'Impresión secuencial',sel:['no','sí']},{k:'sequentialClearance',l:'Secuencial: despeje cabezal (mm)',s:1},
     {k:'gapFill',l:'Relleno de huecos',sel:['no','sí']},{k:'fuzzySkin',l:'Piel rugosa (mm)',s:0.05},{k:'coasting',l:'Coasting (mm)',s:0.1},
     {k:'fuzzyAll',l:'Piel rugosa: todas paredes',sel:['no','sí']},{k:'fuzzyPointDist',l:'Piel rugosa: paso (mm)',s:0.1},{k:'draftShield',l:'Pantalla anti-corriente',sel:['no','sí']},
     {k:'spiralize',l:'Modo jarrón',sel:['no','sí']},{k:'monotonic',l:'Relleno monot.',sel:['no','sí']},{k:'arachne',l:'Arachne (pared var.)',sel:['no','sí']},
@@ -73,8 +74,9 @@ const SL3D=(function(){
     }
     if(buf.byteLength<84)throw new Error('STL inválido (muy corto)');
     const dv=new DataView(buf);
-    const n=Math.min(dv.getUint32(80,true),Math.floor((buf.byteLength-84)/50));
+    const n=dv.getUint32(80,true),expected=84+n*50;
     if(!n)throw new Error('STL binario sin triángulos');
+    if(expected>buf.byteLength)throw new Error(`STL binario truncado: declara ${n} triángulos pero faltan ${expected-buf.byteLength} bytes`);
     const out=new Float32Array(n*9);let o=84;
     for(let i=0;i<n;i++){o+=12;for(let j=0;j<9;j++){out[i*9+j]=dv.getFloat32(o,true);o+=4;}o+=2;}
     return out;
@@ -94,35 +96,72 @@ const SL3D=(function(){
   // 3MF = ZIP con 3D/3dmodel.model (XML). Descomprime con DecompressionStream (sin librerías).
   async function parse3MF(buf){
     const dv=new DataView(buf),u8=new Uint8Array(buf);
-    // Buscar End Of Central Directory (firma 0x06054b50) desde el final
-    let eocd=-1;for(let i=buf.byteLength-22;i>=0;i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}}
-    if(eocd<0)throw new Error('3MF inválido (no es ZIP)');
+    let eocd=-1;for(let i=buf.byteLength-22;i>=Math.max(0,buf.byteLength-65557);i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}}
+    if(eocd<0)throw new Error('3MF inválido (ZIP sin directorio central)');
     const cdOff=dv.getUint32(eocd+16,true),cdCount=dv.getUint16(eocd+10,true);
-    let p=cdOff,modelEntry=null;
-    for(let e=0;e<cdCount&&p<buf.byteLength;e++){
-      if(dv.getUint32(p,true)!==0x02014b50)break;
+    let p=cdOff;const models=[];
+    for(let e=0;e<cdCount&&p+46<=buf.byteLength;e++){
+      if(dv.getUint32(p,true)!==0x02014b50)throw new Error('3MF inválido (directorio ZIP corrupto)');
       const method=dv.getUint16(p+10,true),compSize=dv.getUint32(p+20,true),nameLen=dv.getUint16(p+28,true),extraLen=dv.getUint16(p+30,true),commLen=dv.getUint16(p+32,true),lho=dv.getUint32(p+42,true);
       const name=new TextDecoder().decode(u8.subarray(p+46,p+46+nameLen));
-      if(/\.model$/i.test(name)){modelEntry={method,compSize,lho};}
+      if(/\.model$/i.test(name))models.push({name,method,compSize,lho});
       p+=46+nameLen+extraLen+commLen;
     }
-    if(!modelEntry)throw new Error('3MF sin modelo .model');
-    // Cabecera local para saltar al dato comprimido
-    const lh=modelEntry.lho,lnameLen=dv.getUint16(lh+26,true),lextraLen=dv.getUint16(lh+28,true),dataStart=lh+30+lnameLen+lextraLen;
+    if(!models.length)throw new Error('3MF sin archivo .model');
+    const modelEntry=models.find(x=>/^3D\/3dmodel\.model$/i.test(x.name))||models[0];
+    const lh=modelEntry.lho;
+    if(lh<0||lh+30>buf.byteLength||dv.getUint32(lh,true)!==0x04034b50)throw new Error('3MF inválido (entrada .model corrupta)');
+    const lnameLen=dv.getUint16(lh+26,true),lextraLen=dv.getUint16(lh+28,true),dataStart=lh+30+lnameLen+lextraLen;
     const comp=u8.subarray(dataStart,dataStart+modelEntry.compSize);
     let xml;
-    if(modelEntry.method===0){xml=new TextDecoder().decode(comp);}
-    else{
+    if(modelEntry.method===0)xml=new TextDecoder().decode(comp);
+    else if(modelEntry.method===8){
+      if(typeof DecompressionStream!=='function')throw new Error('Este navegador no puede descomprimir 3MF');
       const ds=new DecompressionStream('deflate-raw');
       const ab=await new Response(new Blob([comp]).stream().pipeThrough(ds)).arrayBuffer();
       xml=new TextDecoder().decode(ab);
+    }else throw new Error('3MF usa una compresión ZIP no soportada (método '+modelEntry.method+')');
+    if(typeof DOMParser!=='function')throw new Error('DOMParser no disponible para leer 3MF');
+    const doc=new DOMParser().parseFromString(xml,'application/xml');
+    if([...doc.getElementsByTagName('*')].some(n=>String(n.localName||n.nodeName).toLowerCase()==='parsererror'))throw new Error('3MF contiene XML inválido');
+    const model=[...doc.getElementsByTagName('*')].find(n=>String(n.localName||n.nodeName).toLowerCase()==='model');
+    if(!model)throw new Error('3MF sin elemento model');
+    const unit=String(model.getAttribute('unit')||'millimeter').toLowerCase();
+    const unitScale={micron:.001,millimeter:1,centimeter:10,inch:25.4,foot:304.8,meter:1000}[unit];
+    if(!unitScale)throw new Error('Unidad 3MF no soportada: '+unit);
+    const kids=(node,name)=>[...node.childNodes].filter(n=>n.nodeType===1&&String(n.localName||n.nodeName).toLowerCase()===name);
+    const all=(node,name)=>[...node.getElementsByTagName('*')].filter(n=>String(n.localName||n.nodeName).toLowerCase()===name);
+    const ident=[1,0,0,0,1,0,0,0,1,0,0,0];
+    const tf=s=>{if(!s)return ident;const a=String(s).trim().split(/\s+/).map(Number);return a.length===12&&a.every(Number.isFinite)?a:ident;};
+    const apply=(pt,T)=>[pt[0]*T[0]+pt[1]*T[3]+pt[2]*T[6]+T[9],pt[0]*T[1]+pt[1]*T[4]+pt[2]*T[7]+T[10],pt[0]*T[2]+pt[1]*T[5]+pt[2]*T[8]+T[11]];
+    const resources=all(model,'resources')[0]||model,objects=new Map();
+    for(const o of kids(resources,'object')){
+      const id=String(o.getAttribute('id')||'');if(!id)continue;
+      const mesh=kids(o,'mesh')[0],components=kids(o,'components')[0];
+      if(mesh){
+        const vertsNode=kids(mesh,'vertices')[0],trisNode=kids(mesh,'triangles')[0];
+        const verts=(vertsNode?kids(vertsNode,'vertex'):[]).map(v=>[+v.getAttribute('x'),+v.getAttribute('y'),+v.getAttribute('z')]);
+        if(verts.some(v=>v.some(x=>!Number.isFinite(x))))throw new Error('3MF contiene vértices inválidos');
+        const tris=(trisNode?kids(trisNode,'triangle'):[]).map(t=>[+t.getAttribute('v1'),+t.getAttribute('v2'),+t.getAttribute('v3')]);
+        objects.set(id,{mesh:{verts,tris},components:[]});
+      }else if(components)objects.set(id,{mesh:null,components:kids(components,'component').map(q=>({id:String(q.getAttribute('objectid')||''),transform:tf(q.getAttribute('transform'))}))});
+      else objects.set(id,{mesh:null,components:[]});
     }
-    // Parsear vértices y triángulos del XML
-    const vs=[],vre=/<vertex\s+x="([-\d.eE+]+)"\s+y="([-\d.eE+]+)"\s+z="([-\d.eE+]+)"/g;let m;
-    while((m=vre.exec(xml)))vs.push(+m[1],+m[2],+m[3]);
-    const out=[],tre=/<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/g;
-    while((m=tre.exec(xml))){const a=+m[1],b=+m[2],c=+m[3];for(const k of[a,b,c])out.push(vs[k*3],vs[k*3+1],vs[k*3+2]);}
-    if(!out.length)throw new Error('3MF sin geometría');
+    const out=[];
+    const emit=(id,transforms,stack)=>{
+      if(stack.length>32||stack.includes(id))throw new Error('3MF contiene componentes cíclicos');
+      const o=objects.get(id);if(!o)throw new Error('3MF referencia objeto inexistente '+id);
+      if(o.mesh)for(const tri of o.mesh.tris)for(const vi of tri){
+        if(!Number.isInteger(vi)||vi<0||vi>=o.mesh.verts.length)throw new Error('3MF contiene un índice de triángulo inválido');
+        let pt=o.mesh.verts[vi];for(const T of transforms)pt=apply(pt,T);
+        out.push(pt[0]*unitScale,pt[1]*unitScale,pt[2]*unitScale);
+      }
+      for(const co of o.components)emit(co.id,[co.transform,...transforms],[...stack,id]);
+    };
+    const build=all(model,'build')[0],items=build?kids(build,'item'):[];
+    if(items.length){for(const item of items){const id=String(item.getAttribute('objectid')||'');if(id)emit(id,[tf(item.getAttribute('transform'))],[]);}}
+    else{for(const[id,o]of objects)if(o.mesh)emit(id,[ident],[]);}
+    if(!out.length)throw new Error('3MF sin geometría imprimible');
     return new Float32Array(out);
   }
 
@@ -315,14 +354,25 @@ const SL3D=(function(){
     }
     return{ov,area,h:mxz-mnz};
   }
+  function _bestOrientation(tris){
+    const cands=[[0,0],[Math.PI,0],[Math.PI/2,0],[-Math.PI/2,0],[0,Math.PI/2],[0,-Math.PI/2]];
+    let best=tris,bestScore=1e18,bestI=0;
+    cands.forEach(([rx,ry],i)=>{const tt=_rotTris(tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
+    return{tris:best,index:bestI};
+  }
   function autoOrient(){
     if(!S.tris){toast('Carga un modelo primero','error');return;}
-    const cands=[[0,0],[Math.PI,0],[Math.PI/2,0],[-Math.PI/2,0],[0,Math.PI/2],[0,-Math.PI/2]];
-    let best=S.tris,bestScore=1e18,bestI=0;
-    cands.forEach(([rx,ry],i)=>{const tt=_rotTris(S.tris,rx,ry);const m=_overhangMetric(tt);const score=(m.area?m.ov/m.area:0)*100+m.h*0.02;if(score<bestScore){bestScore=score;best=tt;bestI=i;}});
-    S.tris=best;S.objBBs=null;analyze(S.tris);buildPreview();S.supSticks=null;render();renderStats();
+    if(S.objects&&S.objects.length>1){
+      S.objects=S.objects.map(o=>_centerTris(_bestOrientation(o).tris));
+      S.modifiers=[];S.supRegions=[];S.supSticks=null;S.layFlatMode=false;_updLayFlatBtn();
+      _replate();
+      toast(`✓ ${S.objects.length} piezas orientadas individualmente y reacomodadas en el plato`,'success');
+      return;
+    }
+    const pick=_bestOrientation(S.tris);
+    S.tris=pick.tris;S.objects=[S.tris];S.objBBs=null;_refreshGeometry();S.supSticks=null;render();renderStats();
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
-    toast(bestI===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
+    toast(pick.index===0?`Ya estaba en la mejor orientación (voladizos ${S.stats.ovPct.toFixed(1)}%)`:`Re-orientado: voladizos ahora ${S.stats.ovPct.toFixed(1)}%`,'success');
   }
   // ── Apoyar cara en la cama (lay-flat por clic) ──────────────
   // Rota toda la malla para que la normal `n` apunte hacia abajo (−Z) → esa cara queda sobre la cama.
@@ -355,6 +405,7 @@ const SL3D=(function(){
   // Raycast 2D sobre el visor: encuentra la cara frontal bajo el cursor y la apoya en la cama.
   function _layFlatAt(px,py){
     if(!S.tris||!S.stats)return;
+    if(S.objects&&S.objects.length>1){toast('No se modifica un plato múltiple desde “Apoyar cara”. Usa Auto-orientar o carga una sola pieza.','info');return;}
     const cv=el('slCanvas'),w=cv.clientWidth||420,h=300;
     const st=S.stats,zm=st.dz/2,ca=Math.cos(S.rot.a),sa=Math.sin(S.rot.a),cb=Math.cos(S.rot.b),sb=Math.sin(S.rot.b);
     const rad=Math.sqrt(st.dx*st.dx+st.dy*st.dy+st.dz*st.dz)/2||1,sc=0.42*Math.min(w,h)/rad;
@@ -376,8 +427,8 @@ const SL3D=(function(){
       }
     }
     if(!bestN){toast('No se detectó cara ahí — haz clic sobre la figura','error');return;}
-    S.tris=_alignTris(S.tris,bestN);S.objBBs=null;
-    analyze(S.tris);buildPreview();S.supSticks=null;
+    S.tris=_alignTris(S.tris,bestN);S.objects=[S.tris];S.objBBs=null;
+    _refreshGeometry();S.supSticks=null;
     S.params=null;S.gcode='';S.modifiers=[];S.supRegions=[];
     el('slParamsWrap').style.display='none';el('slRazon').style.display='none';el('slResult').style.display='none';
     renderModifiers();renderSupRegions();renderObjSettings();
@@ -392,6 +443,7 @@ const SL3D=(function(){
   }
   function toggleLayFlat(){
     if(!S.tris){toast('Carga un modelo primero','error');return;}
+    if(S.objects&&S.objects.length>1){toast('“Apoyar cara” trabaja sobre una pieza a la vez. Carga esa pieza sola o usa Auto-orientar para el plato completo.','info');return;}
     S.layFlatMode=!S.layFlatMode;_updLayFlatBtn();render();
     if(S.layFlatMode)toast('Haz clic en la cara que quieres apoyar en la cama','success');
   }
@@ -431,7 +483,7 @@ const SL3D=(function(){
     S.tris=S.objects.length>1?_plate(S.objects):S.objects[0];
     S.objBBs=S.objects.length>1?S._plateBBs:null; // EXCLUDE_OBJECT sólo con 2+ piezas
     S.objSettings=S.objects.length>1?(S._plateBBs||[]).map((_,i)=>(S.objSettings&&S.objSettings[i])||{}):null; // ajustes por pieza
-    analyze(S.tris);buildPreview();
+    _refreshGeometry();
     const fn=el('slFileName');fn.style.display='block';fn.textContent=S.objects.length>1?`✓ ${S.objects.length} piezas en el plato`:'✓ '+S.name;
     el('slCanvas').style.display='block';render();renderStats();
     el('slBtnIA').disabled=false;el('slBtnBase').disabled=false;
@@ -461,6 +513,17 @@ const SL3D=(function(){
     }
     return{tris:out.subarray(0,o),removed,welded:Math.round(welded/3)};
   }
+  function _meshHealth(t){
+    if(!t||!t.length)return{closed:false,openEdges:0,nonManifoldEdges:0,inconsistentEdges:0,volumeReliable:false};
+    const EPS=0.001,key=(x,y,z)=>Math.round(x/EPS)+','+Math.round(y/EPS)+','+Math.round(z/EPS),edges=new Map();
+    const add=(a,b)=>{const ka=key(a[0],a[1],a[2]),kb=key(b[0],b[1],b[2]);if(ka===kb)return;const lo=ka<kb?ka:kb,hi=ka<kb?kb:ka,k=lo+'|'+hi,dir=ka<kb?1:-1,e=edges.get(k)||{n:0,balance:0};e.n++;e.balance+=dir;edges.set(k,e);};
+    for(let i=0;i<t.length;i+=9){const a=[t[i],t[i+1],t[i+2]],b=[t[i+3],t[i+4],t[i+5]],d=[t[i+6],t[i+7],t[i+8]];add(a,b);add(b,d);add(d,a);}
+    let openEdges=0,nonManifoldEdges=0,inconsistentEdges=0;
+    for(const e of edges.values()){if(e.n===1)openEdges++;else if(e.n>2)nonManifoldEdges++;else if(e.n===2&&e.balance!==0)inconsistentEdges++;}
+    const closed=openEdges===0&&nonManifoldEdges===0;
+    return{closed,openEdges,nonManifoldEdges,inconsistentEdges,volumeReliable:closed&&inconsistentEdges===0};
+  }
+  function _refreshGeometry(){S.meshHealth=_meshHealth(S.tris);analyze(S.tris);buildPreview();}
   async function _parseFile(file){
     const ext=(file.name.split('.').pop()||'').toLowerCase();
     const buf=await file.arrayBuffer();
@@ -499,26 +562,30 @@ const SL3D=(function(){
   function fitsIn(spec){const st=S.stats;return st.dx<=spec.x-2&&st.dy<=spec.y-2&&st.dz<=spec.z-2;}
   function renderStats(){
     const st=S.stats,spec=SPECS[el('slPrinter').value]||SPECS.K1;
-    const fits=fitsIn(spec);
+    const fits=fitsIn(spec),mh=S.meshHealth||{};
+    const meshBadge=mh.volumeReliable?'<span class="badge badge-green">✓ malla cerrada/manifold</span>':`<span class="badge badge-yellow">⚠ malla a revisar · bordes abiertos ${mh.openEdges||0} · non-manifold ${mh.nonManifoldEdges||0}</span>`;
     el('slStats').style.display='block';
     el('slStats').innerHTML=`
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <span class="badge badge-gray">📐 ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm</span>
-        <span class="badge badge-gray">🧊 ${st.vol.toFixed(1)} cm³</span>
+        <span class="badge badge-gray">🧊 ${mh.volumeReliable?'Volumen sólido':'Volumen geométrico estimado'}: ${st.vol.toFixed(1)} cm³</span>
         <span class="badge badge-gray">▲ ${st.tris.toLocaleString('es-CL')} tris</span>
         <span class="badge ${st.ovPct>8?'badge-yellow':'badge-green'}">⛰ voladizos ${st.ovPct.toFixed(1)}%</span>
         ${st.hr>3?'<span class="badge badge-yellow">⚠ pieza alta y delgada</span>':''}
+        ${meshBadge}
         <span class="badge ${fits?'badge-green':'badge-red'}">${fits?'✓ cabe en '+el('slPrinter').value:'✕ NO cabe en '+el('slPrinter').value}</span>
-      </div>`;
+      </div>
+      <div style="margin-top:7px;font-size:9.5px;line-height:1.45;color:var(--text3)">Privacidad: el modelo STL/OBJ/3MF se procesa localmente. Al usar “Analizar con IA” se envían únicamente nombre, métricas geométricas, impresora/material, objetivo y notas; no los triángulos del archivo.</div>`;
   }
 
   // ── IA: selección de parámetros ─────────────────────────────
   function resumen(){
-    const st=S.stats,model=el('slPrinter').value,spec=SPECS[model],mat=el('slMaterial').value;
+    const st=S.stats,model=el('slPrinter').value,spec=SPECS[model],mat=el('slMaterial').value,mh=S.meshHealth||{};
     const obj=el('slObjetivo').selectedOptions[0].textContent,noz=el('slNozzle').value,notas=el('slNotas').value.trim();
     return`PIEZA: ${S.name}
 - Dimensiones (X×Y×Z): ${st.dx.toFixed(1)} × ${st.dy.toFixed(1)} × ${st.dz.toFixed(1)} mm
-- Volumen sólido: ${st.vol.toFixed(1)} cm³ · Área: ${st.area.toFixed(0)} cm² · ${st.tris} triángulos
+- Volumen ${mh.volumeReliable?'sólido verificado por topología':'geométrico NO confiable como sólido'}: ${st.vol.toFixed(1)} cm³ · Área: ${st.area.toFixed(0)} cm² · ${st.tris} triángulos
+- Salud malla: ${mh.volumeReliable?'cerrada/manifold':'REVISAR'} · bordes abiertos ${mh.openEdges||0} · non-manifold ${mh.nonManifoldEdges||0} · orientación inconsistente ${mh.inconsistentEdges||0}
 - Voladizos >55° sin apoyo: ${st.ovPct.toFixed(1)}% del área
 - Relación altura/base: ${st.hr.toFixed(1)} ${st.hr>3?'(riesgo de volcarse — considerar brim)':'(estable)'}
 IMPRESORA: ${model} — volumen ${spec.x}×${spec.y}×${spec.z}mm, velocidad máx ${spec.vmax}mm/s, boquilla ${noz}mm
