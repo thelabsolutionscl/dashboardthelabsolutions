@@ -121,7 +121,9 @@ async function syncQueue(force=false){
     try{
       const r=await fetch(url('/farm/queue'),{cache:'no-store',signal:AbortSignal.timeout(5000)});
       const d=await readJson(r);
-      jobs=Array.isArray(d.jobs)?d.jobs:[];lastQueueSync=Date.now();controllerOk=true;rebuildCounts();render();
+      jobs=Array.isArray(d.jobs)?d.jobs:[];lastQueueSync=Date.now();controllerOk=true;rebuildCounts();
+      try{window.MachineOps?.reconcileFarmQueueJobs?.(jobs);}catch(_){}
+      render();
     }catch(e){controllerOk=false;}
     finally{queueSyncing=null;}
     return jobs;
