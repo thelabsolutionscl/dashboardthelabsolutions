@@ -176,6 +176,26 @@ test('CFS sin telemetría reciente queda como dato desconocido y no como falla',
   assert.match(row.detail,/más de 60 s|aún no llegó/);
 });
 
+test('planificación distingue plan local, telemetría y cola durable',()=>{
+  assert.match(OPS,/Planificación del dashboard ≠ cola de ejecución/);
+  assert.match(OPS,/Controller confirmado/);
+  assert.match(OPS,/esto aún no crea una cola durable/);
+  assert.match(OPS,/function farmQueueEvidence\(/);
+  assert.match(OPS,/function farmQueueMatch\(/);
+  assert.match(OPS,/function liveEvidence\(/);
+  assert.match(OPS,/if\(!evidence\.known\)return false/);
+
+  const ops=loadOps();
+  const state=ops.planningJobState({id:'job-1',name:'Pieza',status:'pendiente',machineId:'',gcodeFile:'',grams:0,dueDate:''},Date.now());
+  assert.equal(state.next.label,'Asignar máquina');
+  assert.equal(ops.farmQueueEvidence().fresh,false);
+});
+
+test('planificación no inventa un minuto de carga en máquinas vacías',()=>{
+  assert.doesNotMatch(OPS,/const total=Math\.max\(1,jobs\.reduce/);
+  assert.match(OPS,/const total=jobs\.reduce\(\(s,j\)=>s\+jobMinutes\(j\),0\)/);
+});
+
 test('sincronización conserva la versión más nueva de cada registro',()=>{
   const ops=loadOps();
   const local=ops.defaultData();
