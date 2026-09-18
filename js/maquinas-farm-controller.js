@@ -127,19 +127,21 @@ function bytesToBase64(buffer){
   for(let i=0;i<bytes.length;i+=CHUNK)binary+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));
   return btoa(binary);
 }
-async function durableAdd(id,gcode,filename,secs,grams){
+async function durableAdd(id,gcode,filename,secs,grams,meta={}){
   try{
     const m=machines().find(x=>x.id===id);
-    const payload={machineId:id,ip:m?durableGetPrinterIp(m):'',filename,secs:Number(secs||0),grams:Number(grams||0),source:'dashboard',gcodeBase64:bytesToBase64(await new Blob([gcode],{type:'text/plain'}).arrayBuffer())};
+    const metadata=meta&&typeof meta==='object'?meta:{};
+    const payload={machineId:id,ip:m?durableGetPrinterIp(m):'',filename,secs:Number(secs||0),grams:Number(grams||0),source:metadata.source||'dashboard',metadata,gcodeBase64:bytesToBase64(await new Blob([gcode],{type:'text/plain'}).arrayBuffer())};
     const r=await fetch(url('/farm/queue'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});
     const d=await readJson(r);if(!d.ok)throw new Error(d.error||'cola rechazada');
     counts[id]=(counts[id]||0)+1;
     try{toast(`📋 Encolado de forma durable en ${m?.nombre||id} (#${counts[id]} en cola)`,'success');}catch(_){}
+    try{window.MachineOps?.onLegacyQueueAdd?.(id,filename,secs,grams,metadata);}catch(_){}
     await syncQueue(true);render();return d.job;
   }catch(e){
     console.warn('[FarmQueue] controller no disponible; usando cola local',e);
     controllerOk=false;
-    return original.add?original.add(id,gcode,filename,secs,grams):null;
+    return original.add?original.add(id,gcode,filename,secs,grams,meta):null;
   }
 }
 async function durableStartNext(id){
