@@ -67,16 +67,68 @@ test('simulador reparte ciclos en la flota compatible y detecta falta de capacid
     {id:'k1-1',modelo:'K1',nombre:'K1',operational:true},
     {id:'k2-1',modelo:'K2',nombre:'K2',operational:true},
   ];
-  const result=ops.simulateCapacity({qty:30,unitsPerBed:10,minutesPerCycle:60,handlingMinutes:5,material:'PLA',bufferPct:15},fleet,{},Date.parse('2026-07-31T12:00:00Z'));
+  const result=ops.simulateCapacity({qty:30,unitsPerBed:10,minutesPerCycle:60,handlingMinutes:5,material:'PLA',sizeX:100,sizeY:100,sizeZ:100,bufferPct:15},fleet,{},Date.parse('2026-07-31T12:00:00Z'));
   assert.equal(result.ok,true);
   assert.equal(result.cycles,3);
   assert.equal(result.assignments.reduce((sum,row)=>sum+row.cycles,0),3);
   assert.equal(result.assignments.reduce((sum,row)=>sum+row.qty,0),30);
   assert.ok(result.machinesUsed>=1);
 
-  const incompatible=ops.simulateCapacity({qty:10,unitsPerBed:5,minutesPerCycle:60,material:'ABS'},[{id:'k1-1',modelo:'K1',operational:true}]);
+  const incompatible=ops.simulateCapacity({qty:10,unitsPerBed:5,minutesPerCycle:60,material:'ABS',sizeX:100,sizeY:100,sizeZ:100},[{id:'k1-1',modelo:'K1',operational:true}]);
   assert.equal(incompatible.ok,false);
   assert.match(incompatible.reason,/compatibles/);
+});
+
+test('simulador de Taller exige dimensiones y respeta literalmente el tiempo de ciclo',()=>{
+  const ops=loadOps(),fleet=[{id:'k1-1',modelo:'K1',nombre:'K1',operational:true}];
+  const missing=ops.simulateCapacity({qty:10,unitsPerBed:10,minutesPerCycle:60,material:'PLA'},fleet);
+  assert.equal(missing.ok,false);
+  assert.match(missing.reason,/dimensiones X, Y y Z/i);
+
+  const result=ops.simulateCapacity({qty:10,unitsPerBed:10,minutesPerCycle:60,handlingMinutes:5,material:'PLA',sizeX:80,sizeY:80,sizeZ:20},fleet,{});
+  assert.equal(result.ok,true);
+  assert.equal(result.assignments[0].minutes,65,'no debe aplicar multiplicadores ocultos por modelo');
+  assert.equal(result.confidence,'scenario');
+});
+
+test('seguridad conserva métricas ausentes como desconocidas, no como cero',()=>{
+  const ops=loadOps(),now=Date.parse('2026-07-31T12:00:00Z');
+  assert.equal(ops.optionalMeasure(''),null);
+  assert.equal(ops.optionalMeasure(null),null);
+  assert.equal(ops.optionalMeasure('23.5'),23.5);
+  const decision=ops.safetyDecision(
+    {enforce:true,cameraRequired:false,ventilationRequired:true,smokeRequired:true,maxTemperature:38,maxHumidity:75,maxVoc:600,staleMinutes:10},
+    {at:'2026-07-31T11:59:00Z',online:true,temperature:null,humidity:null,voc:null,smoke:false,ventilation:true},
+    {unattended:true,cameraConfigured:true},now
+  );
+  assert.equal(decision.ok,false);
+  assert.match(decision.blockers.join(' '),/Temperatura ambiental sin lectura/i);
+  assert.match(decision.blockers.join(' '),/VOC sin lectura/i);
+  assert.match(decision.warnings.join(' '),/Humedad sin lectura/i);
+});
+
+test('perfil aprobado para producción exige metadata técnica mínima',()=>{
+  const ops=loadOps();
+  const bad=ops.profileProductionCheck({model:'',material:'PLA',nozzle:'0.4',params:{layerHeight:.2}});
+  assert.equal(bad.ok,false);
+  assert.ok(bad.missing.includes('modelo'));
+  const good=ops.profileProductionCheck({model:'K1',material:'PLA',nozzle:'0.4',params:{layerHeight:.2},layerHeight:.2});
+  assert.equal(good.ok,true);
+});
+
+test('Taller explicita fuentes de verdad y no apila sus ocho herramientas de entrada',()=>{
+  assert.match(OPS,/mopsWorkshopHome/);
+  assert.match(OPS,/TALLER · FUENTES DE VERDAD/);
+  assert.match(OPS,/Inventario registrado/);
+  assert.match(OPS,/Escenario, no promesa contractual/);
+  assert.match(OPS,/group==='taller'.*target!=='taller'/s);
+  assert.match(OPS,/aprobación humana registrada/i);
+});
+
+test('analítica sin muestra no inventa 100% de éxito ni precisión',()=>{
+  assert.match(OPS,/const success=qa\.length\?approved\/qa\.length\*100:null/);
+  assert.match(OPS,/const accuracy=est&&actual\?Math\.max\(0,100-Math\.abs\(actual-est\)\/est\*100\):null/);
+  assert.match(OPS,/Contribución asignada\*/);
 });
 
 test('compuerta de seguridad bloquea humo y exige controles en modo estricto',()=>{
