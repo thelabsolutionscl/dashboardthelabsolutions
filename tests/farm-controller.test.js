@@ -66,6 +66,16 @@ test('reconciliación reconoce el mismo archivo aunque Moonraker entregue una ru
   assert.equal(api.samePrintFilename('otro.gcode','test.gcode'),false);
 });
 
+test('metadata del slicer se conserva sanitizada en la cola durable',()=>{
+  const meta=api.cleanJobMetadata({source:'slicer3d',name:'pieza',material:'PETG',nozzle:'0.6',model:'K2',sizeX:120,sizeY:80,sizeZ:40,grams:83,secs:5400,
+    params:{layerHeight:.28,infillPct:25,infillType:'gyroid',supports:true,maxVolumetricFlow:10},mesh:{volumeReliable:true,openEdges:0,nonManifoldEdges:0},secret:'no'});
+  assert.equal(meta.material,'PETG');
+  assert.equal(meta.nozzle,'0.6');
+  assert.equal(meta.params.maxVolumetricFlow,10);
+  assert.equal(meta.mesh.volumeReliable,true);
+  assert.equal(meta.secret,undefined,'campos arbitrarios no se persisten');
+});
+
 test('controller evalúa seguridad antes de subir el G-code',()=>{
   const safetyPos=source.indexOf('SafetyPolicy.evaluateSnapshot(safety, j');
   const uploadPos=source.indexOf("requestLegacy('POST', `/${ip}/server/files/upload`");
