@@ -12,6 +12,8 @@ const CAL_SRC = fs.readFileSync(path.join(ROOT, 'js', 'calendario-base.js'), 'ut
 const LOADER_SRC = fs.readFileSync(path.join(ROOT, 'js', 'calendario.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const MOPS = fs.readFileSync(path.join(ROOT, 'js', 'maquinas-operaciones.js'), 'utf8');
+const COLLAPSIBLE = fs.readFileSync(path.join(ROOT, 'js', 'calendario-collapsible.js'), 'utf8');
+const OP_SECTIONS = fs.readFileSync(path.join(ROOT, 'js', 'operativo-secciones.js'), 'utf8');
 
 function calendarContext(state = { cotizaciones: [], pedidos: [], clientes: [] }) {
   const storage = new Map();
@@ -151,6 +153,18 @@ test('concilia IDs de Google entre navegadores y conserva lápidas recientes', (
   )`, ctx);
   assert.deepEqual(Object.keys(removed.a.gcal), []);
   assert.equal(removed.a.removed.gustavo, 300);
+});
+
+test('calendario principal va antes que los paneles operativos y los tres paneles son contraíbles', () => {
+  assert.match(COLLAPSIBLE, /getElementById\(['"]calGrid['"]\)\?\.closest\(['"]\.card['"]\)/, 'debe ubicar la tarjeta del calendario principal');
+  assert.match(COLLAPSIBLE, /insertBefore\(calendarCard,\s*kpis\)/, 'el calendario debe moverse antes de KPIs y Foco operativo');
+  for (const id of ['calFocus', 'calProximos']) {
+    assert.match(COLLAPSIBLE, new RegExp(`contentId:\\s*['"]${id}['"]`), `${id} debe ser contraíble`);
+  }
+  assert.match(COLLAPSIBLE, /cardId:\s*['"]calSinFechaCard['"]/, 'Compromisos sin fecha debe ser contraíble');
+  assert.match(COLLAPSIBLE, /aria-expanded/, 'los paneles deben exponer su estado');
+  assert.match(COLLAPSIBLE, /localStorage\.setItem/, 'el estado abierto/cerrado debe persistir');
+  assert.doesNotMatch(OP_SECTIONS, /fold\(\[\$\('calProximos'\)\?\.closest\('\.card'\)\],\s*'Próximos 14 días'\)/, 'Próximos 14 días no debe quedar envuelto en un segundo disclosure');
 });
 
 test('UI y persistencia incluyen fechas, historial, vistas y sincronización selectiva', () => {
