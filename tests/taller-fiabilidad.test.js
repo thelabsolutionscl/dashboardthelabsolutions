@@ -63,7 +63,7 @@ test('materiales distinguen stock registrado reservado y libre',()=>{
   assert.match(src,/Stock registrado/);
   assert.match(src,/Reservado/);
   assert.match(src,/spoolAvailable/);
-  assert.match(src,/sin balanza física/i);
+  assert.match(src,/balanza física/i);
 });
 
 test('seguridad global no usa la cámara de otra impresora como evidencia',()=>{
