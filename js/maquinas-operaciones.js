@@ -279,15 +279,48 @@ function jobCostBreakdown(job){
   const base=material+electricity+labor+wear,failure=job?.status==='fallido'?base*num(cfg.failureOverheadPct)/100:0;
   return{minutes,hours,grams,material,electricity,labor,wear,failure,total:base+failure};
 }
+function incidentIsConfirmed(row){
+  if(!row)return false;
+  return row.source!=='telemetry'||!!row.confirmedAt;
+}
+function printerHistoryEvidence(machineId){
+  let status={};try{status=window.PrinterHistory?.status?.()||{};}catch(_){}
+  const odo=status.odometer?.[machineId]||{};
+  let completed=Math.max(0,num(odo.prints)),notCompleted=Math.max(0,num(odo.failures));
+  let source=status.mode==='durable'?'Historial central':status.mode==='local-fallback'?'Caché local':'';
+  if(completed+notCompleted===0){
+    const jobs=data().jobs.filter(j=>j.machineId===machineId&&(['terminado','fallido'].includes(j.status)||['terminado','fallido'].includes(j.archivedFromStatus)));
+    completed=jobs.filter(j=>j.status==='terminado'||j.archivedFromStatus==='terminado').length;
+    notCompleted=jobs.filter(j=>j.status==='fallido'||j.archivedFromStatus==='fallido').length;
+    if(completed+notCompleted)source='Trabajos registrados';
+  }
+  return{completed,notCompleted,total:completed+notCompleted,source:source||'Sin historial',durable:status.mode==='durable',lastSync:num(status.lastSync)};
+}
+function centralHealthEvidence(machineId){
+  let status={};try{status=window.FarmHealth?.status?.()||{};}catch(_){}
+  const row=(status.machines||[]).find(x=>String(x.id||'')===String(machineId))||null;
+  const generated=num(status.generatedAt||status.lastSync),fresh=!!generated&&Date.now()-generated<120000;
+  return{row,fresh,central:status.mode==='central',generatedAt:generated};
+}
 function machineReliability(machineId){
-  const jobs=data().jobs.filter(j=>j.machineId===machineId&&(['terminado','fallido'].includes(j.status)||['terminado','fallido'].includes(j.archivedFromStatus)));
-  const done=jobs.filter(j=>j.status==='terminado'||j.archivedFromStatus==='terminado').length,failed=jobs.filter(j=>j.status==='fallido'||j.archivedFromStatus==='fallido').length,total=done+failed;
-  const success=total?done/total*100:100,cut=Date.now()-30*86400000;
-  const incidents=data().incidents.filter(i=>i.machineId===machineId&&Date.parse(i.at||0)>=cut),connectionIncidents=incidents.filter(i=>i.type==='electrical').length;
-  let maintenance=100;try{maintenance=Math.max(0,100-getMaintAlerts(getMachine(machineId)).length*18);}catch(_){ }
-  const stateNow=liveState(machineId),availability=clamp(100-connectionIncidents*4-(['offline','noip'].includes(stateNow)?18:0),0,100);
-  const score=clamp(success*.6+availability*.25+maintenance*.15,0,100);
-  return{score,success,availability,maintenance,done,failed,incidents:incidents.length};
+  const history=printerHistoryEvidence(machineId),central=centralHealthEvidence(machineId);
+  const current=liveState(machineId),cut=Date.now()-30*86400000;
+  const live=typeof _printerStatus!=='undefined'?_printerStatus[machineId]||{}:{};
+  const liveFresh=!!live.lastSeenAt&&Date.now()-num(live.lastSeenAt)<60000;
+  const confirmed=data().incidents.filter(i=>i.machineId===machineId&&!i.resolvedAt&&incidentIsConfirmed(i)&&Date.parse(i.at||0)>=cut);
+  const detected=data().incidents.filter(i=>i.machineId===machineId&&!i.resolvedAt&&!incidentIsConfirmed(i)&&Date.parse(i.at||0)>=cut);
+  let maintenanceAlerts=[];try{maintenanceAlerts=getMaintAlerts(getMachine(machineId))||[];}catch(_){}
+  const sample=history.total,completion=sample?history.completed/sample*100:null;
+  const centralBad=central.fresh&&central.row&&(central.row.health==='offline'||['shutdown','error'].includes(String(central.row.klipperState||'')));
+  const liveBad=liveFresh&&['offline','noip','shutdown','error','apidown'].includes(current);
+  const currentGood=(central.fresh&&central.row?.online)||(liveFresh&&!['connecting','unknown','offline','noip','shutdown','error','apidown'].includes(current));
+  let level='unknown',label='Sin datos actuales';
+  if(centralBad||liveBad||confirmed.length){level='critical';label='Requiere atención';}
+  else if(maintenanceAlerts.length){level='warning';label='Mantención pendiente';}
+  else if(currentGood){level='ok';label='Operativa ahora';}
+  const confidence=history.durable&&central.central&&central.fresh&&sample>=5?'alta':
+    ((central.fresh||liveFresh)&&(history.durable||sample>=2)?'media':'baja');
+  return{level,label,confidence,history,central,current,liveFresh,completion,confirmed:confirmed.length,detected:detected.length,maintenance:maintenanceAlerts.length};
 }
 function preflightFromFacts(facts){
   const checks=[];
@@ -371,10 +404,24 @@ function createJobFromLive(machineId){
   data().jobs.push(job);persist('Trabajo creado desde impresión en vivo');toast('Impresión incorporada al control de producción ✓','success');
 }
 function addIncident({machineId='',jobId='',type='other',note='',photo='',source='manual'}={}){
-  const recent=data().incidents.find(row=>row.machineId===machineId&&row.type===type&&row.source===source&&!row.resolvedAt&&Date.now()-Date.parse(row.at||0)<5*60000);
+  const dedupeMs=source==='telemetry'?30*60000:5*60000;
+  const recent=data().incidents.find(row=>row.machineId===machineId&&row.type===type&&row.source===source&&!row.resolvedAt&&
+    (jobId?row.jobId===jobId:true)&&Date.now()-Date.parse(row.at||0)<dedupeMs);
   if(recent)return recent;
-  const incident={id:uid('incident'),machineId,jobId,type:INCIDENT_TYPES[type]?type:'other',note:String(note||''),photo:String(photo||''),source,at:nowIso(),actor:actor(),resolvedAt:'',resolvedBy:'',updatedAt:nowIso()};
+  const manual=source!=='telemetry';
+  const incident={id:uid('incident'),machineId,jobId,type:INCIDENT_TYPES[type]?type:'other',note:String(note||''),photo:String(photo||''),source,
+    confirmedAt:manual?nowIso():'',confirmedBy:manual?actor():'',at:nowIso(),actor:actor(),resolvedAt:'',resolvedBy:'',resolution:'',updatedAt:nowIso()};
   data().incidents.unshift(incident);if(data().incidents.length>300)data().incidents.length=300;return incident;
+}
+function confirmIncident(id){
+  const row=data().incidents.find(item=>item.id===id);if(!row||row.resolvedAt)return;
+  row.confirmedAt=nowIso();row.confirmedBy=actor();row.updatedAt=nowIso();
+  persist('Evento automático confirmado como incidente');
+}
+function dismissIncident(id){
+  const row=data().incidents.find(item=>item.id===id);if(!row||row.resolvedAt)return;
+  row.resolvedAt=nowIso();row.resolvedBy=actor();row.resolution='dismissed';row.updatedAt=nowIso();
+  persist('Evento automático descartado');
 }
 function openIncident(machineId='',jobId=''){
   const machine=input('mopsIncidentMachine'),job=input('mopsIncidentJob');if(!machine||!job)return;
@@ -410,52 +457,121 @@ function saveIntelligenceConfig(){
 }
 function restartBridgeTimer(){clearInterval(_bridgeTimer);_bridgeTimer=null;if(data().automation.enabled)_bridgeTimer=setInterval(()=>{if(!document.hidden)checkBridgeHealth(true);},num(data().automation.bridgeIntervalSeconds,60)*1000);}
 
-function _parkLiveMonitorBeforeIntelligenceRender(el){
-  // renderIntelligence reemplaza su innerHTML varias veces (bridge, alertas,
-  // telemetría). Si el monitor ya está incrustado aquí, lo sacamos primero para
-  // NO destruir sus tarjetas, cámaras ni listeners y luego lo volvemos a montar.
-  const monitor=input('maquinaMonitorView');
-  if(!monitor||monitor.parentElement!==el)return monitor;
+function _parkIntelligenceEmbeddedNodes(el){
+  // Inteligencia se repinta con innerHTML. Conservamos nodos con estado vivo
+  // (monitor/cámaras y resumen operativo) fuera del contenedor antes de hacerlo.
   const intelligenceView=el.closest('[data-maq-view="inteligencia"]');
-  if(intelligenceView?.parentElement)intelligenceView.insertAdjacentElement('afterend',monitor);
-  return monitor;
+  const park=node=>{
+    if(node&&node.parentElement===el&&intelligenceView?.parentElement)intelligenceView.insertAdjacentElement('afterend',node);
+    return node;
+  };
+  return{monitor:park(input('maquinaMonitorView')),overview:park(input('maquinaOpsOverview'))};
 }
-function _mountLiveMonitorBeforeReliability(el,monitor){
-  const anchor=input('mopsLiveMonitorAnchor');
-  if(!el||!monitor||!anchor)return;
-  anchor.replaceWith(monitor);
-  monitor.classList.add('mops-inline-monitor');
-  monitor.style.marginTop='14px';
-  monitor.style.marginBottom='14px';
-  // Al mover el nodo no se recrean cámaras ni tarjetas. Solo aseguramos que el
-  // contenido esté pintado por si éste fue el primer ingreso a Máquinas.
-  try{renderMonitorFilterTabs();renderMonitorKPIs();renderMonitorGrid();}catch(_){}
+function _mountIntelligenceEmbeddedNodes(el,nodes){
+  if(!el)return;
+  const monitorAnchor=input('mopsLiveMonitorAnchor');
+  if(nodes?.monitor&&monitorAnchor){
+    monitorAnchor.replaceWith(nodes.monitor);
+    nodes.monitor.classList.add('mops-inline-monitor');
+    nodes.monitor.style.marginTop='14px';nodes.monitor.style.marginBottom='14px';
+    try{renderMonitorFilterTabs();renderMonitorKPIs();renderMonitorGrid();}catch(_){}
+  }
+  const overviewAnchor=input('mopsOpsOverviewAnchor');
+  if(nodes?.overview&&overviewAnchor){
+    overviewAnchor.replaceWith(nodes.overview);
+    nodes.overview.classList.add('mops-inline-overview');
+    nodes.overview.style.margin='12px 0 14px';
+    try{renderOpsOverview();}catch(_){}
+  }
+}
+function _statusColor(level){return level==='critical'?'var(--danger)':level==='warning'?'var(--warn)':level==='ok'?'var(--accent3)':'var(--text3)';}
+function _statusIcon(level){return level==='critical'?'!':level==='warning'?'⚠':level==='ok'?'✓':'?';}
+function _incidentRowsForUi(){
+  const all=[...data().incidents].sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0));
+  // Los eventos automáticos viejos sin confirmar no son tareas pendientes.
+  // Siguen en historial, pero no ensucian la pantalla diaria.
+  const pending=all.filter(row=>!row.resolvedAt).filter(row=>incidentIsConfirmed(row)||Date.now()-Date.parse(row.at||0)<24*3600000);
+  const history=all.filter(row=>row.resolvedAt||(!incidentIsConfirmed(row)&&Date.now()-Date.parse(row.at||0)>=24*3600000));
+  return{pending,history};
+}
+function _filamentPhysicalSummary(machine){
+  const s=typeof _printerStatus!=='undefined'?_printerStatus[machine.id]||{}:{},f=s.filament||null;
+  const fresh=!!s.lastSeenAt&&Date.now()-num(s.lastSeenAt)<60000;
+  if(!fresh)return{level:'unknown',label:'Sin dato reciente',detail:'La telemetría física tiene más de 60 s o aún no llegó.',f:null};
+  if(f?.cfsConnected)return{level:'ok',label:'CFS conectado',detail:`${f.cfsSlots?.length||0} slot${(f.cfsSlots?.length||0)===1?'':'s'} con lectura física.`,f};
+  if(f?.detected===true)return{level:'ok',label:'Filamento detectado',detail:'Sensor físico activo; CFS no detectado.',f};
+  if(f?.detected===false)return{level:'warning',label:'Sin filamento',detail:'El sensor físico reporta vacío.',f};
+  return{level:'unknown',label:'CFS no detectado',detail:'No se interpreta como falla; no hay lectura física suficiente.',f};
+}
+function _incidentCard(row){
+  const confirmed=incidentIsConfirmed(row),detected=!confirmed&&!row.resolvedAt;
+  const source=detected?'Evento automático':row.source==='telemetry'?'Confirmado desde telemetría':'Registrado por operador';
+  const state=row.resolvedAt?(row.resolution==='dismissed'?'Descartado':'Resuelto'):confirmed?'Pendiente':'Por confirmar';
+  const actions=row.resolvedAt?'':detected
+    ?`<button class="btn btn-primary btn-sm" onclick="MachineOps.confirmIncident('${row.id}')">Confirmar falla</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.dismissIncident('${row.id}')">Descartar</button>`
+    :`<button class="btn btn-primary btn-sm" onclick="MachineOps.resolveIncident('${row.id}')">Resolver</button>`;
+  return`<article class="${row.resolvedAt?'resolved':''} ${detected?'detected':''}">
+    ${row.photo?`<img src="${esc(row.photo)}" alt="Evidencia">`:''}
+    <div><div class="mops-incident-title"><b>${esc(INCIDENT_TYPES[row.type]||INCIDENT_TYPES.other)}</b><span>${esc(state)}</span></div>
+      <small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(fmtStamp(row.at))}</small>
+      <small class="mops-incident-source">${esc(source)}</small>
+      <p>${esc(row.note||'Sin observaciones')}</p>
+    </div><div class="mops-incident-actions">${actions}</div>
+  </article>`;
 }
 function renderIntelligence(){
   const el=input('mopsIntelligence');if(!el)return;
-  const liveMonitor=_parkLiveMonitorBeforeIntelligenceRender(el);
+  const embedded=_parkIntelligenceEmbeddedNodes(el);
   const alerts=buildSmartAlerts(),critical=alerts.filter(row=>row.severity==='critical').length;
   const unlinked=(MAQUINAS||[]).filter(m=>liveState(m.id)==='printing'&&!data().jobs.some(j=>j.machineId===m.id&&j.status==='imprimiendo'&&!j.archived)).length;
-  // El promedio de fiabilidad de la flota tenía su propio indicador arriba,
-  // justo encima de la grilla que muestra el puntaje de cada máquina: el mismo
-  // dato agregado y detallado a dos centímetros. Queda solo el detalle.
-  const reliability=(MAQUINAS||[]).map(machine=>({machine,...machineReliability(machine.id)}));
+  const healthRows=(MAQUINAS||[]).map(machine=>({machine,...machineReliability(machine.id)}));
   const monthCut=Date.now()-30*86400000,costRows=data().jobs.filter(j=>['terminado','fallido'].includes(j.status)&&Date.parse(j.completedAt||j.updatedAt||0)>=monthCut).map(jobCostBreakdown),monthCost=costRows.reduce((sum,row)=>sum+row.total,0);
   const recommend=data().jobs.filter(j=>!j.archived&&['pendiente','planificado','en_cola'].includes(j.status)).sort((a,b)=>dueUrgency(a)-dueUrgency(b)).slice(0,6).map(job=>({job,...recommendationForJob(job)}));
-  const cfs=(MAQUINAS||[]).map(machine=>({machine,filament:(typeof _printerStatus!=='undefined'?_printerStatus[machine.id]?.filament:null)})).filter(row=>row.filament?.cfsConnected||row.machine.modelo==='K2'||row.machine.modelo==='K2 Plus');
+  const physical=(MAQUINAS||[]).filter(machine=>['K2','K2 Plus'].includes(machine.modelo)||(typeof _printerStatus!=='undefined'&&_printerStatus[machine.id]?.filament)).map(machine=>({machine,..._filamentPhysicalSummary(machine)}));
+  const incidents=_incidentRowsForUi();
   const bridgeLabel={up:'Operativo',down:'Sin respuesta',checking:'Comprobando…'}[_bridgeHealth.state]||'Sin comprobar',bridgeColor=_bridgeHealth.state==='up'?'var(--accent3)':_bridgeHealth.state==='down'?'var(--danger)':'var(--warn)';
+  const confidenceCounts={alta:0,media:0,baja:0};healthRows.forEach(row=>confidenceCounts[row.confidence]=(confidenceCounts[row.confidence]||0)+1);
+
   el.innerHTML=`<div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
     <div class="mops-intel-grid">
-      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Priorizadas por impacto; una alerta atendida reaparece en 4 horas si persiste.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Sin alertas operacionales activas.</div>'}</div></section>
-      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Considera compatibilidad, carga, telemetría, material y mantenimiento.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>{return`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:'<span class="mops-status" style="color:var(--danger)">Sin opción</span>'}</article>`;}).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
+      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
+      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Sugerencias de carga; siempre puedes revisarlas antes de aplicar.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:'<span class="mops-status" style="color:var(--danger)">Sin opción segura</span>'}</article>`).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
     </div>
+
     <div id="mopsLiveMonitorAnchor" aria-hidden="true"></div>
-    <section class="card mops-intel-panel" style="margin-top:12px"><div class="mops-intel-head"><div><b>📈 Salud y fiabilidad por impresora</b><small>El puntaje combina éxito de trabajos, disponibilidad, incidentes y mantenciones.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident()">+ Incidente</button></div><div class="mops-reliability-grid">${reliability.map(row=>`<article><div class="mops-reliability-title"><b>${esc(machineLabel(row.machine.id))}</b><span style="color:${row.score<70?'var(--danger)':row.score<85?'var(--warn)':'var(--accent3)'}">${row.score.toFixed(0)}%</span></div><div class="mops-reliability-bar"><i style="width:${row.score}%;background:${row.score<70?'var(--danger)':row.score<85?'var(--warn)':'var(--accent3)'}"></i></div><small>Éxito ${row.success.toFixed(0)}% · disponibilidad ${row.availability.toFixed(0)}% · ${row.incidents} incidentes/30d</small><div><button class="btn btn-ghost btn-sm" onclick="MachineOps.openTech('${row.machine.id}')">Ficha</button><button class="btn btn-ghost btn-sm" onclick="openHistoryModal('${row.machine.id}')">Historial</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident('${row.machine.id}')">Reportar</button></div></article>`).join('')}</div></section>
-    <div class="mops-intel-grid" style="margin-top:12px">
-      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🧵 CFS y filamento físico</b><small>Lectura real de las K2; no se confunde con el inventario manual.</small></div></div><div class="mops-cfs-grid">${cfs.map(({machine,filament})=>`<article><div><b>${esc(machineLabel(machine.id))}</b><span class="mops-cfs-state ${filament?.cfsConnected?'online':'offline'}">${filament?.cfsConnected?'CFS conectado':'Sin lectura CFS'}</span></div>${filament?.cfsSlots?.length?`<div class="mops-cfs-slots">${filament.cfsSlots.map(slot=>`<span><i style="background:${cssColor(slot.color)}"></i><b>${esc(slot.slot)}</b><small>${esc(slot.material||'—')} · ${Math.round(num(slot.remain))} restante</small></span>`).join('')}</div>`:`<small>${filament?.detected===true?'Filamento detectado':filament?.detected===false?'Sensor reporta vacío':'Esperando telemetría física'}</small>`}</article>`).join('')||'<div class="mops-intel-empty">No hay equipos CFS configurados.</div>'}</div></section>
-      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🧰 Incidentes recientes</b><small>Registro trazable con causa, responsable y evidencia.</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.openIncident()">Registrar</button></div><div class="mops-incidents">${data().incidents.slice(0,10).map(row=>`<article class="${row.resolvedAt?'resolved':''}">${row.photo?`<img src="${esc(row.photo)}" alt="Evidencia">`:''}<div><b>${esc(INCIDENT_TYPES[row.type]||INCIDENT_TYPES.other)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(fmtStamp(row.at))} · ${esc(row.actor||'Sistema')}</small><p>${esc(row.note||'Sin observaciones')}</p></div>${row.resolvedAt?'<span class="mops-status" style="color:var(--accent3)">Resuelto</span>':`<button class="btn btn-ghost btn-sm" onclick="MachineOps.resolveIncident('${row.id}')">Resolver</button>`}</article>`).join('')||'<div class="mops-intel-empty">Sin incidentes registrados.</div>'}</div></section>
-    </div>`;
-  _mountLiveMonitorBeforeReliability(el,liveMonitor);
+    <div id="mopsOpsOverviewAnchor" aria-hidden="true"></div>
+
+    <section class="card mops-intel-panel mops-trust-panel">
+      <div class="mops-intel-head"><div><b>🛡 Estado y evidencia por impresora</b><small>No mostramos un porcentaje “mágico”: cada estado indica qué datos reales lo respaldan.</small></div><div class="mops-confidence-summary"><span>Confianza alta ${confidenceCounts.alta||0}</span><span>media ${confidenceCounts.media||0}</span><span>baja ${confidenceCounts.baja||0}</span></div></div>
+      <div class="mops-reliability-grid mops-evidence-grid">${healthRows.map(row=>{
+        const hist=row.history,completion=row.completion;
+        const historyText=hist.total?`${hist.completed} completada${hist.completed===1?'':'s'} · ${hist.notCompleted} cierre${hist.notCompleted===1?'':'s'} no completado${hist.notCompleted===1?'':'s'}`:'Sin cierres registrados';
+        const centralText=row.central.fresh&&row.central.row?`FarmHealth: ${row.central.row.online?'online':'sin respuesta'}`:'FarmHealth sin lectura reciente';
+        return`<article class="mops-evidence-card ${row.level}">
+          <div class="mops-reliability-title"><b>${esc(machineLabel(row.machine.id))}</b><span class="mops-health-state" style="color:${_statusColor(row.level)}">${_statusIcon(row.level)} ${esc(row.label)}</span></div>
+          <div class="mops-evidence-confidence">Confianza de datos: <b>${esc(row.confidence)}</b> · ${esc(hist.source)}</div>
+          <div class="mops-evidence-facts"><span>${esc(historyText)}${completion!==null&&hist.total>=3?` · ${completion.toFixed(0)}% completadas`:''}</span><span>${esc(centralText)}</span><span>${row.confirmed?'⚠ '+row.confirmed+' incidente(s) confirmado(s) abierto(s)':'✓ Sin incidentes confirmados abiertos'} · ${row.maintenance?row.maintenance+' mantención(es) pendiente(s)':'mantención sin alertas'}</span></div>
+          <div><button class="btn btn-ghost btn-sm" onclick="MachineOps.openTech('${row.machine.id}')">Ficha</button><button class="btn btn-ghost btn-sm" onclick="openHistoryModal('${row.machine.id}')">Historial real</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident('${row.machine.id}')">Reportar</button></div>
+        </article>`;
+      }).join('')}</div>
+    </section>
+
+    <section class="card mops-intel-panel mops-pending-panel" style="margin-top:12px">
+      <div class="mops-intel-head"><div><b>🧰 Pendientes por resolver</b><small>Los eventos automáticos primero se confirman o descartan; solo los confirmados afectan el diagnóstico.</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.openIncident()">+ Registrar incidente</button></div>
+      <div class="mops-incidents">${incidents.pending.length?incidents.pending.slice(0,12).map(_incidentCard).join(''):'<div class="mops-intel-empty">✓ No hay incidentes ni eventos pendientes.</div>'}</div>
+      ${incidents.history.length?`<details class="mops-incident-history"><summary>Ver historial · ${incidents.history.length}</summary><div class="mops-incidents">${incidents.history.slice(0,20).map(_incidentCard).join('')}</div></details>`:''}
+    </section>
+
+    <details class="card mops-intel-panel mops-physical-details" style="margin-top:12px">
+      <summary><span><b>🧵 Datos físicos y CFS</b><small>Información técnica en vivo; no se interpreta como falla cuando falta telemetría.</small></span><span>${physical.filter(row=>row.level==='ok').length}/${physical.length} con lectura útil</span></summary>
+      <div class="mops-cfs-grid mops-physical-grid">${physical.length?physical.map(row=>`<article>
+        <div><b>${esc(machineLabel(row.machine.id))}</b><span class="mops-cfs-state ${row.level==='ok'?'online':'offline'}" style="color:${_statusColor(row.level)}">${esc(row.label)}</span></div>
+        <small>${esc(row.detail)}</small>
+        ${row.f?.cfsSlots?.length?`<div class="mops-cfs-slots">${row.f.cfsSlots.map(slot=>`<span><i style="background:${cssColor(slot.color)}"></i><b>${esc(slot.slot)}</b><small>${esc(slot.material||'—')} · ${Math.round(num(slot.remain))} restante</small></span>`).join('')}</div>`:''}
+      </article>`).join(''):'<div class="mops-intel-empty">No hay equipos con telemetría física configurada.</div>'}</div>
+    </details>`;
+
+  _mountIntelligenceEmbeddedNodes(el,embedded);
 }
 
 // La configuración de automatización y costos se ajusta cada varios meses, no
@@ -525,22 +641,19 @@ function showView(view,button){
 
 function renderOpsOverview(){
   const el=document.getElementById('maquinaOpsOverview');if(!el)return;
-  const jobs=activeJobs(),printing=jobs.filter(j=>j.status==='imprimiendo').length;
-  const qa=jobs.filter(j=>j.status==='qa').length,unassigned=jobs.filter(j=>!j.machineId).length;
-  const grams=jobs.reduce((s,j)=>s+num(j.grams),0);
-  const availableSpools=data().spools.filter(s=>!s.archived&&spoolAvailable(s)>0).length;
-  const notReady=(MAQUINAS||[]).filter(m=>!machineOperational(m)).length;
-  // Aquí había tres avisos —atrasados, sin máquina, esperando QA— que repetían
-  // datos ya visibles en la misma pantalla: los dos últimos son literalmente el
-  // número del indicador de al lado, y los atrasados salen uno por uno en el
-  // panel de alertas, ahí sí con botón para actuar. Quedan solo indicadores.
-  el.innerHTML=`<div class="mops-kpis">
-    ${kpi('Trabajos activos',jobs.length,`${printing} imprimiendo`,'var(--accent)')}
+  const jobs=activeJobs(),qa=jobs.filter(j=>j.status==='qa').length,unassigned=jobs.filter(j=>!j.machineId).length;
+  const printingLive=(MAQUINAS||[]).filter(m=>liveState(m.id)==='printing').length;
+  const trusted=(MAQUINAS||[]).filter(m=>{
+    const s=typeof _printerStatus!=='undefined'?_printerStatus[m.id]||{}:{};
+    return !!s.lastSeenAt&&Date.now()-num(s.lastSeenAt)<60000&&!['connecting','unknown'].includes(String(s.state||''));
+  }).length;
+  el.innerHTML=`<div class="mops-kpis mops-kpis-trust">
+    ${kpi('Imprimiendo ahora',printingLive,'telemetría en vivo',printingLive?'var(--accent)':'var(--text)')}
+    ${kpi('Trabajos abiertos',jobs.length,'planificados o en proceso')}
     ${kpi('Esperando QA',qa,'requieren revisión',qa?'var(--warn)':'var(--accent3)')}
-    ${kpi('Sin asignar',unassigned,'pendientes de planificar',unassigned?'var(--danger)':'var(--accent3)')}
-    ${kpi('Carga estimada',fmtMin(jobs.reduce((s,j)=>s+jobMinutes(j),0)),`${(grams/1000).toFixed(2)} kg reservados`)}
-    ${kpi('Máquinas no listas',notReady,`de ${(MAQUINAS||[]).length}`,notReady?'var(--warn)':'var(--accent3)')}
-    ${kpi('Rollos disponibles',availableSpools,'con saldo utilizable')}
+    ${kpi('Sin máquina',unassigned,'pendientes de asignar',unassigned?'var(--danger)':'var(--accent3)')}
+    ${kpi('Carga pendiente',fmtMin(jobs.reduce((s,j)=>s+jobMinutes(j),0)),'estimación de trabajos abiertos')}
+    ${kpi('Telemetría reciente',trusted+'/'+(MAQUINAS||[]).length,'lectura física < 60 s',trusted===(MAQUINAS||[]).length?'var(--accent3)':'var(--warn)')}
   </div>`;
 }
 
@@ -1542,11 +1655,11 @@ const api={
   openScanner,closeScanner,submitScan,handleScan,clearScanMachine,printEntityLabel,
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
   renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,checkBridgeHealth,saveIntelligenceConfig,
-  openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,
+  openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
   openTech,closeTech,refreshTechStatus,setMachineStatus,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,onLegacyQueueAdd,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,safetyDecision,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,_filamentPhysicalSummary},
 };
 window.MachineOps=api;
 

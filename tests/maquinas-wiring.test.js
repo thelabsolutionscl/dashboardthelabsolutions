@@ -79,18 +79,50 @@ test('la inicialización pinta el monitor de inmediato y luego reconcilia datos 
   assert.match(body,/renderCargaMaquinas\(\)/,'debe enlazar la carga de pedidos por máquina');
 });
 
-test('el monitor en vivo se monta antes de Salud y fiabilidad sin destruir cámaras',()=>{
+test('el monitor en vivo se monta antes del diagnóstico sin destruir cámaras',()=>{
   const render=functionSource(OPS,'renderIntelligence');
-  const park=functionSource(OPS,'_parkLiveMonitorBeforeIntelligenceRender');
-  const mount=functionSource(OPS,'_mountLiveMonitorBeforeReliability');
+  const park=functionSource(OPS,'_parkIntelligenceEmbeddedNodes');
+  const mount=functionSource(OPS,'_mountIntelligenceEmbeddedNodes');
   const anchorPos=render.indexOf('mopsLiveMonitorAnchor');
-  const healthPos=render.indexOf('Salud y fiabilidad por impresora');
-  assert.ok(anchorPos>=0&&healthPos>anchorPos,'el monitor debe quedar antes de Salud y fiabilidad');
+  const healthPos=render.indexOf('Estado y evidencia por impresora');
+  assert.ok(anchorPos>=0&&healthPos>anchorPos,'el monitor debe quedar antes del diagnóstico');
   assert.match(park,/maquinaMonitorView/,'debe reutilizar el monitor existente');
-  assert.match(park,/insertAdjacentElement\('afterend',monitor\)/,'antes de regenerar inteligencia debe sacar el monitor del innerHTML');
-  assert.match(mount,/anchor\.replaceWith\(monitor\)/,'debe mover el mismo nodo, no clonarlo ni recrearlo');
+  assert.match(park,/insertAdjacentElement\('afterend',node\)/,'antes de regenerar inteligencia debe sacar nodos vivos del innerHTML');
+  assert.match(mount,/monitorAnchor\.replaceWith\(nodes\.monitor\)/,'debe mover el mismo nodo, no clonarlo ni recrearlo');
   assert.match(mount,/renderMonitorGrid\(\)/,'al montarlo debe asegurar que las impresoras ya estén visibles');
   assert.doesNotMatch(mount,/cloneNode|innerHTML\s*=/,'no debe duplicar ni recrear el monitor/cámaras');
+});
+
+test('Centro de granja distingue evidencia, eventos automáticos e historial',()=>{
+  const render=functionSource(OPS,'renderIntelligence');
+  const reliability=functionSource(OPS,'machineReliability');
+  const overview=functionSource(OPS,'renderOpsOverview');
+  const add=functionSource(OPS,'addIncident');
+  assert.match(render,/Estado y evidencia por impresora/);
+  assert.match(render,/No mostramos un porcentaje “mágico”/);
+  assert.doesNotMatch(render,/row\.score\.toFixed|disponibilidad \$\{row\.availability/,'no debe mostrar precisión inventada');
+  assert.match(render,/Pendientes por resolver/);
+  const incidentCard=functionSource(OPS,'_incidentCard');
+  assert.match(incidentCard,/Confirmar falla/);
+  assert.match(incidentCard,/Descartar/);
+  assert.match(render,/Datos físicos y CFS/);
+  assert.match(render,/mops-physical-details/,'CFS debe quedar como detalle técnico contraíble');
+  assert.match(reliability,/PrinterHistory|printerHistoryEvidence/);
+  assert.match(reliability,/FarmHealth|centralHealthEvidence/);
+  assert.match(reliability,/liveFresh/,'salud actual debe exigir telemetría reciente');
+  assert.match(add,/source==='telemetry'\?30\*60000:5\*60000/,'telemetría debe tener deduplicación más robusta');
+  assert.match(overview,/Telemetría reciente/);
+  assert.doesNotMatch(overview,/Máquinas no listas/,'no debe inferir disponibilidad con un KPI ambiguo');
+});
+
+test('resumen operativo se integra con el Centro inteligente y no queda perdido al final',()=>{
+  const mount=functionSource(OPS,'_mountIntelligenceEmbeddedNodes');
+  const park=functionSource(OPS,'_parkIntelligenceEmbeddedNodes');
+  const render=functionSource(OPS,'renderIntelligence');
+  assert.match(render,/mopsOpsOverviewAnchor/);
+  assert.match(mount,/overviewAnchor\.replaceWith\(nodes\.overview\)/);
+  assert.match(park,/maquinaOpsOverview/);
+  assert.match(mount,/renderOpsOverview\(\)/);
 });
 
 test('las funciones críticas no están ausentes ni duplicadas',()=>{
