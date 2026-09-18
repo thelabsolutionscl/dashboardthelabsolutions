@@ -35,12 +35,34 @@ const SL = fs.readFileSync(path.join(RAIZ, 'js', 'slicer3d.js'), 'utf8');
 const HTML = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');
 
 function bloque(marca) {
-  const i = SL.indexOf(marca);
-  assert.ok(i > 0, `debe existir ${marca}`);
-  let d = 0;
-  for (let x = SL.indexOf('{', i); x < SL.length; x++) {
-    if (SL[x] === '{') d++;
-    if (SL[x] === '}') { d--; if (!d) return SL.slice(i, x + 1); }
+  const i=SL.indexOf(marca);
+  assert.ok(i>=0,`debe existir ${marca}`);
+  const p0=SL.indexOf('(',i);
+  assert.ok(p0>=0,`debe tener parámetros ${marca}`);
+  let par=0,open=-1,quote='',escape=false,line=false,block=false;
+  for(let x=p0;x<SL.length;x++){
+    const ch=SL[x],next=SL[x+1];
+    if(line){if(ch==='\n')line=false;continue;}
+    if(block){if(ch==='*'&&next==='/'){block=false;x++;}continue;}
+    if(quote){if(escape){escape=false;continue;}if(ch==='\\'){escape=true;continue;}if(ch===quote)quote='';continue;}
+    if(ch==='/'&&next==='/'){line=true;x++;continue;}
+    if(ch==='/'&&next==='*'){block=true;x++;continue;}
+    if(ch==='"'||ch==="'"||ch===String.fromCharCode(96)){quote=ch;continue;}
+    if(ch==='(')par++;
+    else if(ch===')'&&--par===0){open=SL.indexOf('{',x);break;}
+  }
+  assert.ok(open>=0,`no se pudo ubicar el cuerpo de ${marca}`);
+  let depth=0;quote='';escape=false;line=false;block=false;
+  for(let x=open;x<SL.length;x++){
+    const ch=SL[x],next=SL[x+1];
+    if(line){if(ch==='\n')line=false;continue;}
+    if(block){if(ch==='*'&&next==='/'){block=false;x++;}continue;}
+    if(quote){if(escape){escape=false;continue;}if(ch==='\\'){escape=true;continue;}if(ch===quote)quote='';continue;}
+    if(ch==='/'&&next==='/'){line=true;x++;continue;}
+    if(ch==='/'&&next==='*'){block=true;x++;continue;}
+    if(ch==='"'||ch==="'"||ch===String.fromCharCode(96)){quote=ch;continue;}
+    if(ch==='{')depth++;
+    else if(ch==='}'&&--depth===0)return SL.slice(i,x+1);
   }
   assert.fail(`no se pudo cerrar ${marca}`);
 }
@@ -86,6 +108,7 @@ function montar({ maquinas = [], estados = {}, stats = null, laminadoPara = 'K1'
 
   const piezas = [
     SL.slice(SL.indexOf('const SPECS='), SL.indexOf('};', SL.indexOf('const SPECS=')) + 2),
+    SL.slice(SL.indexOf('const MATS='), SL.indexOf('};', SL.indexOf('const MATS=')) + 2),
     bloque('function fitsIn('), bloque('function _gcodeEnvelope('), bloque('function _validateGcodeForSpec('),
     bloque('function _machineReadiness('), bloque('function _abrasiveKnown('), bloque('function _abrasiveCheck('),
     bloque('function _gcodeFitsMachine('), bloque('function _slicerJobMeta('), bloque('function _cabeEn('), bloque('function _destinoOk('),
