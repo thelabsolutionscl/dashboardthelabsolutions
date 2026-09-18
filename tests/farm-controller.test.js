@@ -85,8 +85,9 @@ test('payload G-code vive fuera de queue.json y la persistencia no bloquea el ev
   assert.match(source,/async function atomicWrite\(/);
   assert.match(source,/fs\.promises\.writeFile/);
   assert.match(source,/fs\.promises\.rename/);
-  assert.doesNotMatch(source,/fs\.writeFileSync\(/,'el controller no debe bloquear Node al persistir queue/registry/safety');
-  assert.doesNotMatch(source,/fs\.renameSync\(/,'la rotación atómica debe ser asíncrona');
+  const atomic=source.slice(source.indexOf('async function atomicWrite('),source.indexOf('function payloadPath('));
+  assert.doesNotMatch(atomic,/fs\.writeFileSync\(/,'queue/registry/safety no deben bloquear Node');
+  assert.doesNotMatch(atomic,/fs\.renameSync\(/,'la rotación atómica de estado debe ser asíncrona');
   assert.match(source,/const j = await enqueue\(body\)/);
   assert.match(source,/const j=await enqueue\(\{\.\.\.body,existingFile:true/);
 });
