@@ -1730,6 +1730,32 @@ function handlePrinterTransition(m,s,previous){
   }
   if(_activeView==='inteligencia')renderIntelligence();
 }
+function reconcileFarmQueueJobs(rows=[]){
+  let changed=false;
+  for(const remote of (Array.isArray(rows)?rows:[])){
+    const job=data().jobs.find(j=>!j.archived&&(j.farmJobId===remote.id||(j.executionId&&j.executionId===remote.idempotencyKey)))||null;
+    if(!job)continue;
+    const state=String(remote.state||'');
+    const touch=(status)=>{
+      if(job.status!==status){job.status=status;changed=true;}
+      if(remote.startedAt&&!job.startedAt){job.startedAt=remote.startedAt;changed=true;}
+      if(remote.id&&!job.farmJobId){job.farmJobId=remote.id;changed=true;}
+      if(remote.idempotencyKey&&!job.executionId){job.executionId=remote.idempotencyKey;changed=true;}
+      job.controllerState=state;job.controllerError=remote.lastError||'';job.updatedAt=nowIso();
+    };
+    if(['queued','retry','checking','uploading','uploaded','started','blocked'].includes(state))touch(job.status==='imprimiendo'?'imprimiendo':'en_cola');
+    else if(['printing','paused'].includes(state))touch('imprimiendo');
+    else if(state==='completed'){
+      touch(job.status==='terminado'?'terminado':'qa');
+      if(remote.completedAt&&!job.completedAt){job.completedAt=remote.completedAt;changed=true;}
+      if(job.startedAt&&job.completedAt&&!job.actualMinutes){job.actualMinutes=Math.max(1,Math.round((Date.parse(job.completedAt)-Date.parse(job.startedAt))/60000));changed=true;}
+    }else if(['cancelled','failed'].includes(state)){
+      touch('fallido');if(remote.completedAt&&!job.completedAt){job.completedAt=remote.completedAt;changed=true;}
+    }
+  }
+  if(changed){writeLocal();scheduleRemote();renderAll();}
+  return changed;
+}
 function onLegacyQueueAdd(machineId,filename,secs,grams,meta={}){
   meta=meta&&typeof meta==='object'?meta:{};
   const existing=data().jobs.find(j=>!j.archived&&j.machineId===machineId&&j.gcodeFile===filename&&ACTIVE_JOB_STATES.includes(j.status));
@@ -2089,7 +2115,7 @@ const api={
   openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
-  handlePrinterTransition,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
+  handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
   _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState,bedClearSignature,bedIsCleared,installedNozzle},
 };
 window.MachineOps=api;
