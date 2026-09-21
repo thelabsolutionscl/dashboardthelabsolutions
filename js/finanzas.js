@@ -1982,6 +1982,7 @@ const GS_ACTIONS=[
   {icon:'icon-chat',       title:'Abrir KAI (asistente)',      kw:'kai asistente chat ia ayuda hablar',         run:()=>{try{openKai();}catch(e){}}},
   {tab:'maquinas', icon:'icon-laptop',     title:'Modo Taller (TV)',            kw:'tv taller impresoras camaras pantalla fullscreen monitor', run:()=>{try{tvStartTaller();}catch(e){}}},
   {tab:'overview', icon:'icon-laptop',     title:'Modo Resumen (TV)',           kw:'tv resumen overview pedidos entregas pantalla fullscreen', run:()=>{try{tvStartResumen();}catch(e){}}},
+  {tab:'calendario', icon:'icon-calendar',   title:'Pantalla completa (TV) · Calendario', kw:'tv calendario agenda pantalla completa fullscreen fechas', run:()=>{try{tvStartCalendario();}catch(e){}}},
   {icon:'icon-calendar',   title:'Agendar compromiso',         kw:'agenda compromiso recordatorio tarea pendiente fecha llamar', run:()=>{try{openAgendaModal();}catch(e){}}},
   {tab:'overview',icon:'icon-reporte', title:'Enviar cierre de mes por correo', kw:'cierre mes informe mensual ejecutivo revenue enviar reporte', run:()=>{try{enviarCierreMes();}catch(e){}}},
   {tab:'overview',icon:'icon-reporte', title:'PDF ejecutivo del cierre de mes', kw:'pdf cierre mes informe ejecutivo imprimir reporte descargar compartir', run:()=>{try{generarCierrePDF(0);}catch(e){}}},
