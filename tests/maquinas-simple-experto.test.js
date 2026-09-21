@@ -54,7 +54,8 @@ test('Simple conserva alertas, incidentes y controles de impresión necesarios',
   assert.doesNotMatch(intel,/mops-pending-panel[^"`]*op-expert-only/,'los incidentes pendientes no son detalle técnico');
   assert.match(MAQ,/Pausar/);
   assert.match(MAQ,/Reanudar/);
-  assert.match(MAQ,/Cancelar/);
+  assert.match(MAQ,/Detener/);
+  assert.match(MAQ,/🎛 CONTROL/,'cada impresora debe exponer el panel operativo');
   assert.match(MAQ,/peta_/,'el tiempo restante debe seguir en la tarjeta simple');
   assert.match(MAQ,/pbig_/,'el progreso debe seguir en la tarjeta simple');
 });
@@ -68,7 +69,8 @@ test('Experto concentra infraestructura, evidencia y diagnóstico técnico',()=>
     'mops-physical-details op-expert-only',
   ])assert.match(intel,new RegExp(token.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')),`${token} debe quedar en Experto`);
   assert.match(MAQ,/pcard-ip-address op-expert-only/);
-  assert.match(MAQ,/class="op-expert-only" onclick="openPrinterControl/);
+  assert.match(MAQ,/class="printer-control-btn" onclick="openPrinterControl/,'CONTROL operativo debe existir también en Simple');
+  assert.doesNotMatch(MAQ,/class="op-expert-only" onclick="openPrinterControl/,'CONTROL no es diagnóstico: no debe ocultarse en Simple');
   assert.match(MAQ,/class="op-expert-only" onclick="openGcodeUpload/);
   assert.match(MAQ,/class="op-expert-only" onclick="openPrinterConnModal/);
   assert.match(MAQ,/class="op-expert-only" onclick="openBedMesh/);

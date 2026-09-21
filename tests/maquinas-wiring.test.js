@@ -246,18 +246,41 @@ test('credenciales y enlaces remotos no quedan expuestos permanentemente',()=>{
   assert.match(MAQ,/function printerMediaUrl\(ip,path\)\{return _appendBridgeToken\(printerUrl\(ip,path\)\);\}/);
 });
 
-test('acciones peligrosas están bloqueadas durante una impresión',()=>{
+test('controles operativos separan ajustes en vivo de movimientos peligrosos',()=>{
   const send=functionSource(MAQ,'_sendGcode');
-  assert.match(send,/!opts\.allowBusy&&_isPrinterBusy/);
-  assert.match(send,/no se envió nada/);
+  assert.match(send,/!opts\.allowBusy&&_isPrinterBusy/,'movimiento y utilidades siguen bloqueados durante impresión');
+  assert.match(send,/_printerControlFresh/,'ningún comando normal debe salir con telemetría stale/offline');
+  const temp=functionSource(MAQ,'setPrinterTemp');
+  assert.match(temp,/allowBusy:true/,'temperatura sí puede ajustarse durante una impresión');
+  assert.match(temp,/M104/);
+  assert.match(temp,/M140/);
+  const jog=functionSource(MAQ,'printerJogStep');
+  assert.match(jog,/pcJogStep_/,'la cruceta usa paso seleccionable');
+  const tune=functionSource(MAQ,'printerSetTune');
+  assert.match(tune,/M220/,'velocidad en vivo');
+  assert.match(tune,/M221/,'flujo en vivo');
+  const fan=functionSource(MAQ,'printerSetFan');
+  assert.match(fan,/M106|M107/,'ventilador en vivo');
+  const z=functionSource(MAQ,'printerZAdjust');
+  assert.match(z,/SET_GCODE_OFFSET/,'Z-offset experto en vivo');
   const emergency=functionSource(MAQ,'printerEmergencyStop');
   assert.match(emergency,/confirm\(/);
   assert.match(emergency,/printer\/emergency_stop/);
   const control=functionSource(MAQ,'openPrinterControl');
-  assert.match(control,/const busy=_isPrinterBusy/);
-  assert.match(control,/disabled/);
+  assert.match(control,/motionLocked=busy\|\|!fresh/,'movimiento debe quedar bloqueado si imprime o falta telemetría fresca');
+  assert.match(control,/printerAdjustTemp/);
+  assert.match(control,/PAUSAR/);
+  assert.match(control,/REANUDAR/);
+  assert.match(control,/DETENER/);
 });
 
+test('telemetría incluye factor real de velocidad y flujo para el panel de control',()=>{
+  const derive=functionSource(MAQ,'_deriveStatus');
+  assert.match(MAQ,/webhooks','gcode_move/);
+  assert.match(derive,/gm=s\.gcode_move/);
+  assert.match(derive,/speedFactor/);
+  assert.match(derive,/flowFactor/);
+});
 test('preflight, QA, postproducción e incidentes forman un flujo continuo',()=>{
   for(const id of ['mopsPreflightModal','mopsIncidentModal','mopsJobs','mopsGantt','mopsSpools','mopsQuality','mopsPostProduction','mopsAnalytics']){
     assert.ok(INDEX.includes(`id="${id}"`),`falta ${id}`);
