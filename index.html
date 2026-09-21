@@ -653,7 +653,7 @@
 }
 </style>
 <div class="tab-panel active" id="tab-overview">
-  <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button><div style="position:relative"><button class="btn btn-ghost btn-sm" onclick="openOvCustomize(event)" title="Personalizar overview" style="font-size:14px;line-height:1">⚙</button></div></div></div>
+  <div class="section-header"><div><div class="section-title">Centro de Comando</div><div class="section-desc">Resumen general del negocio en tiempo real: revenue semanal, pedidos activos, cotizaciones pendientes y disponibilidad del equipo.</div></div><div style="display:flex;align-items:center;gap:8px"><div class="section-subtitle" id="lastUpdate">—</div><button class="btn btn-ghost btn-sm" onclick="openMetaModal()" title="Definir meta semanal de revenue"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-target"/></svg> Meta</button><button class="btn btn-ghost btn-sm" onclick="tvStartResumen()" title="Pantalla TV con resumen operativo">📺 Modo Resumen (TV)</button><div style="position:relative"><button class="btn btn-ghost btn-sm" onclick="openOvCustomize(event)" title="Personalizar overview" style="font-size:14px;line-height:1">⚙</button></div></div></div>
   <section id="opToday" class="op-surface op-simple"></section>
   <!-- SALUDO DE LA MAÑANA: top 3 urgencias del día, 1 vez al día, descartable -->
   <div id="morningBrief" style="display:none;margin-bottom:18px;background:linear-gradient(135deg,rgba(0,212,204,0.09),rgba(0,212,204,0.02));border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:14px 16px"></div>
@@ -3173,7 +3173,7 @@
         <span style="font-size:10.5px;color:var(--text3)">↻ <span id="monitorLastUpdate">cargando...</span></span>
         <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:12px">Actualizar</button>
         <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:12px" title="Ordenar por estado">↕ Estado</button>
-        <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:12px" title="Modo pantalla completa">⛶ Kiosko</button>
+        <button class="btn btn-ghost btn-sm" onclick="tvStartTaller()" style="font-size:12px" title="Pantalla TV con impresoras y cámaras">📺 Modo Taller (TV)</button>
         <button class="btn btn-ghost btn-sm op-expert-only" onclick="openAlertSettings()" style="font-size:12px" title="Configurar alertas"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-bell"/></svg> Alertas</button>
         <button id="btnLocalMode" class="btn btn-ghost btn-sm op-expert-only" onclick="toggleLocalMode()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Remoto</button>
         <button class="btn btn-ghost btn-sm op-expert-only" onclick="openOrcaConfigModal()" style="font-size:12px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
@@ -15086,13 +15086,18 @@ async function clearRevenueMeta(){
   closeMetaModal();renderKPIs();toast('Metas eliminadas','info');
 }
 
-// ── MODO TV / TALLER ──────────────────────────────────────────────────
-// Pantalla completa de SOLO LECTURA para una TV en el taller: rota cada 20 s
-// entre (1) pedidos por etapa, (2) estado de impresoras y (3) entregas de hoy.
-// Sale con Escape o doble clic. El auto-refresh silencioso sigue corriendo,
-// así que los datos se mantienen al día solos.
-let _tvTimer=null,_tvClock=null,_tvView=0;
+// ── MODOS TV ──────────────────────────────────────────────────────────
+// Hay DOS pantallas separadas:
+//   1) TALLER (Máquinas): solo impresoras + cámaras en vivo.
+//   2) RESUMEN (Overview): pedidos/entregas, sin mezclar cámaras.
+// Cada modo usa un único overlay y el fullscreen se pide SOBRE ese overlay,
+// no sobre documentElement. Así nunca quedan dos capas visuales superpuestas.
+let _tvTimer=null,_tvClock=null,_tvView=0,_tvMode='',_tvStopping=false;
+let _tvWorkshopSnapTimer=null,_tvWorkshopPatchTimer=null;
+const _tvWorkshopPending={};
+
 function _tvCard(t,sub,warn){return `<div style="background:var(--surface2);border:1px solid ${warn?'rgba(255,68,68,.5)':'var(--border)'};border-radius:10px;padding:12px 14px;margin-bottom:10px"><div style="font-size:20px;font-weight:700;color:${warn?'var(--danger)':'var(--text)'};line-height:1.2">${t}</div><div style="font-size:14px;color:var(--text3);margin-top:3px">${sub}</div></div>`;}
+
 function _tvViewPedidos(){
   const hoy=new Date();hoy.setHours(0,0,0,0);
   const etapas=[['Confirmado','var(--semantic-info)'],['En producción','var(--semantic-production)'],['Listo para despacho','var(--semantic-info)'],['Despachado','var(--semantic-success)']];
@@ -15105,27 +15110,7 @@ function _tvViewPedidos(){
   }).join('');
   return `<div style="display:flex;gap:26px;height:100%">${cols}</div>`;
 }
-function _tvViewMaquinas(){
-  const cards=(typeof MAQUINAS!=='undefined'?MAQUINAS:[]).map(m=>{
-    const st=(typeof _printerStatus!=='undefined'?_printerStatus[m.id]:null)||{};
-    const s=st.state||(typeof getPrinterIp==='function'&&getPrinterIp(m)?'connecting':'noip');
-    const map={connecting:['CONECTANDO…','#38bdf8'],printing:['IMPRIMIENDO','var(--accent3)'],paused:['PAUSADA','var(--warn)'],error:['ERROR','var(--danger)'],shutdown:['DETENIDA','var(--danger)'],offline:['SIN CONEXIÓN','#888'],noip:['SIN IP','#666'],cancelled:['CANCELADA','var(--warn)'],idle:['LIBRE','var(--accent)'],standby:['LIBRE','var(--accent)'],complete:['FINALIZADA ✓','var(--accent3)']};
-    const [lbl,col]=map[s]||['ESTADO DESCONOCIDO','#888'];
-    const prog=s==='printing'&&st.progress!=null?Math.round(st.progress*(st.progress<=1?100:1)):null;
-    const eta=s==='printing'&&st.eta?Math.max(1,Math.round(st.eta/60)):null;
-    const filament=st.filament?.detected===true?'FILAMENTO OK':st.filament?.detected===false?'SIN FILAMENTO':'SENSOR SIN LECTURA';
-    const filamentColor=st.filament?.detected===false?'var(--danger)':st.filament?.detected===true?'var(--accent3)':'var(--text3)';
-    const alerts=typeof MachineOps!=='undefined'&&MachineOps.machineAlertsFor?MachineOps.machineAlertsFor(m.id):[];
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:5px solid ${col};border-radius:10px;padding:16px 18px">
-      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:19px;font-weight:700;color:var(--text)">${escapeHtml(m.nombre)} #${m.numG}</div>${alerts.length?`<span style="font-size:12px;color:var(--warn)">⚠ ${alerts.length}</span>`:''}</div>
-      <div style="font-family:'Bebas Neue';font-size:26px;letter-spacing:1px;color:${col};margin-top:4px">${lbl}${prog!=null?` · ${prog}%`:''}</div>
-      ${st.filename?`<div style="font-size:13px;color:var(--text3);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(String(st.filename))}</div>`:''}
-      ${prog!=null?`<div style="height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;margin-top:10px"><div style="height:100%;width:${prog}%;background:${col}"></div></div>`:''}
-      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:9px;font-size:11px"><span style="color:${filamentColor}">${filament}${st.filament?.cfsConnected?' · CFS':''}</span>${eta?`<span style="color:var(--text3)">ETA ${eta<60?eta+' min':Math.floor(eta/60)+'h '+eta%60+'m'}</span>`:''}</div>
-    </div>`;
-  }).join('');
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;align-content:start">${cards||'<div style="color:var(--text3)">Sin impresoras configuradas</div>'}</div>`;
-}
+
 function _tvViewHoy(){
   const hoy=new Date();hoy.setHours(0,0,0,0);const hoyStr=fmtDate(hoy);
   const activos=state.pedidos.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
@@ -15139,43 +15124,228 @@ function _tvViewHoy(){
     <div style="display:flex;gap:26px;flex:1;min-height:0">${lista(deHoy,'ENTREGAS DE HOY','var(--warn)')}${lista(atrasados,'⚠ ATRASADOS','var(--danger)')}${lista(semana,'PRÓXIMOS 7 DÍAS','var(--accent)')}</div>
   </div>`;
 }
-const _TV_VIEWS=[['PEDIDOS POR ETAPA',_tvViewPedidos],['IMPRESORAS',_tvViewMaquinas],['ENTREGAS',_tvViewHoy]];
-function _tvRender(){
-  const body=document.getElementById('tvBody');if(!body)return;
-  const [titulo,fn]=_TV_VIEWS[_tvView%_TV_VIEWS.length];
-  document.getElementById('tvViewTitle').textContent=titulo;
-  document.getElementById('tvDots').innerHTML=_TV_VIEWS.map((_,i)=>`<span style="width:10px;height:10px;border-radius:50%;background:${i===_tvView%_TV_VIEWS.length?'var(--accent)':'var(--surface3)'};display:inline-block;margin:0 4px"></span>`).join('');
+
+const _TV_SUMMARY_VIEWS=[['PEDIDOS POR ETAPA',_tvViewPedidos],['ENTREGAS',_tvViewHoy]];
+
+function _tvPrinterMeta(m){
+  const st=(typeof _printerStatus!=='undefined'?_printerStatus[m.id]:null)||{};
+  const state=st.state||(typeof getPrinterIp==='function'&&getPrinterIp(m)?'connecting':'noip');
+  const map={
+    connecting:['CONECTANDO…','#38bdf8'],
+    printing:['IMPRIMIENDO','var(--accent3)'],
+    paused:['PAUSADA','var(--warn)'],
+    error:['ERROR','var(--danger)'],
+    shutdown:['DETENIDA','var(--danger)'],
+    apidown:['TELEMETRÍA CAÍDA','var(--warn)'],
+    offline:['SIN CONEXIÓN','#888'],
+    noip:['SIN IP','#666'],
+    cancelled:['CANCELADA','var(--warn)'],
+    idle:['LIBRE','var(--accent)'],
+    standby:['LIBRE','var(--accent)'],
+    complete:['FINALIZADA ✓','var(--accent3)']
+  };
+  const meta=map[state]||['ESTADO DESCONOCIDO','#888'];
+  return{st,state,label:meta[0],color:meta[1]};
+}
+function _tvWorkshopMachines(){
+  const list=[...(typeof MAQUINAS!=='undefined'?MAQUINAS:[])];
+  if(typeof _cameraSignalRank==='function'&&typeof _monitorModelCompare==='function'){
+    return list.sort((a,b)=>_cameraSignalRank(a)-_cameraSignalRank(b)||_monitorModelCompare(a,b));
+  }
+  if(typeof sortedList==='function')return sortedList(list);
+  return list;
+}
+function _tvCameraInfo(m){
+  let raw='',url='',snap=false;
+  try{
+    raw=typeof _printerCamRaw==='function'?(_printerCamRaw(m.id)||''):'';
+    url=raw&&typeof printerCamUrl==='function'?(printerCamUrl(m.id)||''):raw;
+    snap=!!raw&&typeof _camIsSnapshot==='function'&&_camIsSnapshot(raw);
+  }catch(_){}
+  let safe=url;
+  try{if(url&&typeof _safePrinterMediaUrl==='function')safe=_safePrinterMediaUrl(url);}catch(_){}
+  if(url&&safe===url&&typeof escapeHtml==='function')safe=escapeHtml(url);
+  return{raw,url,safe,snap};
+}
+function _tvViewTaller(){
+  const cards=_tvWorkshopMachines().map(m=>{
+    const meta=_tvPrinterMeta(m),cam=_tvCameraInfo(m),id=String(m.id||'');
+    const camera=cam.safe?`
+      <div style="position:relative;background:#050505;border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;aspect-ratio:16/9;min-height:120px">
+        <img id="tvCam_${id}" data-tv-machine="${id}" data-tv-base="${cam.safe}" ${cam.snap?'data-tv-snapshot="1"':''} ${cam.snap?'':`src="${cam.safe}"`} onload="_tvCamOk(this)" onerror="_tvCamErr(this)" style="width:100%;height:100%;display:block;object-fit:cover;opacity:0;transition:opacity .18s">
+        <div class="tv-cam-off" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;background:#090909;color:#777;font-size:12px;font-weight:700"><span style="font-size:22px">📷</span><span>Conectando cámara…</span></div>
+      </div>`:`
+      <div style="background:#090909;border:1px solid rgba(255,255,255,.08);border-radius:10px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;color:#666;font-size:12px"><span style="font-size:22px">📷</span>Sin cámara configurada</div>`;
+    return `<article id="tvPrinter_${id}" style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${meta.color};border-radius:13px;padding:10px;min-width:0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;min-width:0">
+        <div style="min-width:0;flex:1;font-size:14px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(m.nombre||m.modelo||'Impresora')} <span style="color:var(--text3)">#${m.numG??m.num??''}</span></div>
+        <span id="tvState_${id}" style="font-size:10px;font-weight:800;white-space:nowrap;color:${meta.color};border:1px solid ${meta.color}55;background:${meta.color}14;border-radius:999px;padding:3px 7px">${meta.label}</span>
+      </div>
+      ${camera}
+    </article>`;
+  }).join('');
+  return `<div id="tvWorkshopGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px;align-content:start;height:100%;overflow:auto;padding:2px 2px 12px">${cards||'<div style="color:var(--text3)">Sin impresoras configuradas</div>'}</div>`;
+}
+function _tvCamOk(im){
+  if(!im)return;
+  im.dataset.tvLoading='0';im.dataset.tvLastOk=String(Date.now());im.style.opacity='1';
+  const off=im.parentElement?.querySelector('.tv-cam-off');if(off)off.style.display='none';
+  const id=im.dataset.tvMachine||'';
+  if(id&&typeof _setCameraSignalState==='function')_setCameraSignalState(id,'ok');
+}
+function _tvCamErr(im){
+  if(!im)return;
+  im.dataset.tvLoading='0';
+  const had=Number(im.dataset.tvLastOk||0)>0;
+  im.style.opacity=had?'1':'0';
+  const off=im.parentElement?.querySelector('.tv-cam-off');
+  if(off){off.style.display=had?'none':'flex';const t=off.querySelector('span:last-child');if(t)t.textContent='Cámara sin señal';}
+  const id=im.dataset.tvMachine||'';
+  if(id&&typeof _setCameraSignalState==='function')_setCameraSignalState(id,'down');
+}
+function _tvRefreshWorkshopSnapshot(im){
+  if(!im||!im.isConnected||im.dataset.tvLoading==='1')return;
+  const base=im.dataset.tvBase||'',id=im.dataset.tvMachine||'';if(!base||!id)return;
+  im.dataset.tvLoading='1';
+  const prev=_tvWorkshopPending[id];
+  if(prev){clearTimeout(prev.timer);prev.probe.onload=null;prev.probe.onerror=null;}
+  const probe=new Image();
+  const fail=()=>{
+    const cur=_tvWorkshopPending[id];if(!cur||cur.probe!==probe)return;
+    clearTimeout(cur.timer);delete _tvWorkshopPending[id];probe.onload=null;probe.onerror=null;_tvCamErr(im);
+  };
+  const timer=setTimeout(fail,10000);
+  _tvWorkshopPending[id]={probe,timer};
+  probe.decoding='async';
+  probe.onload=()=>{
+    const cur=_tvWorkshopPending[id];if(!cur||cur.probe!==probe)return;
+    clearTimeout(cur.timer);delete _tvWorkshopPending[id];probe.onload=null;probe.onerror=null;
+    if(!im.isConnected)return;
+    im.dataset.tvLoading='0';im.src=probe.src;_tvCamOk(im);
+  };
+  probe.onerror=fail;
+  probe.src=base+(base.includes('?')?'&':'?')+'_tv='+Date.now();
+}
+function _tvRefreshWorkshopSnapshots(){
+  document.querySelectorAll('#tvOverlay img[data-tv-snapshot="1"]').forEach(_tvRefreshWorkshopSnapshot);
+}
+function _tvPatchWorkshop(){
+  const grid=document.getElementById('tvWorkshopGrid');if(!grid)return;
+  _tvWorkshopMachines().forEach(m=>{
+    const meta=_tvPrinterMeta(m),stateEl=document.getElementById('tvState_'+m.id);
+    if(stateEl){stateEl.textContent=meta.label;stateEl.style.color=meta.color;stateEl.style.borderColor=meta.color+'55';stateEl.style.background=meta.color+'14';}
+    const card=document.getElementById('tvPrinter_'+m.id);if(card&&card.parentElement===grid)grid.appendChild(card);
+  });
+}
+function _tvSuspendMonitorCameras(on){
+  document.querySelectorAll('#maquinaMonGrid img[data-machine-id]').forEach(im=>{
+    if(on){
+      if(im.dataset.tvSuspended==='1')return;
+      im.dataset.tvSuspended='1';
+      if(im.dataset.camSuspended!=='1'){im.dataset.tvOwnSuspend='1';im.dataset.camSuspended='1';}
+      try{if(typeof _cameraClearTimer==='function')_cameraClearTimer(im);}catch(_){}
+      im.dataset.camLoading='0';im.removeAttribute('src');
+      return;
+    }
+    if(im.dataset.tvSuspended!=='1')return;
+    delete im.dataset.tvSuspended;
+    if(im.dataset.tvOwnSuspend!=='1')return;
+    delete im.dataset.tvOwnSuspend;delete im.dataset.camSuspended;im.dataset.camLoading='0';
+    const base=im.dataset.camBase||im.getAttribute('data-snap')||'';if(!base)return;
+    try{
+      if(im.dataset.camKind==='snapshot'&&typeof _cameraRefreshNow==='function')_cameraRefreshNow(im);
+      else im.src=base+(base.includes('?')?'&':'?')+'_tvresume='+Date.now();
+    }catch(_){}
+  });
+}
+function _tvStartWorkshopCameras(){
+  _tvSuspendMonitorCameras(true);
+  _tvRefreshWorkshopSnapshots();
+  _tvWorkshopSnapTimer=setInterval(_tvRefreshWorkshopSnapshots,2500);
+  _tvPatchWorkshop();
+  _tvWorkshopPatchTimer=setInterval(_tvPatchWorkshop,2000);
+}
+function _tvStopWorkshopCameras(){
+  if(_tvWorkshopSnapTimer){clearInterval(_tvWorkshopSnapTimer);_tvWorkshopSnapTimer=null;}
+  if(_tvWorkshopPatchTimer){clearInterval(_tvWorkshopPatchTimer);_tvWorkshopPatchTimer=null;}
+  Object.keys(_tvWorkshopPending).forEach(id=>{
+    const p=_tvWorkshopPending[id];clearTimeout(p.timer);p.probe.onload=null;p.probe.onerror=null;delete _tvWorkshopPending[id];
+  });
+  document.querySelectorAll('#tvOverlay img[data-tv-machine]').forEach(im=>{im.onload=null;im.onerror=null;im.removeAttribute('src');});
+  _tvSuspendMonitorCameras(false);
+}
+function _tvRenderSummary(){
+  const body=document.getElementById('tvBody');if(!body||_tvMode!=='resumen')return;
+  const [titulo,fn]=_TV_SUMMARY_VIEWS[_tvView%_TV_SUMMARY_VIEWS.length];
+  const title=document.getElementById('tvViewTitle');if(title)title.textContent=titulo;
+  const dots=document.getElementById('tvDots');if(dots)dots.innerHTML=_TV_SUMMARY_VIEWS.map((_,i)=>`<span style="width:9px;height:9px;border-radius:50%;background:${i===_tvView%_TV_SUMMARY_VIEWS.length?'var(--accent)':'var(--surface3)'};display:inline-block;margin:0 3px"></span>`).join('');
   try{body.innerHTML=fn();}catch(e){body.innerHTML='<div style="color:var(--text3)">Sin datos aún…</div>';}
 }
-function tvStart(){
-  if(document.getElementById('tvOverlay'))return;
-  const ov=document.createElement('div');ov.id='tvOverlay';
-  ov.style.cssText='position:fixed;inset:0;z-index:11000;background:var(--black);display:flex;flex-direction:column;padding:28px 36px;cursor:none';
-  ov.innerHTML=`<div style="display:flex;align-items:baseline;gap:20px;margin-bottom:22px">
-      <div style="font-family:'Bebas Neue';font-size:34px;letter-spacing:2px;color:var(--text)">THE LAB <span style="color:var(--accent)">SOLUTIONS</span></div>
-      <div id="tvViewTitle" style="font-family:'Bebas Neue';font-size:26px;letter-spacing:1.5px;color:var(--text3)"></div>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:18px"><span id="tvDots"></span><span id="tvClock" style="font-family:'Bebas Neue';font-size:38px;color:var(--accent)"></span></div>
+function _tvRenderTaller(){
+  const body=document.getElementById('tvBody');if(!body||_tvMode!=='taller')return;
+  const title=document.getElementById('tvViewTitle');if(title)title.textContent='IMPRESORAS Y CÁMARAS EN VIVO';
+  const dots=document.getElementById('tvDots');if(dots)dots.innerHTML='';
+  body.innerHTML=_tvViewTaller();
+  _tvStartWorkshopCameras();
+}
+function _tvClockTick(){
+  const el=document.getElementById('tvClock');if(el)el.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function _tvEnterFullscreen(ov){
+  if(!ov||!ov.requestFullscreen)return;
+  const enter=()=>{try{const p=ov.requestFullscreen();if(p&&p.then)p.then(()=>{if(ov.isConnected)ov.dataset.tvFullscreen='1';}).catch(()=>{});}catch(_){}};
+  const active=document.fullscreenElement;
+  if(active&&active!==ov){
+    try{const p=document.exitFullscreen?.();if(p&&p.then)p.finally(()=>setTimeout(enter,0));else setTimeout(enter,0);}catch(_){enter();}
+  }else enter();
+}
+function tvStart(mode='resumen'){
+  mode=mode==='taller'?'taller':'resumen';
+  const existing=document.getElementById('tvOverlay');
+  if(existing){if(existing.dataset.tvMode===mode)return;tvStop(false);}
+  try{document.body.classList.remove('kiosk');if(typeof _kioskMode!=='undefined')_kioskMode=false;}catch(_){}
+  _tvMode=mode;_tvView=0;
+  const ov=document.createElement('div');ov.id='tvOverlay';ov.dataset.tvMode=mode;
+  ov.style.cssText='position:fixed;inset:0;z-index:11000;background:var(--black);display:flex;flex-direction:column;padding:18px 24px;box-sizing:border-box';
+  const modeTitle=mode==='taller'?'MODO TALLER (TV)':'MODO RESUMEN (TV)';
+  ov.innerHTML=`<div class="tv-header" data-tv-header="1" style="display:flex;align-items:center;gap:16px;margin-bottom:14px;min-height:42px">
+      <div class="tv-title" data-tv-title data-tv-header-title="1" style="font-family:'Bebas Neue';font-size:28px;letter-spacing:1.5px;color:var(--text)">${modeTitle}</div>
+      <div id="tvViewTitle" style="font-family:'Bebas Neue';font-size:21px;letter-spacing:1.1px;color:var(--text3)"></div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:13px"><span id="tvDots"></span><span id="tvClock" style="font-family:'Bebas Neue';font-size:30px;color:var(--accent)"></span><button type="button" onclick="tvStop()" title="Salir del modo TV" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:16px">×</button></div>
     </div>
     <div id="tvBody" style="flex:1;min-height:0;overflow:hidden"></div>
-    <div style="text-align:center;font-size:11px;color:var(--text3);margin-top:12px">Rota automáticamente · Escape o doble clic para salir</div>`;
-  ov.ondblclick=tvStop;
+    <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:8px">${mode==='taller'?'Impresoras y cámaras en vivo':'Resumen operativo · rota cada 20 s'} · Escape o doble clic para salir</div>`;
+  ov.ondblclick=e=>{if(!e.target.closest('button'))tvStop();};
   document.body.appendChild(ov);
-  const clock=()=>{const el=document.getElementById('tvClock');if(el)el.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});};
-  clock();_tvClock=setInterval(clock,1000);
-  _tvView=0;_tvRender();
-  _tvTimer=setInterval(()=>{_tvView++;_tvRender();},20000);
+  _tvClockTick();_tvClock=setInterval(_tvClockTick,1000);
+  if(mode==='taller')_tvRenderTaller();
+  else{_tvRenderSummary();_tvTimer=setInterval(()=>{_tvView++;_tvRenderSummary();},20000);}
   document.addEventListener('keydown',_tvEsc);
-  try{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}catch(e){}
+  try{window.TVLogoFix?.patch?.();}catch(_){}
+  _tvEnterFullscreen(ov);
 }
-function _tvEsc(e){if(e.key==='Escape')tvStop();}
-function tvStop(){
-  const ov=document.getElementById('tvOverlay');if(ov)ov.remove();
+function tvStartTaller(){try{if(typeof switchTab==='function')switchTab('maquinas');}catch(_){}tvStart('taller');}
+function tvStartResumen(){try{if(typeof switchTab==='function')switchTab('overview');}catch(_){}tvStart('resumen');}
+function _tvEsc(e){if(e.key==='Escape')tvStop(false);}
+function tvStop(exitFullscreen=true){
+  if(_tvStopping)return;_tvStopping=true;
+  const ov=document.getElementById('tvOverlay'),wasTaller=_tvMode==='taller';
+  if(wasTaller)_tvStopWorkshopCameras();
   if(_tvTimer){clearInterval(_tvTimer);_tvTimer=null;}
   if(_tvClock){clearInterval(_tvClock);_tvClock=null;}
   document.removeEventListener('keydown',_tvEsc);
-  try{document.fullscreenElement&&document.exitFullscreen();}catch(e){}
+  const ownsFullscreen=!!ov&&document.fullscreenElement===ov;
+  if(ov)ov.remove();
+  _tvMode='';_tvView=0;
+  if(exitFullscreen&&ownsFullscreen){try{const p=document.exitFullscreen?.();if(p&&p.catch)p.catch(()=>{});}catch(_){}}
+  setTimeout(()=>{_tvStopping=false;},0);
 }
-window.tvStart=tvStart;window.tvStop=tvStop;
+function _tvFullscreenChange(){
+  const ov=document.getElementById('tvOverlay');
+  if(ov&&ov.dataset.tvFullscreen==='1'&&!document.fullscreenElement&&!_tvStopping)tvStop(false);
+}
+document.addEventListener('fullscreenchange',_tvFullscreenChange);
+window.tvStart=tvStart;window.tvStartTaller=tvStartTaller;window.tvStartResumen=tvStartResumen;window.tvStop=tvStop;
 
 // ── KANBAN PEDIDOS ────────────────────────────────────────────────────
 function renderPedidosKanban(){
