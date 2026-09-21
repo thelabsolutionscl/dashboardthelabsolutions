@@ -26,6 +26,13 @@
   }
 
   function visibleTvRoots(){
+    // Los nuevos modos TV usan un único overlay. Si está presente, es la única
+    // raíz que se debe decorar: así TVLogoFix nunca crea una segunda "capa".
+    const primary=document.getElementById('tvOverlay');
+    if(primary){
+      const cs=getComputedStyle(primary);
+      if(cs.display!=='none'&&cs.visibility!=='hidden')return[primary];
+    }
     const selectors=['.cal-tv','[data-tv-mode]','.of-tv','.oficina-tv','[class*="tv-page"]','[class*="tv-view"]','[class*="-tv"]'];
     const roots=[...document.querySelectorAll(selectors.join(','))].filter(el=>{
       const cs=getComputedStyle(el);return cs.display!=='none'&&cs.visibility!=='hidden';
@@ -55,10 +62,14 @@
     logo.alt='The Lab Solutions';
     logo.style.cssText='display:block;width:auto;height:34px;max-width:270px;object-fit:contain;flex:0 0 auto';
     const titleText=pageTitle(root);
-    const title=document.createElement('span');
-    title.textContent=titleText;
-    title.style.cssText='color:#777;font:700 22px/1 "Bebas Neue",sans-serif;letter-spacing:1.5px;white-space:nowrap';
-    header.prepend(title);
+    const existingTitle=header.querySelector('[data-tv-header-title],.tv-title');
+    if(!existingTitle&&titleText){
+      const title=document.createElement('span');
+      title.textContent=titleText;
+      title.setAttribute('data-tv-header-title','1');
+      title.style.cssText='color:#777;font:700 22px/1 "Bebas Neue",sans-serif;letter-spacing:1.5px;white-space:nowrap';
+      header.prepend(title);
+    }
     header.prepend(logo);
     header.style.display='flex';
     header.style.alignItems='center';
