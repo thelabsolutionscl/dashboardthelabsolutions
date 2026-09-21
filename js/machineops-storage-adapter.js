@@ -62,27 +62,52 @@ function bestDomainSnapshot(records,domain,maxWrittenAt=Infinity){
   }
   return candidates.sort((a,b)=>b.writtenAt-a.writtenAt)[0]||null;
 }
+function recoverableDomainSnapshot(records,domain,commitAt){
+  const candidates=[];
+  for(const rec of (records||[]).filter(r=>r?.fields?.Name===recordName(domain))){
+    const payload=parseNotes(rec);if(!payload||payload.schema!==SCHEMA)continue;
+    const currentAt=Number(payload.writtenAt||0),prevAt=Number(payload.previous?.writtenAt||0);
+    // Si el fragmento actual quedó escrito DESPUÉS del último meta, pero lleva
+    // como previous una versión que sí estaba confirmada por ese meta, estamos
+    // ante una escritura huérfana: el dominio llegó a Airtable y falló solo el
+    // commit final. Mantenerlo oculto para siempre deja dos computadores con
+    // estados distintos. Los dominios son independientes, por lo que es seguro
+    // recuperar esa versión actual y dejar que el siguiente push repare meta.
+    if(currentAt>commitAt&&prevAt>0&&prevAt<=commitAt){
+      candidates.push({writtenAt:currentAt,data:payload.data,recovered:true,previousWrittenAt:prevAt});
+    }
+  }
+  return candidates.sort((a,b)=>b.writtenAt-a.writtenAt)[0]||null;
+}
 function composePayload(records){
   const base={...parseLegacy(records)};
   const meta=bestMetaRecord(records);
   if(!meta){
     lastMode='legacy';lastReadAt=Date.now();
-    return{data:base,normalized:0};
+    return{data:base,normalized:0,recoveredDomains:[]};
   }
   const commitAt=Number(meta.payload.writtenAt||0);
-  let normalized=1;
+  let normalized=1,newestAt=commitAt;
+  const recoveredDomains=[];
   for(const domain of DOMAINS){
-    const hit=bestDomainSnapshot(records,domain,commitAt);if(!hit)continue;
+    const committed=bestDomainSnapshot(records,domain,commitAt);
+    const recovered=recoverableDomainSnapshot(records,domain,commitAt);
+    const hit=recovered||committed;if(!hit)continue;
     base[domain]=hit.data;
     hashes.set(domain,domainHash(hit.data));
     committedSnapshots.set(domain,{writtenAt:hit.writtenAt,data:hit.data});
+    newestAt=Math.max(newestAt,Number(hit.writtenAt||0));
+    if(hit.recovered)recoveredDomains.push(domain);
     normalized++;
   }
   base.version=Number(meta.payload.version||base.version||4);
-  base.updatedAt=Math.max(Number(base.updatedAt||0),Number(meta.payload.updatedAt||0));
+  // Si recuperamos un fragmento huérfano, su writtenAt es evidencia de una
+  // actualización remota más nueva que el meta. Esto permite que MachineOps
+  // la trate como estado compartido real y, en el siguiente push, sanee meta.
+  base.updatedAt=Math.max(Number(base.updatedAt||0),Number(meta.payload.updatedAt||0),newestAt);
   hashes.set(META_DOMAIN,domainHash({version:base.version,updatedAt:Number(meta.payload.updatedAt||0)}));
-  lastMode='normalized';lastReadAt=Date.now();
-  return{data:base,normalized};
+  lastMode=recoveredDomains.length?'recovered':'normalized';lastReadAt=Date.now();
+  return{data:base,normalized,recoveredDomains};
 }
 function splitPayload(raw){
   const data=raw&&typeof raw==='object'?raw:{};
@@ -150,7 +175,7 @@ function installWhenReady(target,attempts=40){
 }
 function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWriteAt,knownDomains:[...hashes.keys()]};}
 
-return{install,installWhenReady,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
+return{install,installWhenReady,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,recoverableDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
 });
 
 // PrinterHistory se puede cargar de forma independiente: si este módulo falla,
