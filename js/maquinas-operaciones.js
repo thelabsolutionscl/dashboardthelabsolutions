@@ -418,14 +418,28 @@ function evaluatePreflight(job,machine){
 function alertRow(key,machineId,severity,title,detail,action=''){
   return{key,machineId,severity,title,detail,action,at:Date.now()};
 }
+const ACTIONABLE_CONNECTION_JOB_STATES=new Set(['en_cola','imprimiendo','queued','retry','checking','uploading','uploaded','started','printing','paused']);
+function connectivityAlertDecision(machine,stateNow,offlineForMs,jobs=[],offlineThresholdMs=120000){
+  const operationalState=String(machine?.operationalState||machine?.estado||'disponible').toLowerCase();
+  const intentionallyOffline=['mantencion','esperando_repuesto','fuera_servicio'].includes(operationalState);
+  const urgentJob=(Array.isArray(jobs)?jobs:[]).find(j=>j&&j.machineId===machine?.id&&ACTIONABLE_CONNECTION_JOB_STATES.has(String(j.status||j.state||'').toLowerCase()))||null;
+  const unreachable=stateNow==='noip'||(stateNow==='offline'&&Math.max(0,num(offlineForMs))>=Math.max(0,num(offlineThresholdMs,120000)));
+  return{show:!!(unreachable&&!intentionallyOffline&&urgentJob),unreachable,intentionallyOffline,urgentJob,operationalState};
+}
 function buildSmartAlerts(now=Date.now()){
-  const rows=[];
+  const rows=[],active=activeJobs();
+  let farmJobs=[];try{farmJobs=window.FarmQueue?.status?.().jobs||[];}catch(_){}
   if(_bridgeHealth.state==='down')rows.push(alertRow('bridge-down','', 'critical','Bridge de impresoras sin respuesta',_bridgeHealth.error||'No se pudo alcanzar el bridge','bridge'));
-  activeJobs().filter(j=>j.dueDate&&dateValue(j.dueDate)<now).forEach(j=>rows.push(alertRow('late-'+j.id,j.machineId,'warning','Trabajo atrasado',`${j.name} · ${orderLabel(j.pedidoId)||'sin pedido'}`,'job:'+j.id)));
+  active.filter(j=>j.dueDate&&dateValue(j.dueDate)<now).forEach(j=>rows.push(alertRow('late-'+j.id,j.machineId,'warning','Trabajo atrasado',`${j.name} · ${orderLabel(j.pedidoId)||'sin pedido'}`,'job:'+j.id)));
   (MAQUINAS||[]).forEach(machine=>{
     const live=typeof _printerStatus!=='undefined'?_printerStatus[machine.id]||{}:{},stateNow=live.state||'connecting',watch=_telemetryWatch[machine.id]||{};
-    if(stateNow==='noip'||(stateNow==='offline'&&now-num(watch.offlineAt,now)>=num(data().automation.offlineMinutes,2)*60000))rows.push(alertRow('offline-'+machine.id,machine.id,'critical',stateNow==='noip'?'Máquina sin IP':'Máquina sin conexión',live.connectionError||'Sin telemetría','machine:'+machine.id));
-    if(stateNow==='apidown')rows.push(alertRow('apidown-'+machine.id,machine.id,'critical','Telemetría caída, máquina viva',`Responde en el puerto ${num(live.alivePort,4408)} pero Moonraker no: puede estar imprimiendo sin que el dashboard lo vea`,'machine:'+machine.id));
+    const operationalState=typeof getMaquinaEstadoGlobal==='function'?getMaquinaEstadoGlobal(machine.id):(machine.estado||'disponible');
+    const conn=connectivityAlertDecision({...machine,operationalState},stateNow,now-num(watch.offlineAt,now),[...active,...farmJobs],num(data().automation.offlineMinutes,2)*60000);
+    if(conn.show){
+      const jobLabel=conn.urgentJob?.name||conn.urgentJob?.filename||'trabajo activo';
+      rows.push(alertRow('offline-'+machine.id,machine.id,'critical',stateNow==='noip'?'Máquina sin IP':'Máquina sin conexión',`${live.connectionError||'Sin telemetría'} · afecta ${jobLabel}`,'machine:'+machine.id));
+    }
+    if(stateNow==='apidown'&&conn.urgentJob)rows.push(alertRow('apidown-'+machine.id,machine.id,'critical','Telemetría caída, máquina viva',`Responde en el puerto ${num(live.alivePort,4408)} pero Moonraker no · afecta ${conn.urgentJob?.name||conn.urgentJob?.filename||'un trabajo activo'}`,'machine:'+machine.id));
     if(['error','shutdown'].includes(stateNow))rows.push(alertRow('error-'+machine.id,machine.id,'critical','Impresora detenida',live.klMsg||'Klipper requiere atención','machine:'+machine.id));
     if(stateNow==='paused')rows.push(alertRow('paused-'+machine.id,machine.id,'warning','Impresión pausada',live.filename||'Archivo sin nombre','machine:'+machine.id));
     if(stateNow==='cancelled')rows.push(alertRow('cancelled-'+machine.id,machine.id,'warning','Última impresión cancelada',live.filename||'Revisa la máquina','machine:'+machine.id));
@@ -508,7 +522,18 @@ function resolveIncident(id){const row=data().incidents.find(item=>item.id===id)
 
 async function checkBridgeHealth(silent=true){
   if(typeof getPrinterTunnel!=='function')return false;const started=performance.now(),previous=_bridgeHealth.state,url=getPrinterTunnel();_bridgeHealth={..._bridgeHealth,state:'checking',checkedAt:Date.now(),error:''};if(!silent)renderIntelligence();
-  try{const response=await fetch(url+'/healthz',{signal:AbortSignal.timeout(7000)});if(!response.ok)throw new Error('Bridge HTTP '+response.status);const token=typeof getPrinterTunnelToken==='function'?getPrinterTunnelToken():'';if(!token)throw new Error('Bridge disponible, pero falta el token de acceso');const auth=await fetch(url+'/authcheck?bt='+encodeURIComponent(token),{signal:AbortSignal.timeout(7000)});if(auth.status===401)throw new Error('Token del bridge inválido o vencido');if(!auth.ok)throw new Error('Validación HTTP '+auth.status);_bridgeHealth={state:'up',checkedAt:Date.now(),latencyMs:Math.round(performance.now()-started),error:''};if(previous==='down')audit('Bridge de impresoras recuperado','','Conexión restablecida','info');if(!silent)toast('Bridge operativo y autenticado ✓','success');}
+  try{
+    const response=await fetch(url+'/healthz',{signal:AbortSignal.timeout(7000)});if(!response.ok)throw new Error('Bridge HTTP '+response.status);
+    const token=typeof getPrinterTunnelToken==='function'?getPrinterTunnelToken():'';if(!token)throw new Error('Bridge disponible, pero falta el token de acceso');
+    const auth=await fetch(url+'/authcheck?bt='+encodeURIComponent(token),{signal:AbortSignal.timeout(7000)});if(auth.status===401)throw new Error('Token del bridge inválido o vencido');if(!auth.ok)throw new Error('Validación HTTP '+auth.status);
+    let discoveryStarted=false;
+    if(!silent&&window.FarmRegistry?.discover){
+      try{const discovery=await window.FarmRegistry.discover();discoveryStarted=!!discovery?.started;}catch(e){console.warn('[FarmRegistry] discovery manual',e);}
+    }
+    _bridgeHealth={state:'up',checkedAt:Date.now(),latencyMs:Math.round(performance.now()-started),error:''};
+    if(previous==='down')audit('Bridge de impresoras recuperado','','Conexión restablecida','info');
+    if(!silent)toast(discoveryStarted?'Bridge operativo · buscando IPs actuales de la granja…':'Bridge operativo y autenticado ✓','success');
+  }
   catch(error){_bridgeHealth={state:'down',checkedAt:Date.now(),latencyMs:null,error:error?.message||'Sin respuesta'};if(previous!=='down')audit('Bridge de impresoras sin respuesta','',_bridgeHealth.error,'error');if(!silent)toast('El bridge no responde','error');}
   writeLocal();renderIntelligence();updateNavCounts();return _bridgeHealth.state==='up';
 }
@@ -2165,7 +2190,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,planningJobState,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 
