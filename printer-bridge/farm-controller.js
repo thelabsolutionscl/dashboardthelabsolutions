@@ -265,22 +265,24 @@ function routeMinimumRole(req, pathname) {
 }
 function proxyLegacy(req, res, role) {
   const bodyless = req.method === 'GET' || req.method === 'HEAD';
+  const targetPath = cleanForwardPath(req.url);
+  const streamUpload = req.method === 'POST' && /\/server\/files\/upload(?:\?|$)/.test(targetPath);
   const forward = (body) => {
-    const targetPath = cleanForwardPath(req.url);
     const headers = { ...req.headers, host: `127.0.0.1:${LEGACY_PORT}`, 'x-bridge-token': INTERNAL_TOKEN };
-    delete headers.origin; delete headers.referer; delete headers['content-length'];
+    delete headers.origin; delete headers.referer;
+    if(!streamUpload)delete headers['content-length'];
     if (body) headers['content-length'] = String(body.length);
-    const p = http.request({ host: '127.0.0.1', port: LEGACY_PORT, path: targetPath, method: req.method, headers, timeout: 20_000 }, pr => {
+    const p = http.request({ host: '127.0.0.1', port: LEGACY_PORT, path: targetPath, method: req.method, headers, timeout: streamUpload ? 120_000 : 20_000 }, pr => {
       const h = { ...pr.headers, 'x-farm-role': role || 'public' };
       delete h['access-control-allow-origin']; delete h['access-control-allow-methods']; delete h['access-control-allow-headers'];
       res.writeHead(pr.statusCode || 502, h);
       pr.pipe(res);
     });
-    p.on('timeout', () => p.destroy(new Error('legacy timeout')));
+    p.on('timeout', () => p.destroy(new Error(streamUpload?'upload timeout':'legacy timeout')));
     p.on('error', e => json(res, 502, { ok: false, error: 'legacy bridge no disponible: ' + e.message }, { 'X-Bridge-Error': '1' }));
     if (body) p.end(body); else req.pipe(p);
   };
-  if (bodyless) forward(null); else readBody(req).then(forward).catch(e => json(res, 413, { ok: false, error: e.message }));
+  if (bodyless || streamUpload) forward(null); else readBody(req).then(forward).catch(e => json(res, 413, { ok: false, error: e.message }));
 }
 
 function queueJobById(id) { return queue.jobs.find(j => j.id === id); }
