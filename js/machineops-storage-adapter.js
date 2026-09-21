@@ -9,7 +9,7 @@
 (function(root,factory){
   const api=factory();
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
-  if(root){root.MachineOpsStorage=api;api.install(root);}
+  if(root){root.MachineOpsStorage=api;api.installWhenReady(root);}
 })(typeof window!=='undefined'?window:null,function(){
 'use strict';
 
@@ -142,9 +142,15 @@ function install(target){
   };
   return true;
 }
+function installWhenReady(target,attempts=40){
+  if(install(target)||installed)return true;
+  if(attempts<=0)return false;
+  setTimeout(()=>installWhenReady(target,attempts-1),250);
+  return false;
+}
 function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWriteAt,knownDomains:[...hashes.keys()]};}
 
-return{install,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
+return{install,installWhenReady,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
 });
 
 // PrinterHistory se puede cargar de forma independiente: si este módulo falla,
