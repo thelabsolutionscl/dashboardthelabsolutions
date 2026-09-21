@@ -30,8 +30,8 @@ function api(store={},maquinas=[],local=false){
     _appendBridgeToken:u=>u+(u.includes('?')?'&':'?')+'bt=TK',
   };
   vm.createContext(ctx);
-  vm.runInContext([fn('_defaultCamUrl'),fn('_camFollowLivePrinterIp'),fn('_printerCamRaw'),fn('_camIsSnapshot'),fn('printerCamUrl'),
-    'this.api={def:_defaultCamUrl,raw:_printerCamRaw,snap:_camIsSnapshot,url:printerCamUrl};'].join('\n'),ctx);
+  vm.runInContext([fn('_defaultCamUrl'),fn('_camFollowLivePrinterIp'),fn('_printerCamRaw'),fn('_printerCamUrlFromRaw'),fn('_cameraProbeUrl'),fn('_camIsSnapshot'),fn('printerCamUrl'),
+    'this.api={def:_defaultCamUrl,raw:_printerCamRaw,probe:_cameraProbeUrl,snap:_camIsSnapshot,url:printerCamUrl};'].join('\n'),ctx);
   return ctx.api;
 }
 
@@ -46,6 +46,11 @@ test('K1 y Ender derivan MJPEG en :8080',()=>{
   assert.equal(a.def(K1),'http://192.168.100.7:8080/?action=stream');
   assert.equal(a.def(ENDER),'http://192.168.100.67:8080/?action=stream');
   assert.equal(a.snap(a.def(K1)),false,'MJPEG no es snapshot');
+});
+
+test('la sonda K1 usa snapshot finito y conserva el túnel remoto',()=>{
+  const a=api({},[K1]);
+  assert.equal(a.probe('k1-3'),'https://printers.thelab.solutions/192.168.100.7:8080/?action=snapshot&bt=TK');
 });
 
 test('K2 y K2 Plus derivan snapshot go2rtc en :1984',()=>{
