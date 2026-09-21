@@ -263,6 +263,21 @@ test('planificación distingue plan local, telemetría y cola durable',()=>{
   assert.equal(ops.farmQueueEvidence().fresh,false);
 });
 
+test('trabajos imprimiendo obsoletos se reconcilian sin inventar ejecución activa',()=>{
+  const ops=loadOps();
+  const job={status:'imprimiendo'};
+  assert.equal(ops.stalePrintingDecision(job,{known:true,state:'idle'},true,false),'qa','idle + Controller fresco sin ejecución activa pasa a revisión');
+  assert.equal(ops.stalePrintingDecision(job,{known:true,state:'standby'},false,false),'','sin Controller fresco no se adivina el final');
+  assert.equal(ops.stalePrintingDecision(job,{known:true,state:'idle'},true,true),'','una ejecución durable activa impide cerrar el trabajo');
+  assert.equal(ops.stalePrintingDecision(job,{known:true,state:'complete'},false,false),'qa','complete reciente basta como evidencia de fin');
+  assert.equal(ops.stalePrintingDecision(job,{known:true,state:'cancelled'},false,false),'fallido','cancelación física no puede quedar como imprimiendo');
+  assert.equal(ops.stalePrintingDecision(job,{known:true,state:'printing'},true,false),'','una impresión física activa se conserva');
+  assert.match(OPS,/remote\.idempotencyKey==='machineops:'\+j\.id/,'reconcilia trabajos antiguos aunque falte executionId local');
+  assert.match(OPS,/Ejecución y preparación/);
+  assert.match(OPS,/Esperando QA/);
+  assert.match(OPS,/0 imprimiendo|printingRows/);
+});
+
 test('planificación no inventa un minuto de carga en máquinas vacías',()=>{
   assert.doesNotMatch(OPS,/const total=Math\.max\(1,jobs\.reduce/);
   assert.match(OPS,/const total=jobs\.reduce\(\(s,j\)=>s\+jobMinutes\(j\),0\)/);
