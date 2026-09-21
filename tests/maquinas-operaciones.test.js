@@ -258,10 +258,15 @@ test('MachineOps reintenta escritura remota y refresca trabajos entre computador
   assert.match(OPS,/MachineOps sincronizado entre equipos/);
 });
 
-test('subida G-code remota evita listeners de progreso que fuerzan preflight',()=>{
+test('subida G-code muestra porcentaje real también por túnel remoto',()=>{
   const upload=OPS.slice(OPS.indexOf('async function uploadJobGcode'),OPS.indexOf('function planningBadge'));
-  assert.match(upload,/const localMode=typeof _isLocalMode/);
-  assert.match(upload,/if\(localMode&&xhr\.upload\)/);
+  assert.match(OPS,/function _jobGcodeProgressLabel\(/);
+  assert.match(upload,/if\(xhr\.upload\)/);
+  assert.match(upload,/xhr\.upload\.onprogress=event/);
+  assert.match(upload,/event\.loaded\/event\.total\*100/);
+  assert.match(upload,/Math\.min\(99/);
+  assert.match(upload,/PROCESANDO/);
+  assert.match(upload,/VERIFICANDO EN MOONRAKER/);
   assert.match(upload,/xhr\.timeout=120000/);
   assert.match(upload,/_verifyUploadedGcode/);
   assert.match(OPS,/function cancelJobGcodeUpload\(/);
