@@ -704,7 +704,7 @@ function savePrinterConn(){
 // (status = {print_stats, virtual_sdcard, heater_bed, extruder, webhooks, …}).
 // Es puro/síncrono para reusarlo igual desde el polling REST y desde el WebSocket.
 function _deriveStatus(m,s,ip){
-  const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{};
+  const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{},gm=s.gcode_move||{};
   // Estado real del firmware Klipper. Si está "shutdown"/"error" la impresora
   // dejó de imprimir y NO reporta sensores (todo 0) → hay que reiniciar el firmware.
   const klState=wh.state||'ready';
@@ -727,7 +727,7 @@ function _deriveStatus(m,s,ip){
   else if(klState==='startup')state='startup';
   const light=_printerLightApplyStatus(m.id,s);
   const seen=Date.now();
-  return{state,klState,klMsg,progress,progressRaw,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},elapsed,eta,ip,filament:_extractFilamentTelemetry(s),updatedAt:seen,lastSeenAt:seen,checkedAt:seen,light:light?.available?{available:true,on:!!light.on}:null};
+  return{state,klState,klMsg,progress,progressRaw,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},speedFactor:Math.round(Number(gm.speed_factor||1)*100),flowFactor:Math.round(Number(gm.extrude_factor||1)*100),elapsed,eta,ip,filament:_extractFilamentTelemetry(s),updatedAt:seen,lastSeenAt:seen,checkedAt:seen,light:light?.available?{available:true,on:!!light.on}:null};
 }
 // Miniatura del trabajo en curso (cacheada por archivo). Devuelve la URL o null.
 async function _ensureThumb(m,ip,st){
@@ -746,7 +746,7 @@ async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id);
   try{
-    const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks'];
+    const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks','gcode_move'];
     if(machineHasPhysicalCfs(m))objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
     const path='/printer/objects/query?'+objects.map(encodeURIComponent).join('&')+_printerLightQuerySuffix(m.id);
     const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
@@ -1177,13 +1177,13 @@ function renderMonitorGrid(){
         ${isActive?`<div style="display:flex;gap:6px;margin-top:8px">
           ${isPrinting?`<button onclick="printerControl('${m.id}','pause')" style="flex:1;background:rgba(255,170,0,0.15);border:1px solid rgba(255,170,0,0.4);color:#ffaa00;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">⏸ Pausar</button>`:''}
           ${isPaused?`<button onclick="printerControl('${m.id}','resume')" style="flex:1;background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.4);color:#00d4aa;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">▶ Reanudar</button>`:''}
-          <button onclick="printerControl('${m.id}','cancel')" style="flex:1;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.35);color:#ff4444;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">■ Cancelar</button>
+          <button onclick="printerControl('${m.id}','cancel')" style="flex:1;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.35);color:#ff4444;border-radius:7px;padding:6px;font-size:12px;font-weight:700;cursor:pointer">■ Detener</button>
         </div>`:''}
         <div class="pcard-iprow" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
           <span class="pcard-ip-address op-expert-only" style="font-size:10px;color:var(--text3);font-family:monospace">${ip}${getPrinterApiKey(m.id)?` <span style="color:var(--accent3)" title="API Key configurada">🔑</span>`:''}</span>
-          <div class="pcard-actions" style="display:flex;gap:4px">
+          <div class="pcard-actions" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
             ${_renderPrinterLightButton(m.id)}
-            <button class="op-expert-only" onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.12)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.35)':'var(--border2)'};border-radius:6px;color:${isActive?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Control técnico de impresora">🎛️</button>
+            <button class="printer-control-btn" onclick="openPrinterControl('${m.id}')" style="background:${isActive?'rgba(0,212,170,0.13)':'var(--surface2)'};border:1px solid ${isActive?'rgba(0,212,170,0.38)':'var(--border2)'};border-radius:8px;color:${isActive?'var(--accent)':'var(--text2)'};font-size:10px;font-weight:800;letter-spacing:.35px;padding:4px 8px;cursor:pointer" title="Mover, temperaturas y controles de impresión">🎛 CONTROL</button>
             <button class="op-expert-only" onclick="openGcodeUpload('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Enviar G-code">📤</button>
             <button class="op-expert-only" onclick="openPrinterConnModal('${m.id}')" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text3);font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar IP, API Key y LED">⚙</button>
             <button onclick="openWebcamModal('${m.id}')" style="background:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.12)':'var(--surface2)'};border:1px solid ${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'rgba(0,212,204,0.3)':'var(--border2)'};border-radius:6px;color:${(localStorage.getItem('printer_cam_'+m.id)||m.cam)?'var(--accent)':'var(--text3)'};font-size:10.5px;padding:3px 7px;cursor:pointer" title="Configurar webcam">📷</button>
@@ -1300,12 +1300,17 @@ function _patchLivePrinter(id,s){
 async function printerControl(id,action){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
-  if(action==='cancel'&&!confirm(`¿Cancelar impresión en ${m.nombre} #${m.numG}?`))return;
-  toast({pause:'⏸ Pausando',resume:'▶ Reanudando',cancel:'■ Cancelando'}[action]+` ${m.nombre} #${m.numG}`,'info');
+  if(!_printerControlFresh(id)){toast('🔒 '+_printerControlReason(id)+' — control bloqueado','error');return;}
+  const state=_pcState(id);
+  if(action==='pause'&&state!=='printing'){toast('La impresora no está imprimiendo','info');return;}
+  if(action==='resume'&&state!=='paused'){toast('La impresora no está pausada','info');return;}
+  if(action==='cancel'&&!['printing','paused'].includes(state)){toast('No hay una impresión activa que detener','info');return;}
+  if(action==='cancel'&&!confirm(`¿Detener la impresión en ${m.nombre} #${m.numG}?\n\nSe cancelará el trabajo actual de forma normal. La parada de emergencia es una acción distinta.`))return;
+  toast({pause:'⏸ Pausando',resume:'▶ Reanudando',cancel:'■ Deteniendo'}[action]+` ${m.nombre} #${m.numG}`,'info');
   const headers=getPrinterAuthHeaders(id);
   try{
     const r=await fetch(printerUrl(ip,`/printer/print/${action}`),{method:'POST',signal:AbortSignal.timeout(6000),headers});
-    if(r.ok)setTimeout(pollPrinters,1500);else toast('Error: '+r.status,'error');
+    if(r.ok)setTimeout(pollPrinters,700);else toast('Error: '+r.status,'error');
   }catch(e){toast('Sin conexión con la impresora','error');}
 }
 
@@ -1369,6 +1374,21 @@ async function recoverPrinterTelemetry(id){
 const PREHEAT_PRESETS={PLA:{h:210,b:60},PETG:{h:240,b:80},ABS:{h:250,b:100},TPU:{h:225,b:50}};
 function _isPrinterBusy(state){return state==='printing'||state==='paused';}
 function _pcState(id){return(_printerStatus[id]||{}).state||'offline';}
+function _printerControlFresh(id){
+  const s=_printerStatus[id]||{},state=String(s.state||'');
+  if(!state||s.stale)return false;
+  return !['offline','noip','apidown','connecting','shutdown','startup','error','unknown'].includes(state);
+}
+function _printerControlReason(id){
+  const s=_printerStatus[id]||{},state=String(s.state||'offline');
+  if(s.stale)return'Telemetría desactualizada';
+  if(state==='shutdown'||state==='error')return'Klipper detenido';
+  if(state==='startup'||state==='connecting')return'La impresora todavía está conectando';
+  if(state==='noip')return'Sin IP configurada';
+  if(state==='apidown')return'Moonraker no responde';
+  if(state==='unknown')return'Estado de impresión desconocido';
+  return'Sin conexión con la impresora';
+}
 // ── AGENTE: Auditoría y mantención 3D ──────────────────────────────────
 // Audita cada impresora vía Moonraker. SEGURIDAD: no propone ni ejecuta nada
 // sobre una máquina imprimiendo/pausada; las acciones reutilizan _sendGcode (gated).
@@ -1482,44 +1502,84 @@ async function _moonrakerGet(id,path,timeout=6000){
 async function _sendGcode(id,script,label,opts={}){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return false;
   const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return false;}
-  if(!opts.allowBusy&&_isPrinterBusy(_pcState(id))){toast('🔒 Bloqueado: la impresora está imprimiendo — no se envió nada','error');return false;}
+  if(!opts.allowStale&&!_printerControlFresh(id)){toast('🔒 '+_printerControlReason(id)+' — no se envió nada','error');return false;}
+  if(!opts.allowBusy&&_isPrinterBusy(_pcState(id))){toast('🔒 Bloqueado durante una impresión — no se envió nada','error');return false;}
   try{
     const r=await fetch(printerUrl(ip,`/printer/gcode/script?script=${encodeURIComponent(script)}`),{method:'POST',signal:AbortSignal.timeout(opts.timeout||9000),headers:getPrinterAuthHeaders(id)});
-    if(r.ok){if(label)toast(label,'success');setTimeout(pollPrinters,1200);return true;}
+    if(r.ok){if(label)toast(label,'success');setTimeout(pollPrinters,650);return true;}
     toast('Error: '+r.status,'error');return false;
   }catch(e){toast('Sin conexión con la impresora','error');return false;}
 }
-// Temperatura
+function _printerTempLimit(heater){return heater==='hotend'?300:120;}
 function setPrinterTemp(id,heater){
   const inp=document.getElementById('pcTemp_'+heater);if(!inp)return;
   let t=Math.round(+inp.value);if(!isFinite(t)||t<0)t=0;
-  const max=heater==='hotend'?300:120;if(t>max){toast(`Máximo ${max}° para ${heater==='hotend'?'el hotend':'la cama'}`,'error');return;}
-  _sendGcode(id,heater==='hotend'?`M104 S${t}`:`M140 S${t}`,`🌡️ ${heater==='hotend'?'Hotend':'Cama'} → ${t}°`);
+  const max=_printerTempLimit(heater);if(t>max){toast(`Máximo ${max}° para ${heater==='hotend'?'el nozzle':'la cama'}`,'error');return;}
+  _sendGcode(id,heater==='hotend'?`M104 S${t}`:`M140 S${t}`,`🌡️ ${heater==='hotend'?'Nozzle':'Cama'} → ${t}°`,{allowBusy:true});
+}
+function printerAdjustTemp(id,heater,delta){
+  const inp=document.getElementById('pcTemp_'+heater),s=_printerStatus[id]||{},obj=heater==='hotend'?s.hotend:s.bed;
+  const base=inp&&inp.value!==''?Number(inp.value):Number(obj?.target>0?obj.target:obj?.actual||0);
+  const max=_printerTempLimit(heater),next=Math.max(0,Math.min(max,Math.round(base+delta)));
+  if(inp)inp.value=next;
+  _sendGcode(id,heater==='hotend'?`M104 S${next}`:`M140 S${next}`,`🌡️ ${heater==='hotend'?'Nozzle':'Cama'} → ${next}°`,{allowBusy:true});
 }
 function preheatPrinter(id,mat){
   const p=PREHEAT_PRESETS[mat];if(!p)return;
-  _sendGcode(id,`M104 S${p.h}\nM140 S${p.b}`,`🔥 Precalentando ${mat} · hotend ${p.h}° · cama ${p.b}°`);
+  _sendGcode(id,`M104 S${p.h}\nM140 S${p.b}`,`🔥 Precalentando ${mat} · nozzle ${p.h}° · cama ${p.b}°`);
 }
-function cooldownPrinter(id){_sendGcode(id,`M104 S0\nM140 S0`,'❄️ Enfriando — calentadores apagados');}
-// Máquina
-function printerHome(id){_sendGcode(id,'G28','🏠 Origen (home) en curso');}
+function cooldownPrinter(id){_sendGcode(id,'M104 S0\nM140 S0','❄️ Enfriando — calentadores apagados');}
+function printerHome(id){_sendGcode(id,'G28','🏠 Home en curso');}
 function printerMotorsOff(id){_sendGcode(id,'M84','Motores liberados');}
-function printerJog(id,axis,dist){_sendGcode(id,`G91\nG1 ${axis}${dist} F${axis==='Z'?600:3000}\nG90`,`Mover ${axis} ${dist>0?'+':''}${dist}mm`);}
+function printerJog(id,axis,dist){_sendGcode(id,`G91\nG1 ${axis}${dist} F${axis==='Z'?600:3000}\nG90`,`Mover ${axis} ${dist>0?'+':''}${dist} mm`);}
+function printerJogStep(id,axis,sign){
+  const sel=document.getElementById('pcJogStep_'+id),step=Math.max(0.1,Math.min(50,Number(sel?.value)||10));
+  printerJog(id,axis,step*(sign>=0?1:-1));
+}
 function printerFilament(id,dir){
   const ht=(_printerStatus[id]||{}).hotend?.actual||0;
-  if(ht<170){toast('🌡️ Calienta el hotend a ≥170° antes de mover filamento','error');return;}
+  if(ht<170){toast(`🌡️ Nozzle a ${ht}°. Usa “Calentar 220°” y espera ≥170° antes de mover filamento.`,'error');return;}
   const dist=dir==='load'?60:-60;
-  _sendGcode(id,`M83\nG1 E${dist} F300\nM82`,dir==='load'?'⬇️ Cargando filamento (60mm)':'⬆️ Descargando filamento (60mm)');
+  _sendGcode(id,`M83\nG1 E${dist} F300\nM82`,dir==='load'?'⬇️ Cargando filamento (60 mm)':'⬆️ Descargando filamento (60 mm)');
+}
+function printerHeatForFilament(id){_sendGcode(id,'M104 S220','🔥 Nozzle → 220°',{allowBusy:false});}
+function printerSetTune(id,type){
+  if(!_isPrinterBusy(_pcState(id))){toast('Los ajustes en vivo aparecen durante impresión o pausa','info');return;}
+  const input=document.getElementById('pcTune_'+type);if(!input)return;
+  let value=Math.round(Number(input.value)||100),script='',label='';
+  if(type==='speed'){value=Math.max(50,Math.min(150,value));script=`M220 S${value}`;label=`⚡ Velocidad → ${value}%`;}
+  else if(type==='flow'){value=Math.max(80,Math.min(120,value));script=`M221 S${value}`;label=`🧵 Flujo → ${value}%`;}
+  else return;
+  input.value=value;
+  const st=_printerStatus[id];if(st)st[type==='speed'?'speedFactor':'flowFactor']=value;
+  _sendGcode(id,script,label,{allowBusy:true});
+}
+function printerAdjustTune(id,type,delta){
+  const input=document.getElementById('pcTune_'+type);if(!input)return;
+  input.value=Math.round((Number(input.value)||100)+delta);
+  printerSetTune(id,type);
+}
+function printerSetFan(id,pct){
+  if(!_isPrinterBusy(_pcState(id))){toast('El ventilador en vivo se ajusta durante impresión o pausa','info');return;}
+  const p=Math.max(0,Math.min(100,Math.round(Number(pct)||0))),s=Math.round(255*p/100);
+  _sendGcode(id,p===0?'M107':`M106 S${s}`,`💨 Ventilador → ${p}%`,{allowBusy:true});
+}
+function printerZAdjust(id,delta){
+  if(!_isPrinterBusy(_pcState(id))){toast('El Z-offset en vivo solo está disponible durante impresión o pausa','info');return;}
+  const d=Math.max(-0.05,Math.min(0.05,Number(delta)||0));
+  if(Math.abs(d)>=0.05&&!confirm(`Ajustar Z ${d>0?'+':''}${d.toFixed(2)} mm durante la impresión?\n\nEste es un control experto. Observa la primera capa mientras lo aplicas.`))return;
+  _sendGcode(id,`SET_GCODE_OFFSET Z_ADJUST=${d.toFixed(2)} MOVE=1`,`↕ Z-offset ${d>0?'+':''}${d.toFixed(2)} mm`,{allowBusy:true});
 }
 function printerEmergencyStop(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
-  if(!confirm(`⛔ PARADA DE EMERGENCIA — ${m.nombre} #${m.numG}\n\nDetiene TODO de inmediato (incluido cualquier print en curso) y deja el firmware apagado hasta reiniciarlo desde Fluidd/Mainsail. Úsalo solo ante un peligro real.\n\n¿Continuar?`))return;
+  if(!confirm(`⛔ PARADA DE EMERGENCIA — ${m.nombre} #${m.numG}\n\nDetiene TODO de inmediato y deja el firmware apagado hasta reiniciarlo. Úsalo solo ante un peligro real.\n\n¿Continuar?`))return;
   const ip=getPrinterIp(m);
   fetch(printerUrl(ip,'/printer/emergency_stop'),{method:'POST',headers:getPrinterAuthHeaders(id),signal:AbortSignal.timeout(6000)}).then(r=>{
     if(!r.ok)throw new Error('HTTP '+r.status);
-    toast('⛔ Parada de emergencia confirmada','info');setTimeout(pollPrinters,1500);
+    toast('⛔ Parada de emergencia confirmada','info');setTimeout(pollPrinters,1000);
   }).catch(e=>toast('No se pudo confirmar la parada de emergencia: '+(e?.message||'sin conexión'),'error'));
 }
+
 // Archivos en la impresora
 async function loadPrinterFiles(id){
   const cont=document.getElementById('pcFiles');if(!cont)return;
@@ -1580,55 +1640,59 @@ async function loadPrinterHistory(id){
 function openPrinterControl(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   const ip=getPrinterIp(m);if(!ip){toast('Configura primero la IP de esta impresora','error');return;}
-  const s=_printerStatus[id]||{};const busy=_isPrinterBusy(s.state);
-  document.getElementById('pcTitle').textContent=`${m.nombre} #${m.numG}`;
-  const dis=busy?'disabled':'';
-  const lockBanner=busy?`<div style="background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.4);border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#ffaa00;line-height:1.5">🔒 <b>Imprimiendo ahora</b> — los controles de temperatura y máquina están bloqueados para no arriesgar el trabajo en curso. Solo lectura de archivos e historial. La parada de emergencia sigue disponible.</div>`:'';
-  const btn=(label,onclick,extra='')=>`<button onclick="${onclick}" ${dis} style="background:${busy?'var(--surface3)':'var(--surface2)'};border:1px solid var(--border2);color:${busy?'var(--text3)':'var(--text)'};border-radius:7px;padding:7px 10px;font-size:12px;font-weight:600;cursor:${busy?'not-allowed':'pointer'};${extra}">${label}</button>`;
+  const s=_printerStatus[id]||{},busy=_isPrinterBusy(s.state),fresh=_printerControlFresh(id);
+  const motionLocked=busy||!fresh,tempLocked=!fresh,active=busy;
+  document.getElementById('pcTitle').textContent=`${m.nombre} #${m.numG} · CONTROL`;
+  const button=(label,onclick,disabled=false,extra='')=>`<button onclick="${onclick}" ${disabled?'disabled':''} style="background:${disabled?'var(--surface3)':'var(--surface2)'};border:1px solid var(--border2);color:${disabled?'var(--text3)':'var(--text)'};border-radius:9px;padding:8px 11px;font-size:12px;font-weight:700;cursor:${disabled?'not-allowed':'pointer'};${extra}">${label}</button>`;
+  const printActions=s.state==='printing'
+    ?`<button onclick="printerControl('${id}','pause')" style="flex:1;background:rgba(255,170,0,.14);border:1px solid rgba(255,170,0,.45);color:#ffaa00;border-radius:9px;padding:10px;font-weight:800;cursor:pointer">⏸ PAUSAR</button><button onclick="printerControl('${id}','cancel')" style="flex:1;background:rgba(255,68,68,.12);border:1px solid rgba(255,68,68,.4);color:#ff4444;border-radius:9px;padding:10px;font-weight:800;cursor:pointer">■ DETENER</button>`
+    :s.state==='paused'
+      ?`<button onclick="printerControl('${id}','resume')" style="flex:1;background:rgba(0,212,170,.14);border:1px solid rgba(0,212,170,.45);color:#00d4aa;border-radius:9px;padding:10px;font-weight:800;cursor:pointer">▶ REANUDAR</button><button onclick="printerControl('${id}','cancel')" style="flex:1;background:rgba(255,68,68,.12);border:1px solid rgba(255,68,68,.4);color:#ff4444;border-radius:9px;padding:10px;font-weight:800;cursor:pointer">■ DETENER</button>`:'';
+  const lockBanner=!fresh
+    ?`<div style="background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.32);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#ff7777">🔒 <b>Control bloqueado:</b> ${escapeHtml(_printerControlReason(id))}. Los comandos se habilitan cuando vuelva telemetría fresca.</div>`
+    :busy?`<div style="background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.32);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#ffaa00">🛡️ <b>Impresión activa:</b> movimiento, Home, filamento, precalentados y enfriado están bloqueados. Temperatura, velocidad, flujo y ventilador siguen disponibles.</div>`:'';
+  const hotTarget=s.hotend?.target||s.hotend?.actual||0,bedTarget=s.bed?.target||s.bed?.actual||0;
+  const speed=Math.max(50,Math.min(150,Number(s.speedFactor)||100)),flow=Math.max(80,Math.min(120,Number(s.flowFactor)||100));
   document.getElementById('pcBody').innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <span style="padding:4px 9px;border-radius:999px;background:${fresh?'rgba(0,212,170,.12)':'rgba(255,68,68,.1)'};border:1px solid ${fresh?'rgba(0,212,170,.3)':'rgba(255,68,68,.3)'};color:${fresh?'#00d4aa':'#ff6666'};font-size:11px;font-weight:800">${fresh?'● EN LÍNEA':'● SIN CONTROL'}</span>
+      <span style="font-size:11px;color:var(--text3)">${escapeHtml(s.filename||'Sin trabajo activo')}</span>
+      <button onclick="closePrinterControl();openWebcamModal('${id}')" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">📷 CÁMARA</button>
+    </div>
+    ${printActions?`<div style="display:flex;gap:8px;margin-bottom:12px">${printActions}</div>`:''}
     ${lockBanner}
-    <!-- TEMPERATURA -->
-    <div style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🌡️ Temperatura</div>
-    <div style="display:flex;gap:10px;margin-bottom:10px">
-      <div style="flex:1">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">HOTEND · actual ${s.hotend?.actual||0}°${s.hotend?.target>0?' → '+s.hotend.target+'°':''}</div>
-        <div style="display:flex;gap:5px"><input id="pcTemp_hotend" type="number" min="0" max="300" placeholder="${s.hotend?.target||0}" ${dis} style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"><button onclick="setPrinterTemp('${id}','hotend')" ${dis} style="background:${busy?'var(--surface3)':'var(--accent2)'};border:none;color:${busy?'var(--text3)':'#000'};border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:${busy?'not-allowed':'pointer'}">OK</button></div>
+    <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🌡️ Temperaturas</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:10px">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:10px">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:7px">NOZZLE · <b style="color:var(--text)">${s.hotend?.actual||0}°</b> ${s.hotend?.target>0?'→ '+s.hotend.target+'°':''}</div>
+        <div style="display:flex;gap:5px">${button('−5°',`printerAdjustTemp('${id}','hotend',-5)`,tempLocked,'padding:7px 9px')}<input id="pcTemp_hotend" type="number" min="0" max="300" value="${hotTarget}" ${tempLocked?'disabled':''} style="width:74px;flex:1;min-width:64px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:7px;color:var(--text);font-size:12px;text-align:center">${button('+5°',`printerAdjustTemp('${id}','hotend',5)`,tempLocked,'padding:7px 9px')}<button onclick="setPrinterTemp('${id}','hotend')" ${tempLocked?'disabled':''} style="background:${tempLocked?'var(--surface3)':'var(--accent)'};border:none;color:${tempLocked?'var(--text3)':'#07110f'};border-radius:8px;padding:7px 10px;font-weight:800;cursor:${tempLocked?'not-allowed':'pointer'}">OK</button></div>
       </div>
-      <div style="flex:1">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">CAMA · actual ${s.bed?.actual||0}°${s.bed?.target>0?' → '+s.bed.target+'°':''}</div>
-        <div style="display:flex;gap:5px"><input id="pcTemp_bed" type="number" min="0" max="120" placeholder="${s.bed?.target||0}" ${dis} style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"><button onclick="setPrinterTemp('${id}','bed')" ${dis} style="background:${busy?'var(--surface3)':'#ffaa00'};border:none;color:${busy?'var(--text3)':'#000'};border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:${busy?'not-allowed':'pointer'}">OK</button></div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:10px">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:7px">CAMA · <b style="color:var(--text)">${s.bed?.actual||0}°</b> ${s.bed?.target>0?'→ '+s.bed.target+'°':''}</div>
+        <div style="display:flex;gap:5px">${button('−5°',`printerAdjustTemp('${id}','bed',-5)`,tempLocked,'padding:7px 9px')}<input id="pcTemp_bed" type="number" min="0" max="120" value="${bedTarget}" ${tempLocked?'disabled':''} style="width:74px;flex:1;min-width:64px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:7px;color:var(--text);font-size:12px;text-align:center">${button('+5°',`printerAdjustTemp('${id}','bed',5)`,tempLocked,'padding:7px 9px')}<button onclick="setPrinterTemp('${id}','bed')" ${tempLocked?'disabled':''} style="background:${tempLocked?'var(--surface3)':'#ffaa00'};border:none;color:#111;border-radius:8px;padding:7px 10px;font-weight:800;cursor:${tempLocked?'not-allowed':'pointer'}">OK</button></div>
       </div>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
-      <span style="font-size:10px;color:var(--text3);align-self:center">Precalentar:</span>
-      ${Object.keys(PREHEAT_PRESETS).map(mat=>btn(mat,`preheatPrinter('${id}','${mat}')`,'padding:5px 10px')).join('')}
-      ${btn('❄️ Enfriar',`cooldownPrinter('${id}')`,'padding:5px 10px;margin-left:auto')}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px"><span style="font-size:10px;color:var(--text3);align-self:center">Precalentar:</span>${Object.keys(PREHEAT_PRESETS).map(mat=>button(mat,`preheatPrinter('${id}','${mat}')`,motionLocked,'padding:5px 10px')).join('')}${button('❄️ ENFRIAR',`cooldownPrinter('${id}')`,motionLocked,'padding:5px 10px;margin-left:auto')}</div>
+    ${active?`
+    <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">⚡ Ajustes en vivo</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:9px;margin-bottom:10px">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:9px"><div style="font-size:10px;color:var(--text3);margin-bottom:6px">VELOCIDAD · 50–150%</div><div style="display:flex;gap:5px"><button onclick="printerAdjustTune('${id}','speed',-10)" style="flex:1">−10</button><input id="pcTune_speed" type="number" value="${speed}" min="50" max="150" style="width:64px;text-align:center;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text)"><button onclick="printerAdjustTune('${id}','speed',10)" style="flex:1">+10</button><button onclick="printerSetTune('${id}','speed')">OK</button></div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:9px"><div style="font-size:10px;color:var(--text3);margin-bottom:6px">FLUJO · 80–120%</div><div style="display:flex;gap:5px"><button onclick="printerAdjustTune('${id}','flow',-5)" style="flex:1">−5</button><input id="pcTune_flow" type="number" value="${flow}" min="80" max="120" style="width:64px;text-align:center;background:var(--surface);border:1px solid var(--border2);border-radius:6px;color:var(--text)"><button onclick="printerAdjustTune('${id}','flow',5)" style="flex:1">+5</button><button onclick="printerSetTune('${id}','flow')">OK</button></div></div>
     </div>
-    <!-- MÁQUINA -->
-    <div style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🎮 Máquina</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-      ${btn('🏠 Home',`printerHome('${id}')`)}
-      ${btn('⬇️ Cargar filamento',`printerFilament('${id}','load')`)}
-      ${btn('⬆️ Descargar',`printerFilament('${id}','unload')`)}
-      ${btn('💤 Soltar motores',`printerMotorsOff('${id}')`)}
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><span style="font-size:10px;color:var(--text3)">VENTILADOR:</span>${[0,50,75,100].map(p=>button(p+'%',`printerSetFan('${id}',${p})`,!fresh,'padding:5px 9px')).join('')}</div>
+    <div class="op-expert-only" style="background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.22);border-radius:10px;padding:9px;margin-bottom:18px"><div style="font-size:10px;color:#ffaa00;margin-bottom:6px;font-weight:800">EXPERTO · Z-OFFSET EN VIVO</div><div style="display:flex;gap:6px;flex-wrap:wrap">${[-0.05,-0.01,0.01,0.05].map(v=>button((v>0?'+':'')+v.toFixed(2)+' mm',`printerZAdjust('${id}',${v})`,!fresh,'padding:6px 9px')).join('')}</div></div>
+    `:''}
+    <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🎮 Movimiento</div>
+    <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:54px 54px 54px;grid-template-rows:42px 42px 42px;gap:5px"><span></span>${button('Y +',`printerJogStep('${id}','Y',1)`,motionLocked,'grid-column:2;grid-row:1')}<span></span>${button('X −',`printerJogStep('${id}','X',-1)`,motionLocked,'grid-column:1;grid-row:2')}${button('HOME',`printerHome('${id}')`,motionLocked,'grid-column:2;grid-row:2;padding:5px')}${button('X +',`printerJogStep('${id}','X',1)`,motionLocked,'grid-column:3;grid-row:2')}<span></span>${button('Y −',`printerJogStep('${id}','Y',-1)`,motionLocked,'grid-column:2;grid-row:3')}<span></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:80px">${button('Z +',`printerJogStep('${id}','Z',1)`,motionLocked)}${button('Z −',`printerJogStep('${id}','Z',-1)`,motionLocked)}</div>
+      <div style="min-width:130px"><div style="font-size:10px;color:var(--text3);margin-bottom:5px">PASO</div><select id="pcJogStep_${id}" ${motionLocked?'disabled':''} style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px"><option value=".1">0,1 mm</option><option value="1">1 mm</option><option value="10" selected>10 mm</option><option value="50">50 mm</option></select></div>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-      <span style="font-size:10px;color:var(--text3)">Mover:</span>
-      ${['X','Y','Z'].map(ax=>`${btn(ax+'+',`printerJog('${id}','${ax}',${ax==='Z'?1:10})`,'padding:5px 9px')}${btn(ax+'−',`printerJog('${id}','${ax}',${ax==='Z'?-1:-10})`,'padding:5px 9px')}`).join('<span style="width:6px"></span>')}
-    </div>
-    <div style="margin-bottom:18px"><button onclick="printerEmergencyStop('${id}')" style="background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.4);color:#ff4444;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;width:100%">⛔ Parada de emergencia</button></div>
-    <!-- ARCHIVOS -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">📂 Archivos en la impresora</span>
-      <button onclick="loadPrinterFiles('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10.5px;cursor:pointer">↻ Cargar</button>
-    </div>
-    <div id="pcFiles" style="max-height:160px;overflow-y:auto;margin-bottom:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:12px;padding:8px">Pulsa "Cargar" para ver los g-code y reimprimir.</div></div>
-    <!-- HISTORIAL -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">📊 Historial real (Moonraker)</span>
-      <button onclick="loadPrinterHistory('${id}')" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:10.5px;cursor:pointer">↻ Cargar</button>
-    </div>
-    <div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:12px;padding:8px">Tiempo y filamento reales de cada trabajo — útil para costos.</div></div>`;
+    <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🧰 Utilidades</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">${button('🔥 Calentar 220°',`printerHeatForFilament('${id}')`,motionLocked)}${button('⬇️ Cargar filamento',`printerFilament('${id}','load')`,motionLocked)}${button('⬆️ Descargar',`printerFilament('${id}','unload')`,motionLocked)}${button('💤 Soltar motores',`printerMotorsOff('${id}')`,motionLocked)}</div>
+    <div style="border-top:1px solid var(--border2);padding-top:14px;margin-bottom:20px"><div style="font-size:10px;color:var(--text3);margin-bottom:7px">EMERGENCIA · no confundir con “Detener impresión”</div><button onclick="printerEmergencyStop('${id}')" style="background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.45);color:#ff4444;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:800;cursor:pointer;width:100%">⛔ PARADA DE EMERGENCIA</button></div>
+    <details class="op-expert-only" style="margin-bottom:12px"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📂 Archivos en la impresora</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterFiles('${id}')">↻ Cargar</button></div><div id="pcFiles" style="max-height:160px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:12px;padding:8px">Pulsa “Cargar” para ver los G-code y reimprimir.</div></div></details>
+    <details class="op-expert-only"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📊 Historial real (Moonraker)</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterHistory('${id}')">↻ Cargar</button></div><div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:12px;padding:8px">Tiempo y filamento reales de cada trabajo.</div></div></details>`;
   document.getElementById('printerControlModal').style.display='flex';
 }
 function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
