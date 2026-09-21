@@ -85,7 +85,7 @@ test('cámaras permanecen montadas aunque cambie estado, orden o filtro',()=>{
   assert.match(replace,/replaceWith\(oldSlot\)/,'una tarjeta actualizada debe conservar el slot de cámara');
 });
 
-test('cámaras hacen autoretry y K2 espera cada frame antes de pedir el siguiente',()=>{
+test('cámaras hacen autoretry y K2 conserva el último frame sin parpadear',()=>{
   const sync=fn(MAQ,'_syncPrinterCam');
   assert.match(sync,/loading="eager"/,'las cámaras deben arrancar aunque estén bajo el fold');
   assert.match(sync,/onerror="_cameraLoadError\(this\)"/);
@@ -94,11 +94,27 @@ test('cámaras hacen autoretry y K2 espera cada frame antes de pedir el siguient
   assert.match(ok,/_CAM_SNAPSHOT_MS/,'el siguiente snapshot parte después del frame recibido');
   const err=fn(MAQ,'_cameraLoadError');
   assert.match(err,/_CAM_RETRY_MAX_MS/,'los fallos deben reintentarse con backoff');
+  assert.match(err,/hadGood/,'un fallo transitorio debe distinguir una cámara que ya entregó imagen');
+  assert.match(err,/hadGood\?'1':'0'/,'si había frame bueno no debe ocultar la imagen');
   const refresh=fn(MAQ,'_refreshSnapshotCams');
   assert.match(refresh,/camLoading/,'el watchdog no debe abortar una petición aún en vuelo');
   assert.match(MAQ,/const _CAM_LOAD_TIMEOUT_MS=25000/,'K2 necesita margen para negociar WebRTC');
+  assert.match(MAQ,/const _CAM_SNAPSHOT_MS=2500/,'go2rtc no debe saturarse con solicitudes cada segundo');
   const refreshNow=fn(MAQ,'_cameraRefreshNow');
-  assert.match(refreshNow,/camKind==='snapshot'/,'el timeout de frame no debe reiniciar un MJPEG sano');
+  assert.match(refreshNow,/const probe=new Image\(\)/,'K2 debe precargar el frame fuera del img visible');
+  assert.match(refreshNow,/im\.src=probe\.src/,'solo cambia el frame visible después de una carga exitosa');
+  assert.match(refreshNow,/_cameraLoadError\(im\)/,'timeouts reales sí alimentan recuperación');
+});
+
+test('K1 y Ender tienen sonda finita de cámara aunque el MJPEG quede colgado',()=>{
+  const probe=fn(MAQ,'_cameraHealthProbe');
+  const sweep=fn(MAQ,'_cameraHealthSweep');
+  const probeUrl=fn(MAQ,'_cameraProbeUrl');
+  assert.match(probeUrl,/action=snapshot/,'la sonda MJPEG debe ser una petición finita');
+  assert.match(probe,/setTimeout\(\(\)=>finish\(false\),12000\)/,'una cámara que cuelga no puede quedar esperando para siempre');
+  assert.match(probe,/recoverPrinterCamera\(id,true\)/,'si nunca hubo un frame válido debe intentar recuperación física');
+  assert.match(sweep,/_cameraManagedByPrinter/,'solo se recuperan automáticamente cámaras integradas');
+  assert.match(MAQ,/setInterval\(_cameraHealthSweep,_CAM_HEALTH_INTERVAL_MS\)/,'la vigilancia debe continuar durante la sesión');
 });
 
 test('K2 evita doble consumidor y recupera su stack de cámara automáticamente',()=>{

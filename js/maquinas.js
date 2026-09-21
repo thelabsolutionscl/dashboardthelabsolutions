@@ -127,12 +127,13 @@ const _OFFLINE_AFTER_FAILS=3;       // fallos consecutivos antes de declarar Off
 const _WS_HEARTBEAT_MS=15000;       // una consulta ligera mantiene vivo el socket incluso cuando la impresora está idle
 const _WS_STALE_MS=45000;           // un socket sin mensajes deja de ser autoritativo; vuelve a polling y se reconecta
 const _WS_OPEN_TIMEOUT_MS=12000;    // evita conexiones TCP/WebSocket medio abiertas para siempre
-const _CAM_SNAPSHOT_MS=1200;        // siguiente frame sólo DESPUÉS de recibir el anterior
+const _CAM_SNAPSHOT_MS=2500;        // menos presión sobre go2rtc; siguiente frame sólo tras recibir el anterior
 const _CAM_LOAD_TIMEOUT_MS=25000;   // K2 puede tardar ~20s negociando WebRTC
 const _CAM_RETRY_MAX_MS=30000;
 const _CAM_AUTORECOVER_FAILS=3;     // tras varios fallos reales, reinicia el stack de cámara por el bridge
 const _CAM_AUTORECOVER_COOLDOWN_MS=10*60*1000;
-const _CAM_RECOVER_TIMEOUT_MS=95000;
+const _CAM_RECOVER_TIMEOUT_MS=150000; // incluye preflight + S99camera + espera de imagen del bridge
+const _CAM_HEALTH_INTERVAL_MS=60000;
 function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0;
 function _getPrinterTunnelLongToken(){
@@ -240,12 +241,18 @@ function _printerCamRaw(id){
   return m?_defaultCamUrl(m):'';
 }
 // Webcam: en modo remoto reescribe http://IP_LAN:PUERTO/ruta → túnel /{ip}:{puerto}/ruta
-function printerCamUrl(id){
-  const raw=_printerCamRaw(id);if(!raw)return'';
+function _printerCamUrlFromRaw(raw){
+  if(!raw)return'';
   if(typeof _isLocalMode==='function'&&_isLocalMode())return raw;
-  const mm=raw.match(/^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?(\/.*)?$/);
+  const mm=String(raw).match(/^http:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?(\/.*)?$/);
   if(!mm)return raw;
   return _appendBridgeToken(`${getPrinterTunnel()}/${mm[1]}:${mm[2]||'80'}${mm[3]||'/'}`);
+}
+function printerCamUrl(id){return _printerCamUrlFromRaw(_printerCamRaw(id));}
+function _cameraProbeUrl(id){
+  let raw=_printerCamRaw(id);if(!raw)return'';
+  if(/([?&])action=stream(?:&|$)/i.test(raw))raw=raw.replace(/action=stream/i,'action=snapshot');
+  return _printerCamUrlFromRaw(raw);
 }
 // Cámaras tipo "snapshot" (p.ej. go2rtc /api/frame.jpeg de las K2, que no dan
 // MJPEG): el <img> con data-snap se refresca solo cada ~1s para simular video.
@@ -259,25 +266,50 @@ function _safePrinterMediaUrl(raw){
     return escapeHtml(u.href);
   }catch(e){return'';}
 }
-let _camSnapInterval=null;
-const _camRetryTimers={};
+let _camSnapInterval=null,_camHealthInterval=null;
+const _camRetryTimers={},_camPendingImages={},_camHealthFails={};
 const _camRecovering={},_camLastRecover={};
 function _cameraTimerKey(im){return im?.dataset?.machineId||im?.id||'';}
 function _cameraClearTimer(im){
   const key=_cameraTimerKey(im);if(!key)return;
   clearTimeout(_camRetryTimers[key]);delete _camRetryTimers[key];
+  const pending=_camPendingImages[key];
+  if(pending){pending.onload=null;pending.onerror=null;delete _camPendingImages[key];}
 }
 function _cameraRefreshNow(im){
   if(!im||!im.isConnected||im.dataset.camSuspended==='1')return;
   const base=im.dataset.camBase||im.getAttribute('data-snap')||'';if(!base)return;
+  if(im.dataset.camLoading==='1')return;
   _cameraClearTimer(im);
   im.dataset.camLoading='1';
-  im.src=base+(base.includes('?')?'&':'?')+'_cam='+Date.now();
+  const nextUrl=base+(base.includes('?')?'&':'?')+'_cam='+Date.now();
   const key=_cameraTimerKey(im);
-  if(key&&im.dataset.camKind==='snapshot')_camRetryTimers[key]=setTimeout(()=>{
-    if(!im.isConnected){delete _camRetryTimers[key];return;}
-    im.dataset.camLoading='0';_cameraRefreshNow(im);
-  },_CAM_LOAD_TIMEOUT_MS);
+  if(im.dataset.camKind==='snapshot'){
+    // Doble buffer: nunca reemplazamos el frame visible hasta que el siguiente
+    // JPEG esté completamente cargado. Un timeout/transitorio de go2rtc ya no
+    // deja la tarjeta negra ni provoca el parpadeo ocultar/mostrar.
+    const probe=new Image();if(key)_camPendingImages[key]=probe;
+    probe.decoding='async';
+    probe.onload=()=>{
+      if(key&&_camPendingImages[key]!==probe)return;
+      if(key)delete _camPendingImages[key];
+      if(!im.isConnected||im.dataset.camSuspended==='1')return;
+      im.src=probe.src; // queda en caché del navegador; onload visible programa el siguiente frame
+    };
+    probe.onerror=()=>{
+      if(key&&_camPendingImages[key]!==probe)return;
+      if(key)delete _camPendingImages[key];
+      _cameraLoadError(im);
+    };
+    if(key)_camRetryTimers[key]=setTimeout(()=>{
+      if(_camPendingImages[key]!==probe)return;
+      probe.onload=null;probe.onerror=null;delete _camPendingImages[key];
+      im.dataset.camLoading='0';_cameraLoadError(im);
+    },_CAM_LOAD_TIMEOUT_MS);
+    probe.src=nextUrl;
+    return;
+  }
+  im.src=nextUrl;
 }
 function _cameraSchedule(im,delay){
   if(!im||!im.isConnected)return;
@@ -307,7 +339,8 @@ async function recoverPrinterCamera(id,silent=false){
   _camLastRecover[id]=now;_camRecovering[id]=true;
   if(!silent)toast(`📷 Reiniciando cámara · ${m.nombre} #${m.numG}…`,'info');
   try{
-    const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/recover-camera/${ip}`),{method:'POST',signal:AbortSignal.timeout(_CAM_RECOVER_TIMEOUT_MS)});
+    const kind=/K2/.test(String(m.modelo||''))?'k2':'mjpeg';
+    const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/recover-camera/${ip}?kind=${kind}`),{method:'POST',signal:AbortSignal.timeout(_CAM_RECOVER_TIMEOUT_MS)});
     let d={};try{d=await r.json();}catch(_){}
     if(r.status===403){if(!silent)toast('El token actual no tiene permiso admin para reiniciar la cámara','error');return false;}
     if(r.status===404){if(!silent)toast('El bridge todavía no tiene recuperación de cámara. Actualízalo en el iMac.','error');return false;}
@@ -330,13 +363,42 @@ async function recoverPrinterCamera(id,silent=false){
 }
 function _cameraLoadError(im){
   if(!im)return;
-  im.dataset.camLoading='0';im.style.opacity='0';
-  const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display='flex';
+  im.dataset.camLoading='0';
+  const hadGood=Number(im.dataset.camLastOk||0)>0;
+  // Si ya hubo imagen, conservar el último frame es más útil que hacerla
+  // desaparecer por un fallo transitorio. El estado "sin señal" solo tapa la
+  // cámara cuando todavía nunca conseguimos un cuadro válido.
+  im.style.opacity=hadGood?'1':'0';
+  const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display=hadGood?'none':'flex';
   const n=(parseInt(im.dataset.camFails||'0',10)||0)+1;im.dataset.camFails=String(n);
   const machineId=im.dataset.machineId||'';
   if(machineId&&n>=_CAM_AUTORECOVER_FAILS)recoverPrinterCamera(machineId,true).catch(()=>{});
   const delay=Math.min(_CAM_RETRY_MAX_MS,1000*Math.pow(2,Math.min(n-1,5)));
   _cameraSchedule(im,delay);
+}
+function _cameraHealthProbe(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m||!_cameraManagedByPrinter(id))return Promise.resolve(true);
+  const raw=_printerCamRaw(id);if(_camIsSnapshot(raw))return Promise.resolve(true);
+  const url=_cameraProbeUrl(id);if(!url)return Promise.resolve(false);
+  return new Promise(resolve=>{
+    const probe=new Image();let done=false;
+    const finish=ok=>{
+      if(done)return;done=true;clearTimeout(to);probe.onload=null;probe.onerror=null;
+      if(ok){_camHealthFails[id]=0;resolve(true);return;}
+      const fails=(_camHealthFails[id]||0)+1;_camHealthFails[id]=fails;
+      const card=document.getElementById('mccam_'+id)?.querySelector('img'),neverWorked=!Number(card?.dataset?.camLastOk||0);
+      if(neverWorked||fails>=2)recoverPrinterCamera(id,true).catch(()=>{});
+      resolve(false);
+    };
+    const to=setTimeout(()=>finish(false),12000);
+    probe.onload=()=>finish(true);probe.onerror=()=>finish(false);probe.src=url+(url.includes('?')?'&':'?')+'_probe='+Date.now();
+  });
+}
+function _cameraHealthSweep(){
+  if(document.hidden)return;
+  (MAQUINAS||[]).filter(m=>_cameraManagedByPrinter(m.id)&&!_camIsSnapshot(_printerCamRaw(m.id))).forEach((m,i)=>{
+    setTimeout(()=>_cameraHealthProbe(m.id).catch(()=>{}),i*350);
+  });
 }
 function _refreshSnapshotCams(force=false){
   if(document.hidden&&!force)return;
@@ -838,6 +900,7 @@ function ensurePrinterRealtimeService(){
   if(!_monitorInterval){pollPrinters();_monitorInterval=setInterval(pollPrinters,_MONITOR_INTERVAL_MS);}
   if(!_wsHeartbeatTimer)_wsHeartbeatTimer=setInterval(_printerWsHeartbeat,_WS_HEARTBEAT_MS);
   if(!_camSnapInterval)_camSnapInterval=setInterval(()=>_refreshSnapshotCams(false),10000);
+  if(!_camHealthInterval){_cameraHealthSweep();_camHealthInterval=setInterval(_cameraHealthSweep,_CAM_HEALTH_INTERVAL_MS);}
   connectAllPrinterWs();_printerWsHeartbeat();
   if(!_printerLifecycleBound){
     _printerLifecycleBound=true;

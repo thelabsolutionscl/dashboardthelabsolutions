@@ -51,7 +51,7 @@ const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
 const REPO_DIR = path.join(__dirname, '..');
 const RECOVER_SSH_TIMEOUT_MS = 30000;   // la shell de la impresora es lenta por WiFi
 const RECOVER_WAIT_MS = 45000;          // Moonraker tarda ~15s en registrar sus endpoints
-const CAMERA_RECOVER_WAIT_MS = 65000;   // K2/go2rtc puede tardar ~20s por negociación WebRTC
+const CAMERA_RECOVER_WAIT_MS = 90000;   // incluye S99camera + negociación lenta de K2/go2rtc
 
 function loadToken() {
   if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN.trim();
@@ -183,8 +183,12 @@ function cameraRecoverScript() {
     'INIT=/etc/init.d/S99camera',
     'HELP=/mnt/UDISK/helper-script',
     'if [ -x "$INIT" ]; then',
-    '  "$INIT" restart >/tmp/thelab-camera-recover.log 2>&1 || "$INIT" start >/tmp/thelab-camera-recover.log 2>&1 || true',
-    '  echo "servicio de cámara reiniciado: $INIT"',
+    // En K1 el init espera ~30 s antes de arrancar mjpg_streamer. Si SSH espera
+    // ese sleep completo choca con RECOVER_SSH_TIMEOUT_MS. Lo lanzamos en
+    // segundo plano, con stdout/stderr desacoplados, y el bridge verifica luego
+    // la imagen real mediante waitCameraUp().
+    '  ( "$INIT" restart || "$INIT" start ) >/tmp/thelab-camera-recover.log 2>&1 </dev/null &',
+    '  echo "servicio de cámara lanzado en segundo plano: $INIT"',
     '  exit 0',
     'fi',
     'if [ -f "$HELP/k2rtc.py" ] && [ -x "$HELP/go2rtc" ]; then',
@@ -243,27 +247,28 @@ function cameraProbe(ip,port,pathName,timeoutMs) {
     req.end();
   });
 }
-async function cameraIsUp(ip) {
-  if (await cameraProbe(ip,1984,'/api/frame.jpeg?src=k2plus',25000)) return {ok:true,kind:'go2rtc',port:1984};
-  if (await cameraProbe(ip,8080,'/?action=snapshot',7000)) return {ok:true,kind:'mjpeg',port:8080};
+async function cameraIsUp(ip,kind='auto') {
+  const mode=String(kind||'auto').toLowerCase();
+  if(mode!=='mjpeg'&&await cameraProbe(ip,1984,'/api/frame.jpeg?src=k2plus',25000)) return {ok:true,kind:'go2rtc',port:1984};
+  if(mode!=='k2'&&await cameraProbe(ip,8080,'/?action=snapshot',7000)) return {ok:true,kind:'mjpeg',port:8080};
   return {ok:false};
 }
-async function waitCameraUp(ip,maxMs) {
+async function waitCameraUp(ip,maxMs,kind='auto') {
   const t0=Date.now();
   while(Date.now()-t0<maxMs){
-    const s=await cameraIsUp(ip);if(s.ok)return s;
+    const s=await cameraIsUp(ip,kind);if(s.ok)return s;
     await _sleep(3000);
   }
   return {ok:false};
 }
-async function recoverCamera(ip) {
-  const t0=Date.now(),before=await cameraIsUp(ip);
+async function recoverCamera(ip,kind='auto') {
+  const t0=Date.now(),before=await cameraIsUp(ip,kind);
   if(before.ok)return {ok:true,camera:'up',kind:before.kind,steps:['La cámara ya entregaba imagen — no hizo falta reiniciarla']};
   const r=await runCameraRecoverSsh(ip);
   const steps=String(r.out||'').split('\n').map(s=>s.trim()).filter(Boolean);
   console.log(`[recover-camera] ${ip}: ${r.ok ? steps.join('; ') || 'sin salida' : 'ERROR '+r.error}`);
   if(!r.ok)return {ok:false,code:r.code,error:r.error,steps};
-  const up=await waitCameraUp(ip,CAMERA_RECOVER_WAIT_MS);
+  const up=await waitCameraUp(ip,CAMERA_RECOVER_WAIT_MS,kind);
   steps.push(up.ok
     ? `Cámara respondió por ${up.kind} tras ${Math.round((Date.now()-t0)/1000)}s`
     : 'el stack se reinició pero no llegó una imagen — revisa S99camera/go2rtc/camera_watchdog');
@@ -430,8 +435,11 @@ const server = http.createServer((req, res) => {
       return;
     }
     if(_recoveringCamera.has(ip)){jsonError(res,409,'ya hay una recuperación de cámara en curso para esa impresora');return;}
+    const kindPart=qParts.find(p=>p.startsWith('kind='));
+    const requestedKind=kindPart?decodeURIComponent(kindPart.slice(5)).toLowerCase():'auto';
+    const kind=['k2','mjpeg'].includes(requestedKind)?requestedKind:'auto';
     _recoveringCamera.add(ip);
-    recoverCamera(ip)
+    recoverCamera(ip,kind)
       .then(r=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(r));})
       .catch(e=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,code:'error-interno',error:e.message,steps:[]}));})
       .finally(()=>_recoveringCamera.delete(ip));
