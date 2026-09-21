@@ -116,7 +116,7 @@ function _printerLightQuerySuffix(id){
 }
 
 function _printerLightWsObjects(id){
-  const objects={print_stats:null,heater_bed:null,extruder:null,display_status:null,virtual_sdcard:null,webhooks:null};
+  const objects={print_stats:null,heater_bed:null,extruder:null,display_status:null,virtual_sdcard:null,webhooks:null,gcode_move:null};
   const object=_printerLightCaps[id]?.object;if(object)objects[object]=null;
   let machine=null;try{machine=(MAQUINAS||[]).find(m=>m.id===id)||null;}catch(_){}
   const hasCfs=typeof machineHasPhysicalCfs==='function'?machineHasPhysicalCfs(machine):
