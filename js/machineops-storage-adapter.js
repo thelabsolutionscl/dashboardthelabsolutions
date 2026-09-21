@@ -109,6 +109,7 @@ function composePayload(records){
   lastMode=recoveredDomains.length?'recovered':'normalized';lastReadAt=Date.now();
   return{data:base,normalized,recoveredDomains};
 }
+const NOTES_SAFE_LIMIT=90000;
 function splitPayload(raw){
   const data=raw&&typeof raw==='object'?raw:{};
   const writtenAt=Date.now();
@@ -116,8 +117,20 @@ function splitPayload(raw){
     const value=Object.prototype.hasOwnProperty.call(data,domain)?data[domain]:null;
     const previous=committedSnapshots.get(domain)||null;
     const envelope={schema:SCHEMA,domain,writtenAt,data:value};
-    if(previous)envelope.previous={writtenAt:previous.writtenAt,data:previous.data};
-    return{domain,name:recordName(domain),hash:domainHash(value),writtenAt,data:value,notes:JSON.stringify(envelope)};
+    let notes=JSON.stringify(envelope);
+    // Airtable acepta texto largo, pero un snapshot actual + previous puede
+    // superar el límite práctico del campo Notes. En ese caso priorizamos el
+    // snapshot actual para que la sincronización completa no quede bloqueada.
+    // previous es una ayuda de recuperación, no el dato autoritativo.
+    if(previous){
+      const withPrevious={...envelope,previous:{writtenAt:previous.writtenAt,data:previous.data}};
+      const candidate=JSON.stringify(withPrevious);
+      if(candidate.length<=NOTES_SAFE_LIMIT)notes=candidate;
+    }
+    if(notes.length>NOTES_SAFE_LIMIT){
+      throw new Error(`MachineOps domain "${domain}" excede el límite seguro de Notes (${notes.length} caracteres)`);
+    }
+    return{domain,name:recordName(domain),hash:domainHash(value),writtenAt,data:value,notes};
   });
   const meta={
     domain:META_DOMAIN,name:recordName(META_DOMAIN),writtenAt,
@@ -175,7 +188,7 @@ function installWhenReady(target,attempts=40){
 }
 function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWriteAt,knownDomains:[...hashes.keys()]};}
 
-return{install,installWhenReady,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,recoverableDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS}};
+return{install,installWhenReady,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,recoverableDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS,NOTES_SAFE_LIMIT}};
 });
 
 // PrinterHistory se puede cargar de forma independiente: si este módulo falla,

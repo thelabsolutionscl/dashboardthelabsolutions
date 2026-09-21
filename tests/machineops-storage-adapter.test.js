@@ -63,6 +63,30 @@ test('no recupera un fragmento futuro sin previous confirmado por meta',()=>{
   assert.deepEqual(t.composePayload(records).data.jobs,[{id:'legacy'}]);
 });
 
+test('splitPayload omite previous cuando haría superar el límite seguro de Notes',()=>{
+  const hugeAudit=Array.from({length:260},(_,i)=>({id:'a'+i,detail:'x'.repeat(210)}));
+  // Primera composición deja snapshot comprometido en memoria.
+  const first=t.splitPayload({version:4,updatedAt:1,audit:hugeAudit});
+  const firstAudit=first.fragments.find(x=>x.domain==='audit');
+  assert.ok(firstAudit.notes.length<t.NOTES_SAFE_LIMIT);
+  // Simula snapshot confirmado por una lectura V3.
+  t.composePayload([
+    {fields:{Name:'MACHINE_OPS_V3:audit',Notes:firstAudit.notes}},
+    {fields:{Name:'MACHINE_OPS_V3:meta',Notes:JSON.stringify({schema:3,domain:'meta',writtenAt:JSON.parse(firstAudit.notes).writtenAt,version:4,updatedAt:1})}}
+  ]);
+  const second=t.splitPayload({version:4,updatedAt:2,audit:[...hugeAudit,{id:'extra',detail:'nuevo'}]});
+  const secondAudit=second.fragments.find(x=>x.domain==='audit');
+  assert.ok(secondAudit.notes.length<=t.NOTES_SAFE_LIMIT);
+  const parsed=JSON.parse(secondAudit.notes);
+  assert.equal(parsed.previous,undefined,'debe sacrificar previous antes que bloquear la sincronización');
+  assert.equal(parsed.data.length,261);
+});
+
+test('splitPayload falla de forma explícita si el snapshot actual por sí solo excede Notes',()=>{
+  const impossible=[{id:'x',detail:'z'.repeat(t.NOTES_SAFE_LIMIT+1000)}];
+  assert.throws(()=>t.splitPayload({version:4,updatedAt:1,audit:impossible}),/excede el límite seguro de Notes/);
+});
+
 test('wrapper divide MACHINE_OPS_V2 y escribe meta al final',async()=>{
   const calls=[];
   const root={
