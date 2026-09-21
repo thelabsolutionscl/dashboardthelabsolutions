@@ -167,8 +167,17 @@ function _rowsNeedRemotePush(localRows,remoteRows){
   }
   return false;
 }
+const REMOTE_ROW_LIMITS={audit:250};
+function _remoteSnapshot(raw){
+  const d=normalizeData(raw);
+  return{...d,audit:d.audit.slice(0,REMOTE_ROW_LIMITS.audit)};
+}
 function _localNeedsRemotePush(local,remote){
-  const l=normalizeData(local),r=normalizeData(remote);
+  // Compara exactamente lo que MachineOps persiste de forma compartida.
+  // Localmente conservamos hasta 500 auditorías, pero Airtable mantiene las
+  // 250 más recientes para evitar exceder Notes. Comparar 500 vs 250 crea un
+  // falso positivo permanente y dispara un push en cada polling.
+  const l=_remoteSnapshot(local),r=_remoteSnapshot(remote);
   for(const key of ['jobs','spools','qa','workflows','profiles','safetyReadings','incidents','audit']){
     if(_rowsNeedRemotePush(l[key],r[key]))return true;
   }
@@ -214,7 +223,7 @@ async function saveRemote(force=false){
     _remoteSync.state='pushing';_remoteSync.lastError='';_renderRemoteSyncIndicator();
     try{
       await loadRemote({render:false,requeueLocal:false});
-      const payload=JSON.stringify({...data(),audit:data().audit.slice(0,250)});
+      const payload=JSON.stringify(_remoteSnapshot(data()));
       await _monitorUpsert(REMOTE_NAME,payload,'machineOpsRecordId');
       _remoteSync.lastPushAt=Date.now();_remoteSync.state='synced';_remoteSync.lastError='';_remoteRetryMs=2500;
       if(revision===_remoteRevision)_remoteDirty=false;
@@ -2486,7 +2495,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 

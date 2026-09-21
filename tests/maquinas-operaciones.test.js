@@ -268,6 +268,15 @@ test('subida G-code remota evita listeners de progreso que fuerzan preflight',()
   assert.match(OPS,/Cancelar subida/);
 });
 
+test('MachineOps no entra en loop por conservar 500 auditorías locales y 250 remotas',()=>{
+  assert.match(OPS,/const REMOTE_ROW_LIMITS=\{audit:250\}/);
+  assert.match(OPS,/function _remoteSnapshot\(raw\)/);
+  assert.match(OPS,/audit:d\.audit\.slice\(0,REMOTE_ROW_LIMITS\.audit\)/);
+  assert.match(OPS,/const l=_remoteSnapshot\(local\),r=_remoteSnapshot\(remote\)/);
+  assert.match(OPS,/JSON\.stringify\(_remoteSnapshot\(data\(\)\)\)/);
+  assert.doesNotMatch(OPS,/audit:data\(\)\.audit\.slice\(0,250\)/,'push y comparación deben usar la misma proyección remota');
+});
+
 test('estado visual de sync se actualiza sin exigir un rerender completo',()=>{
   assert.match(OPS,/function _renderRemoteSyncIndicator\(/);
   assert.match(OPS,/id="mopsRemoteSyncBtn"/);
