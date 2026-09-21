@@ -3879,6 +3879,7 @@
       <button class="btn btn-ghost btn-sm" onclick="calPedirPermisoAvisos()" title="Permitir notificaciones del navegador para las alarmas">🔔 Avisos</button>
       <button class="btn btn-ghost btn-sm" onclick="calGoogleConnect()" title="Conectar tu cuenta Google (una vez por navegador)">🔗 Conectar Google</button>
       <button class="btn btn-ghost btn-sm" id="calSyncBtn" onclick="calSyncAll()" title="Empujar los eventos pendientes a los Google Calendar">⇅ Sincronizar</button>
+      <button class="btn btn-ghost btn-sm" onclick="tvStartCalendario()" title="Mostrar únicamente la sección Calendario en pantalla completa">📺 Pantalla completa (TV)</button>
       <button class="btn btn-primary btn-sm" onclick="openCalEventoModal()">＋ Evento</button>
     </div>
   </div>
@@ -15087,12 +15088,14 @@ async function clearRevenueMeta(){
 }
 
 // ── MODOS TV ──────────────────────────────────────────────────────────
-// Hay DOS pantallas separadas:
+// Hay TRES pantallas separadas:
 //   1) TALLER (Máquinas): solo impresoras + cámaras en vivo.
 //   2) RESUMEN (Overview): pedidos/entregas, sin mezclar cámaras.
+//   3) CALENDARIO: solo la sección Calendario, reutilizando su DOM real.
 // Cada modo usa un único overlay y el fullscreen se pide SOBRE ese overlay,
 // no sobre documentElement. Así nunca quedan dos capas visuales superpuestas.
 let _tvTimer=null,_tvClock=null,_tvView=0,_tvMode='',_tvStopping=false;
+let _tvCalendarMount=null;
 let _tvWorkshopSnapTimer=null,_tvWorkshopPatchTimer=null;
 const _tvWorkshopPending={};
 
@@ -15288,6 +15291,33 @@ function _tvRenderTaller(){
   body.innerHTML=_tvViewTaller();
   _tvStartWorkshopCameras();
 }
+function _tvMountCalendario(){
+  const body=document.getElementById('tvBody'),tab=document.getElementById('tab-calendario');
+  if(!body||!tab||_tvCalendarMount)return;
+  const host=document.createElement('div');host.id='tvCalendarHost';
+  host.style.cssText='height:100%;overflow:auto;padding:2px 4px 18px;box-sizing:border-box';
+  body.innerHTML='';body.appendChild(host);
+  const moved=[];
+  for(const id of ['calEventoModal','calCrmModal']){const el=document.getElementById(id);if(el&&el.parentNode)moved.push({el,parent:el.parentNode,next:el.nextSibling});}
+  _tvCalendarMount={tab,parent:tab.parentNode,next:tab.nextSibling,style:tab.getAttribute('style'),hadActive:tab.classList.contains('active'),moved};
+  host.appendChild(tab);
+  tab.classList.add('active','tv-calendar-panel');
+  tab.style.display='block';tab.style.width='100%';tab.style.height='auto';tab.style.maxWidth='1800px';tab.style.margin='0 auto';tab.style.padding='2px 6px 24px';
+  moved.forEach(x=>document.getElementById('tvOverlay')?.appendChild(x.el));
+  const title=document.getElementById('tvViewTitle');if(title)title.textContent='CALENDARIO OPERACIONAL';
+  const dots=document.getElementById('tvDots');if(dots)dots.innerHTML='';
+  try{if(typeof renderCalendario==='function')renderCalendario();}catch(_){}
+  try{window.CalOps?.refresh?.();}catch(_){}
+}
+function _tvUnmountCalendario(){
+  const m=_tvCalendarMount;if(!m)return;
+  m.moved.forEach(x=>{try{x.parent.insertBefore(x.el,x.next&&x.next.parentNode===x.parent?x.next:null);}catch(_){try{x.parent.appendChild(x.el);}catch(__){}}});
+  try{m.parent.insertBefore(m.tab,m.next&&m.next.parentNode===m.parent?m.next:null);}catch(_){try{m.parent.appendChild(m.tab);}catch(__){}}
+  m.tab.classList.remove('tv-calendar-panel');if(!m.hadActive)m.tab.classList.remove('active');
+  if(m.style===null)m.tab.removeAttribute('style');else m.tab.setAttribute('style',m.style);
+  _tvCalendarMount=null;
+}
+function _tvRenderCalendario(){if(_tvMode==='calendario')_tvMountCalendario();}
 function _tvClockTick(){
   const el=document.getElementById('tvClock');if(el)el.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
@@ -15300,25 +15330,26 @@ function _tvEnterFullscreen(ov){
   }else enter();
 }
 function tvStart(mode='resumen'){
-  mode=mode==='taller'?'taller':'resumen';
+  mode=['taller','resumen','calendario'].includes(mode)?mode:'resumen';
   const existing=document.getElementById('tvOverlay');
   if(existing){if(existing.dataset.tvMode===mode)return;tvStop(false);}
   try{document.body.classList.remove('kiosk');if(typeof _kioskMode!=='undefined')_kioskMode=false;}catch(_){}
   _tvMode=mode;_tvView=0;
   const ov=document.createElement('div');ov.id='tvOverlay';ov.dataset.tvMode=mode;
   ov.style.cssText='position:fixed;inset:0;z-index:11000;background:var(--black);display:flex;flex-direction:column;padding:18px 24px;box-sizing:border-box';
-  const modeTitle=mode==='taller'?'MODO TALLER (TV)':'MODO RESUMEN (TV)';
+  const modeTitle=mode==='taller'?'MODO TALLER (TV)':mode==='calendario'?'PANTALLA COMPLETA (TV) · CALENDARIO':'MODO RESUMEN (TV)';
   ov.innerHTML=`<div class="tv-header" data-tv-header="1" style="display:flex;align-items:center;gap:16px;margin-bottom:14px;min-height:42px">
       <div class="tv-title" data-tv-title data-tv-header-title="1" style="font-family:'Bebas Neue';font-size:28px;letter-spacing:1.5px;color:var(--text)">${modeTitle}</div>
       <div id="tvViewTitle" style="font-family:'Bebas Neue';font-size:21px;letter-spacing:1.1px;color:var(--text3)"></div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:13px"><span id="tvDots"></span><span id="tvClock" style="font-family:'Bebas Neue';font-size:30px;color:var(--accent)"></span><button type="button" onclick="tvStop()" title="Salir del modo TV" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:16px">×</button></div>
     </div>
     <div id="tvBody" style="flex:1;min-height:0;overflow:hidden"></div>
-    <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:8px">${mode==='taller'?'Impresoras y cámaras en vivo':'Resumen operativo · rota cada 20 s'} · Escape o doble clic para salir</div>`;
+    <div style="text-align:center;font-size:10px;color:var(--text3);margin-top:8px">${mode==='taller'?'Impresoras y cámaras en vivo':mode==='calendario'?'Solo Calendario · vista en vivo':'Resumen operativo · rota cada 20 s'} · Escape o doble clic para salir</div>`;
   ov.ondblclick=e=>{if(!e.target.closest('button'))tvStop();};
   document.body.appendChild(ov);
   _tvClockTick();_tvClock=setInterval(_tvClockTick,1000);
   if(mode==='taller')_tvRenderTaller();
+  else if(mode==='calendario')_tvRenderCalendario();
   else{_tvRenderSummary();_tvTimer=setInterval(()=>{_tvView++;_tvRenderSummary();},20000);}
   document.addEventListener('keydown',_tvEsc);
   try{window.TVLogoFix?.patch?.();}catch(_){}
@@ -15326,11 +15357,13 @@ function tvStart(mode='resumen'){
 }
 function tvStartTaller(){try{if(typeof switchTab==='function')switchTab('maquinas');}catch(_){}tvStart('taller');}
 function tvStartResumen(){try{if(typeof switchTab==='function')switchTab('overview');}catch(_){}tvStart('resumen');}
+function tvStartCalendario(){try{if(typeof switchTab==='function')switchTab('calendario');if(typeof renderCalendario==='function')renderCalendario();}catch(_){}tvStart('calendario');}
 function _tvEsc(e){if(e.key==='Escape')tvStop(false);}
 function tvStop(exitFullscreen=true){
   if(_tvStopping)return;_tvStopping=true;
-  const ov=document.getElementById('tvOverlay'),wasTaller=_tvMode==='taller';
+  const ov=document.getElementById('tvOverlay'),wasTaller=_tvMode==='taller',wasCalendario=_tvMode==='calendario';
   if(wasTaller)_tvStopWorkshopCameras();
+  if(wasCalendario)_tvUnmountCalendario();
   if(_tvTimer){clearInterval(_tvTimer);_tvTimer=null;}
   if(_tvClock){clearInterval(_tvClock);_tvClock=null;}
   document.removeEventListener('keydown',_tvEsc);
@@ -15345,7 +15378,7 @@ function _tvFullscreenChange(){
   if(ov&&ov.dataset.tvFullscreen==='1'&&!document.fullscreenElement&&!_tvStopping)tvStop(false);
 }
 document.addEventListener('fullscreenchange',_tvFullscreenChange);
-window.tvStart=tvStart;window.tvStartTaller=tvStartTaller;window.tvStartResumen=tvStartResumen;window.tvStop=tvStop;
+window.tvStart=tvStart;window.tvStartTaller=tvStartTaller;window.tvStartResumen=tvStartResumen;window.tvStartCalendario=tvStartCalendario;window.tvStop=tvStop;
 
 // ── KANBAN PEDIDOS ────────────────────────────────────────────────────
 function renderPedidosKanban(){
