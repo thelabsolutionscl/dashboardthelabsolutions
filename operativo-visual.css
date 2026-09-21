@@ -32,6 +32,8 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-pill{display:inline-block;font-size:11px;font-weight:600;padding:4px 8px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);line-height:1.5}
 .op-pill.op-danger{color:var(--danger)}.op-pill.op-warn{color:var(--warn)}.op-pill.op-good{color:var(--accent3)}
 .op-facts{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:18px 0}
+/* Los facts reciben un rail semántico inset de 3px. Separamos contenido y rail para que etiquetas/valores no queden pegados al color. */
+.op-facts>div{padding-left:14px;min-width:0}
 .op-facts span,.op-facts small{display:block;color:var(--text2);font-size:12px;line-height:1.5}
 .op-facts b{display:block;font-size:17px;font-weight:600;line-height:1.6;overflow-wrap:anywhere}
 .op-payment{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;font-size:12px;border-top:1px solid var(--border)}
@@ -43,6 +45,20 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-record footer{border-top:1px solid var(--border);padding-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;line-height:1.5}
 .op-record footer small{display:block;font-size:11px;color:var(--text2)}
 .op-record footer>span{flex:1;min-width:0}.op-record footer>button{flex-shrink:0}
+.pv-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px;margin:0 0 18px}
+.pv-card{position:relative}
+.pv-card.is-blocked{border-left:4px solid var(--danger)}
+.pv-card.is-inactive{border-left:4px solid var(--border2)}
+.pv-card.is-review{border-left:4px solid var(--warn)}
+.pv-card-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.pv-card-contact{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 0 16px}
+.pv-card-contact>div{min-width:0}
+.pv-card-contact span{display:block;font-size:11px;color:var(--text2);margin-bottom:3px}
+.pv-card-contact a,.pv-card-contact b{font-size:13px;color:var(--text);font-weight:600;text-decoration:none;overflow-wrap:anywhere}
+.pv-card-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pv-card-actions .op-button{min-height:34px;padding:7px 10px}
+#tab-proveedores .pv-table-secondary{display:none!important}
+@media(max-width:768px){.pv-card-grid{grid-template-columns:1fr}.pv-card-contact{grid-template-columns:1fr}}
 .op-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0 18px;font-size:13px;color:var(--text2)}
 .op-toolbar input{margin-left:auto;min-width:220px;max-width:100%;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);font:14px 'DM Sans',sans-serif;padding:10px 12px}
 .op-more{text-align:center;margin:14px}.op-empty{padding:28px;color:var(--text2);font-size:14px;text-align:center;border:1px dashed var(--border);border-radius:12px;grid-column:1/-1}
