@@ -60,3 +60,8 @@ test('wrapper divide MACHINE_OPS_V2 y escribe meta al final',async()=>{
   assert.ok(calls.some(c=>c.name==='MACHINE_OPS_V3:jobs'));
   assert.equal(calls.at(-1).name,'MACHINE_OPS_V3:meta');
 });
+
+
+test('adaptador expone instalación tardía para cargas donde Airtable aparece después',()=>{
+  assert.equal(typeof adapter.installWhenReady,'function');
+});

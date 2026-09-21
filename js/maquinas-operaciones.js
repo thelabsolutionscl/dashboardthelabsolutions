@@ -63,7 +63,8 @@ const INCIDENT_TYPES={
   electrical:'Eléctrico / conexión',quality:'Calidad dimensional',other:'Otro',
 };
 
-let _data=null,_remoteTimer=null,_initialized=false,_initPromise=null,_activeView='operacion',_activeWorkshopView='taller',_ganttFilter='carga',_ganttFamily='todas';
+let _data=null,_remoteTimer=null,_remoteRetryTimer=null,_remotePollTimer=null,_remoteSaving=null,_remotePulling=null,_remoteDirty=false,_remoteRevision=0,_remoteRetryMs=2500,_initialized=false,_initPromise=null,_activeView='operacion',_activeWorkshopView='taller',_ganttFilter='carga',_ganttFamily='todas';
+const _remoteSync={lastPullAt:0,lastPushAt:0,lastError:'',state:'idle'};
 const _techRefreshPending={};
 let _techStatusListenerBound=false;
 const _telemetryWatch={};
@@ -154,30 +155,108 @@ function persist(reason,{remote=true,render=true}={}){
   if(render)renderAll();
   if(remote)scheduleRemote();
 }
-function scheduleRemote(){
+function _rowsNeedRemotePush(localRows,remoteRows){
+  const remote=new Map((Array.isArray(remoteRows)?remoteRows:[]).filter(x=>x?.id).map(x=>[x.id,x]));
+  for(const row of (Array.isArray(localRows)?localRows:[])){
+    if(!row?.id)continue;
+    const other=remote.get(row.id);if(!other)return true;
+    const lv=Date.parse(row.updatedAt||row.createdAt||0)||num(row.updatedAt||row.createdAt);
+    const rv=Date.parse(other.updatedAt||other.createdAt||0)||num(other.updatedAt||other.createdAt);
+    if(lv>rv)return true;
+    if(lv===rv&&hashText(JSON.stringify(row))!==hashText(JSON.stringify(other)))return true;
+  }
+  return false;
+}
+function _localNeedsRemotePush(local,remote){
+  const l=normalizeData(local),r=normalizeData(remote);
+  for(const key of ['jobs','spools','qa','workflows','profiles','safetyReadings','incidents','audit']){
+    if(_rowsNeedRemotePush(l[key],r[key]))return true;
+  }
+  return num(l.updatedAt)>num(r.updatedAt);
+}
+function remoteSyncStatus(){return{..._remoteSync,dirty:_remoteDirty,saving:!!_remoteSaving};}
+function _remoteSetError(error){
+  _remoteSync.state='error';_remoteSync.lastError=String(error?.message||error||'Error de sincronización');
+}
+function _scheduleRemoteRetry(){
+  if(window._DEMO_MODE||_remoteRetryTimer)return;
+  const delay=_remoteRetryMs;
+  _remoteRetryTimer=setTimeout(()=>{_remoteRetryTimer=null;saveRemote();},delay);
+  _remoteRetryMs=Math.min(30000,Math.round(_remoteRetryMs*1.8));
+}
+function scheduleRemote(delay=700){
+  if(window._DEMO_MODE)return;
+  _remoteDirty=true;_remoteRevision++;
+  data().updatedAt=Date.now();writeLocal();
   clearTimeout(_remoteTimer);
-  _remoteTimer=setTimeout(saveRemote,700);
+  _remoteTimer=setTimeout(saveRemote,Math.max(0,delay));
 }
-async function saveRemote(){
-  if(window._DEMO_MODE||typeof _monitorUpsert!=='function')return;
-  try{
-    // Integra primero los cambios compartidos para reducir sobrescrituras entre
-    // dos operadores que trabajan al mismo tiempo.
-    await loadRemote();
-    const payload=JSON.stringify({...data(),audit:data().audit.slice(0,250)});
-    await _monitorUpsert(REMOTE_NAME,payload,'machineOpsRecordId');
-  }catch(e){console.warn('[MachineOps] respaldo remoto pendiente',e);}
+async function saveRemote(force=false){
+  if(window._DEMO_MODE)return true;
+  if(_remoteSaving)return _remoteSaving;
+  if(!_remoteDirty&&!force)return true;
+  const revision=_remoteRevision;
+  _remoteSaving=(async()=>{
+    if(typeof _monitorUpsert!=='function'){
+      _remoteSetError('Sin acceso al almacenamiento compartido');_scheduleRemoteRetry();return false;
+    }
+    _remoteSync.state='pushing';_remoteSync.lastError='';
+    try{
+      await loadRemote({render:false,requeueLocal:false});
+      const payload=JSON.stringify({...data(),audit:data().audit.slice(0,250)});
+      await _monitorUpsert(REMOTE_NAME,payload,'machineOpsRecordId');
+      _remoteSync.lastPushAt=Date.now();_remoteSync.state='synced';_remoteSync.lastError='';_remoteRetryMs=2500;
+      if(revision===_remoteRevision)_remoteDirty=false;
+      else setTimeout(()=>saveRemote(),0);
+      return true;
+    }catch(e){
+      _remoteSetError(e);console.warn('[MachineOps] respaldo remoto pendiente',e);_scheduleRemoteRetry();return false;
+    }
+  })().finally(()=>{_remoteSaving=null;});
+  return _remoteSaving;
 }
-async function loadRemote(){
-  if(window._DEMO_MODE||typeof airtableFetch!=='function')return;
-  try{
-    const res=await airtableFetch('Monitor Sistema',200);
-    const rec=(res.records||[]).find(r=>r.fields?.Name===REMOTE_NAME);
-    if(!rec)return;
-    state.machineOpsRecordId=rec.id;
-    const remote=JSON.parse(rec.fields?.Notes||'{}');
-    _data=mergeData(data(),remote);writeLocal();
-  }catch(e){console.warn('[MachineOps] no se pudo restaurar respaldo',e);}
+async function loadRemote({render=false,requeueLocal=true}={}){
+  if(window._DEMO_MODE)return false;
+  if(_remotePulling)return _remotePulling;
+  _remotePulling=(async()=>{
+    if(typeof airtableFetch!=='function'){_remoteSetError('Airtable no disponible');return false;}
+    _remoteSync.state=_remoteDirty?'pending':'pulling';
+    try{
+      const localBefore=data();
+      const res=await airtableFetch('Monitor Sistema',200);
+      const rec=(res.records||[]).find(r=>r.fields?.Name===REMOTE_NAME);
+      if(!rec){_remoteSetError('No existe el registro compartido de MachineOps');return false;}
+      state.machineOpsRecordId=rec.id;
+      const remote=JSON.parse(rec.fields?.Notes||'{}'),needsPush=_localNeedsRemotePush(localBefore,remote);
+      const before=JSON.stringify(localBefore);
+      _data=mergeData(localBefore,remote);writeLocal();
+      const changed=JSON.stringify(_data)!==before;
+      _remoteSync.lastPullAt=Date.now();_remoteSync.lastError='';_remoteSync.state=_remoteDirty||needsPush?'pending':'synced';
+      if(changed&&render)renderAll();
+      if(needsPush&&requeueLocal)scheduleRemote(120);
+      return true;
+    }catch(e){_remoteSetError(e);console.warn('[MachineOps] no se pudo restaurar respaldo',e);return false;}
+  })().finally(()=>{_remotePulling=null;});
+  return _remotePulling;
+}
+async function syncRemoteNow(){
+  _remoteDirty=true;_remoteRevision++;data().updatedAt=Date.now();writeLocal();
+  const ok=await saveRemote(true);
+  if(ok){await loadRemote({render:true,requeueLocal:false});toast('MachineOps sincronizado entre equipos ✓','success');}
+  else toast('No se pudo sincronizar MachineOps · se reintentará automáticamente','error');
+  return ok;
+}
+function startRemoteSync(){
+  if(window._DEMO_MODE||_remotePollTimer)return;
+  const pull=()=>{if(typeof document!=='undefined'&&document.hidden)return;if(typeof navigator!=='undefined'&&navigator.onLine===false)return;loadRemote({render:true});};
+  _remotePollTimer=setInterval(pull,8000);
+  window.addEventListener?.('focus',pull);
+  window.addEventListener?.('online',()=>{pull();if(_remoteDirty)saveRemote();});
+  document.addEventListener?.('visibilitychange',()=>{if(!document.hidden)pull();});
+  window.addEventListener?.('storage',event=>{
+    if(event.key!==STORAGE_KEY||!event.newValue)return;
+    try{_data=mergeData(data(),JSON.parse(event.newValue));writeLocal();renderAll();}catch(_){}
+  });
 }
 function audit(action,machineId='',detail='',severity='info'){
   const row={id:uid('audit'),at:nowIso(),actor:actor(),action,machineId,detail:String(detail||''),severity,updatedAt:nowIso()};
@@ -969,7 +1048,26 @@ function _jobGcodeSetProgress(id,progress,label=''){
   state.active=true;state.progress=Math.max(0,Math.min(100,Math.round(num(progress))));if(label)state.label=label;
   const btn=_jobGcodeButton(id);if(btn){btn.disabled=true;btn.textContent=state.label||`⏳ SUBIENDO ${state.progress}%`;btn.style.cursor='wait';}
 }
-function _jobGcodeClearProgress(id){delete _jobGcodeUploads[id];}
+function _jobGcodeClearProgress(id){
+  const state=_jobGcodeUploads[id];
+  if(state?.watchdog)clearTimeout(state.watchdog);
+  delete _jobGcodeUploads[id];
+}
+function cancelJobGcodeUpload(id){
+  const state=_jobGcodeUploads[id];if(!state)return false;
+  try{state.xhr?.abort();}catch(_){}
+  _jobGcodeClearProgress(id);renderAll();toast('Subida de G-code cancelada','info');return true;
+}
+async function _verifyUploadedGcode(machineId,filename){
+  if(typeof _moonrakerGet!=='function')return false;
+  for(let attempt=0;attempt<4;attempt++){
+    const d=await _moonrakerGet(machineId,'/server/files/list?root=gcodes',8000);
+    const files=Array.isArray(d?.result)?d.result:[];
+    if(files.some(f=>fileKey(f.path||f.filename||'')===fileKey(filename)))return true;
+    if(attempt<3)await new Promise(resolve=>setTimeout(resolve,900+attempt*700));
+  }
+  return false;
+}
 function selectJobGcode(id){
   const job=data().jobs.find(x=>x.id===id);if(!job)return false;
   if(!job.machineId){toast('Asigna una máquina antes de subir el G-code','error');return false;}
@@ -990,7 +1088,9 @@ async function uploadJobGcode(id,file){
   if(!machine){toast('La impresora asignada ya no existe','error');return false;}
   const ip=typeof getPrinterIp==='function'?getPrinterIp(machine):machine.ip;
   if(!ip){toast('La impresora no tiene IP/configuración de conexión','error');return false;}
-  _jobGcodeUploads[id]={active:true,progress:0,filename:String(file.name||'')};_jobGcodeSetProgress(id,0,'⏳ PREPARANDO G-CODE…');
+  const sizeMb=(num(file.size)/1024/1024).toFixed(1);
+  _jobGcodeUploads[id]={active:true,progress:0,filename:String(file.name||''),xhr:null,watchdog:null};
+  _jobGcodeSetProgress(id,0,`⏳ COMPROBANDO IMPRESORA… ${sizeMb} MB`);
 
   const bindUploaded=(storedName)=>{
     const current=data().jobs.find(x=>x.id===id);
@@ -1010,7 +1110,7 @@ async function uploadJobGcode(id,file){
     current.updatedAt=nowIso();
     _jobGcodeClearProgress(id);
     audit('G-code subido y vinculado',targetMachineId,`${current.name} · ${storedName} · ${Math.round(num(file.size)/1024)} KB`,'control');
-    writeLocal();scheduleRemote();renderAll();
+    data().updatedAt=Date.now();writeLocal();scheduleRemote(100);renderAll();
     toast(`✓ G-code vinculado: ${storedName}`,'success');
     return true;
   };
@@ -1021,26 +1121,51 @@ async function uploadJobGcode(id,file){
   }
 
   if(typeof printerUrl!=='function'){_jobGcodeClearProgress(id);renderAll();toast('No está disponible la conexión Moonraker para subir el archivo','error');return false;}
+  if(typeof _moonrakerGet==='function'){
+    const probe=await _moonrakerGet(targetMachineId,'/server/info',7000);
+    if(!probe?.result){
+      _jobGcodeClearProgress(id);renderAll();toast(`No hay respuesta de Moonraker en ${machineLabel(targetMachineId)}. No se inició la subida.`,'error');return false;
+    }
+  }
+  _jobGcodeSetProgress(id,0,`⏳ SUBIENDO G-CODE · ${sizeMb} MB`);
+
   return new Promise(resolve=>{
     const fd=new FormData();fd.append('file',file,String(file.name));fd.append('root','gcodes');
-    const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));xhr.timeout=300000;
+    const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));xhr.timeout=120000;
+    const uploadState=_jobGcodeUploads[id];if(uploadState)uploadState.xhr=xhr;
     const headers=typeof getPrinterAuthHeaders==='function'?getPrinterAuthHeaders(targetMachineId):{};for(const k in headers)xhr.setRequestHeader(k,headers[k]);
-    xhr.upload.onprogress=event=>{if(event.lengthComputable)_jobGcodeSetProgress(id,event.loaded/event.total*100);else _jobGcodeSetProgress(id,0,'⏳ SUBIENDO G-CODE…');};
-    xhr.onload=()=>{
+    const localMode=typeof _isLocalMode==='function'&&_isLocalMode();
+    if(localMode&&xhr.upload){
+      xhr.upload.onprogress=event=>{if(event.lengthComputable)_jobGcodeSetProgress(id,Math.min(99,event.loaded/event.total*100));};
+      xhr.upload.onload=()=>_jobGcodeSetProgress(id,99,'⏳ ARCHIVO ENVIADO · ESPERANDO MOONRAKER…');
+    }
+    if(uploadState)uploadState.watchdog=setTimeout(()=>{
+      if(_jobGcodeUploads[id]?.active)_jobGcodeSetProgress(id,0,'⏳ SUBIDA EN CURSO · RESPUESTA LENTA…');
+    },15000);
+
+    xhr.onload=async()=>{
       if(xhr.status>=200&&xhr.status<300){
         let storedName=String(file.name);
         try{
           const body=JSON.parse(xhr.responseText||'{}'),item=body?.result?.item||body?.result||{};
           storedName=String(item.path||item.filename||storedName);
         }catch(_){}
+        _jobGcodeSetProgress(id,99,'⏳ VERIFICANDO ARCHIVO EN MOONRAKER…');
+        const verified=await _verifyUploadedGcode(targetMachineId,storedName);
+        if(!verified){
+          _jobGcodeClearProgress(id);renderAll();
+          audit('G-code no verificado',targetMachineId,`${storedName} · Moonraker respondió al upload pero el archivo no apareció en /server/files/list`,'warn');
+          toast('Moonraker respondió, pero el archivo no aparece en la impresora. No lo vinculé al trabajo.','error');resolve(false);return;
+        }
         resolve(bindUploaded(storedName));
       }else{
         _jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`HTTP ${xhr.status} · ${file.name}`,'error');
         toast(`No se pudo subir el G-code a ${machineLabel(targetMachineId)} · HTTP ${xhr.status}`,'error');resolve(false);
       }
     };
-    xhr.onerror=()=>{_jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`${file.name} · impresora inaccesible`,'error');toast('No se pudo alcanzar la impresora para subir el G-code','error');resolve(false);};
-    xhr.ontimeout=()=>{_jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`${file.name} · timeout`,'error');toast('La subida del G-code agotó el tiempo de espera','error');resolve(false);};
+    xhr.onerror=()=>{_jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`${file.name} · impresora/bridge inaccesible`,'error');toast('No se pudo alcanzar la impresora/bridge para subir el G-code','error');resolve(false);};
+    xhr.ontimeout=()=>{_jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`${file.name} · timeout 120 s`,'error');toast('La subida no respondió en 120 s. Se liberó el botón para reintentar.','error');resolve(false);};
+    xhr.onabort=()=>{if(_jobGcodeUploads[id]){_jobGcodeClearProgress(id);renderAll();}resolve(false);};
     try{xhr.send(fd);}catch(e){_jobGcodeClearProgress(id);renderAll();toast('No se pudo iniciar la subida: '+(e?.message||e),'error');resolve(false);}
   });
 }
@@ -1063,7 +1188,7 @@ function planningJobCard(j){
   const uploadState=_jobGcodeUploads[j.id];
   const uploadId='mopsGcodeUpload_'+_jobDomKey(j.id);
   const uploadPrimary=canUpload&&!p.gcodeReady
-    ?`<button id="${uploadId}" class="btn btn-primary btn-sm" onclick="MachineOps.selectJobGcode('${j.id}')" ${uploadState?.active?'disabled':''}>${uploadState?.active?(uploadState.label||`⏳ SUBIENDO ${uploadState.progress||0}%`):'📤 SUBIR G-CODE'}</button>`:'';
+    ?`<button id="${uploadId}" class="btn btn-primary btn-sm" onclick="MachineOps.selectJobGcode('${j.id}')" ${uploadState?.active?'disabled':''}>${uploadState?.active?(uploadState.label||'⏳ SUBIENDO G-CODE…'):'📤 SUBIR G-CODE'}</button>${uploadState?.active?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.cancelJobGcodeUpload('${j.id}')">Cancelar subida</button>`:''}`:'';
   const changeGcode=canUpload&&p.gcodeReady
     ?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.selectJobGcode('${j.id}')">Cambiar G-code</button>`:'';
   const canPrepare=['pendiente','planificado'].includes(j.status)&&!!j.machineId&&p.gcodeReady;
@@ -1132,7 +1257,8 @@ function renderPlanning(){
   const qaRows=rows.filter(j=>j.status==='qa'),closedRows=rows.filter(j=>!ACTIVE_JOB_STATES.includes(j.status));
   if(!rows.length){list.innerHTML='<div class="empty-state" style="padding:24px">No hay trabajos que coincidan con los filtros.</div>';return;}
   const showClosed=!!q||!!st,printingRows=executionRows.filter(j=>j.status==='imprimiendo').length;
-  list.innerHTML=`<div class="mops-job-board-head"><div><b>Ejecución y preparación</b><small>La cantidad “imprimiendo” se basa en el estado reconciliado con telemetría y Farm Controller.</small></div><span>${printingRows} imprimiendo · ${executionRows.length} abierto(s)</span></div>
+  const sync=remoteSyncStatus(),syncText=sync.saving?'Sincronizando…':sync.dirty?'Pendiente de sincronizar':sync.state==='error'?'Error de sincronización':'Sincronizado';
+  list.innerHTML=`<div class="mops-job-board-head"><div><b>Ejecución y preparación</b><small>La cantidad “imprimiendo” se basa en el estado reconciliado con telemetría y Farm Controller.</small></div><span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn btn-ghost btn-sm" onclick="MachineOps.syncRemoteNow()" title="${esc(sync.lastError||'Sincronización compartida entre computadores')}">☁ ${esc(syncText)}</button><span>${printingRows} imprimiendo · ${executionRows.length} abierto(s)</span></span></div>
     <div class="mops-job-board">${executionRows.length?executionRows.map(planningJobCard).join(''):'<div class="mops-intel-empty">✓ No hay trabajos en ejecución ni preparación.</div>'}</div>
     ${qaRows.length?`<div class="mops-job-board-head mops-job-board-head-secondary"><div><b>Esperando QA</b><small>Impresiones finalizadas o ejecuciones que ya no están activas y requieren confirmación humana.</small></div><span>${qaRows.length} pendiente(s)</span></div><div class="mops-job-board">${qaRows.map(planningJobCard).join('')}</div>`:''}
     ${closedRows.length?(showClosed?`<div class="mops-job-board mops-job-history-grid">${closedRows.map(planningJobCard).join('')}</div>`:`<details class="mops-job-history"><summary>Historial cerrado · ${closedRows.length}</summary><div class="mops-job-board mops-job-history-grid">${closedRows.sort((a,b)=>Date.parse(b.completedAt||b.updatedAt||0)-Date.parse(a.completedAt||a.updatedAt||0)).slice(0,20).map(planningJobCard).join('')}</div></details>`):''}`;
@@ -2316,7 +2442,7 @@ function printTechLabel(){
 async function init(){
   if(_initPromise)return _initPromise;
   _initPromise=(async()=>{
-    data();await loadRemote();await restoreLegacyQueues();importLegacyProfiles();_initialized=true;
+    data();await loadRemote({render:false});startRemoteSync();await restoreLegacyQueues();importLegacyProfiles();_initialized=true;
     // Un valor guardado del esquema anterior ('materiales', 'calidad'…) se
     // resuelve solo a su pantalla dentro de showView.
     _activeView=localStorage.getItem('machine_ops_view')||'hoy';showView(_activeView);renderAll();bindTechStatusListener();restartBridgeTimer();setTimeout(()=>checkBridgeHealth(true),600);
@@ -2328,7 +2454,7 @@ async function init(){
 }
 
 const api={
-  init,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,selectJobGcode,uploadJobGcode,
+  init,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,selectJobGcode,uploadJobGcode,cancelJobGcodeUpload,syncRemoteNow,remoteSyncStatus,
   openPreflight,closePreflight,confirmPreflight,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,
@@ -2342,7 +2468,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 
