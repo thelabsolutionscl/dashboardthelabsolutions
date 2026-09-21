@@ -325,7 +325,7 @@ function _calWritebackSync(arr,ev){
   if(t){t.gcal=ev.gcal;t.gcalRemoved=ev.gcalRemoved;t.gsyncMts=ev.gsyncMts;}
 }
 async function calSyncAll(){
-  const btn=document.getElementById('calSyncBtn');if(btn){btn.disabled=true;btn.textContent='Sincronizando…';}
+  const btn=document.getElementById('calSyncBtn');if(btn){btn.disabled=true;btn.dataset.syncBusy='1';btn.textContent='Sincronizando…';}
   try{
     await _calGetToken();   // interactivo si hace falta
     const arr=_calAll();const pend=_calSyncCandidates().filter(_calNeedsSync);
@@ -338,7 +338,7 @@ async function calSyncAll(){
       else toast(`✓ ${ok} evento${ok!==1?'s':''} sincronizado${ok!==1?'s':''} con Google`,'success');
     }
   }catch(e){toast('Google: '+e.message,'error');}
-  if(btn){btn.disabled=false;btn.textContent='⇅ Sincronizar';}
+  if(btn){btn.disabled=false;btn.dataset.syncBusy='0';}
   renderCalendario();
 }
 // Silencioso: sólo si ya hay token vigente en memoria (nunca abre popup).
@@ -532,6 +532,30 @@ function renderCalProximos(){
   }
   el.innerHTML=out.length?out.join(''):'<div style="font-size:12px;color:var(--text3);padding:10px 4px">Sin eventos en los próximos 14 días.</div>';
 }
+function _calRenderSyncControls(pend,gOK){
+  const connect=document.getElementById('calGoogleBtn');
+  if(connect){
+    connect.textContent=gOK?'🟢 Google Calendar conectado':'🔗 Conectar Google Calendar';
+    connect.title=gOK?'Google Calendar conectado. Haz clic para renovar la autorización o cambiar de cuenta.':'Autorizar Google Calendar en este navegador';
+    connect.style.color=gOK?'var(--accent3)':'';
+    connect.style.borderColor=gOK?'rgba(0,212,170,.4)':'';
+    connect.style.background=gOK?'rgba(0,212,170,.08)':'';
+  }
+  const sync=document.getElementById('calSyncBtn');
+  if(sync&&sync.dataset.syncBusy!=='1'){
+    if(gOK&&!pend){
+      sync.textContent='✓ Sincronizado';
+      sync.title='Google Calendar está al día';
+      sync.style.color='var(--accent3)';
+      sync.style.borderColor='rgba(0,212,170,.4)';
+      sync.style.background='rgba(0,212,170,.08)';
+    }else{
+      sync.textContent=pend?`⇅ Sincronizar calendario (${pend})`:'⇅ Sincronizar calendario';
+      sync.title=pend?`${pend} evento${pend!==1?'s':''} pendiente${pend!==1?'s':''} de sincronizar con Google Calendar`:'Sincronizar eventos con Google Calendar';
+      sync.style.color='';sync.style.borderColor='';sync.style.background='';
+    }
+  }
+}
 function _calRenderSyncStatus(){
   const el=document.getElementById('calSyncStatus');if(!el)return;
   const gm=_calGmap().map;
@@ -539,7 +563,8 @@ function _calRenderSyncStatus(){
   const pend=_calSyncCandidates().filter(_calNeedsSync).length;
   const gOK=_calTokenVigente();
   const notif=(typeof Notification!=='undefined'&&Notification.permission==='granted');
-  el.innerHTML=`<span style="color:${gOK?'var(--accent3)':'var(--text3)'}">${gOK?'🟢 Google conectado':'⚪ Google sin conectar'}</span>
+  _calRenderSyncControls(pend,gOK);
+  el.innerHTML=`<span style="color:${gOK?'var(--accent3)':'var(--text3)'}">${gOK?'🟢 Google Calendar conectado':'⚪ Google Calendar sin conectar'}</span>
     · <span style="color:${conf===3?'var(--accent3)':'var(--warn)'}">${conf}/3 calendarios configurados</span>
     ${pend?` · <span style="color:var(--warn)">${pend} pendiente${pend!==1?'s':''} de sincronizar</span>`:' · <span style="color:var(--accent3)">✓ al día</span>'}
     ${notif?'':' · <span style="color:var(--text3)">avisos del navegador desactivados</span>'}`;
