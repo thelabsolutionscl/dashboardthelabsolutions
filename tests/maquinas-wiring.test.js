@@ -281,6 +281,27 @@ test('telemetría incluye factor real de velocidad y flujo para el panel de cont
   assert.match(derive,/speedFactor/);
   assert.match(derive,/flowFactor/);
 });
+test('control de cama ofrece calibración automática segura y medidor de desnivel',()=>{
+  const auto=functionSource(MAQ,'printerAutoBedCalibrate');
+  const refresh=functionSource(MAQ,'printerBedLevelRefresh');
+  const stats=functionSource(MAQ,'_bedLevelStats');
+  const grade=functionSource(MAQ,'_bedLevelGrade');
+  const control=functionSource(MAQ,'openPrinterControl');
+  assert.match(auto,/_printerControlFresh/,'calibración requiere telemetría fresca');
+  assert.match(auto,/_isPrinterBusy/,'calibración debe bloquearse durante impresión o pausa');
+  assert.match(auto,/confirm\(/,'debe exigir confirmar cama despejada');
+  assert.match(auto,/G28\\nBED_MESH_CLEAR\\nBED_MESH_CALIBRATE/);
+  assert.match(refresh,/printer\/objects\/query\?bed_mesh/);
+  assert.match(stats,/probed_matrix\|\|mesh\?\.mesh_matrix/);
+  assert.match(grade,/range<=0\.15/);
+  assert.match(grade,/range<=0\.25/);
+  assert.match(grade,/range<=0\.40/);
+  assert.match(control,/pcBedLevelValue_/);
+  assert.match(control,/CALIBRAR AUTOMÁTICAMENTE/);
+  assert.match(control,/MEDIR DESNIVEL/);
+  assert.match(control,/VER MAPA DE CAMA/);
+});
+
 test('preflight, QA, postproducción e incidentes forman un flujo continuo',()=>{
   for(const id of ['mopsPreflightModal','mopsIncidentModal','mopsJobs','mopsGantt','mopsSpools','mopsQuality','mopsPostProduction','mopsAnalytics']){
     assert.ok(INDEX.includes(`id="${id}"`),`falta ${id}`);
