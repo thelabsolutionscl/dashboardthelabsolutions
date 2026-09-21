@@ -278,7 +278,10 @@ test('estado visual de sync se actualiza sin exigir un rerender completo',()=>{
 test('un en_cola local sin Controller ni G-code no se presenta como listo ni bloquea archivar',()=>{
   assert.match(OPS,/staleLocalQueue=j\.status==='en_cola'&&!p\.gcodeReady&&!j\.farmJobId&&!j\.executionId/);
   assert.match(OPS,/PREPARACIÓN INCOMPLETA/);
-  const archive=functionSource(OPS,'archiveJob');
+  const start=OPS.indexOf('function archiveJob(id){');
+  const end=OPS.indexOf('\nfunction renderMaterials',start);
+  assert.ok(start>=0&&end>start,'archiveJob debe existir');
+  const archive=OPS.slice(start,end);
   assert.match(archive,/j\.status==='imprimiendo'\|\|\(j\.status==='en_cola'&&\(j\.farmJobId\|\|j\.executionId\)\)/);
   assert.doesNotMatch(archive,/\['imprimiendo','en_cola'\]\.includes/);
 });
