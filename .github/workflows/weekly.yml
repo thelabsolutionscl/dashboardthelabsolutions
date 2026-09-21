@@ -2,13 +2,13 @@ name: Automatización semanal
 
 # Corre solo en el servidor (GitHub Actions) — no necesita que nadie abra el dashboard.
 # 1) Respalda TODAS las tablas de Airtable a un JSON y lo guarda como artifact (90 días).
-# 2) (Opcional) Envía un resumen por correo vía mail-api.thelab.solutions.
+# 2) (Opcional) Envía un resumen directamente por Resend.
 #
 # Secrets que usa:
 #   AIRTABLE        (ya existe — el mismo del deploy)
-#   MAIL_USER       (opcional: casilla que envía, p. ej. hola@thelab.solutions)
-#   MAIL_PASS       (opcional: contraseña de esa casilla en cPanel)
-#   REPORT_EMAIL    (opcional: destinatario del resumen; sin él no se envía correo)
+#   RESEND_API_KEY  (opcional; sin él no se envía el resumen)
+#   RESEND_FROM     (opcional; fallback: The Lab Solutions <hola@thelab.solutions>)
+#   REPORT_EMAIL    (opcional; sin él no se envía el resumen)
 
 on:
   schedule:
@@ -43,27 +43,9 @@ jobs:
           path: backup/
           retention-days: 90
 
-      - name: Enviar resumen por correo (solo si hay secrets de correo)
+      - name: Enviar resumen por Resend
         env:
-          MAIL_USER: ${{ secrets.MAIL_USER }}
-          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ secrets.RESEND_FROM }}
           REPORT_EMAIL: ${{ secrets.REPORT_EMAIL }}
-        run: |
-          if [ -z "${MAIL_USER}" ] || [ -z "${MAIL_PASS}" ] || [ -z "${REPORT_EMAIL}" ]; then
-            echo "Secrets de correo no configurados (MAIL_USER/MAIL_PASS/REPORT_EMAIL) — resumen omitido."
-            exit 0
-          fi
-          BODY=$(sed 's/$/<br>/' backup/resumen.txt)
-          HTTP=$(curl -s -o /tmp/mail-out.json -w "%{http_code}" \
-            --data-urlencode "user=${MAIL_USER}" \
-            --data-urlencode "pass=${MAIL_PASS}" \
-            --data-urlencode "action=send" \
-            --data-urlencode "to=${REPORT_EMAIL}" \
-            --data-urlencode "subject=💾 Backup semanal CRM — $(date -u +%Y-%m-%d)" \
-            --data-urlencode "body=${BODY}" \
-            --data-urlencode "from_name=The Lab Solutions (automático)" \
-            https://mail-api.thelab.solutions/mail-api.php)
-          cat /tmp/mail-out.json; echo
-          if [ "${HTTP}" != "200" ]; then
-            echo "::warning::El envío del resumen devolvió HTTP ${HTTP} (el backup igual quedó como artifact)."
-          fi
+        run: node scripts/send-weekly-report.mjs
