@@ -156,3 +156,12 @@ test('Controller soporta iniciar un G-code ya existente sin saltarse lifecycle',
   assert.match(source,/existingFile:true/);
   assert.match(source,/if\(!j\.existingFile\)/);
 });
+
+
+test('uploads grandes se streamean al bridge sin buffer completo',()=>{
+  const proxy=source.slice(source.indexOf('function proxyLegacy'),source.indexOf('function queueJobById'));
+  assert.match(proxy,/const streamUpload = req\.method === 'POST'/);
+  assert.match(proxy,/if \(bodyless \|\| streamUpload\) forward\(null\)/);
+  assert.match(proxy,/timeout: streamUpload \? 120_000 : 20_000/);
+  assert.match(proxy,/if\(!streamUpload\)delete headers\['content-length'\]/);
+});
