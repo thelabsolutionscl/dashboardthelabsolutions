@@ -2021,10 +2021,11 @@ function setMonitorSort(mode){
 }
 function toggleSort(){setMonitorSort(_monitorSortMode==='state'?'camera_model':'state');}
 function toggleKiosk(){
-  _kioskMode=!_kioskMode;
-  if(_kioskMode){document.documentElement.requestFullscreen?.();document.body.classList.add('kiosk');}
-  else{document.exitFullscreen?.();document.body.classList.remove('kiosk');}
-  renderMonitorGrid();
+  // Compatibilidad con botones/enlaces antiguos: ya no crea una segunda capa
+  // ni pone documentElement en fullscreen. Todo converge al Taller TV único.
+  _kioskMode=false;document.body.classList.remove('kiosk');
+  if(typeof tvStartTaller==='function'){tvStartTaller();return;}
+  if(typeof toast==='function')toast('Modo Taller (TV) todavía no está disponible','error');
 }
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&_kioskMode){_kioskMode=false;document.body.classList.remove('kiosk');renderMonitorGrid();}});
 
