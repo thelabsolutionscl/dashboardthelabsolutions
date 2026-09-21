@@ -248,6 +248,27 @@ test('CFS sin telemetría reciente queda como dato desconocido y no como falla',
   assert.match(row.detail,/más de 60 s|aún no llegó/);
 });
 
+test('tarjeta de ejecución permite subir G-code de OrcaSlicer sin modo Experto',()=>{
+  assert.match(OPS,/function selectJobGcode\(/);
+  assert.match(OPS,/async function uploadJobGcode\(/);
+  assert.match(OPS,/\.gcode o \.gco exportado por OrcaSlicer/);
+  assert.match(OPS,/server\/files\/upload/);
+  assert.match(OPS,/📤 SUBIR G-CODE/);
+  assert.match(OPS,/✓ G-code vinculado/);
+  assert.match(OPS,/j\.status==='en_cola'&&p\.gcodeReady/,'Revisar e iniciar solo aparece cuando el archivo está listo');
+  assert.match(OPS,/class="btn btn-primary btn-sm" onclick="MachineOps\.selectJobGcode/,'la subida debe estar disponible en Simple, no como op-expert-only');
+});
+
+test('G-code subido queda vinculado a la impresora correcta y exige re-subida si cambia',()=>{
+  const ops=loadOps();
+  assert.equal(ops.jobGcodeReady({gcodeFile:'pieza.gcode',machineId:'k1-1',gcodeUploadedMachineId:'k1-1'}),true);
+  assert.equal(ops.jobGcodeReady({gcodeFile:'pieza.gcode',machineId:'k2-1',gcodeUploadedMachineId:'k1-1'}),false);
+  assert.equal(ops.jobGcodeReady({gcodeFile:'pieza.gcode',machineId:'k2-1'}),true,'archivos históricos indicados manualmente mantienen compatibilidad');
+  assert.match(OPS,/gcodeUploadedMachineId=targetMachineId/);
+  assert.match(OPS,/preserveUpload/);
+  assert.match(OPS,/Sube el G-code a la impresora asignada antes de iniciar/);
+});
+
 test('planificación distingue plan local, telemetría y cola durable',()=>{
   assert.match(OPS,/Planificación del dashboard ≠ cola de ejecución/);
   assert.match(OPS,/Controller confirmado/);

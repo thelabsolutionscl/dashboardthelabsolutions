@@ -417,7 +417,7 @@ function preflightFromFacts(facts){
     add('nozzle','Boquilla instalada',facts.nozzleKnown?(facts.nozzleMatch?'pass':'block'):'warn',
       facts.nozzleKnown?(facts.nozzleMatch?`Boquilla ${facts.installedNozzle} confirmada`:`Trabajo requiere ${facts.jobNozzle} mm y la máquina declara ${facts.installedNozzle} mm`):`Trabajo requiere ${facts.jobNozzle} mm; boquilla física sin registrar`);
   }
-  add('file','Archivo G-code',facts.hasFile?'pass':'block',facts.hasFile?'Archivo identificado':'Falta indicar el archivo G-code');
+  add('file','Archivo G-code',facts.hasFile?'pass':'block',facts.fileDetail||(facts.hasFile?'Archivo identificado':'Falta indicar el archivo G-code'));
   if(facts.gramsRequired>0)add('spool','Filamento suficiente',facts.spoolAvailable>=facts.gramsRequired?'pass':facts.spoolKnown?'block':'warn',facts.spoolKnown?`${Math.round(facts.spoolAvailable)} g disponibles / ${Math.round(facts.gramsRequired)} g requeridos`:'No hay inventario de rollo vinculado');
   if(facts.filamentDetected===false)add('sensor','Sensor físico','block','La impresora no detecta filamento');
   else add('sensor','Sensor físico',facts.filamentDetected===true?'pass':'warn',facts.filamentDetected===true?'Filamento detectado':'Sensor físico sin lectura');
@@ -435,10 +435,13 @@ function evaluatePreflight(job,machine){
   const overdue=maint.some(a=>a.hours>=a.threshold),safety=safetyDecision(data().safetyConfig,latestSafetyReading(),{unattended:jobMinutes(job)>=240,cameraConfigured:!!(localStorage.getItem('printer_cam_'+machine.id)||machine.cam)});
   const x=num(job.sizeX),y=num(job.sizeY),z=num(job.sizeZ),dimensionsKnown=x>0&&y>0&&z>0,dimensionsPartial=(x>0||y>0||z>0)&&!dimensionsKnown;
   const nozzle=installedNozzle(machine),jobNozzle=String(job.nozzle||'').trim(),nozzleKnown=!!nozzle,nozzleMatch=!jobNozzle||!nozzleKnown||String(nozzle)===jobNozzle;
+  const fileReady=jobGcodeReady(job),fileDetail=!job.gcodeFile?'Falta indicar o subir el archivo G-code':
+    fileReady?`${job.gcodeFile}${job.gcodeUploadedAt?' · subida verificada para '+machineLabel(machine.id):' · archivo indicado'}`:
+    `${job.gcodeFile} fue subido a ${machineLabel(job.gcodeUploadedMachineId)}; vuelve a subirlo para ${machineLabel(machine.id)}`;
   return preflightFromFacts({
     connectionReady:!['','connecting','offline','noip','shutdown','error','startup'].includes(stateNow),connectionDetail:live.connectionError,
     machineFree:!['printing','paused'].includes(stateNow)&&machineOperational(machine),bedNeedsClear:stateNow==='complete'&&!bedIsCleared(machine.id),
-    compatible:modelCanRun(machine.modelo,job),dimensionsKnown,dimensionsPartial,jobNozzle,installedNozzle:nozzle,nozzleKnown,nozzleMatch,hasFile:!!job.gcodeFile,
+    compatible:modelCanRun(machine.modelo,job),dimensionsKnown,dimensionsPartial,jobNozzle,installedNozzle:nozzle,nozzleKnown,nozzleMatch,hasFile:fileReady,fileDetail,
     gramsRequired:num(job.grams),spoolKnown:!!spool,spoolAvailable:free,filamentDetected:live.filament?.detected??null,
     cameraConfigured:!!(localStorage.getItem('printer_cam_'+machine.id)||machine.cam),maintenanceOverdue:overdue,maintenanceSoon:maint.length>0,
     safetyBlockers:safety.blockers,safetyWarnings:safety.warnings,
@@ -927,8 +930,9 @@ function planningJobState(job,now=Date.now()){
   const farm=farmQueueEvidence(now),farmJob=farmQueueMatch(job,farm);
   const late=!!job.dueDate&&dateValue(job.dueDate)<now;
   const missing=[];
+  const gcodeReady=jobGcodeReady(job);
   if(!job.machineId)missing.push('máquina');
-  if(!job.gcodeFile)missing.push('archivo G-code');
+  if(!gcodeReady)missing.push('archivo G-code');
   if(num(job.grams)>0&&!job.spoolId)missing.push('rollo reservado');
   let level='info',label='Revisar trabajo',detail='Comprueba la configuración antes de continuar.';
   if(job.status==='imprimiendo'){
@@ -940,19 +944,107 @@ function planningJobState(job,now=Date.now()){
     else{label='Realizar QA';detail='La impresión terminó y necesita revisión antes de cerrar.';}
   }
   else if(job.status==='en_cola'){
-    if(!job.machineId||!job.gcodeFile){level='danger';label='Completar preparación';detail=`Falta ${missing.filter(x=>x!=='rollo reservado').join(' y ')||'información crítica'} antes de iniciar.`;}
+    if(!job.machineId||!gcodeReady){level='danger';label='Completar preparación';detail=`Falta ${missing.filter(x=>x!=='rollo reservado').join(' y ')||'información crítica'} antes de iniciar.`;}
     else if(!live.known){level='warning';label='Recuperar telemetría';detail='No se iniciará automáticamente: primero confirma un estado reciente de la impresora.';}
     else if(['printing','paused'].includes(live.state)){level='info';label='Esperar máquina libre';detail=`La impresora está ${live.state==='paused'?'pausada':'ocupada'}; el trabajo permanece solo planificado.`;}
     else{level='ok';label='Revisar preflight e iniciar';detail='Máquina y archivo definidos. El preflight volverá a validar seguridad, material y mantención.';}
   }else if(['pendiente','planificado'].includes(job.status)){
     if(!job.machineId){level='warning';label='Asignar máquina';detail='La planificación automática solo usará impresoras con telemetría reciente y compatibilidad confirmada.';}
-    else if(!job.gcodeFile){level='warning';label='Indicar archivo G-code';detail='El dashboard necesita saber qué archivo existente debe iniciar en Moonraker.';}
+    else if(!gcodeReady){level='warning';label='Subir archivo G-code';detail=job.gcodeFile&&job.gcodeUploadedMachineId?`El archivo ${job.gcodeFile} fue subido a otra impresora. Vuelve a subirlo para ${machineLabel(job.machineId)}.`:'Sube aquí el .gcode exportado por OrcaSlicer para esta impresora.';}
     else if(!live.known){level='warning';label='Validar telemetría';detail='La máquina está asignada, pero su estado actual no está confirmado.';}
     else{level='info';label='Preparar para iniciar';detail='La ficha está completa. Al preparar, seguirá siendo planificación del dashboard hasta iniciar o confirmar cola durable.';}
   }else if(job.status==='terminado'){level='ok';label='Trabajo terminado';detail='Cierre registrado.';}
   else if(job.status==='fallido'){level='danger';label='Revisar falla';detail='Revisa incidente, desperdicio y eventual reimpresión.';}
-  return{machine,live,farm,farmJob,late,missing,next:{level,label,detail}};
+  return{machine,live,farm,farmJob,late,missing,gcodeReady,next:{level,label,detail}};
 }
+const _jobGcodeUploads={};
+function jobGcodeReady(job){
+  if(!job?.gcodeFile)return false;
+  return !job.gcodeUploadedMachineId||!job.machineId||job.gcodeUploadedMachineId===job.machineId;
+}
+function _jobDomKey(id){return String(id||'').replace(/[^a-zA-Z0-9_-]/g,'_');}
+function _jobGcodeButton(id){return document.getElementById('mopsGcodeUpload_'+_jobDomKey(id));}
+function _jobGcodeSetProgress(id,progress,label=''){
+  const state=_jobGcodeUploads[id]||(_jobGcodeUploads[id]={active:true,progress:0});
+  state.active=true;state.progress=Math.max(0,Math.min(100,Math.round(num(progress))));if(label)state.label=label;
+  const btn=_jobGcodeButton(id);if(btn){btn.disabled=true;btn.textContent=state.label||`⏳ SUBIENDO ${state.progress}%`;btn.style.cursor='wait';}
+}
+function _jobGcodeClearProgress(id){delete _jobGcodeUploads[id];}
+function selectJobGcode(id){
+  const job=data().jobs.find(x=>x.id===id);if(!job)return false;
+  if(!job.machineId){toast('Asigna una máquina antes de subir el G-code','error');return false;}
+  if(_jobGcodeUploads[id]?.active){toast('Ese G-code todavía se está subiendo','info');return false;}
+  const picker=document.createElement('input');picker.type='file';picker.accept='.gcode,.gco';picker.style.display='none';
+  const remove=()=>{try{picker.parentNode?.removeChild(picker);}catch(_){}};
+  picker.addEventListener('change',()=>{const file=picker.files?.[0]||null;remove();if(file)uploadJobGcode(id,file);},{once:true});
+  picker.addEventListener('cancel',remove,{once:true});
+  document.body.appendChild(picker);picker.click();return true;
+}
+async function uploadJobGcode(id,file){
+  const job=data().jobs.find(x=>x.id===id);if(!job||!file)return false;
+  if(!job.machineId){toast('Asigna una máquina antes de subir el G-code','error');return false;}
+  if(!/\.(gcode|gco)$/i.test(String(file.name||''))){toast('Selecciona un archivo .gcode o .gco exportado por OrcaSlicer','error');return false;}
+  if(!(num(file.size)>0)){toast('El archivo G-code está vacío','error');return false;}
+  if(_jobGcodeUploads[id]?.active){toast('Ese G-code todavía se está subiendo','info');return false;}
+  const targetMachineId=job.machineId,machine=getMachine(targetMachineId);
+  if(!machine){toast('La impresora asignada ya no existe','error');return false;}
+  const ip=typeof getPrinterIp==='function'?getPrinterIp(machine):machine.ip;
+  if(!ip){toast('La impresora no tiene IP/configuración de conexión','error');return false;}
+  _jobGcodeUploads[id]={active:true,progress:0,filename:String(file.name||'')};_jobGcodeSetProgress(id,0,'⏳ PREPARANDO G-CODE…');
+
+  const bindUploaded=(storedName)=>{
+    const current=data().jobs.find(x=>x.id===id);
+    if(!current){_jobGcodeClearProgress(id);return false;}
+    if(current.machineId!==targetMachineId){
+      _jobGcodeClearProgress(id);renderAll();
+      audit('G-code subido sin vincular',targetMachineId,`${storedName} · el trabajo cambió de impresora durante la subida`,'warn');
+      toast(`El archivo quedó en ${machineLabel(targetMachineId)}, pero el trabajo cambió de máquina. Vuelve a subirlo a la nueva impresora.`,'info');
+      return false;
+    }
+    current.gcodeFile=storedName;
+    current.gcodeUploadedMachineId=targetMachineId;
+    current.gcodeUploadedAt=nowIso();
+    current.gcodeUploadedBy=actor();
+    current.gcodeSize=num(file.size);
+    current.gcodeSource='orcaslicer-upload';
+    current.updatedAt=nowIso();
+    _jobGcodeClearProgress(id);
+    audit('G-code subido y vinculado',targetMachineId,`${current.name} · ${storedName} · ${Math.round(num(file.size)/1024)} KB`,'control');
+    writeLocal();scheduleRemote();renderAll();
+    toast(`✓ G-code vinculado: ${storedName}`,'success');
+    return true;
+  };
+
+  if(window._DEMO_MODE){
+    _jobGcodeSetProgress(id,100,'✓ G-CODE SUBIDO');
+    return new Promise(resolve=>setTimeout(()=>resolve(bindUploaded(String(file.name))),180));
+  }
+
+  if(typeof printerUrl!=='function'){_jobGcodeClearProgress(id);renderAll();toast('No está disponible la conexión Moonraker para subir el archivo','error');return false;}
+  return new Promise(resolve=>{
+    const fd=new FormData();fd.append('file',file,String(file.name));fd.append('root','gcodes');
+    const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));xhr.timeout=300000;
+    const headers=typeof getPrinterAuthHeaders==='function'?getPrinterAuthHeaders(targetMachineId):{};for(const k in headers)xhr.setRequestHeader(k,headers[k]);
+    xhr.upload.onprogress=event=>{if(event.lengthComputable)_jobGcodeSetProgress(id,event.loaded/event.total*100);else _jobGcodeSetProgress(id,0,'⏳ SUBIENDO G-CODE…');};
+    xhr.onload=()=>{
+      if(xhr.status>=200&&xhr.status<300){
+        let storedName=String(file.name);
+        try{
+          const body=JSON.parse(xhr.responseText||'{}'),item=body?.result?.item||body?.result||{};
+          storedName=String(item.path||item.filename||storedName);
+        }catch(_){}
+        resolve(bindUploaded(storedName));
+      }else{
+        _jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`HTTP ${xhr.status} · ${file.name}`,'error');
+        toast(`No se pudo subir el G-code a ${machineLabel(targetMachineId)} · HTTP ${xhr.status}`,'error');resolve(false);
+      }
+    };
+    xhr.onerror=()=>{_jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`${file.name} · impresora inaccesible`,'error');toast('No se pudo alcanzar la impresora para subir el G-code','error');resolve(false);};
+    xhr.ontimeout=()=>{_jobGcodeClearProgress(id);renderAll();audit('Fallo al subir G-code',targetMachineId,`${file.name} · timeout`,'error');toast('La subida del G-code agotó el tiempo de espera','error');resolve(false);};
+    try{xhr.send(fd);}catch(e){_jobGcodeClearProgress(id);renderAll();toast('No se pudo iniciar la subida: '+(e?.message||e),'error');resolve(false);}
+  });
+}
+
 function planningBadge(label,level='neutral'){
   return`<span class="mops-plan-badge ${level}">${esc(label)}</span>`;
 }
@@ -966,15 +1058,31 @@ function planningJobCard(j){
   ];
   if(j.status==='en_cola')evidence.push(p.farmJob?planningBadge('Controller confirmado','ok'):planningBadge(p.farm.fresh?'Solo plan dashboard':'Controller sin confirmar',p.farm.fresh?'warning':'neutral'));
   if(num(j.grams)>0)evidence.push(planningBadge(j.spoolId?'Rollo reservado':'Sin rollo reservado',j.spoolId?'ok':'warning'));
+
+  const canUpload=!!j.machineId&&['pendiente','planificado','en_cola'].includes(j.status);
+  const uploadState=_jobGcodeUploads[j.id];
+  const uploadId='mopsGcodeUpload_'+_jobDomKey(j.id);
+  const uploadPrimary=canUpload&&!p.gcodeReady
+    ?`<button id="${uploadId}" class="btn btn-primary btn-sm" onclick="MachineOps.selectJobGcode('${j.id}')" ${uploadState?.active?'disabled':''}>${uploadState?.active?(uploadState.label||`⏳ SUBIENDO ${uploadState.progress||0}%`):'📤 SUBIR G-CODE'}</button>`:'';
+  const changeGcode=canUpload&&p.gcodeReady
+    ?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.selectJobGcode('${j.id}')">Cambiar G-code</button>`:'';
+  const canPrepare=['pendiente','planificado'].includes(j.status)&&!!j.machineId&&p.gcodeReady;
   const actions=[
     `<button class="btn btn-ghost btn-sm" onclick="MachineOps.openJob('${j.id}')">Editar</button>`,
     !j.machineId?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.planOne('${j.id}')">Asignar</button>`:'',
-    ['pendiente','planificado'].includes(j.status)?`<button class="btn btn-primary btn-sm" onclick="MachineOps.enqueueJob('${j.id}')">Preparar</button>`:'',
-    j.status==='en_cola'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.startJob('${j.id}')">Revisar e iniciar</button>`:'',
+    uploadPrimary,
+    canPrepare?`<button class="btn btn-primary btn-sm" onclick="MachineOps.enqueueJob('${j.id}')">Preparar</button>`:'',
+    j.status==='en_cola'&&p.gcodeReady?`<button class="btn btn-primary btn-sm" onclick="MachineOps.startJob('${j.id}')">Revisar e iniciar</button>`:'',
+    changeGcode,
     j.status==='qa'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.openQA('${j.id}')">Abrir QA</button>`:'',
     `<button class="btn btn-ghost btn-sm" onclick="MachineOps.printEntityLabel('job','${j.id}')">QR</button>`,
     `<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveJob('${j.id}')">Archivar</button>`,
   ].join('');
+  const gcodeRow=j.gcodeFile
+    ?`<div style="display:flex;align-items:center;gap:7px;margin-top:9px;padding:8px 10px;border:1px solid ${p.gcodeReady?'rgba(34,197,94,.28)':'rgba(255,170,0,.32)'};border-radius:9px;background:${p.gcodeReady?'rgba(34,197,94,.06)':'rgba(255,170,0,.06)'};min-width:0">
+       <span style="font-size:11px;font-weight:800;color:${p.gcodeReady?'var(--accent3)':'var(--warn)'};white-space:nowrap">${p.gcodeReady?'✓ G-code vinculado':'⚠ G-code requiere re-subida'}</span>
+       <b style="font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0" title="${esc(j.gcodeFile)}">${esc(j.gcodeFile)}</b>
+     </div>`:'';
   return`<article class="mops-job-card ${p.next.level}">
     <div class="mops-job-card-head"><div><b>${esc(j.name)}</b><small>${esc(order||'Sin pedido')}${j.dueDate?' · entrega '+esc(j.dueDate):''}${p.late?' · ATRASADO':''}</small></div>${statusBadge(j.status)}</div>
     <div class="mops-job-card-grid">
@@ -984,6 +1092,7 @@ function planningJobCard(j){
       <span><small>Duración estimada</small><b>${fmtMin(jobMinutes(j))}</b></span>
     </div>
     <div class="mops-job-next ${p.next.level}"><span>PRÓXIMO PASO</span><b>${esc(p.next.label)}</b><small>${esc(p.next.detail)}</small></div>
+    ${gcodeRow}
     <div class="mops-job-evidence op-expert-only">${evidence.join('')}</div>
     <div class="mops-job-card-actions">${actions}</div>
   </article>`;
@@ -995,7 +1104,7 @@ function renderPlanning(){
   const farm=farmQueueEvidence(),printing=(MAQUINAS||[]).filter(m=>liveEvidence(m.id).known&&liveState(m.id)==='printing').length;
   const telemetry=(MAQUINAS||[]).filter(m=>liveEvidence(m.id).known).length;
   const prepared=active.filter(j=>j.status==='en_cola').length,qa=active.filter(j=>j.status==='qa').length;
-  const needsPrep=active.filter(j=>['pendiente','planificado'].includes(j.status)&&(!j.machineId||!j.gcodeFile)).length;
+  const needsPrep=active.filter(j=>['pendiente','planificado'].includes(j.status)&&(!j.machineId||!jobGcodeReady(j))).length;
   const durable=farm.fresh?farm.jobs.filter(j=>['queued','retry','checking','uploading','uploaded'].includes(String(j.state||''))).length:null;
   const dueSoon=active.filter(j=>j.dueDate&&(dateValue(j.dueDate)-Date.now())<3*86400000).length;
   const statusSelect=document.getElementById('mopsJobStatus'),queueOption=statusSelect?.querySelector('option[value="en_cola"]');if(queueOption)queueOption.textContent='Lista para iniciar';
@@ -1168,6 +1277,8 @@ function updateJobCycles(){
 function collectJob(){
   const id=inputVal('mopsJobId'),existing=id?data().jobs.find(j=>j.id===id):null;
   const qty=Math.max(1,num(inputVal('mopsJobQty'),1)),unitsPerBed=Math.max(1,num(inputVal('mopsJobBedQty'),1));
+  const machineId=inputVal('mopsJobMachine'),gcodeFile=inputVal('mopsJobFile').trim();
+  const preserveUpload=!!existing&&String(existing.machineId||'')===String(machineId||'')&&String(existing.gcodeFile||'')===String(gcodeFile||'');
   const models=[...document.querySelectorAll('#mopsJobModels input:checked')].map(x=>x.value);
   const postStages=[...document.querySelectorAll('#mopsJobPostStages input:checked')].map(x=>x.value);
   return{
@@ -1176,8 +1287,10 @@ function collectJob(){
     minutesPerCycle:Math.max(1,num(inputVal('mopsJobMinutes'),60)),material:inputVal('mopsJobMaterial'),color:inputVal('mopsJobColor').trim(),
     grams:Math.max(0,num(inputVal('mopsJobGrams'))),nozzle:inputVal('mopsJobNozzle'),sizeX:Math.max(0,num(inputVal('mopsJobX'))),
     sizeY:Math.max(0,num(inputVal('mopsJobY'))),sizeZ:Math.max(0,num(inputVal('mopsJobZ'))),dueDate:inputVal('mopsJobDue'),
-    priority:inputVal('mopsJobPriority'),machineId:inputVal('mopsJobMachine'),spoolId:inputVal('mopsJobSpool'),profileId:inputVal('mopsJobProfile'),
-    gcodeFile:inputVal('mopsJobFile').trim(),notes:inputVal('mopsJobNotes').trim(),compatibleModels:models,
+    priority:inputVal('mopsJobPriority'),machineId,spoolId:inputVal('mopsJobSpool'),profileId:inputVal('mopsJobProfile'),
+    gcodeFile,gcodeUploadedMachineId:preserveUpload?(existing.gcodeUploadedMachineId||''):'',gcodeUploadedAt:preserveUpload?(existing.gcodeUploadedAt||''):'',
+    gcodeUploadedBy:preserveUpload?(existing.gcodeUploadedBy||''):'',gcodeSize:preserveUpload?num(existing.gcodeSize):0,gcodeSource:preserveUpload?(existing.gcodeSource||''):'',
+    notes:inputVal('mopsJobNotes').trim(),compatibleModels:models,
     postStages,
     status:existing?.status||'pendiente',createdAt:existing?.createdAt||nowIso(),updatedAt:nowIso(),archived:false,
   };
@@ -1248,7 +1361,7 @@ async function startJob(id,options={}){
   }
   if(!machineOperational(m)){toast('La máquina no está operativa o la cama no fue liberada','error');return false;}
   if(st==='printing'||st==='paused'){j.status='en_cola';persist('Trabajo conservado en cola');toast('La impresora está ocupada; el trabajo permanece en cola','info');return false;}
-  if(!j.gcodeFile){toast('Configura el nombre del archivo G-code que ya está en la impresora','error');return false;}
+  if(!jobGcodeReady(j)){toast('Sube el G-code a la impresora asignada antes de iniciar','error');return false;}
   if(!checkSafetyBeforeStart(j,m,true))return false;
   if(!window.FarmQueue?.startExisting){
     audit('Inicio detenido: Controller no disponible',m.id,j.gcodeFile,'error');
@@ -2215,7 +2328,7 @@ async function init(){
 }
 
 const api={
-  init,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,
+  init,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,selectJobGcode,uploadJobGcode,
   openPreflight,closePreflight,confirmPreflight,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,
@@ -2229,7 +2342,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 
