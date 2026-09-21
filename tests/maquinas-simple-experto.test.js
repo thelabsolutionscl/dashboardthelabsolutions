@@ -42,7 +42,9 @@ test('Máquinas participa del selector Simple/Experto persistente',()=>{
   const mode=functionSource(UI,'mode');
   assert.match(mode,/el\.dataset\.opView=value/);
   assert.match(mode,/localStorage\.setItem\('op_view_'\+page,value\)/);
-  assert.match(mode,/details\.op-disclosure,details\.op-telemetry,details\.op-post-actions/);
+  assert.match(mode,/details\.op-disclosure,details\.op-post-actions/);
+  assert.match(mode,/details\.op-telemetry/);
+  assert.match(mode,/n\.open=true/,'telemetría debe permanecer desplegada en Simple y Experto');
   assert.match(CSS,/\[data-op-view=simple\] \.op-expert-only\{display:none!important\}/);
 });
 
@@ -93,8 +95,8 @@ test('Simple reduce planificación y Taller sin quitar el trabajo diario',()=>{
   assert.match(INDEX,/data-maq-view="postproduccion"/,'Postproducción debe seguir en la pantalla Trabajos');
 });
 
-test('Simple mantiene cámara, cola y telemetría accesible bajo demanda',()=>{
-  assert.match(MAQ,/details class="op-telemetry"/,'temperaturas deben quedar contraídas, no eliminadas');
+test('Simple mantiene cámara, cola y telemetría desplegada',()=>{
+  assert.match(MAQ,/details class="op-telemetry" open/,'temperaturas y telemetría deben abrirse por defecto en todas las tarjetas con lectura');
   assert.match(MAQ,/onclick="openWebcamModal\('\$\{m\.id\}'\)"/);
   assert.match(MAQ,/onclick="openQueueModal\('\$\{m\.id\}'\)"/);
   assert.match(CSS,/#tab-maquinas\[data-op-view=simple\] \.pcard-actions/);
