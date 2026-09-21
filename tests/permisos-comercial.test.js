@@ -96,7 +96,8 @@ test('las acciones de finanzas y el respaldo quedan fuera del alcance comercial'
     assert.match(linea(t) || '', /tab:\s*'finanzas'/, `"${t}" debe exigir acceso a Finanzas`);
   }
   assert.match(linea('Respaldar CRM ahora') || '', /config:\s*true/, 'el respaldo completo del CRM es de administración');
-  assert.match(linea('Modo TV (taller)') || '', /tab:\s*'maquinas'/, 'la pantalla del taller pertenece al taller');
+  assert.match(linea('Modo Taller (TV)') || '', /tab:\s*'maquinas'/, 'la pantalla del taller pertenece a Máquinas');
+  assert.match(linea('Modo Resumen (TV)') || '', /tab:\s*'overview'/, 'la pantalla resumen pertenece a Overview');
 
   // Y el filtro tiene que honrar de verdad la marca de configuración.
   const fn = extraer(FIN, 'globalSearchOnInput');
