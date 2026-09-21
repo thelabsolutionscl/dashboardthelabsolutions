@@ -248,6 +248,26 @@ test('CFS sin telemetría reciente queda como dato desconocido y no como falla',
   assert.match(row.detail,/más de 60 s|aún no llegó/);
 });
 
+test('MachineOps reintenta escritura remota y refresca trabajos entre computadores',()=>{
+  assert.match(OPS,/function startRemoteSync\(/);
+  assert.match(OPS,/setInterval\(pull,8000\)/);
+  assert.match(OPS,/window\.addEventListener\?\.\('focus',pull\)/);
+  assert.match(OPS,/function _scheduleRemoteRetry\(/);
+  assert.match(OPS,/Math\.min\(30000/);
+  assert.match(OPS,/if\(needsPush&&requeueLocal\)scheduleRemote\(120\)/);
+  assert.match(OPS,/MachineOps sincronizado entre equipos/);
+});
+
+test('subida G-code remota evita listeners de progreso que fuerzan preflight',()=>{
+  const upload=OPS.slice(OPS.indexOf('async function uploadJobGcode'),OPS.indexOf('function planningBadge'));
+  assert.match(upload,/const localMode=typeof _isLocalMode/);
+  assert.match(upload,/if\(localMode&&xhr\.upload\)/);
+  assert.match(upload,/xhr\.timeout=120000/);
+  assert.match(upload,/_verifyUploadedGcode/);
+  assert.match(OPS,/function cancelJobGcodeUpload\(/);
+  assert.match(OPS,/Cancelar subida/);
+});
+
 test('tarjeta de ejecución permite subir G-code de OrcaSlicer sin modo Experto',()=>{
   assert.match(OPS,/function selectJobGcode\(/);
   assert.match(OPS,/async function uploadJobGcode\(/);
