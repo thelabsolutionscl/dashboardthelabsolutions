@@ -785,11 +785,24 @@ case 'send':
         ]);
         exit;
     }
-    $err = resend_send($from_name, $user, $to, $cc, $subject, $body_html, $attachments, $bcc);
-    if ($err) { echo json_out(['error' => $err, 'provider' => 'resend']); exit; }
-
-    // Guardar en carpeta Enviados via IMAP APPEND
+    // Autenticar la identidad del buzón antes de permitir que Resend envíe.
+    // CORS no es autenticación: sin esta comprobación una contraseña inventada
+    // podría usar el proveedor transaccional del servidor.
     $conn = open_imap($user, $pass);
+    if (is_array($conn)) {
+        http_response_code(401);
+        echo json_out(['error' => 'Credenciales de correo inválidas o cuenta no disponible.']);
+        exit;
+    }
+
+    $err = resend_send($from_name, $user, $to, $cc, $subject, $body_html, $attachments, $bcc);
+    if ($err) {
+        imap_close($conn);
+        echo json_out(['error' => $err, 'provider' => 'resend']);
+        exit;
+    }
+
+    // Guardar en carpeta Enviados via IMAP APPEND usando la conexión ya autenticada.
     if (!is_array($conn)) {
         $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
         $list   = imap_list($conn, $prefix, '*') ?: [];
