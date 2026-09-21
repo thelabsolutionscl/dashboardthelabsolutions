@@ -36,16 +36,31 @@ test('sin meta ignora fragmentos V3 incompletos',()=>{
   assert.deepEqual(out.data.jobs,[{id:'legacy'}]);
 });
 
-test('si Airtable sobreescribe un dominio antes de meta usa previous confirmado',()=>{
+test('si un dominio llegó a Airtable pero meta quedó atrás recupera el fragmento huérfano',()=>{
   const records=[
     {fields:{Name:'MACHINE_OPS_V2',Notes:JSON.stringify({jobs:[{id:'legacy'}]})}},
     {fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({
-      schema:3,domain:'jobs',writtenAt:30,data:[{id:'partial-future'}],
+      schema:3,domain:'jobs',writtenAt:30,data:[{id:'recovered'}],
       previous:{writtenAt:20,data:[{id:'committed'}]}
     })}},
     {fields:{Name:'MACHINE_OPS_V3:meta',Notes:JSON.stringify({schema:3,domain:'meta',writtenAt:21,version:4,updatedAt:21})}},
   ];
-  assert.deepEqual(t.composePayload(records).data.jobs,[{id:'committed'}]);
+  const out=t.composePayload(records);
+  assert.deepEqual(out.data.jobs,[{id:'recovered'}]);
+  assert.deepEqual(out.recoveredDomains,['jobs']);
+  assert.equal(out.data.updatedAt,30);
+});
+
+test('no recupera un fragmento futuro sin previous confirmado por meta',()=>{
+  const records=[
+    {fields:{Name:'MACHINE_OPS_V2',Notes:JSON.stringify({jobs:[{id:'legacy'}]})}},
+    {fields:{Name:'MACHINE_OPS_V3:jobs',Notes:JSON.stringify({
+      schema:3,domain:'jobs',writtenAt:30,data:[{id:'unsafe'}],
+      previous:{writtenAt:25,data:[{id:'also-future'}]}
+    })}},
+    {fields:{Name:'MACHINE_OPS_V3:meta',Notes:JSON.stringify({schema:3,domain:'meta',writtenAt:21,version:4,updatedAt:21})}},
+  ];
+  assert.deepEqual(t.composePayload(records).data.jobs,[{id:'legacy'}]);
 });
 
 test('wrapper divide MACHINE_OPS_V2 y escribe meta al final',async()=>{
