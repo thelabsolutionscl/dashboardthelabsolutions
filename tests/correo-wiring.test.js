@@ -158,6 +158,13 @@ test('Correo mantiene vínculos trazables con CRM y cotizaciones', () => {
   assert.match(methodBlock('sendCompose'), /await\s+this\._registrarCotEnviada/);
 });
 
+test('el envío nunca cae al SMTP compartido si falta Resend', () => {
+  const send = phpCase('send');
+  assert.match(send, /http_response_code\(503\)/);
+  assert.match(send, /SMTP compartido deshabilitado/);
+  assert.doesNotMatch(send, /smtp_send\s*\(/, 'send no debe usar el SMTP suspendido como fallback');
+});
+
 test('diagnóstico: Resend debe autenticar la casilla antes de enviar', (t) => {
   const send = phpCase('send');
   const resendAt = send.indexOf('resend_send(');

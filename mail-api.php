@@ -13,7 +13,8 @@
  *        b) archivo mail-api-config.php con:  <?php define('RESEND_API_KEY','re_...');
  *        c) archivo resend.key con la clave adentro.
  *      El dominio thelab.solutions debe estar verificado en Resend (SPF/DKIM).
- *      Si NO hay key, cae a SMTP (mail.thelab.solutions:465) como respaldo.
+ *      Si NO hay key, el envío se bloquea con error 503. El SMTP compartido
+ *      de SilverHost queda reservado a recepción/IMAP y nunca se usa como fallback.
  *
  * REQUISITOS: PHP 7.4+ con extensión IMAP habilitada (curl recomendado para Resend)
  */
@@ -772,18 +773,36 @@ case 'send':
         }
     }
 
-    // Envío por Resend si hay API key configurada en el servidor; si no, SMTP
-    // (respaldo, por si aún no se configura la key). El "from" usa el buzón
-    // activo: su dominio debe estar verificado en Resend.
-    if (resend_api_key()) {
-        $err = resend_send($from_name, $user, $to, $cc, $subject, $body_html, $attachments, $bcc);
-    } else {
-        $err = smtp_send($user, $pass, $from_name, $to, $cc, $subject, $body_html, $attachments, $bcc);
+    // Salida exclusivamente por Resend. El SMTP compartido de SilverHost fue
+    // suspendido por volumen y no puede actuar como fallback: si falta la key,
+    // fallamos de forma explícita antes de intentar cualquier conexión saliente.
+    if (!resend_api_key()) {
+        http_response_code(503);
+        echo json_out([
+            'error' => 'Envío saliente no disponible: falta configurar Resend en el servidor. SMTP compartido deshabilitado para evitar nuevas suspensiones.',
+            'provider' => 'resend',
+            'retryable' => false,
+        ]);
+        exit;
     }
-    if ($err) { echo json_out(['error' => $err]); exit; }
-
-    // Guardar en carpeta Enviados via IMAP APPEND
+    // Autenticar la identidad del buzón antes de permitir que Resend envíe.
+    // CORS no es autenticación: sin esta comprobación una contraseña inventada
+    // podría usar el proveedor transaccional del servidor.
     $conn = open_imap($user, $pass);
+    if (is_array($conn)) {
+        http_response_code(401);
+        echo json_out(['error' => 'Credenciales de correo inválidas o cuenta no disponible.']);
+        exit;
+    }
+
+    $err = resend_send($from_name, $user, $to, $cc, $subject, $body_html, $attachments, $bcc);
+    if ($err) {
+        imap_close($conn);
+        echo json_out(['error' => $err, 'provider' => 'resend']);
+        exit;
+    }
+
+    // Guardar en carpeta Enviados via IMAP APPEND usando la conexión ya autenticada.
     if (!is_array($conn)) {
         $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
         $list   = imap_list($conn, $prefix, '*') ?: [];
