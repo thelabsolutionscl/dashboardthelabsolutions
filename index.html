@@ -3105,7 +3105,7 @@
 <div class="tab-panel pf" id="tab-maquinas">
   <div class="section-header">
     <div><div class="section-title">Máquinas 3D</div><div class="section-subtitle" id="maquinasSubtitle">—</div><div class="section-desc">Monitorea en tiempo real el estado de cada impresora 3D: disponible, imprimiendo o en mantención. Gestiona colas de trabajo y recibe alertas de fallos automáticamente.</div></div>
-    <div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="MachineOps.openScanner()" style="font-size:12px">▦ Escanear QR</button><button class="btn btn-ghost btn-sm" onclick="openMaquinasManager()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Gestionar máquinas</button></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="MachineOps.openScanner()" style="font-size:12px">▦ Escanear QR</button><button class="btn btn-ghost btn-sm op-expert-only" onclick="openMaquinasManager()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Gestionar máquinas</button></div>
   </div>
 
   <div id="maqWorkspaceNav" class="maq-workspace-nav" role="tablist" aria-label="Áreas de Máquinas">
@@ -3128,7 +3128,7 @@
   <div id="maquinaIntelligenceView" data-maq-view="inteligencia" style="display:none;margin-bottom:28px">
     <div class="maq-view-head">
       <div><div class="maq-view-title">🧠 Centro inteligente de la granja</div><div class="maq-view-sub">Alertas accionables, preflight, recomendación de carga, CFS, incidentes, fiabilidad y costo real en una sola vista.</div></div>
-      <div class="maq-view-actions"><button class="btn btn-primary btn-sm" onclick="MachineOps.autoPlan()">🎯 Planificar carga</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident()">+ Incidente</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Diagnosticar bridge</button></div>
+      <div class="maq-view-actions"><button class="btn btn-primary btn-sm" onclick="MachineOps.autoPlan()">🎯 Planificar carga</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.openIncident()">+ Incidente</button><button class="btn btn-ghost btn-sm op-expert-only" onclick="MachineOps.checkBridgeHealth(false)">↻ Diagnosticar bridge</button></div>
     </div>
     <div id="mopsIntelligence"><div class="empty-state">Analizando telemetría y producción…</div></div>
   </div>
@@ -3174,9 +3174,9 @@
         <button class="btn btn-ghost btn-sm" onclick="pollPrinters()" style="font-size:12px">Actualizar</button>
         <button id="btnSort" class="btn btn-ghost btn-sm" onclick="toggleSort()" style="font-size:12px" title="Ordenar por estado">↕ Estado</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleKiosk()" style="font-size:12px" title="Modo pantalla completa">⛶ Kiosko</button>
-        <button class="btn btn-ghost btn-sm" onclick="openAlertSettings()" style="font-size:12px" title="Configurar alertas"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-bell"/></svg> Alertas</button>
-        <button id="btnLocalMode" class="btn btn-ghost btn-sm" onclick="toggleLocalMode()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Remoto</button>
-        <button class="btn btn-ghost btn-sm" onclick="openOrcaConfigModal()" style="font-size:12px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
+        <button class="btn btn-ghost btn-sm op-expert-only" onclick="openAlertSettings()" style="font-size:12px" title="Configurar alertas"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-bell"/></svg> Alertas</button>
+        <button id="btnLocalMode" class="btn btn-ghost btn-sm op-expert-only" onclick="toggleLocalMode()" style="font-size:12px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Remoto</button>
+        <button class="btn btn-ghost btn-sm op-expert-only" onclick="openOrcaConfigModal()" style="font-size:12px" title="Configurar OrcaSlicer">🦙 OrcaSlicer</button>
       </div>
     </div>
     <div id="monitorFilterTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
@@ -3193,11 +3193,11 @@
       <div class="maq-view-actions">
         <button class="btn btn-primary btn-sm" onclick="MachineOps.openJob()">+ Trabajo de impresión</button>
         <button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">🎯 Planificar automáticamente</button>
-        <button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">☁ Sincronizar</button>
+        <button class="btn btn-ghost btn-sm op-expert-only" onclick="MachineOps.syncNow()">☁ Sincronizar</button>
       </div>
     </div>
     <div id="mopsPlanningSummary"></div>
-    <div class="card maq-ops-card"><div id="mopsGantt"></div></div>
+    <div class="card maq-ops-card op-expert-only"><div id="mopsGantt"></div></div>
     <div class="card maq-ops-card" style="margin-top:12px">
       <div class="maq-toolbar">
         <input id="mopsJobSearch" class="field-input" placeholder="Buscar trabajo, pedido o material…" oninput="MachineOps.renderPlanning()">

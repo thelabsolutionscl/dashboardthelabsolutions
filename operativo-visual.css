@@ -123,6 +123,21 @@ dialog.op-drawer[data-kind="quote"]{inset:0;width:100vw;max-width:100vw;height:1
 #tab-reporte[data-op-view=simple] #opReports{grid-column:1/-1}
 [data-op-view=expert] .op-telemetry>summary,[data-op-view=expert] .op-post-actions>summary{display:none}
 
+/* Máquinas: Simple conserva decisiones y controles diarios; Experto agrega
+   infraestructura, evidencia, configuración y diagnóstico técnico. */
+#tab-maquinas[data-op-view=simple] .mops-intel-grid{grid-template-columns:minmax(0,1fr)}
+#tab-maquinas[data-op-view=simple] #maquinaMonGrid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))!important}
+#tab-maquinas[data-op-view=simple] .pcard-iprow{justify-content:flex-end!important}
+#tab-maquinas[data-op-view=simple] .pcard-actions{margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+#tab-maquinas[data-op-view=simple] .pcard-actions>button{min-width:34px;min-height:32px}
+#tab-maquinas[data-op-view=simple] .mops-workshop-hero p{max-width:760px}
+#tab-maquinas[data-op-view=simple] .mops-workshop-kpis{margin-top:12px}
+@media(max-width:768px){
+  #tab-maquinas[data-op-view=simple] #maquinaMonGrid{grid-template-columns:1fr!important}
+  #tab-maquinas[data-op-view=simple] .maq-view-actions .btn{flex:1 1 auto;justify-content:center}
+  #tab-maquinas[data-op-view=simple] .pcard-actions{width:100%}
+}
+
 /* El selector de formato conserva su significado en ambos niveles de detalle. */
 #tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed) :is(th,td):nth-child(5),
 #tab-pedidos[data-op-view=simple] #pedidosTableWrap:not(.op-revealed) :is(th,td):nth-child(6){display:none}

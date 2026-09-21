@@ -656,20 +656,20 @@ function renderIntelligence(){
   const confidenceCounts={alta:0,media:0,baja:0};healthRows.forEach(row=>confidenceCounts[row.confidence]=(confidenceCounts[row.confidence]||0)+1);
   const services=_serviceTrustSnapshot();
 
-  el.innerHTML=`<section class="mops-service-trust">
+  el.innerHTML=`<section class="mops-service-trust op-expert-only">
       <div class="mops-service-trust-head"><div><b>Estado de servicios</b><small>Antes de actuar, confirma qué fuentes están realmente disponibles.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">↻ Sincronizar todo</button></div>
       <div class="mops-service-trust-grid">${services.map(s=>`<article class="${s.state}"><span class="mops-service-dot"></span><div><b>${esc(s.label)}</b><small>${esc(s.detail)}</small></div>${s.stamp?`<time>${esc(fmtStamp(s.stamp))}</time>`:''}</article>`).join('')}</div>
     </section>
-    <div class="mops-kpis">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
+    <div class="mops-kpis mops-diagnostic-kpis op-expert-only">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
     <div id="mopsOpsOverviewAnchor" class="mops-intelligence-overview-anchor" aria-hidden="true"></div>
     <div class="mops-intel-grid">
-      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
+      <section class="card mops-intel-panel mops-actionable-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm op-expert-only" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Sugerencias de carga; siempre puedes revisarlas antes de aplicar.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:'<span class="mops-status" style="color:var(--danger)">Sin opción segura</span>'}</article>`).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
     </div>
 
     <div id="mopsLiveMonitorAnchor" aria-hidden="true"></div>
 
-    <section class="card mops-intel-panel mops-trust-panel">
+    <section class="card mops-intel-panel mops-trust-panel op-expert-only">
       <div class="mops-intel-head"><div><b>🛡 Estado y evidencia por impresora</b><small>No mostramos un porcentaje “mágico”: cada estado indica qué datos reales lo respaldan.</small></div><div class="mops-confidence-summary"><span>Confianza alta ${confidenceCounts.alta||0}</span><span>media ${confidenceCounts.media||0}</span><span>baja ${confidenceCounts.baja||0}</span></div></div>
       <div class="mops-reliability-grid mops-evidence-grid">${healthRows.map(row=>{
         const hist=row.history,completion=row.completion;
@@ -687,10 +687,10 @@ function renderIntelligence(){
     <section class="card mops-intel-panel mops-pending-panel" style="margin-top:12px">
       <div class="mops-intel-head"><div><b>🧰 Pendientes por resolver</b><small>Los eventos automáticos primero se confirman o descartan; solo los confirmados afectan el diagnóstico.</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.openIncident()">+ Registrar incidente</button></div>
       <div class="mops-incidents">${incidents.pending.length?incidents.pending.slice(0,12).map(_incidentCard).join(''):'<div class="mops-intel-empty">✓ No hay incidentes ni eventos pendientes.</div>'}</div>
-      ${incidents.history.length?`<details class="mops-incident-history"><summary>Ver historial · ${incidents.history.length}</summary><div class="mops-incidents">${incidents.history.slice(0,20).map(_incidentCard).join('')}</div></details>`:''}
+      ${incidents.history.length?`<details class="mops-incident-history op-expert-only"><summary>Ver historial · ${incidents.history.length}</summary><div class="mops-incidents">${incidents.history.slice(0,20).map(_incidentCard).join('')}</div></details>`:''}
     </section>
 
-    <details class="card mops-intel-panel mops-physical-details" style="margin-top:12px">
+    <details class="card mops-intel-panel mops-physical-details op-expert-only" style="margin-top:12px">
       <summary><span><b>🧵 CFS físico</b><small>Solo equipos con CFS instalado: K1 #1 y K2 Plus #11.</small></span><span>${physical.filter(row=>row.level==='ok').length}/${physical.length} CFS confirmados</span></summary>
       <div class="mops-cfs-grid mops-physical-grid">${physical.length?physical.map(row=>`<article>
         <div><b>${esc(machineLabel(row.machine.id))}</b><span class="mops-cfs-state ${row.level==='ok'?'online':'offline'}" style="color:${_statusColor(row.level)}">${esc(row.label)}</span></div>
@@ -829,7 +829,7 @@ function renderWorkshopHome(){
       <div><span class="mops-workshop-eyebrow">TALLER · FUENTES DE VERDAD</span><h3>Estado físico y configuración de la granja</h3><p>Primero ves qué requiere acción y qué datos son confirmados, registrados o estimados. Abre un módulo sólo cuando lo necesites.</p></div>
       <button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">☁ Sincronizar MachineOps</button>
     </div>
-    <div class="mops-workshop-trust">
+    <div class="mops-workshop-trust op-expert-only">
       <span class="${histTone}"><b>HISTORIAL DE IMPRESIÓN</b><strong>${histLabel}</strong><small>${s.history.lastSync?'sync '+esc(fmtStamp(s.history.lastSync)):'sin sincronización central'}${s.history.lastError?' · '+esc(s.history.lastError):''}</small></span>
       <span class="warning"><b>MATERIALES</b><strong>Inventario registrado</strong><small>${(s.stockRegistered/1000).toFixed(2)} kg declarados · sin balanza física</small></span>
       <span class="${safetyTone}"><b>SEGURIDAD AMBIENTAL</b><strong>${esc(safetyState)}</strong><small>${s.reading?esc(s.reading.source||'registro')+' · hace '+s.safetyAge+' min':'sin sensor/lectura manual vigente'}</small></span>
@@ -848,14 +848,14 @@ function renderWorkshopHome(){
       ${workshopNavCard('seguridad','Seguridad','Sensor/lectura manual y reglas de preflight',safetyState,safetyTone)}
       ${workshopNavCard('capacidad','Capacidad','Simulador de escenario; no promesa automática','Simular','neutral')}
     </div>
-    <div class="mops-workshop-section-title"><div><b>Herramientas avanzadas</b><small>Configuración y análisis; no necesitas tenerlas abiertas todo el tiempo.</small></div></div>
-    <div class="mops-workshop-nav-grid advanced">
+    <div class="mops-workshop-section-title op-expert-only"><div><b>Herramientas avanzadas</b><small>Configuración y análisis; no necesitas tenerlas abiertas todo el tiempo.</small></div></div>
+    <div class="mops-workshop-nav-grid advanced op-expert-only">
       ${workshopNavCard('perfiles','Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
       ${workshopNavCard('laminado','Laminador','Agente 3D, G-code y preflight','Abrir','neutral')}
       ${workshopNavCard('analitica','Analítica','QA, tiempos reales y costos modelados','Abrir','neutral')}
       ${workshopNavCard('automatizacion','Configuración','Umbrales, automatización y costos','Avanzado','neutral')}
     </div>
-    <div class="mops-workshop-legend"><span><i class="ok"></i><b>Confirmado</b> sensor/controller reciente</span><span><i class="warning"></i><b>Registrado</b> dato ingresado/sincronizado</span><span><i></i><b>Estimado</b> simulación o modelo de costo</span></div>`;
+    <div class="mops-workshop-legend op-expert-only"><span><i class="ok"></i><b>Confirmado</b> sensor/controller reciente</span><span><i class="warning"></i><b>Registrado</b> dato ingresado/sincronizado</span><span><i></i><b>Estimado</b> simulación o modelo de costo</span></div>`;
 }
 function showView(view,button){
   const target=view||'hoy',group=groupOf(target);_activeView=group;
@@ -951,7 +951,7 @@ function planningJobCard(j){
       <span><small>Duración estimada</small><b>${fmtMin(jobMinutes(j))}</b></span>
     </div>
     <div class="mops-job-next ${p.next.level}"><span>PRÓXIMO PASO</span><b>${esc(p.next.label)}</b><small>${esc(p.next.detail)}</small></div>
-    <div class="mops-job-evidence">${evidence.join('')}</div>
+    <div class="mops-job-evidence op-expert-only">${evidence.join('')}</div>
     <div class="mops-job-card-actions">${actions}</div>
   </article>`;
 }
@@ -966,7 +966,7 @@ function renderPlanning(){
   const durable=farm.fresh?farm.jobs.filter(j=>['queued','retry','checking','uploading','uploaded'].includes(String(j.state||''))).length:null;
   const dueSoon=active.filter(j=>j.dueDate&&(dateValue(j.dueDate)-Date.now())<3*86400000).length;
   const statusSelect=document.getElementById('mopsJobStatus'),queueOption=statusSelect?.querySelector('option[value="en_cola"]');if(queueOption)queueOption.textContent='Lista para iniciar';
-  summary.innerHTML=`<div class="mops-planning-guide">
+  summary.innerHTML=`<div class="mops-planning-guide op-expert-only">
       <div><b>Centro de planificación confiable</b><small>Separamos lo que está guardado, lo que confirma la telemetría y lo que realmente existe en la cola de ejecución.</small></div>
       <div class="mops-planning-trust">
         <span><b>TRABAJOS</b><small>MachineOps + respaldo remoto</small></span>
