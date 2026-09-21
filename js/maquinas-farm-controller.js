@@ -66,8 +66,15 @@ async function syncRegistry(force=false){
   })();
   return registrySyncing;
 }
+function confirmedPrinterIp(id){
+  if(!id)return'';
+  try{return String(localStorage.getItem('printer_ip_confirmed_'+id)||'').trim();}catch(_){return'';}
+}
 function durableGetPrinterIp(m){
-  if(m&&m.id){const hit=registryById[m.id];if(hit&&hit.ip)return hit.ip;}
+  if(m&&m.id){
+    const confirmed=confirmedPrinterIp(m.id);if(confirmed)return confirmed;
+    const hit=registryById[m.id];if(hit&&hit.ip)return hit.ip;
+  }
   return original.getIp?original.getIp(m):(m&&m.ip)||null;
 }
 async function patchRegistryMachine(m,forcedIp){
@@ -96,8 +103,12 @@ async function seedRegistry(){
   // Solo si falta el ID canónico. Si ya existe, jamás pisamos una IP descubierta
   // con un override viejo del navegador. Un guardado manual sí actualiza abajo.
   for(const m of machines()){
-    if(!m||!m.id||registryById[m.id])continue;
-    try{await patchRegistryMachine(m);}catch(e){console.warn('[FarmRegistry] seed',m.id,e.message);}
+    if(!m||!m.id)continue;
+    const confirmed=confirmedPrinterIp(m.id),current=registryById[m.id];
+    try{
+      if(confirmed&&(!current||current.ip!==confirmed)){await patchRegistryMachine(m,confirmed);continue;}
+      if(!current)await patchRegistryMachine(m);
+    }catch(e){console.warn('[FarmRegistry] seed',m.id,e.message);}
   }
   await syncRegistry(true);
 }
@@ -105,6 +116,7 @@ async function updateRegistryAfterManualSave(id){
   const m=machines().find(x=>x.id===id);if(!m)return;
   const hasLocal=localStorage.getItem('printer_ip_'+id)!==null;
   const ip=hasLocal?(localStorage.getItem('printer_ip_'+id)||''):(m.ip||'');
+  if(ip)localStorage.setItem('printer_ip_confirmed_'+id,ip);else localStorage.removeItem('printer_ip_confirmed_'+id);
   const current=registryById[id]||{id};Object.assign(current,{ip,updatedAt:new Date().toISOString()});
   if(!registryById[id])registry.push(current);registryById[id]=current;
   try{await patchRegistryMachine(m,ip);}catch(e){console.warn('[FarmRegistry] manual update',e.message);}

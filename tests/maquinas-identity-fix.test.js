@@ -13,7 +13,7 @@ function storage(initial={}){
   };
 }
 
-test('elimina .95 de Ender #8 y .51 de K1 #1 para respetar Airtable',()=>{
+test('corrige Ender #8 a .127 y limpia la identidad histórica de K1 #1',()=>{
   const s=storage({
     'printer_ip_e5-3':'192.168.100.95',
     'printer_cam_e5-3':'http://192.168.100.95:8080/?action=stream',
@@ -23,7 +23,8 @@ test('elimina .95 de Ender #8 y .51 de K1 #1 para respetar Airtable',()=>{
   const out=fix._test.migrateStorage(s);
   const d=s.dump();
   assert.equal(out.changed,true);
-  assert.equal(d['printer_ip_e5-3'],undefined);
+  assert.equal(d['printer_ip_e5-3'],'192.168.100.127');
+  assert.equal(d['printer_ip_confirmed_e5-3'],'192.168.100.127');
   assert.equal(d['printer_cam_e5-3'],undefined);
   assert.equal(d['printer_ip_k1-1'],undefined);
   assert.equal(d['printer_cam_k1-1'],undefined);
@@ -41,7 +42,8 @@ test('no borra overrides de otras máquinas ni valores desconocidos',()=>{
   const d=s.dump();
   assert.equal(out.changed,false);
   assert.equal(d['printer_ip_e5-2'],'192.168.100.64');
-  assert.equal(d['printer_ip_e5-3'],'192.168.100.123');
+  assert.equal(d['printer_ip_e5-3'],'192.168.100.127');
+  assert.equal(d['printer_ip_confirmed_e5-3'],'192.168.100.127');
   assert.equal(d['printer_ip_k1-1'],'192.168.100.120');
   assert.equal(d['printer_cam_k1-2'],'http://192.168.100.89:8080/?action=stream');
 });

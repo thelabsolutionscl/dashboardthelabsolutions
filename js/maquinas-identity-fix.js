@@ -11,11 +11,12 @@
 })(typeof window!=='undefined'?window:null,function(){
 'use strict';
 
-const MARKER='printer_identity_fix_20260826_v1';
+const MARKER='printer_identity_fix_20260921_v2';
 const K1_ID='k1-1';
 const ENDER8_ID='e5-3';
 const CURRENT_K1_IP='192.168.100.95';
 const OLD_K1_IP='192.168.100.51';
+const CURRENT_ENDER8_IP='192.168.100.127';
 
 function read(storage,key){try{return String(storage?.getItem(key)||'').trim();}catch(_){return'';}}
 function remove(storage,key){try{storage?.removeItem(key);return true;}catch(_){return false;}}
@@ -30,10 +31,12 @@ function migrateStorage(storage){
     if(value&&predicate(value)&&remove(storage,key))removed.push(key);
   };
 
-  // .95 ya no pertenece a Ender #8. Cualquier override local con esa IP haría
-  // que la tarjeta siguiera apareciendo equivocada aunque Airtable esté bien.
+  // .95 ya no pertenece a Ender #8. El 2026-09-21 el operador confirmó
+  // que las Ender-5 Max activas usan .67, .64, .66 y .127; #8 es .127.
   drop(`printer_ip_${ENDER8_ID}`,v=>v===CURRENT_K1_IP);
   drop(`printer_cam_${ENDER8_ID}`,v=>hasIp(v,CURRENT_K1_IP));
+  set(storage,`printer_ip_${ENDER8_ID}`,CURRENT_ENDER8_IP);
+  set(storage,`printer_ip_confirmed_${ENDER8_ID}`,CURRENT_ENDER8_IP);
 
   // K1 #1 antes figuraba en .51. Al limpiar solo ese valor conocido, Airtable
   // (.95) vuelve a ser la fuente efectiva sin destruir overrides arbitrarios.
@@ -56,5 +59,5 @@ function install(root){
   return true;
 }
 
-return{install,_test:{migrateStorage,hasIp,MARKER,K1_ID,ENDER8_ID,CURRENT_K1_IP,OLD_K1_IP}};
+return{install,_test:{migrateStorage,hasIp,MARKER,K1_ID,ENDER8_ID,CURRENT_K1_IP,OLD_K1_IP,CURRENT_ENDER8_IP}};
 });
