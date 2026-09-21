@@ -109,6 +109,32 @@ async function updateRegistryAfterManualSave(id){
   if(!registryById[id])registry.push(current);registryById[id]=current;
   try{await patchRegistryMachine(m,ip);}catch(e){console.warn('[FarmRegistry] manual update',e.message);}
 }
+let registryDiscovery=null;
+async function discoverRegistry(){
+  if(registryDiscovery)return registryDiscovery;
+  registryDiscovery=(async()=>{
+    const role=await authRole();
+    if(role!=='admin')return{started:false,reason:'admin-required'};
+    const b=base(),t=token();if(!b||!t)return{started:false,reason:'controller-unavailable'};
+    const r=await fetch(url('/farm/discover'),{method:'POST',signal:AbortSignal.timeout(6000)});
+    const d=await readJson(r);
+    if(d.started){
+      const refresh=async()=>{
+        try{
+          await syncRegistry(true);
+          if(typeof pollPrinters==='function')pollPrinters();
+          render();
+        }catch(e){console.warn('[FarmRegistry] refresh tras discovery',e.message);}
+      };
+      // El endpoint inicia un barrido LAN asíncrono. Refrescamos una vez durante
+      // el barrido y otra al final del peor caso habitual para adoptar cambios DHCP.
+      setTimeout(refresh,4000);
+      setTimeout(refresh,16000);
+    }
+    return d;
+  })().finally(()=>{registryDiscovery=null;});
+  return registryDiscovery;
+}
 
 // ── Cola durable ─────────────────────────────────────────────────────────
 function rebuildCounts(){
@@ -213,5 +239,5 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)_resumeCon
 window.addEventListener('farm-controller-health',_resumeControllerSync);
 
 window.FarmQueue={sync:syncQueue,startExisting,confirmBedClear,status:()=>({controllerOk,lastSync:lastQueueSync,jobs:[...jobs],counts:{...counts}})};
-window.FarmRegistry={sync:syncRegistry,seed:seedRegistry,ipFor:durableGetPrinterIp,status:()=>({controllerOk,role:controllerRole,lastSync:lastRegistrySync,machines:[...registry]})};
+window.FarmRegistry={sync:syncRegistry,seed:seedRegistry,discover:discoverRegistry,ipFor:durableGetPrinterIp,status:()=>({controllerOk,role:controllerRole,lastSync:lastRegistrySync,machines:[...registry]})};
 })();
