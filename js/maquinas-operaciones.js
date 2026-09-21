@@ -175,8 +175,19 @@ function _localNeedsRemotePush(local,remote){
   return num(l.updatedAt)>num(r.updatedAt);
 }
 function remoteSyncStatus(){return{..._remoteSync,dirty:_remoteDirty,saving:!!_remoteSaving};}
+function _remoteSyncText(sync=remoteSyncStatus()){
+  return sync.saving?'Sincronizando…':sync.dirty?'Pendiente de sincronizar':sync.state==='error'?'Error de sincronización':'Sincronizado';
+}
+function _renderRemoteSyncIndicator(){
+  const btn=document.getElementById('mopsRemoteSyncBtn');if(!btn)return;
+  const sync=remoteSyncStatus();
+  btn.textContent='☁ '+_remoteSyncText(sync);
+  btn.title=sync.lastError||'Sincronización compartida entre computadores';
+  btn.dataset.syncState=sync.saving?'saving':sync.dirty?'pending':sync.state==='error'?'error':'synced';
+}
 function _remoteSetError(error){
   _remoteSync.state='error';_remoteSync.lastError=String(error?.message||error||'Error de sincronización');
+  _renderRemoteSyncIndicator();
 }
 function _scheduleRemoteRetry(){
   if(window._DEMO_MODE||_remoteRetryTimer)return;
@@ -187,7 +198,7 @@ function _scheduleRemoteRetry(){
 function scheduleRemote(delay=700){
   if(window._DEMO_MODE)return;
   _remoteDirty=true;_remoteRevision++;
-  data().updatedAt=Date.now();writeLocal();
+  data().updatedAt=Date.now();writeLocal();_renderRemoteSyncIndicator();
   clearTimeout(_remoteTimer);
   _remoteTimer=setTimeout(saveRemote,Math.max(0,delay));
 }
@@ -200,7 +211,7 @@ async function saveRemote(force=false){
     if(typeof _monitorUpsert!=='function'){
       _remoteSetError('Sin acceso al almacenamiento compartido');_scheduleRemoteRetry();return false;
     }
-    _remoteSync.state='pushing';_remoteSync.lastError='';
+    _remoteSync.state='pushing';_remoteSync.lastError='';_renderRemoteSyncIndicator();
     try{
       await loadRemote({render:false,requeueLocal:false});
       const payload=JSON.stringify({...data(),audit:data().audit.slice(0,250)});
@@ -208,6 +219,7 @@ async function saveRemote(force=false){
       _remoteSync.lastPushAt=Date.now();_remoteSync.state='synced';_remoteSync.lastError='';_remoteRetryMs=2500;
       if(revision===_remoteRevision)_remoteDirty=false;
       else setTimeout(()=>saveRemote(),0);
+      _renderRemoteSyncIndicator();
       return true;
     }catch(e){
       _remoteSetError(e);console.warn('[MachineOps] respaldo remoto pendiente',e);_scheduleRemoteRetry();return false;
@@ -232,6 +244,7 @@ async function loadRemote({render=false,requeueLocal=true}={}){
       _data=mergeData(localBefore,remote);writeLocal();
       const changed=JSON.stringify(_data)!==before;
       _remoteSync.lastPullAt=Date.now();_remoteSync.lastError='';_remoteSync.state=_remoteDirty||needsPush?'pending':'synced';
+      _renderRemoteSyncIndicator();
       if(changed&&render)renderAll();
       if(needsPush&&requeueLocal)scheduleRemote(120);
       return true;
@@ -242,7 +255,7 @@ async function loadRemote({render=false,requeueLocal=true}={}){
 async function syncRemoteNow(){
   _remoteDirty=true;_remoteRevision++;data().updatedAt=Date.now();writeLocal();
   const ok=await saveRemote(true);
-  if(ok){await loadRemote({render:true,requeueLocal:false});toast('MachineOps sincronizado entre equipos ✓','success');}
+  if(ok){await loadRemote({render:true,requeueLocal:false});_renderRemoteSyncIndicator();toast('MachineOps sincronizado entre equipos ✓','success');}
   else toast('No se pudo sincronizar MachineOps · se reintentará automáticamente','error');
   return ok;
 }
@@ -1175,6 +1188,9 @@ function planningBadge(label,level='neutral'){
 }
 function planningJobCard(j){
   const p=planningJobState(j),cycles=Math.max(1,num(j.cycles,1)),produced=num(j.completedCycles);
+  const staleLocalQueue=j.status==='en_cola'&&!p.gcodeReady&&!j.farmJobId&&!j.executionId;
+  const cardStatus=staleLocalQueue?'<span class="mops-status" style="color:#ff5555;background:#ff555514">PREPARACIÓN INCOMPLETA</span>':statusBadge(j.status);
+  const canArchive=j.status!=='imprimiendo'&&!(j.status==='en_cola'&&(j.farmJobId||j.executionId));
   const order=orderLabel(j.pedidoId),machine=j.machineId?machineLabel(j.machineId):'Sin máquina';
   const liveLabel=!j.machineId?'Sin máquina':p.live.known?`Telemetría: ${p.live.state}`:'Telemetría sin confirmar';
   const evidence=[
@@ -1201,7 +1217,7 @@ function planningJobCard(j){
     changeGcode,
     j.status==='qa'?`<button class="btn btn-primary btn-sm" onclick="MachineOps.openQA('${j.id}')">Abrir QA</button>`:'',
     `<button class="btn btn-ghost btn-sm" onclick="MachineOps.printEntityLabel('job','${j.id}')">QR</button>`,
-    `<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveJob('${j.id}')">Archivar</button>`,
+    canArchive?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.archiveJob('${j.id}')">Archivar</button>`:`<button class="btn btn-ghost btn-sm" disabled title="No se puede archivar mientras el Controller tenga una ejecución activa">Archivar</button>`,
   ].join('');
   const gcodeRow=j.gcodeFile
     ?`<div style="display:flex;align-items:center;gap:7px;margin-top:9px;padding:8px 10px;border:1px solid ${p.gcodeReady?'rgba(34,197,94,.28)':'rgba(255,170,0,.32)'};border-radius:9px;background:${p.gcodeReady?'rgba(34,197,94,.06)':'rgba(255,170,0,.06)'};min-width:0">
@@ -1209,7 +1225,7 @@ function planningJobCard(j){
        <b style="font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0" title="${esc(j.gcodeFile)}">${esc(j.gcodeFile)}</b>
      </div>`:'';
   return`<article class="mops-job-card ${p.next.level}">
-    <div class="mops-job-card-head"><div><b>${esc(j.name)}</b><small>${esc(order||'Sin pedido')}${j.dueDate?' · entrega '+esc(j.dueDate):''}${p.late?' · ATRASADO':''}</small></div>${statusBadge(j.status)}</div>
+    <div class="mops-job-card-head"><div><b>${esc(j.name)}</b><small>${esc(order||'Sin pedido')}${j.dueDate?' · entrega '+esc(j.dueDate):''}${p.late?' · ATRASADO':''}</small></div>${cardStatus}</div>
     <div class="mops-job-card-grid">
       <span><small>Máquina</small><b>${esc(machine)}</b></span>
       <span><small>Producción</small><b>${num(j.qty,1)} u · ${produced}/${cycles} ciclos</b></span>
@@ -1257,8 +1273,8 @@ function renderPlanning(){
   const qaRows=rows.filter(j=>j.status==='qa'),closedRows=rows.filter(j=>!ACTIVE_JOB_STATES.includes(j.status));
   if(!rows.length){list.innerHTML='<div class="empty-state" style="padding:24px">No hay trabajos que coincidan con los filtros.</div>';return;}
   const showClosed=!!q||!!st,printingRows=executionRows.filter(j=>j.status==='imprimiendo').length;
-  const sync=remoteSyncStatus(),syncText=sync.saving?'Sincronizando…':sync.dirty?'Pendiente de sincronizar':sync.state==='error'?'Error de sincronización':'Sincronizado';
-  list.innerHTML=`<div class="mops-job-board-head"><div><b>Ejecución y preparación</b><small>La cantidad “imprimiendo” se basa en el estado reconciliado con telemetría y Farm Controller.</small></div><span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn btn-ghost btn-sm" onclick="MachineOps.syncRemoteNow()" title="${esc(sync.lastError||'Sincronización compartida entre computadores')}">☁ ${esc(syncText)}</button><span>${printingRows} imprimiendo · ${executionRows.length} abierto(s)</span></span></div>
+  const sync=remoteSyncStatus(),syncText=_remoteSyncText(sync);
+  list.innerHTML=`<div class="mops-job-board-head"><div><b>Ejecución y preparación</b><small>La cantidad “imprimiendo” se basa en el estado reconciliado con telemetría y Farm Controller.</small></div><span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button id="mopsRemoteSyncBtn" type="button" class="btn btn-ghost btn-sm" data-sync-state="${sync.saving?'saving':sync.dirty?'pending':sync.state==='error'?'error':'synced'}" onclick="MachineOps.syncRemoteNow()" title="${esc(sync.lastError||'Sincronización compartida entre computadores')}">☁ ${esc(syncText)}</button><span>${printingRows} imprimiendo · ${executionRows.length} abierto(s)</span></span></div>
     <div class="mops-job-board">${executionRows.length?executionRows.map(planningJobCard).join(''):'<div class="mops-intel-empty">✓ No hay trabajos en ejecución ni preparación.</div>'}</div>
     ${qaRows.length?`<div class="mops-job-board-head mops-job-board-head-secondary"><div><b>Esperando QA</b><small>Impresiones finalizadas o ejecuciones que ya no están activas y requieren confirmación humana.</small></div><span>${qaRows.length} pendiente(s)</span></div><div class="mops-job-board">${qaRows.map(planningJobCard).join('')}</div>`:''}
     ${closedRows.length?(showClosed?`<div class="mops-job-board mops-job-history-grid">${closedRows.map(planningJobCard).join('')}</div>`:`<details class="mops-job-history"><summary>Historial cerrado · ${closedRows.length}</summary><div class="mops-job-board mops-job-history-grid">${closedRows.sort((a,b)=>Date.parse(b.completedAt||b.updatedAt||0)-Date.parse(a.completedAt||a.updatedAt||0)).slice(0,20).map(planningJobCard).join('')}</div></details>`):''}`;
@@ -1513,7 +1529,9 @@ function startExistingFile(machineId,filename){
 }
 function archiveJob(id){
   const j=data().jobs.find(x=>x.id===id);if(!j)return;
-  if(['imprimiendo','en_cola'].includes(j.status)){toast('No se puede archivar un trabajo activo o en cola','error');return;}
+  if(j.status==='imprimiendo'||(j.status==='en_cola'&&(j.farmJobId||j.executionId))){
+    toast('No se puede archivar mientras existe una ejecución activa en el Controller','error');return;
+  }
   j.archivedFromStatus=j.status;j.archived=true;j.status='archivado';j.updatedAt=nowIso();persist('Trabajo archivado');
 }
 

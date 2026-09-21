@@ -268,6 +268,24 @@ test('subida G-code remota evita listeners de progreso que fuerzan preflight',()
   assert.match(OPS,/Cancelar subida/);
 });
 
+test('estado visual de sync se actualiza sin exigir un rerender completo',()=>{
+  assert.match(OPS,/function _renderRemoteSyncIndicator\(/);
+  assert.match(OPS,/id="mopsRemoteSyncBtn"/);
+  assert.match(OPS,/_remoteDirty=false;[\s\S]{0,180}_renderRemoteSyncIndicator\(\)/);
+  assert.match(OPS,/_remoteSync\.state='pushing';_remoteSync\.lastError='';_renderRemoteSyncIndicator\(\)/);
+});
+
+test('un en_cola local sin Controller ni G-code no se presenta como listo ni bloquea archivar',()=>{
+  assert.match(OPS,/staleLocalQueue=j\.status==='en_cola'&&!p\.gcodeReady&&!j\.farmJobId&&!j\.executionId/);
+  assert.match(OPS,/PREPARACIÓN INCOMPLETA/);
+  const start=OPS.indexOf('function archiveJob(id){');
+  const end=OPS.indexOf('\nfunction renderMaterials',start);
+  assert.ok(start>=0&&end>start,'archiveJob debe existir');
+  const archive=OPS.slice(start,end);
+  assert.match(archive,/j\.status==='imprimiendo'\|\|\(j\.status==='en_cola'&&\(j\.farmJobId\|\|j\.executionId\)\)/);
+  assert.doesNotMatch(archive,/\['imprimiendo','en_cola'\]\.includes/);
+});
+
 test('tarjeta de ejecución permite subir G-code de OrcaSlicer sin modo Experto',()=>{
   assert.match(OPS,/function selectJobGcode\(/);
   assert.match(OPS,/async function uploadJobGcode\(/);
