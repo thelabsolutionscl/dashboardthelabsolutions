@@ -13,6 +13,7 @@ const OPS=fs.readFileSync(path.join(ROOT,'js','maquinas-operaciones.js'),'utf8')
 const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
 const MAQ=fs.readFileSync(path.join(ROOT,'js','maquinas.js'),'utf8');
 const SLICER=fs.readFileSync(path.join(ROOT,'js','slicer3d.js'),'utf8');
+const FARM=fs.readFileSync(path.join(ROOT,'js','maquinas-farm-controller.js'),'utf8');
 const CSS=fs.readFileSync(path.join(ROOT,'styles.css'),'utf8');
 
 function storage(){
@@ -41,6 +42,23 @@ test('compatibilidad por material y volumen de impresión',()=>{
   assert.equal(ops.modelCanRun('K1',{material:'ABS',sizeX:100,sizeY:100,sizeZ:100}),false);
   assert.equal(ops.modelCanRun('K1',{material:'PLA',sizeX:400,sizeY:400,sizeZ:400}),false);
   assert.equal(ops.modelCanRun('Giga',{material:'PLA',sizeX:700,sizeY:600,sizeZ:500}),true);
+});
+
+test('alertas de conectividad solo son accionables cuando afectan producción activa',()=>{
+  const decide=loadOps().connectivityAlertDecision;
+  assert.equal(decide({id:'k1-5',operationalState:'disponible'},'noip',0,[]).show,false,'una máquina idle sin IP no debe llenar Alertas accionables');
+  assert.equal(decide({id:'e5-3',operationalState:'disponible'},'offline',180000,[{machineId:'e5-3',status:'en_cola',name:'Pieza'}],120000).show,true,'una cola activa sí requiere intervención');
+  assert.equal(decide({id:'giga-1',operationalState:'mantencion'},'offline',180000,[{machineId:'giga-1',state:'queued',filename:'pieza.gcode'}],120000).show,false,'mantención/fuera de servicio no debe generar falsa alarma');
+  assert.equal(decide({id:'e5-5',operationalState:'disponible'},'offline',30000,[{machineId:'e5-5',state:'printing'}],120000).show,false,'respeta el umbral antes de declarar caída');
+});
+
+test('Revisar bridge inicia discovery LAN y refresca registry/telemetría',()=>{
+  assert.match(OPS,/FarmRegistry\?\.discover/);
+  assert.match(FARM,/async function discoverRegistry\(\)/);
+  assert.match(FARM,/\/farm\/discover/);
+  assert.match(FARM,/setTimeout\(refresh,4000\)/);
+  assert.match(FARM,/setTimeout\(refresh,16000\)/);
+  assert.match(FARM,/discover:discoverRegistry/);
 });
 
 test('horas de trabajo se calculan por ciclos reales',()=>{
