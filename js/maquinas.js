@@ -1553,6 +1553,72 @@ function preheatPrinter(id,mat){
   _sendGcode(id,`M104 S${p.h}\nM140 S${p.b}`,`🔥 Precalentando ${mat} · nozzle ${p.h}° · cama ${p.b}°`);
 }
 function cooldownPrinter(id){_sendGcode(id,'M104 S0\nM140 S0','❄️ Enfriando — calentadores apagados');}
+
+const _bedLevelWatchTimers={};
+function _bedLevelStats(mesh){
+  const matrix=mesh?.probed_matrix||mesh?.mesh_matrix;
+  if(!Array.isArray(matrix)||!matrix.length)return null;
+  const vals=matrix.flat().map(Number).filter(Number.isFinite);
+  if(!vals.length)return null;
+  const min=Math.min(...vals),max=Math.max(...vals),range=max-min,avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+  return{matrix,min,max,range,avg,points:vals.length,rows:matrix.length,cols:Array.isArray(matrix[0])?matrix[0].length:0};
+}
+function _bedLevelGrade(range){
+  if(range<=0.15)return{label:'EXCELENTE',color:'#00d4aa',hint:'Cama muy pareja'};
+  if(range<=0.25)return{label:'CORRECTA',color:'#38bdf8',hint:'Dentro de un rango razonable'};
+  if(range<=0.40)return{label:'ATENCIÓN',color:'#ffaa00',hint:'Conviene revisar nivelación mecánica'};
+  return{label:'DESNIVEL ALTO',color:'#ff5555',hint:'Revisa tornillos/cama antes de confiar solo en el mesh'};
+}
+function _bedLevelSetBusy(id,busy,label){
+  const btn=document.getElementById('pcBedAuto_'+id);
+  if(btn){btn.disabled=!!busy;btn.textContent=busy?(label||'⏳ CALIBRANDO…'):'⚙ CALIBRAR AUTOMÁTICAMENTE';btn.style.opacity=busy?'.65':'1';}
+}
+async function printerBedLevelRefresh(id,opts={}){
+  const value=document.getElementById('pcBedLevelValue_'+id);
+  const gradeEl=document.getElementById('pcBedLevelGrade_'+id);
+  const detail=document.getElementById('pcBedLevelDetail_'+id);
+  const fill=document.getElementById('pcBedLevelFill_'+id);
+  const marker=document.getElementById('pcBedLevelMarker_'+id);
+  if(!value&&!detail)return null;
+  if(detail)detail.textContent='Leyendo bed mesh…';
+  const data=await _moonrakerGet(id,'/printer/objects/query?bed_mesh',9000);
+  const mesh=data?.result?.status?.bed_mesh;
+  const st=_bedLevelStats(mesh);
+  if(!st){
+    if(value)value.textContent='—';
+    if(gradeEl){gradeEl.textContent='SIN MEDICIÓN';gradeEl.style.color='var(--text3)';}
+    if(detail)detail.textContent='Sin malla disponible. Ejecuta la calibración automática.';
+    if(fill)fill.style.width='0%';
+    if(marker)marker.style.left='0%';
+    return null;
+  }
+  const g=_bedLevelGrade(st.range),pct=Math.max(0,Math.min(100,(st.range/0.60)*100));
+  if(value)value.textContent=(st.range*1000).toFixed(0)+' µm';
+  if(gradeEl){gradeEl.textContent=g.label;gradeEl.style.color=g.color;}
+  if(detail)detail.textContent=`mín ${st.min.toFixed(3)} mm · máx ${st.max.toFixed(3)} mm · ${st.rows}×${st.cols} puntos · ${g.hint}`;
+  if(fill){fill.style.width=pct+'%';fill.style.background=g.color;}
+  if(marker){marker.style.left=`calc(${pct}% - 5px)`;marker.style.background=g.color;}
+  if(opts.announce)toast(`🛏 Desnivel de cama: ${(st.range*1000).toFixed(0)} µm · ${g.label}`,st.range<=0.25?'success':st.range<=0.40?'info':'error');
+  return st;
+}
+function _bedLevelWatch(id){
+  (_bedLevelWatchTimers[id]||[]).forEach(clearTimeout);
+  const delays=[1500,12000,30000,60000,100000,140000];
+  _bedLevelWatchTimers[id]=delays.map((ms,i)=>setTimeout(()=>printerBedLevelRefresh(id,{announce:i===delays.length-1}).catch(()=>{}),ms));
+}
+async function printerAutoBedCalibrate(id){
+  const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
+  if(!_printerControlFresh(id)){toast('🔒 '+_printerControlReason(id)+' — no se puede calibrar','error');return;}
+  if(_isPrinterBusy(_pcState(id))){toast('🔒 Está imprimiendo o pausada — la calibración de cama está bloqueada','error');return;}
+  if(!confirm(`🛏 Calibrar automáticamente la cama de ${m.nombre} #${m.numG}?\n\nLa impresora hará HOME y medirá la cama punto por punto.\n\nAsegúrate de que la cama esté completamente despejada.\n\nEsto genera compensación de malla; no reemplaza una corrección mecánica si el desnivel es alto.`))return;
+  _bedLevelSetBusy(id,true,'⏳ CALIBRANDO…');
+  const detail=document.getElementById('pcBedLevelDetail_'+id);
+  if(detail)detail.textContent='Calibrando: HOME + barrido automático de la cama…';
+  const ok=await _sendGcode(id,'G28\nBED_MESH_CLEAR\nBED_MESH_CALIBRATE','🛏 Calibración automática iniciada',{timeout:180000});
+  if(!ok){_bedLevelSetBusy(id,false);if(detail)detail.textContent='No se pudo iniciar la calibración.';return;}
+  _bedLevelWatch(id);
+  setTimeout(()=>_bedLevelSetBusy(id,false),5000);
+}
 function printerHome(id){_sendGcode(id,'G28','🏠 Home en curso');}
 function printerMotorsOff(id){_sendGcode(id,'M84','Motores liberados');}
 function printerJog(id,axis,dist){_sendGcode(id,`G91\nG1 ${axis}${dist} F${axis==='Z'?600:3000}\nG90`,`Mover ${axis} ${dist>0?'+':''}${dist} mm`);}
@@ -1697,6 +1763,31 @@ function openPrinterControl(id){
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px"><span style="font-size:10px;color:var(--text3);align-self:center">Precalentar:</span>${Object.keys(PREHEAT_PRESETS).map(mat=>button(mat,`preheatPrinter('${id}','${mat}')`,motionLocked,'padding:5px 10px')).join('')}${button('❄️ ENFRIAR',`cooldownPrinter('${id}')`,motionLocked,'padding:5px 10px;margin-left:auto')}</div>
+
+    <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🛏 Nivelación de cama</div>
+    <div id="pcBedLevel_${id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:12px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1.2fr);gap:14px;align-items:center">
+        <div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Desnivel máximo de la cama</div>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+            <span id="pcBedLevelValue_${id}" style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:800;color:var(--text)">—</span>
+            <span id="pcBedLevelGrade_${id}" style="font-size:11px;font-weight:900;color:var(--text3)">LEYENDO…</span>
+          </div>
+          <div style="position:relative;height:10px;border-radius:999px;background:linear-gradient(to right,#00d4aa 0%,#38bdf8 35%,#ffaa00 68%,#ff5555 100%);margin:9px 0 7px;overflow:visible">
+            <div id="pcBedLevelFill_${id}" style="position:absolute;inset:0 auto 0 0;width:0%;border-radius:999px;background:#00d4aa;opacity:.24"></div>
+            <span id="pcBedLevelMarker_${id}" style="position:absolute;top:-3px;left:0;width:10px;height:16px;border-radius:5px;background:var(--text3);box-shadow:0 0 0 2px var(--surface2)"></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3)"><span>0 µm</span><span>150</span><span>250</span><span>400</span><span>600+ µm</span></div>
+          <div id="pcBedLevelDetail_${id}" style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.4">Leyendo bed mesh…</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <button id="pcBedAuto_${id}" onclick="printerAutoBedCalibrate('${id}')" ${motionLocked?'disabled':''} style="background:${motionLocked?'var(--surface3)':'rgba(0,212,170,.12)'};border:1px solid ${motionLocked?'var(--border2)':'rgba(0,212,170,.4)'};color:${motionLocked?'var(--text3)':'var(--accent)'};border-radius:9px;padding:10px 12px;font-size:11px;font-weight:900;cursor:${motionLocked?'not-allowed':'pointer'}">⚙ CALIBRAR AUTOMÁTICAMENTE</button>
+          <button onclick="printerBedLevelRefresh('${id}',{announce:true})" style="background:var(--surface);border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer">↻ MEDIR DESNIVEL</button>
+          <button onclick="openBedMesh('${id}')" style="background:var(--surface);border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer">🗺 VER MAPA DE CAMA</button>
+          <div style="font-size:9.5px;color:var(--text3);line-height:1.35">La calibración ejecuta <b>HOME + BED_MESH_CALIBRATE</b>. Compensa electrónicamente pequeñas variaciones; si supera 400 µm conviene corregir la cama físicamente.</div>
+        </div>
+      </div>
+    </div>
     ${active?`
     <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">⚡ Ajustes en vivo</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:9px;margin-bottom:10px">
@@ -1718,6 +1809,7 @@ function openPrinterControl(id){
     <details class="op-expert-only" style="margin-bottom:12px"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📂 Archivos en la impresora</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterFiles('${id}')">↻ Cargar</button></div><div id="pcFiles" style="max-height:160px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:12px;padding:8px">Pulsa “Cargar” para ver los G-code y reimprimir.</div></div></details>
     <details class="op-expert-only"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📊 Historial real (Moonraker)</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterHistory('${id}')">↻ Cargar</button></div><div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:12px;padding:8px">Tiempo y filamento reales de cada trabajo.</div></div></details>`;
   document.getElementById('printerControlModal').style.display='flex';
+  setTimeout(()=>printerBedLevelRefresh(id).catch(()=>{}),0);
 }
 function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
 
@@ -1848,8 +1940,8 @@ async function openBedMesh(id){
   try{
     const data=await _moonrakerGet(id,'/printer/objects/query?bed_mesh');
     const mesh=data?.result?.status?.bed_mesh;
-    if(!mesh||!mesh.probed_matrix){toast('Sin datos de bed mesh — ejecuta BED_MESH_CALIBRATE primero','error');return;}
-    const matrix=mesh.probed_matrix;
+    const matrix=mesh?.probed_matrix||mesh?.mesh_matrix;
+    if(!Array.isArray(matrix)||!matrix.length){toast('Sin datos de bed mesh — ejecuta la calibración automática primero','error');return;}
     const rows=matrix.length,cols=matrix[0].length;
     let mn=1e9,mx=-1e9;
     matrix.forEach(r=>r.forEach(v=>{if(v<mn)mn=v;if(v>mx)mx=v;}));
