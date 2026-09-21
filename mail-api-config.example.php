@@ -9,6 +9,7 @@
  *   3. NO lo subas al repositorio: mail-api-config.php está en .gitignore.
  *
  * La key vive solo en el servidor y nunca se expone en el front-end.
+ * Sin esta key, el envío devuelve HTTP 503; no existe fallback al SMTP compartido.
  * Alternativas equivalentes: variable de entorno RESEND_API_KEY, o un archivo
  * "resend.key" con solo la clave adentro.
  */
