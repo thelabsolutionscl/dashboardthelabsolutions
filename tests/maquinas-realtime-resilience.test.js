@@ -74,6 +74,24 @@ test('navegar por el dashboard no destruye el monitor de Máquinas',()=>{
   assert.doesNotMatch(sw,/disconnectAllPrinterWs\(\)/);
 });
 
+test('monitor permite ordenar por señal de cámara y luego por modelo',()=>{
+  const sort=fn(MAQ,'sortedList');
+  const signal=fn(MAQ,'_cameraSignalRank');
+  const setSort=fn(MAQ,'setMonitorSort');
+  const filters=fn(MAQ,'renderMonitorFilterTabs');
+  const loadOk=fn(MAQ,'_cameraLoadOk');
+  const loadError=fn(MAQ,'_cameraLoadError');
+  assert.match(MAQ,/let _monitorSortMode='camera_model'/,'cámara+modelo debe ser el orden por defecto');
+  assert.match(sort,/_cameraSignalRank\(a\)-_cameraSignalRank\(b\)/,'primero separa con señal de sin señal');
+  assert.match(sort,/_monitorModelCompare\(a,b\)/,'dentro de cada estado de cámara ordena por modelo/número');
+  assert.match(signal,/state==='ok'\?0:state==='down'\?2:1/);
+  assert.match(setSort,/monitor_sort_mode/,'el orden elegido debe persistir');
+  assert.match(filters,/monitorSortSelect/);
+  assert.match(filters,/Cámara con señal → sin señal · modelo/);
+  assert.match(loadOk,/_setCameraSignalState\(im\.dataset\.machineId,'ok'\)/);
+  assert.match(loadError,/_setCameraSignalState\(machineId,'down'\)/);
+});
+
 test('cámaras permanecen montadas aunque cambie estado, orden o filtro',()=>{
   const render=fn(MAQ,'renderMonitorGrid');
   assert.match(render,/const showCam=!!_rawCam/,'Moonraker caído no debe apagar una cámara configurada');

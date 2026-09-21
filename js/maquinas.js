@@ -267,8 +267,20 @@ function _safePrinterMediaUrl(raw){
   }catch(e){return'';}
 }
 let _camSnapInterval=null,_camHealthInterval=null;
-const _camRetryTimers={},_camPendingImages={},_camHealthFails={};
+const _camRetryTimers={},_camPendingImages={},_camHealthFails={},_camSignalState={};
 const _camRecovering={},_camLastRecover={};
+let _camSortRenderTimer=null;
+function _setCameraSignalState(id,state){
+  id=String(id||'');if(!id)return;
+  const next=['ok','down','unknown'].includes(state)?state:'unknown';
+  if(_camSignalState[id]===next)return;
+  _camSignalState[id]=next;
+  clearTimeout(_camSortRenderTimer);
+  _camSortRenderTimer=setTimeout(()=>{
+    if(typeof renderMonitorGrid==='function')renderMonitorGrid();
+    if(typeof renderMonitorFilterTabs==='function')renderMonitorFilterTabs();
+  },120);
+}
 function _cameraTimerKey(im){return im?.dataset?.machineId||im?.id||'';}
 function _cameraClearTimer(im){
   const key=_cameraTimerKey(im);if(!key)return;
@@ -320,6 +332,7 @@ function _cameraSchedule(im,delay){
 function _cameraLoadOk(im){
   if(!im)return;
   im.dataset.camLoading='0';im.dataset.camFails='0';im.dataset.camLastOk=String(Date.now());im.style.opacity='1';
+  _setCameraSignalState(im.dataset.machineId,'ok');
   const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display='none';
   _cameraClearTimer(im);
   if(im.dataset.camKind==='snapshot'&&im.dataset.camSuspended!=='1')_cameraSchedule(im,_CAM_SNAPSHOT_MS);
@@ -372,6 +385,7 @@ function _cameraLoadError(im){
   const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display=hadGood?'none':'flex';
   const n=(parseInt(im.dataset.camFails||'0',10)||0)+1;im.dataset.camFails=String(n);
   const machineId=im.dataset.machineId||'';
+  if(machineId&&n>=_CAM_AUTORECOVER_FAILS)_setCameraSignalState(machineId,'down');
   if(machineId&&n>=_CAM_AUTORECOVER_FAILS)recoverPrinterCamera(machineId,true).catch(()=>{});
   const delay=Math.min(_CAM_RETRY_MAX_MS,1000*Math.pow(2,Math.min(n-1,5)));
   _cameraSchedule(im,delay);
@@ -384,9 +398,10 @@ function _cameraHealthProbe(id){
     const probe=new Image();let done=false;
     const finish=ok=>{
       if(done)return;done=true;clearTimeout(to);probe.onload=null;probe.onerror=null;
-      if(ok){_camHealthFails[id]=0;resolve(true);return;}
+      if(ok){_camHealthFails[id]=0;_setCameraSignalState(id,'ok');resolve(true);return;}
       const fails=(_camHealthFails[id]||0)+1;_camHealthFails[id]=fails;
       const card=document.getElementById('mccam_'+id)?.querySelector('img'),neverWorked=!Number(card?.dataset?.camLastOk||0);
+      if(fails>=2)_setCameraSignalState(id,'down');
       if(neverWorked||fails>=2)recoverPrinterCamera(id,true).catch(()=>{});
       resolve(false);
     };
@@ -947,11 +962,20 @@ function renderSparkline(readings,key,color){
 
 function renderMonitorFilterTabs(){
   const el=document.getElementById('monitorFilterTabs');if(!el)return;
-  el.innerHTML=MONITOR_GRUPOS.map(g=>{
+  const chips=MONITOR_GRUPOS.map(g=>{
     const active=_monitorFilter===g.key;
     const count=g.key==='all'?MAQUINAS.length:MAQUINAS.filter(m=>m.modelo===g.key).length;
     return`<button onclick="filterMonitor('${g.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1px solid ${active?g.color:'var(--border2)'};background:${active?g.color+'22':'var(--surface2)'};color:${active?g.color:'var(--text3)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;transition:all 0.15s">${g.label}<span style="background:${active?g.color+'33':'var(--surface3)'};border-radius:10px;padding:1px 6px;font-size:10.5px;font-weight:700">${count}</span></button>`;
   }).join('');
+  const opt=(value,label)=>`<option value="${value}"${_monitorSortMode===value?' selected':''}>${label}</option>`;
+  el.innerHTML=chips+`<label style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text3);white-space:nowrap">Ordenar
+    <select id="monitorSortSelect" onchange="setMonitorSort(this.value)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);padding:5px 8px;font-size:11px;cursor:pointer">
+      ${opt('camera_model','Cámara con señal → sin señal · modelo')}
+      ${opt('model','Modelo')}
+      ${opt('state','Estado / prioridad')}
+      ${opt('original','Orden registrado')}
+    </select>
+  </label>`;
 }
 
 function filterMonitor(grupo){_monitorFilter=grupo;renderMonitorFilterTabs();renderMonitorKPIs();renderMonitorGrid();}
@@ -1157,7 +1181,7 @@ function renderMonitorGrid(){
             <div class="pbar ${isPrinting?'live':''}"><i id="pbar_${m.id}" style="width:${s.progress}%"></i></div>
           </div>
         </div>`:''}
-        <details class="op-telemetry" ${document.getElementById('tab-maquinas')?.dataset.opView==='expert'?'open':''}><summary>Temperaturas y telemetría</summary><div style="display:flex;gap:6px;margin-top:8px">
+        <details class="op-telemetry" open><summary>Temperaturas y telemetría</summary><div style="display:flex;gap:6px;margin-top:8px">
           <div style="flex:1;background:var(--surface2);border-radius:7px;padding:7px;text-align:center">
             <div style="font-size:10px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px">HOTEND</div>
             <div class="ptemp" id="phot_${m.id}" style="font-size:17px;font-weight:700;color:${s.hotend?.target>0?'#ff6b35':'var(--text)'};line-height:1">${s.hotend?.actual||0}°</div>
@@ -1962,10 +1986,40 @@ function saveAlertSettings(){
 function closeAlertSettings(){document.getElementById('alertSettingsModal').style.display='none';}
 
 // ── SORT & KIOSK ──────────────────────────────────────────────
-let _sortByState=true,_kioskMode=false;
-function stateOrder(s){return{error:0,shutdown:1,paused:2,apidown:3,printing:4,complete:5,standby:6,offline:7,noip:8}[s]??9;}
-function sortedList(lista){if(!_sortByState)return lista;return[...lista].sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline')||((_printerStatus[a.id]?.state==='printing'&&_printerStatus[b.id]?.state==='printing')?((_printerStatus[a.id].eta??Infinity)-(_printerStatus[b.id].eta??Infinity)):0));}
-function toggleSort(){_sortByState=!_sortByState;const btn=document.getElementById('btnSort');if(btn)btn.style.color=_sortByState?'var(--accent)':'var(--text3)';renderMonitorGrid();}
+const MONITOR_SORT_MODES=['camera_model','model','state','original'];
+let _monitorSortMode='camera_model',_kioskMode=false;
+try{
+  const saved=localStorage.getItem('monitor_sort_mode');
+  if(MONITOR_SORT_MODES.includes(saved))_monitorSortMode=saved;
+}catch(_){}
+function stateOrder(s){return{error:0,shutdown:1,paused:2,apidown:3,printing:4,complete:5,standby:6,idle:6,offline:7,noip:8}[s]??9;}
+function _monitorModelOrder(m){
+  const i=MONITOR_GRUPOS.findIndex(g=>g.key===m?.modelo);
+  return i<=0?99:i;
+}
+function _monitorMachineNumber(m){const n=Number(m?.numG??m?.num);return Number.isFinite(n)?n:9999;}
+function _monitorModelCompare(a,b){
+  return _monitorModelOrder(a)-_monitorModelOrder(b)||String(a?.modelo||'').localeCompare(String(b?.modelo||''),'es')||_monitorMachineNumber(a)-_monitorMachineNumber(b)||String(a?.nombre||'').localeCompare(String(b?.nombre||''),'es');
+}
+function _cameraSignalRank(m){
+  if(!_printerCamRaw(m?.id))return 3;
+  const state=_camSignalState[m.id]||'unknown';
+  return state==='ok'?0:state==='down'?2:1;
+}
+function sortedList(lista){
+  const rows=[...(lista||[])];
+  if(_monitorSortMode==='original')return rows;
+  if(_monitorSortMode==='model')return rows.sort(_monitorModelCompare);
+  if(_monitorSortMode==='state')return rows.sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline')||((_printerStatus[a.id]?.state==='printing'&&_printerStatus[b.id]?.state==='printing')?((_printerStatus[a.id].eta??Infinity)-(_printerStatus[b.id].eta??Infinity)):0)||_monitorModelCompare(a,b));
+  return rows.sort((a,b)=>_cameraSignalRank(a)-_cameraSignalRank(b)||_monitorModelCompare(a,b));
+}
+function setMonitorSort(mode){
+  _monitorSortMode=MONITOR_SORT_MODES.includes(mode)?mode:'camera_model';
+  try{localStorage.setItem('monitor_sort_mode',_monitorSortMode);}catch(_){}
+  const btn=document.getElementById('btnSort');if(btn){btn.style.color=_monitorSortMode==='state'?'var(--accent)':'var(--text3)';btn.title='Orden actual: '+_monitorSortMode;}
+  renderMonitorFilterTabs();renderMonitorGrid();
+}
+function toggleSort(){setMonitorSort(_monitorSortMode==='state'?'camera_model':'state');}
 function toggleKiosk(){
   _kioskMode=!_kioskMode;
   if(_kioskMode){document.documentElement.requestFullscreen?.();document.body.classList.add('kiosk');}
