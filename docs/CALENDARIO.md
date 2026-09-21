@@ -18,13 +18,14 @@ alarmas/notificaciones y sincronización al **Google Calendar personal** de cada
 ## Configuración (una vez)
 
 1. **Google Cloud** (mismo proyecto del Client ID de Drive que ya usa el panel):
+   - **Drive y Calendar comparten el Client ID, pero son permisos distintos**: conectar Drive no autoriza Google Calendar.
    - Habilitar **Google Calendar API**.
    - En la pantalla de consentimiento OAuth, agregar el scope
      `https://www.googleapis.com/auth/calendar.events`.
    - El origen JavaScript autorizado debe incluir el dominio del panel.
 2. En la sección **Calendario → ⚙ Calendarios de cada uno**: poner el correo de
    Google de Nicanor, Gustavo y Florencia (se guarda compartido para todos).
-3. Cada usuario pulsa **🔗 Conectar Google** una vez por navegador y
+3. Cada usuario pulsa **🔗 Conectar Google Calendar** una vez por navegador y
    **🔔 Avisos** para permitir notificaciones del navegador.
 
 ## Cómo sincroniza con Google
@@ -40,7 +41,7 @@ alarmas/notificaciones y sincronización al **Google Calendar personal** de cada
 - Ediciones → `PATCH`; quitar a una persona o borrar el evento → `DELETE` de su
   copia. El estado de sync viaja en el evento (`gcal`, `gsyncMts`) por el respaldo
   compartido, así **cualquier** navegador conectado empuja lo pendiente
-  (⇅ Sincronizar, o automático si ya hay sesión de Google activa).
+  (⇅ Sincronizar calendario, o automático si ya hay sesión de Google Calendar activa).
 
 ## Detalles técnicos
 
