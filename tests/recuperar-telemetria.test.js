@@ -101,6 +101,7 @@ test('la ruta /recover exige POST, token, IP privada y no se solapa',()=>{
 test('el bridge puede recuperar cámaras K2/K2 Plus y MJPEG sin tocar Klipper',()=>{
   const camScript=functionSource(BRIDGE,'cameraRecoverScript');
   assert.match(camScript,/S99camera/,'prefiere el servicio persistente instalado en la impresora');
+  assert.match(camScript,/\/dev\/null &/,'S99camera debe arrancar en background: las K1 esperan ~30 s y no pueden agotar SSH');
   assert.match(camScript,/k2rtc\.py/,'K2 requiere el puente WebRTC');
   assert.match(camScript,/go2rtc/,'K2 publica snapshots mediante go2rtc');
   assert.match(camScript,/camera_watchdog\.py/,'debe reponer también el watchdog');
@@ -114,8 +115,20 @@ test('el bridge puede recuperar cámaras K2/K2 Plus y MJPEG sin tocar Klipper',(
   assert.match(route,/req\.method!=='POST'/);
   assert.match(route,/isPrivateIp\(ip\)/);
   assert.match(route,/_recoveringCamera\.has\(ip\)/,'no debe reiniciar dos veces el mismo stack');
-  assert.match(route,/recoverCamera\(ip\)/);
+  assert.match(route,/requestedKind/,'el dashboard puede indicar K2 o MJPEG para no probar el backend equivocado');
+  assert.match(route,/recoverCamera\(ip,kind\)/);
   assert.doesNotMatch(route,/writeHead\(5\d\d/,'Cloudflare no debe convertir el error en una respuesta sin CORS');
+});
+
+test('recuperación de cámara usa el backend correcto y tiene presupuesto de tiempo suficiente',()=>{
+  const cam= functionSource(BRIDGE,'cameraIsUp');
+  assert.match(cam,/mode!=='mjpeg'/,'K1/MJPEG no debe perder 25 s probando go2rtc');
+  assert.match(cam,/mode!=='k2'/,'K2 no debe perder tiempo probando MJPEG');
+  const recover=functionSource(MAQ,'recoverPrinterCamera');
+  assert.match(recover,/\?kind=\$\{kind\}/,'el modelo debe viajar como pista al bridge');
+  const clientMs=Number(MAQ.match(/const _CAM_RECOVER_TIMEOUT_MS=(\d+)/)[1]);
+  const waitMs=Number(BRIDGE.match(/const CAMERA_RECOVER_WAIT_MS = (\d+)/)[1]);
+  assert.ok(clientMs>waitMs+30000,'el navegador debe esperar holgadamente el arranque físico y la negociación de cámara');
 });
 
 test('la tarjeta de telemetría caída ofrece el botón de recuperación',()=>{
