@@ -26,7 +26,8 @@
     value=value==='expert'?'expert':'simple';el.dataset.opView=value;
     el.querySelectorAll('.op-revealed').forEach(n=>closeDetail(n.id,false));
     el.querySelectorAll('.op-detail-close').forEach(n=>n.remove());
-    el.querySelectorAll('details.op-disclosure,details.op-telemetry,details.op-post-actions').forEach(n=>{n.open=value==='expert';});
+    el.querySelectorAll('details.op-disclosure,details.op-post-actions').forEach(n=>{n.open=value==='expert';});
+    el.querySelectorAll('details.op-telemetry').forEach(n=>{n.open=true;});
     el.querySelectorAll('[data-op="mode"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.arg===page+':'+value)));
     try{localStorage.setItem('op_view_'+page,value);}catch(e){}
     if(page==='finanzas'&&value==='expert'&&typeof finDrawChart==='function')requestAnimationFrame(()=>finDrawChart());
