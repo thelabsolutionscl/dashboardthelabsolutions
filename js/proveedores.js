@@ -209,13 +209,72 @@ function renderProveedores(skipAnalytics){
   const sorted=getSortedProveedores(list);
   const count=document.getElementById('proveedoresCount');if(count) count.textContent=`${sorted.length} proveedor${sorted.length!==1?'es':''}`;
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
-  if(!sorted.length){tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;return;}
+  const tableWrap=tbody.closest('.table-wrap')||tbody.closest('table')?.parentElement;
+  let cards=document.getElementById('proveedoresCards');
+  if(!cards&&tableWrap){
+    cards=document.createElement('section');
+    cards.id='proveedoresCards';
+    cards.className='pv-card-grid';
+    tableWrap.before(cards);
+    tableWrap.classList.add('pv-table-secondary');
+  }
+  if(!sorted.length){
+    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</td></tr>`;
+    if(cards) cards.innerHTML=`<div class="op-empty">${state.proveedores.length?'Sin resultados para esta búsqueda':'Sin proveedores aún — agrega el primero ↗'}</div>`;
+    return;
+  }
   tbody.innerHTML=sorted.map(p=>buildProveedorRow(p)).join('');
+  if(cards) cards.innerHTML=sorted.map(p=>buildProveedorCard(p)).join('');
   if(!skipAnalytics) renderProveedoresAnalytics();
   try{renderMejorPrecio();}catch(e){}
   try{renderOCList();}catch(e){}
   _applySortIndicators();
 }
+function buildProveedorCard(p){
+  const f=p.fields||{},id=p.id;
+  const nombre=f['Nombre']||'—';
+  const estado=f['Estado']||'Activo';
+  const estadoPost=f['Estado postulación']||'';
+  const rep=parseInt(f['Reputación'])||0;
+  const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'Sin dato';
+  const tel=(f['Teléfono']||'').replace(/\s/g,'');
+  const email=f['Email']||'';
+  const web=f['Sitio Web']||'';
+  const cats=pvCat(f)||'Sin categoría';
+  const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===String(nombre).toLowerCase());
+  const pedidosActivos=pedidosTodos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||''));
+  const total=pedidosTodos.reduce((s,x)=>s+(Number(x.fields['Monto total (CLP)'])||0),0);
+  const cls=estado==='Bloqueado'?'is-blocked':estado==='Inactivo'?'is-inactive':estadoPost==='ENTREVISTAR'?'is-review':'';
+  const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;
+  return `<article class="op-record pv-card ${cls}" data-id="${id}">
+    <header>
+      <div>
+        <span class="op-eyebrow">PROVEEDOR</span>
+        <h3>${escapeHtml(nombre)}</h3>
+        <p>${escapeHtml(f['Contacto']||'Contacto sin registrar')}${f['Comuna']?' · '+escapeHtml(f['Comuna']):''}</p>
+        <div class="pv-card-meta">${pvCatBadge(cats)}${estadoPvBadge(estado)}${estadoPost?estadoPostPill(estadoPost):''}</div>
+      </div>
+    </header>
+    <div class="op-facts">
+      <div><span>Reputación</span><b>${rep?repStars(rep):'Sin dato'}</b><small>${rep?rep+'/5':'Aún no evaluado'}</small></div>
+      <div><span>Plazo de entrega</span><b>${escapeHtml(plazo)}</b><small>${pedidosActivos.length} pedido${pedidosActivos.length!==1?'s':''} activo${pedidosActivos.length!==1?'s':''}</small></div>
+    </div>
+    <div class="pv-card-contact">
+      <div><span>Email</span>${email?`<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>`:'<b>Sin email</b>'}</div>
+      <div><span>Teléfono</span>${tel?`<a href="tel:${escapeHtml(tel)}">${escapeHtml(f['Teléfono']||tel)}</a>`:'<b>Sin teléfono</b>'}</div>
+    </div>
+    <p class="op-caption">${pedidosTodos.length?`${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''} registrada${pedidosTodos.length!==1?'s':''} · ${formatCLP(total)} acumulado`:'Sin pedidos vinculados registrados'}</p>
+    <footer>
+      <span><small>Gestión</small>${escapeHtml(f['Condiciones de pago']||'Condición de pago sin registrar')}</span>
+      <div class="pv-card-actions">
+        ${wa?`<a class="op-button" href="https://wa.me/${escapeHtml(wa.replace(/^\+/,'').replace(/\D/g,''))}" target="_blank" rel="noopener">WhatsApp</a>`:''}
+        ${web?`<a class="op-button" href="${escapeHtml(web.startsWith('http')?web:'https://'+web)}" target="_blank" rel="noopener">Web</a>`:''}
+        <button type="button" class="op-button op-primary" onclick="openEditProveedor('${id}')">Ver / editar</button>
+      </div>
+    </footer>
+  </article>`;
+}
+
 function buildProveedorRow(p){
   const f=p.fields,id=p.id;
   const tel=(f['Teléfono']||'').replace(/\s/g,'');
