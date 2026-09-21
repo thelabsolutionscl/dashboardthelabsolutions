@@ -1065,6 +1065,12 @@ function jobGcodeReady(job){
 }
 function _jobDomKey(id){return String(id||'').replace(/[^a-zA-Z0-9_-]/g,'_');}
 function _jobGcodeButton(id){return document.getElementById('mopsGcodeUpload_'+_jobDomKey(id));}
+function _jobGcodeProgressLabel(progress,loaded=0,total=0){
+  const pct=Math.max(0,Math.min(99,Math.round(num(progress))));
+  const loadedMb=Math.max(0,num(loaded))/1024/1024,totalMb=Math.max(0,num(total))/1024/1024;
+  const amount=totalMb>0?` · ${loadedMb.toFixed(1)}/${totalMb.toFixed(1)} MB`:'';
+  return `⏳ SUBIENDO G-CODE · ${pct}%${amount}`;
+}
 function _jobGcodeSetProgress(id,progress,label=''){
   const state=_jobGcodeUploads[id]||(_jobGcodeUploads[id]={active:true,progress:0});
   state.active=true;state.progress=Math.max(0,Math.min(100,Math.round(num(progress))));if(label)state.label=label;
@@ -1111,7 +1117,7 @@ async function uploadJobGcode(id,file){
   const ip=typeof getPrinterIp==='function'?getPrinterIp(machine):machine.ip;
   if(!ip){toast('La impresora no tiene IP/configuración de conexión','error');return false;}
   const sizeMb=(num(file.size)/1024/1024).toFixed(1);
-  _jobGcodeUploads[id]={active:true,progress:0,filename:String(file.name||''),xhr:null,watchdog:null};
+  _jobGcodeUploads[id]={active:true,progress:0,filename:String(file.name||''),xhr:null,watchdog:null,loadedBytes:0,totalBytes:num(file.size)};
   _jobGcodeSetProgress(id,0,`⏳ COMPROBANDO IMPRESORA… ${sizeMb} MB`);
 
   const bindUploaded=(storedName)=>{
@@ -1156,13 +1162,27 @@ async function uploadJobGcode(id,file){
     const xhr=new XMLHttpRequest();xhr.open('POST',printerUrl(ip,'/server/files/upload'));xhr.timeout=120000;
     const uploadState=_jobGcodeUploads[id];if(uploadState)uploadState.xhr=xhr;
     const headers=typeof getPrinterAuthHeaders==='function'?getPrinterAuthHeaders(targetMachineId):{};for(const k in headers)xhr.setRequestHeader(k,headers[k]);
-    const localMode=typeof _isLocalMode==='function'&&_isLocalMode();
-    if(localMode&&xhr.upload){
-      xhr.upload.onprogress=event=>{if(event.lengthComputable)_jobGcodeSetProgress(id,Math.min(99,event.loaded/event.total*100));};
-      xhr.upload.onload=()=>_jobGcodeSetProgress(id,99,'⏳ ARCHIVO ENVIADO · ESPERANDO MOONRAKER…');
+    // El bridge remoto ya responde OPTIONS y CORS, por lo que el navegador
+    // puede reportar upload progress también a través del túnel Cloudflare.
+    // El porcentaje mide bytes enviados al bridge/impresora; 100% solo se
+    // confirma después de verificar que Moonraker realmente guardó el archivo.
+    if(xhr.upload){
+      xhr.upload.onprogress=event=>{
+        if(!event.lengthComputable)return;
+        const pct=Math.min(99,event.loaded/event.total*100),state=_jobGcodeUploads[id];
+        if(state){state.loadedBytes=event.loaded;state.totalBytes=event.total;}
+        _jobGcodeSetProgress(id,pct,_jobGcodeProgressLabel(pct,event.loaded,event.total));
+      };
+      xhr.upload.onload=()=>{
+        const state=_jobGcodeUploads[id],total=state?.totalBytes||num(file.size);
+        if(state){state.loadedBytes=total;state.progress=99;}
+        _jobGcodeSetProgress(id,99,`⏳ SUBIENDO G-CODE · 99% · ${(total/1024/1024).toFixed(1)}/${(total/1024/1024).toFixed(1)} MB · PROCESANDO…`);
+      };
     }
     if(uploadState)uploadState.watchdog=setTimeout(()=>{
-      if(_jobGcodeUploads[id]?.active)_jobGcodeSetProgress(id,0,'⏳ SUBIDA EN CURSO · RESPUESTA LENTA…');
+      const state=_jobGcodeUploads[id];
+      if(state?.active)_jobGcodeSetProgress(id,state.progress||0,
+        `⏳ SUBIDA EN CURSO · ${Math.round(state.progress||0)}%${state.totalBytes?` · ${(num(state.loadedBytes)/1024/1024).toFixed(1)}/${(num(state.totalBytes)/1024/1024).toFixed(1)} MB`:''} · RESPUESTA LENTA…`);
     },15000);
 
     xhr.onload=async()=>{
@@ -1172,7 +1192,7 @@ async function uploadJobGcode(id,file){
           const body=JSON.parse(xhr.responseText||'{}'),item=body?.result?.item||body?.result||{};
           storedName=String(item.path||item.filename||storedName);
         }catch(_){}
-        _jobGcodeSetProgress(id,99,'⏳ VERIFICANDO ARCHIVO EN MOONRAKER…');
+        _jobGcodeSetProgress(id,99,'⏳ SUBIENDO G-CODE · 99% · VERIFICANDO EN MOONRAKER…');
         const verified=await _verifyUploadedGcode(targetMachineId,storedName);
         if(!verified){
           _jobGcodeClearProgress(id);renderAll();
