@@ -93,6 +93,14 @@
       ${button(d30?'✓ Pago a 30 días':'Pago a 30 días','order-pay-30',p.id,d30?'op-pay-active':'')}
     </div>`;
   }
+  function marginColor(value){
+    const n=Number(value);
+    if(!Number.isFinite(n))return '';
+    const p=Math.max(0,Math.min(100,n));
+    // Menor margen = azul; mayor margen = rojo.
+    const hue=Math.round(210*(1-p/100));
+    return `hsl(${hue} 85% 65%)`;
+  }
   function quoteInfo(c){
     const f=c.fields,e=f['Estado cotización']||'Sin estado';
     const expires=until(f['Fecha vencimiento']),age=until(f['Fecha cotización']);
@@ -144,7 +152,7 @@
     el.innerHTML=rows.length?rows.slice(0,ui.limit).map(c=>{
       const f=c.fields,q=quoteInfo(c),m=getMargenCot(f);
       const missingOrder=q.e==='Aprobada'&&q.linkedOrder===null;
-      return `<article class="op-record"><header><div><span class="op-eyebrow">${esc(f['N° Cotización']||'Cotización')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'Sin título')}</p></div>${pill(q.e)}</header><div class="op-facts"><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div><div><span>Margen</span><b>${m==null?'Sin dato':Number(m).toFixed(1)+'%'}</b></div></div><p class="op-caption">${q.awaiting&&q.age!==null?`${Math.max(0,-q.age)} días desde la fecha de cotización · `:''}Vigencia: ${esc(f['Fecha vencimiento']||'sin fecha')}</p><footer><span><small>Siguiente paso</small>${esc(q.next)}</span>${button(missingOrder?'Crear pedido':'Ver propuesta',missingOrder?'quote-order':'quote',c.id,'op-primary')}</footer></article>`;
+      return `<article class="op-record"><header><div><span class="op-eyebrow">${esc(f['N° Cotización']||'Cotización')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'Sin título')}</p></div>${pill(q.e)}</header><div class="op-facts"><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div><div class="op-margin-fact" style="${m==null?'':`--op-margin-color:${marginColor(m)}`}"><span>Margen</span><b>${m==null?'Sin dato':Number(m).toFixed(1)+'%'}</b></div></div><p class="op-caption">${q.awaiting&&q.age!==null?`${Math.max(0,-q.age)} días desde la fecha de cotización · `:''}Vigencia: ${esc(f['Fecha vencimiento']||'sin fecha')}</p><footer><span><small>Siguiente paso</small>${esc(q.next)}</span>${button(missingOrder?'Crear pedido':'Ver propuesta',missingOrder?'quote-order':'quote',c.id,'op-primary')}</footer></article>`;
     }).join(''):'<div class="op-empty">No hay cotizaciones en esta selección.</div>';
     $('opQuoteMore').innerHTML=rows.length>ui.limit?button(`Ver más · ${rows.length-ui.limit} pendientes`,'more-quotes'):'';
   }
@@ -280,7 +288,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,marginColor,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
