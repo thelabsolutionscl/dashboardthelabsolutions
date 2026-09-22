@@ -92,6 +92,29 @@ test('monitor permite ordenar por señal de cámara y luego por modelo',()=>{
   assert.match(loadError,/_setCameraSignalState\(machineId,'down'\)/);
 });
 
+test('modo remoto aligera polling y distingue bridge de impresora',()=>{
+  const poll=fn(MAQ,'pollPrinters');
+  const fetchStatus=fn(MAQ,'fetchPrinterStatus');
+  const apply=fn(MAQ,'_applyStatus');
+  assert.match(poll,/_printerUsesRemoteTunnel\(\)\?2:4/,'remoto debe limitar concurrencia');
+  assert.match(fetchStatus,/_REMOTE_STATUS_TIMEOUT_MS/);
+  assert.match(fetchStatus,/_remoteBridgeReachable/);
+  assert.match(fetchStatus,/_remotePathFailure/);
+  assert.match(apply,/_remotePathFail/,'un fallo común del túnel no debe convertirse en offline individual');
+  assert.match(apply,/_centralFarmMachineEvidence/,'usa evidencia del controller dentro de la oficina');
+});
+
+test('grid remoto convierte MJPEG continuo en snapshots finitos',()=>{
+  const raw=fn(MAQ,'_printerGridCamRaw');
+  const sync=fn(MAQ,'_syncPrinterCam');
+  const ok=fn(MAQ,'_cameraLoadOk');
+  assert.match(raw,/action=stream/);
+  assert.match(raw,/action=snapshot/);
+  assert.match(sync,/_REMOTE_CAM_SNAPSHOT_MS/);
+  assert.match(sync,/data-cam-interval/);
+  assert.match(ok,/_cameraSnapshotDelay/);
+});
+
 test('cámaras permanecen montadas aunque cambie estado, orden o filtro',()=>{
   const render=fn(MAQ,'renderMonitorGrid');
   assert.match(render,/const showCam=!!_rawCam/,'Moonraker caído no debe apagar una cámara configurada');
