@@ -500,7 +500,7 @@ test('preflight valida la malla activa en Moonraker y exige confirmación extra 
 
 test('inicio revalida inmediatamente y sólo ejecuta mediante Farm Controller',()=>{
   const start=OPS.slice(OPS.indexOf('async function startJob('),OPS.indexOf('\nfunction startExistingFile',OPS.indexOf('async function startJob(')));
-  assert.match(start,/const fresh=evaluatePreflight\(j,m\)/);
+  assert.match(start,/const fresh=await evaluatePreflightLive\(j,m\)/);
   assert.match(start,/window\.FarmQueue\?\.startExisting/);
   assert.doesNotMatch(start,/printer\/print\/start/);
   assert.match(start,/j\.status='en_cola'/,'aceptación del Controller no debe fingir que ya imprime');
