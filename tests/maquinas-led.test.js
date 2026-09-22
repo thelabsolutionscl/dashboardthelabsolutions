@@ -80,6 +80,7 @@ test('la UI consulta, suscribe y expone el control LED por impresora',()=>{
   assert.ok(INDEX.includes('id="printerConnLight"'));
   assert.match(MAQ,/_printerLightQuerySuffix\(m\.id\)/);
   assert.match(MAQ,/_printerLightWsObjects\(m\.id\)/);
+  assert.match(LED,/idle_timeout:null/,'WebSocket debe recibir cambios de actividad G-code');
   assert.match(MAQ,/_renderPrinterLightButton\(m\.id\)/);
   assert.match(LED,/_sendGcode\(id,script,[\s\S]*\{allowBusy:true\}\)/);
 });
