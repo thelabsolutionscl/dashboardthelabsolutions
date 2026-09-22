@@ -486,13 +486,16 @@ test('preflight separa material-volumen, boquilla y cama liberada',()=>{
   assert.match(OPS,/confirmBedCleared/);
 });
 
-test('preflight usa historial de nivelación para advertir mesh alto, antiguo o a temperatura distinta',()=>{
-  assert.match(OPS,/function bedLevelPreflightFact\(/);
-  assert.match(OPS,/desnivel MUY ALTO/);
-  assert.match(OPS,/ageDays>=7/);
-  assert.match(OPS,/Math\.abs\(expected-temp\)>=20/);
-  assert.match(OPS,/add\('bed-level','Nivelación de cama'/);
-  assert.match(OPS,/bedLevel:bedLevelPreflightFact\(machine\.id,job\.material\)/);
+test('preflight valida la malla activa en Moonraker y exige confirmación extra si no está verificada',()=>{
+  assert.match(OPS,/async function evaluatePreflightLive\(/);
+  assert.match(OPS,/window\.getBedLevelPreflightFact/);
+  assert.match(OPS,/strongConfirm/);
+  assert.match(OPS,/strongWarnings/);
+  assert.match(OPS,/strongToken/);
+  assert.match(OPS,/CONFIRMACIÓN EXTRA/);
+  assert.match(OPS,/const fresh=await evaluatePreflightLive\(j,m\)/);
+  assert.match(OPS,/fresh\.strongToken!==String\(options\.strongToken/);
+  assert.match(OPS,/bedLevel:Object\.prototype\.hasOwnProperty\.call\(opts,'bedLevel'\)/);
 });
 
 test('inicio revalida inmediatamente y sólo ejecuta mediante Farm Controller',()=>{
