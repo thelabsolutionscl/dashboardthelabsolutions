@@ -290,6 +290,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   const stats=functionSource(MAQ,'_bedLevelStats');
   const grade=functionSource(MAQ,'_bedLevelGrade');
   const wait=functionSource(MAQ,'_bedLevelWaitForCompletion');
+  const idleWait=functionSource(MAQ,'_bedLevelWaitForPhysicalIdle');
   const render=functionSource(MAQ,'_bedLevelRenderStats');
   const source=functionSource(MAQ,'_bedLevelSetSource');
   const restore=functionSource(MAQ,'_bedLevelRestoreRunUi');
@@ -306,13 +307,18 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(auto,/_bedLevelMetaWrite/,'una calibración verificada debe guardar fecha y firma');
   assert.match(auto,/_bedLevelTimeoutMs/,'timeout debe ser consistente y adaptable a camas grandes');
   assert.match(auto,/renderMonitorKPIs\(\);renderMonitorGrid\(\)/,'la tarjeta debe cambiar a CALIBRANDO inmediatamente');
+  assert.match(auto,/_bedLevelWaitForPhysicalIdle/,'no debe liberar CALIBRANDO mientras idle_timeout siga ejecutando el cierre de la calibración');
 
   assert.match(wait,/1200/,'durante calibración debe muestrear suficientemente rápido para observar BED_MESH_CLEAR');
+  assert.match(idleWait,/idle_timeout&print_stats/,'debe esperar evidencia física de que Klipper dejó de ejecutar G-code');
+  assert.match(idleWait,/finalizando G-code y activando la nueva malla/,'el cierre sigue siendo parte de CALIBRANDO');
   assert.match(wait,/sawCleared/);
   assert.match(wait,/CALIBRANDO · \$\{elapsed\}s/);
   assert.match(wait,/run\.cancelled/);
 
   assert.match(refresh,/forceDuringRun/,'una lectura manual no debe pisar visualmente el estado CALIBRANDO');
+  assert.match(refresh,/_bedLevelCalibrationActive/,'SIN MALLA no debe mostrarse como falla mientras BED_MESH_CALIBRATE está en curso');
+  assert.match(MAQ,/MIDIENDO NUEVA MALLA/,'durante BED_MESH_CLEAR la UI debe explicar el estado transitorio en vez de alarmar');
   assert.match(source,/MALLA ACTIVA NO VERIFICADA/,'una lectura de Moonraker no debe fingir que coincide con una calibración verificada');
   assert.match(source,/CALIBRACIÓN VERIFICADA/);
   assert.match(render,/Malla leída ahora/,'debe distinguir hora de lectura de hora de calibración');
@@ -375,6 +381,7 @@ test('la tarjeta prioriza actividad física sobre standby/libre',()=>{
   const ocupacion=functionSource(MAQ,'renderMaqOcupacion');
   assert.match(effective,/_printerActivity/,'todas las vistas deben consumir la fuente única de actividad');
   assert.match(activity,/MachineActivityStore/,'una calibración durable debe dominar standby incluso tras recarga');
+  assert.match(activity,/_bedLevelRuns/,'la ejecución local activa debe conservar prioridad aunque el Controller aún no haya sincronizado');
   assert.match(activity,/MachineActivity\.derive/,'macros G-code también deben dejar de verse libres');
   assert.match(meta,/calibrating:\{label:'Calibrando'/);
   assert.match(meta,/gcode:\{label:'Ejecutando G-code'/);
