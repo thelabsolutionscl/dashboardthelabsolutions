@@ -101,6 +101,22 @@
     const hue=Math.round(210*(1-p/100));
     return `hsl(${hue} 85% 65%)`;
   }
+  function quoteStateActions(c){
+    const q=quoteInfo(c),e=q.e,id=c.id,parts=[];
+    if(['Solicitada','Enviada','Negociación'].includes(e)){
+      if(e==='Solicitada')parts.push(button('Marcar enviada','quote-status',`${id}::Enviada`));
+      if(e==='Enviada')parts.push(button('Pasar a negociación','quote-status',`${id}::Negociación`));
+      parts.push(button('Aprobar cotización','quote-status',`${id}::Aprobada`,'op-primary'));
+      parts.push(button('Rechazar cotización','quote-status',`${id}::Rechazada`,'op-danger-action'));
+    }else if(e==='Rechazada'||e==='Vencida'){
+      parts.push(button('Reactivar como enviada','quote-status',`${id}::Enviada`,'op-primary'));
+    }else if(e==='Aprobada'){
+      if(q.linkedOrder)parts.push(button('Ver pedido vinculado','quote-linked-order',q.linkedOrder.id,'op-primary'));
+      else parts.push(button('Crear pedido pendiente','quote-order',id,'op-primary'));
+    }
+    if(!parts.length)return '';
+    return `<div class="op-quote-state-actions"><div class="op-quote-state-head"><span>Acciones de estado</span><small>${esc(e)}</small></div><div class="op-quote-state-buttons">${parts.join('')}</div></div>`;
+  }
   function quoteInfo(c){
     const f=c.fields,e=f['Estado cotización']||'Sin estado';
     const expires=until(f['Fecha vencimiento']),age=until(f['Fecha cotización']);
@@ -227,7 +243,7 @@
     const f=r.fields,isOrder=kind==='order';
     const nextStage=isOrder?nextOrderStage(r):null;
     const editTone=!isOrder||!nextStage?'op-primary':'';
-    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div><p>${esc(quoteInfo(r).next)}</p>`}<div class="op-drawer-actions">${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,editTone)}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'El envío y los cambios de estado están disponibles al editar la cotización o en Experto.'}</p>`;
+    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div><p>${esc(quoteInfo(r).next)}</p>${quoteStateActions(r)}`}<div class="op-drawer-actions">${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,editTone)}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'Las acciones de estado disponibles aparecen arriba; Editar conserva el control completo de la cotización.'}</p>`;
     if(!dlg.open)dlg.showModal();
   }
   function goFinance(tab){if(!allowed('finanzas'))return;switchTab('finanzas');finSwitchTab(tab);finance();}
@@ -255,6 +271,14 @@
     if(a==='collection-detail'){reveal('finCobranzaActions');return;}
     if(a==='client'){if(!allowed('clientes'))return;openClienteDetalle(arg);return;}
     if(a==='client-tab'){if(!allowed('clientes'))return;cdTab(arg);return;}
+    if(a==='quote-status'){
+      const sep=arg.indexOf('::'),id=sep>=0?arg.slice(0,sep):'',estado=sep>=0?arg.slice(sep+2):'';
+      if(!id||!estado||typeof updateCotizacionEstado!=='function')return;
+      await updateCotizacionEstado(id,estado);
+      openRecord('quote',id);
+      return;
+    }
+    if(a==='quote-linked-order'){openRecord('order',arg);return;}
     if(a==='order-pay-abono'||a==='order-pay-saldo'||a==='order-pay-total'||a==='order-pay-30'){
       const p=own(state.pedidos).find(p=>p.id===arg);if(!p)return;
       const f=p.fields||{};
@@ -288,7 +312,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,marginColor,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,quoteStateActions,marginColor,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
