@@ -1086,6 +1086,15 @@ function _printerActivity(id,status=null){
   const live=status||_printerStatus[id]||_printerInitialStatus((typeof MAQUINAS!=='undefined'?MAQUINAS:[]).find(m=>m.id===id)||{});
   let operation=null,adminAvailable=true,bedCleared=true;
   try{operation=window.MachineActivityStore?.get?.(id)||null;}catch(_){}
+  // La ejecución local es evidencia autoritativa mientras esta pestaña siga viva.
+  // Evita que un sync tardío del Farm Controller haga caer CALIBRANDO a G-code
+  // aunque BED_MESH_CALIBRATE siga físicamente en curso.
+  try{
+    const run=_bedLevelRuns?.[id];
+    if(run?.active&&!run.cancelled&&operation?.type!=='bed_calibration'){
+      operation={machineId:id,type:'bed_calibration',label:'Nivelación de cama',phase:run.phaseText||'Calibrando cama…',source:'dashboard',startedAt:run.startedAt||Date.now(),expiresAt:(run.startedAt||Date.now())+_BED_LEVEL_TIMEOUT_MS+120000,updatedAt:Date.now()};
+    }
+  }catch(_){}
   try{adminAvailable=typeof getMaquinaEstadoGlobal!=='function'||getMaquinaEstadoGlobal(id)==='disponible';}catch(_){}
   try{bedCleared=typeof window.MachineOps?.bedIsCleared!=='function'||window.MachineOps.bedIsCleared(id);}catch(_){}
   if(window.MachineActivity?.derive)return window.MachineActivity.derive(live,{operation,adminAvailable,bedCleared});
@@ -2044,6 +2053,19 @@ function _bedLevelSetBusy(id,busy,label){
   ['pcBedRefresh_','pcBedMap_','pcBedCold_','pcBedPla_','pcBedPetg_','pcBedAbs_'].forEach(prefix=>{const el=document.getElementById(prefix+id);if(!el)return;el.disabled=!!busy;el.style.opacity=busy?'.45':'1';el.style.cursor=busy?'not-allowed':'pointer';});
 }
 function _bedLevelMarkPrevious(id){const src=document.getElementById('pcBedLevelSource_'+id);if(src)src.innerHTML='<b style="color:#ffaa00">VALOR ANTERIOR</b><br><span style="color:var(--text3)">La cifra visible corresponde a la malla previa. Se reemplazará cuando termine y se verifique la nueva calibración.</span>';}
+function _bedLevelCalibrationActive(id){
+  const run=_bedLevelRuns[id];if(run?.active&&!run.cancelled)return true;
+  try{return window.MachineActivityStore?.get?.(id)?.type==='bed_calibration';}catch(_){return false;}
+}
+function _bedLevelRenderMeasuring(id){
+  const value=document.getElementById('pcBedLevelValue_'+id),gradeEl=document.getElementById('pcBedLevelGrade_'+id),detail=document.getElementById('pcBedLevelDetail_'+id),fill=document.getElementById('pcBedLevelFill_'+id),marker=document.getElementById('pcBedLevelMarker_'+id),src=document.getElementById('pcBedLevelSource_'+id);
+  if(value&&value.textContent==='—')value.textContent='…';
+  if(gradeEl){gradeEl.textContent='MIDIENDO NUEVA MALLA';gradeEl.style.color='#ffaa00';}
+  if(detail)detail.textContent='BED_MESH_CLEAR dejó la malla temporalmente vacía mientras Klipper mide los nuevos puntos. Esto es normal durante la calibración.';
+  if(fill)fill.style.opacity='.12';if(marker)marker.style.background='#ffaa00';
+  if(src)src.innerHTML='<b style="color:#ffaa00">CALIBRACIÓN EN CURSO</b><br><span style="color:var(--text3)">La ausencia temporal de malla no es una falla. La nueva malla aparecerá al terminar BED_MESH_CALIBRATE.</span>';
+  _bedLevelSetState(id,'CALIBRANDO','#ffaa00');_bedLevelSetStatus(id,'CALIBRANDO · MIDIENDO NUEVA MALLA','#ffaa00');
+}
 function _bedLevelRestoreRunUi(id){
   const run=_bedLevelRuns[id],op=window.MachineActivityStore?.get?.(id);if(!run?.active&&op?.type!=='bed_calibration')return false;const startedAt=run?.startedAt||op.startedAt||Date.now(),elapsed=Math.max(0,Math.floor((Date.now()-startedAt)/1000));
   const label=run?.uiLabel||'CALIBRANDO',phase=run?.phaseText||op?.phase||'Calibrando cama…';_bedLevelSetBusy(id,true,`⏳ ${label} · ${elapsed}s`);_bedLevelSetState(id,label,'#ffaa00');_bedLevelSetStatus(id,phase,'#ffaa00');_bedLevelMarkPrevious(id);return true;
@@ -2069,6 +2091,7 @@ async function printerBedLevelRefresh(id,opts={}){
     if(value)value.textContent='—';if(gradeEl){gradeEl.textContent='SIN RESPUESTA';gradeEl.style.color='var(--danger)';}if(detail)detail.textContent='No se pudo leer la malla desde Moonraker.';if(fill)fill.style.width='0%';if(marker)marker.style.left='0%';const src=document.getElementById('pcBedLevelSource_'+id);if(src)src.textContent='No hay una lectura confiable disponible.';_bedLevelSetState(id,'SIN RESPUESTA','var(--danger)');_bedLevelSetStatus(id,'Moonraker no respondió','var(--danger)');return null;
   }
   const st=read.st;if(!st){
+    if(_bedLevelCalibrationActive(id)&&!opts.forceDuringRun){_bedLevelRenderMeasuring(id);return null;}
     if(value)value.textContent='—';if(gradeEl){gradeEl.textContent='SIN MALLA';gradeEl.style.color='#ff5555';}if(detail)detail.textContent='Moonraker no tiene una malla activa. Ejecuta calibración o carga un perfil antes de producción.';if(fill)fill.style.width='0%';if(marker)marker.style.left='0%';const src=document.getElementById('pcBedLevelSource_'+id);if(src)src.innerHTML='<b style="color:#ff5555">SIN MALLA ACTIVA</b><br><span style="color:var(--text3)">El historial no sustituye una malla cargada en la impresora.</span>';_bedLevelSetState(id,'SIN MALLA','#ff5555');_bedLevelSetStatus(id,'Sin bed mesh activo','#ff5555');_bedLevelHistoryRender(id,null,opts.material||'');return null;
   }
   _bedLevelRenderStats(id,st,{status:!opts.quietStatus,statusText:opts.statusText,verifiedAt:opts.verifiedAt,material:opts.material});
@@ -2123,6 +2146,20 @@ async function _bedLevelWaitForCompletion(id,beforeSig,timeoutMs){
   }
   return null;
 }
+async function _bedLevelWaitForPhysicalIdle(id,run,maxMs=45000){
+  const started=Date.now();let phaseSynced=false;
+  while(Date.now()-started<maxMs){
+    if(!run?.active||run.cancelled)return false;
+    const data=await _moonrakerGet(id,'/printer/objects/query?idle_timeout&print_stats',6000),s=data?.result?.status||{},ps=s.print_stats||{},idle=String(s.idle_timeout?.state||'').toLowerCase();
+    const printing=ps.state==='printing'||ps.state==='paused',busyGcode=!printing&&idle==='printing';
+    if(!busyGcode)return true;
+    run.uiLabel='CALIBRANDO';run.phaseText='CALIBRANDO · finalizando G-code y activando la nueva malla…';
+    _bedLevelSetBusy(id,true,`⏳ CALIBRANDO · ${Math.max(1,Math.round((Date.now()-run.startedAt)/1000))}s`);_bedLevelSetState(id,'CALIBRANDO','#ffaa00');_bedLevelSetStatus(id,run.phaseText,'#ffaa00');
+    if(!phaseSynced){phaseSynced=true;_machineOperationSet(id,{type:'bed_calibration',phase:run.phaseText,label:'Nivelación de cama'});}
+    await _bedLevelSleep(900);
+  }
+  return false;
+}
 async function _bedLevelRefreshAfterFailure(id,message){
   const run=_bedLevelRuns[id];if(run)run.active=false;const st=await printerBedLevelRefresh(id,{forceDuringRun:true,quietStatus:true,statusText:message});if(st){_bedLevelSetState(id,'MALLA NO VERIFICADA','#ffaa00');_bedLevelSetStatus(id,message,'#ffaa00');}return st;
 }
@@ -2141,6 +2178,11 @@ async function printerAutoBedCalibrate(id,presetKey='current'){
     run.phaseText='VERIFICANDO · comprobando malla nueva…';run.uiLabel='VERIFICANDO';_bedLevelSetState(id,'VERIFICANDO','#38bdf8');_bedLevelSetStatus(id,run.phaseText,'#38bdf8');
     let after=await waitPromise;if(!after){const current=await _bedLevelReadActive(id,9000);if(current.st&&(!beforeSig||_bedLevelSignature(current.st)!==beforeSig))after=current.st;}
     if(!after){await _bedLevelRefreshAfterFailure(id,'⚠ Terminó el comando, pero no se pudo demostrar que la malla visible sea nueva.');toast('Calibración terminada, pero la malla nueva no pudo verificarse','error');return;}
+    /* Moonraker puede publicar la malla nueva antes de que idle_timeout abandone
+       "Printing". Mantenemos CALIBRANDO durante ese cierre para no mostrar un
+       falso estado intermedio "EJECUTANDO G-CODE". */
+    const physicalIdle=await _bedLevelWaitForPhysicalIdle(id,run);
+    if(!physicalIdle&&!run.cancelled){run.phaseText='CALIBRANDO · la malla ya existe, pero Klipper aún reporta G-code activo';_bedLevelSetStatus(id,run.phaseText,'#ffaa00');}
     const verifiedAt=Date.now(),tempEnd=await _bedLevelReadBedTemp(id),bedTemp=tempEnd.actual??run.bedTempStart,bedTarget=tempEnd.target??run.bedTargetStart,meta=_bedLevelMetaWrite(id,after,{calibratedAt:verifiedAt,bedTemp,bedTarget});
     _bedLevelHistoryAppend(id,after,{calibratedAt:verifiedAt,bedTemp,bedTarget});
     const delta=before?after.range-before.range:null;let resultText='Calibración nueva verificada';if(delta!==null&&Math.abs(delta)>=0.005)resultText+=delta<0?` · mejoró ${Math.abs(delta*1000).toFixed(0)} µm`:` · aumentó ${Math.abs(delta*1000).toFixed(0)} µm`;else if(delta!==null)resultText+=' · cambio <5 µm';
