@@ -323,6 +323,14 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(control,/BED_MESH_CLEAR/);
   assert.match(control,/_bedLevelRestoreRunUi/);
   assert.match(control,/repeat\(auto-fit,minmax\(220px,1fr\)\)/);
+  assert.match(control,/pcBedRecommendation_/);
+  assert.match(control,/pcBedHistory_/);
+  assert.match(MAQ,/BED_LEVEL_HISTORY_V1/,'historial debe tener respaldo compartido');
+  assert.match(MAQ,/function _bedLevelDiagnose\(/);
+  assert.match(MAQ,/function _bedLevelHistoryTrendSvg\(/);
+  assert.match(MAQ,/function _bedLevelRecommendation\(/);
+  assert.match(MAQ,/bedTempStart/,'calibración debe registrar temperatura de cama');
+  assert.match(MAQ,/DIAGNÓSTICO FÍSICO GUIADO/);
 });
 
 test('preflight, QA, postproducción e incidentes forman un flujo continuo',()=>{

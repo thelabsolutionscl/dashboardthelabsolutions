@@ -486,6 +486,15 @@ test('preflight separa material-volumen, boquilla y cama liberada',()=>{
   assert.match(OPS,/confirmBedCleared/);
 });
 
+test('preflight usa historial de nivelación para advertir mesh alto, antiguo o a temperatura distinta',()=>{
+  assert.match(OPS,/function bedLevelPreflightFact\(/);
+  assert.match(OPS,/desnivel MUY ALTO/);
+  assert.match(OPS,/ageDays>=7/);
+  assert.match(OPS,/Math\.abs\(expected-temp\)>=20/);
+  assert.match(OPS,/add\('bed-level','Nivelación de cama'/);
+  assert.match(OPS,/bedLevel:bedLevelPreflightFact\(machine\.id,job\.material\)/);
+});
+
 test('inicio revalida inmediatamente y sólo ejecuta mediante Farm Controller',()=>{
   const start=OPS.slice(OPS.indexOf('async function startJob('),OPS.indexOf('\nfunction startExistingFile',OPS.indexOf('async function startJob(')));
   assert.match(start,/const fresh=evaluatePreflight\(j,m\)/);

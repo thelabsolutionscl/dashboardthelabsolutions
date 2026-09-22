@@ -507,6 +507,20 @@ function machineReliability(machineId){
     ((central.fresh||liveFresh)&&(history.durable||sample>=2)?'media':'baja');
   return{level,label,confidence,history,central,current,liveFresh,completion,confirmed:confirmed.length,detected:detected.length,maintenance:maintenanceAlerts.length};
 }
+const _BED_LEVEL_PREFLIGHT_KEY='printer_bedmesh_history_v1';
+function bedLevelPreflightFact(machineId,material=''){
+  let rows=[];try{const parsed=JSON.parse(localStorage.getItem(_BED_LEVEL_PREFLIGHT_KEY)||'[]');if(Array.isArray(parsed))rows=parsed;}catch(_){}
+  const latest=rows.filter(x=>x&&x.machineId===machineId&&Number(x.calibratedAt)>0).sort((a,b)=>Number(b.calibratedAt)-Number(a.calibratedAt))[0];
+  if(!latest)return null;
+  const range=Number(latest.range)||0,um=Math.round(range*1000),ageDays=(Date.now()-Number(latest.calibratedAt))/86400000;
+  const mat=String(material||'').toUpperCase(),expected=mat.includes('ABS')||mat.includes('ASA')?100:mat.includes('PETG')?75:mat.includes('TPU')?50:mat.includes('PLA')?60:0;
+  const temp=Number(latest.bedTemp),issues=[];
+  if(range>0.80)issues.push(`desnivel MUY ALTO: ${um} µm; revisa físicamente la cama antes de iniciar`);
+  else if(range>0.40)issues.push(`desnivel alto: ${um} µm; conviene corregir y recalibrar`);
+  if(ageDays>=7)issues.push(`calibración verificada hace ${Math.floor(ageDays)} día(s)`);
+  if(expected&&Number.isFinite(temp)&&Math.abs(expected-temp)>=20)issues.push(`mesh calibrado a ${temp.toFixed(0)} °C y ${material||'este material'} trabaja cerca de ${expected} °C`);
+  return{level:issues.length?'warn':'pass',detail:issues.length?issues.join(' · '):`Calibración verificada · ${um} µm · hace ${Math.max(0,Math.floor(ageDays))} día(s)`,range,calibratedAt:Number(latest.calibratedAt)};
+}
 function preflightFromFacts(facts){
   const checks=[];
   const add=(key,label,level,detail)=>checks.push({key,label,level,detail});
@@ -524,6 +538,7 @@ function preflightFromFacts(facts){
   else add('sensor','Sensor físico',facts.filamentDetected===true?'pass':'warn',facts.filamentDetected===true?'Filamento detectado':'Sensor físico sin lectura');
   add('camera','Cámara',facts.cameraConfigured?'pass':'warn',facts.cameraConfigured?'Cámara configurada':'Sin cámara configurada');
   add('maintenance','Mantención',facts.maintenanceOverdue?'block':facts.maintenanceSoon?'warn':'pass',facts.maintenanceOverdue?'Mantención vencida':facts.maintenanceSoon?'Mantención próxima':'Mantención al día');
+  if(facts.bedLevel)add('bed-level','Nivelación de cama',facts.bedLevel.level,facts.bedLevel.detail);
   (facts.safetyBlockers||[]).forEach((detail,index)=>add('safety-b'+index,'Seguridad ambiental','block',detail));
   (facts.safetyWarnings||[]).forEach((detail,index)=>add('safety-w'+index,'Seguridad ambiental','warn',detail));
   const blockers=checks.filter(c=>c.level==='block'),warnings=checks.filter(c=>c.level==='warn');
@@ -546,6 +561,7 @@ function evaluatePreflight(job,machine){
     gramsRequired:num(job.grams),spoolKnown:!!spool,spoolAvailable:free,filamentDetected:live.filament?.detected??null,
     cameraConfigured:!!(localStorage.getItem('printer_cam_'+machine.id)||machine.cam),maintenanceOverdue:overdue,maintenanceSoon:maint.length>0,
     safetyBlockers:safety.blockers,safetyWarnings:safety.warnings,
+    bedLevel:bedLevelPreflightFact(machine.id,job.material),
   });
 }
 function alertRow(key,machineId,severity,title,detail,action=''){
