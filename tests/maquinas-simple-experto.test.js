@@ -79,17 +79,22 @@ test('Experto concentra infraestructura, evidencia y diagnóstico técnico',()=>
   assert.match(MAQ,/class="op-expert-only" onclick="openHistoryModal/);
 });
 
-test('Simple reduce planificación y Taller sin quitar el trabajo diario',()=>{
+test('Simple reduce detalle técnico sin ocultar herramientas de Taller',()=>{
   assert.match(INDEX,/class="btn btn-ghost btn-sm op-expert-only" onclick="openMaquinasManager\(\)"/);
   assert.match(INDEX,/class="card maq-ops-card op-expert-only"><div id="mopsGantt"/);
   assert.match(OPS,/mops-planning-guide op-expert-only/);
   assert.match(OPS,/mops-job-evidence op-expert-only/);
   assert.match(OPS,/mops-workshop-trust op-expert-only/);
-  assert.match(OPS,/mops-workshop-nav-grid advanced op-expert-only/);
+  assert.match(OPS,/mops-workshop-nav-grid advanced/);
+  assert.doesNotMatch(OPS,/mops-workshop-nav-grid advanced op-expert-only/,'Simple debe conservar los accesos a todas las herramientas');
   assert.match(OPS,/workshopNavCard\('materiales'/,'Materiales debe seguir disponible en Simple');
   assert.match(OPS,/workshopNavCard\('mantenimiento'/,'Mantención debe seguir disponible en Simple');
   assert.match(OPS,/workshopNavCard\('seguridad'/,'Seguridad debe seguir disponible en Simple');
   assert.match(OPS,/workshopNavCard\('capacidad'/,'Capacidad debe seguir disponible en Simple');
+  assert.match(OPS,/workshopNavCard\('laminado'/,'Laminador debe estar disponible en Simple');
+  assert.match(OPS,/workshopNavCard\('perfiles'/,'Perfiles debe estar disponible en Simple');
+  assert.match(OPS,/workshopNavCard\('analitica'/,'Analítica debe estar disponible en Simple');
+  assert.match(OPS,/workshopNavCard\('automatizacion'/,'Configuración debe estar disponible en Simple');
   assert.match(INDEX,/id="mopsJobs"/,'las tarjetas de trabajos deben seguir visibles');
   assert.match(INDEX,/data-maq-view="calidad"/,'QA debe seguir en la pantalla Trabajos');
   assert.match(INDEX,/data-maq-view="postproduccion"/,'Postproducción debe seguir en la pantalla Trabajos');
