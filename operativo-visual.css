@@ -176,3 +176,28 @@ dialog.op-drawer[data-kind="quote"]{inset:0;width:100vw;max-width:100vw;height:1
  #clienteDetalleModal>.modal-card>div:last-child{bottom:-16px;position:static}
  #opClient .op-metrics{grid-template-columns:1fr}
 }
+
+
+/* Pedidos · Tarjetas: controles editables de equipo y estado */
+.op-card-control{padding:11px 0;border-top:1px solid var(--border);display:grid;gap:8px}
+.op-card-control-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.op-card-control-head>span{font-size:11px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.45px}
+.op-card-control-head>small{font-size:9.5px;color:var(--text3)}
+.op-team-chips,.op-stage-picks{display:flex;gap:6px;flex-wrap:wrap}
+.op-team-chip,.op-stage-pick{
+  appearance:none;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);
+  border-radius:999px;min-height:29px;padding:5px 9px;font:700 10px/1 'DM Sans',sans-serif;
+  cursor:pointer;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease
+}
+.op-team-chip:hover,.op-stage-pick:hover{border-color:var(--accent);color:var(--text);transform:translateY(-1px)}
+.op-team-chip.is-selected,.op-stage-pick.is-selected{
+  background:var(--accent)!important;color:#061513!important;border-color:var(--accent)!important;
+  box-shadow:0 0 0 1px rgba(0,212,204,.18)
+}
+.op-stage-pick:disabled{opacity:1;cursor:default;transform:none}
+.op-stage-picks{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.op-stage-pick{border-radius:8px;padding:6px 4px;white-space:normal;line-height:1.15;text-align:center}
+@media(max-width:720px){
+  .op-stage-picks{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .op-team-chip,.op-stage-pick{min-height:34px}
+}
