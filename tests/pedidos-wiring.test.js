@@ -211,6 +211,6 @@ test('editar pedido no se bloquea si faltan campos opcionales de calendario o co
     assert.ok(persist.includes(field), 'debe tratar '+field+' como extensión opcional');
   }
   assert.match(persist, /Unknown field name/, 'debe reconocer el 422 de campo desconocido');
-  assert.match(save, /_persistPedidoEdit\\(id,fields\\)/, 'Editar pedido debe usar guardado tolerante');
-  assert.match(save, /Object\\.assign\\(p\\.fields,result\\.saved\\)/, 'solo debe reflejar localmente los campos realmente guardados');
+  assert.ok(save.includes('_persistPedidoEdit(id,fields)'), 'Editar pedido debe usar guardado tolerante');
+  assert.ok(save.includes('Object.assign(p.fields,result.saved)'), 'solo debe reflejar localmente los campos realmente guardados');
 });
