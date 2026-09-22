@@ -2613,6 +2613,8 @@ async function sendWebhookAlert(m,event){
 async function openBedMesh(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
   const ip=getPrinterIp(m);if(!ip){toast('Sin IP configurada','error');return;}
+  /* Evita mapas duplicados si se pulsa dos veces mientras Moonraker responde. */
+  document.querySelector('.bed-mesh-modal')?.remove();
   toast('Consultando bed mesh…','info');
   try{
     await _bedLevelHistoryLoadRemote(false).catch(()=>false);
@@ -2635,9 +2637,9 @@ async function openBedMesh(id){
     const colLabels=Array.from({length:cols},(_,ci)=>`<text x="${offset+ci*cell+cell/2}" y="14" text-anchor="middle" fill="rgba(255,255,255,.48)" font-size="9">C${ci+1}</text>`).join('');
     const latestTemp=_bedLevelFiniteOrNull(latest?.bedTemp);
     const capButtons=`${caps.screwsTilt?'<button onclick="printerScrewsTiltGuide(\''+id+'\')" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);font-weight:800;cursor:pointer">🪛 CALCULAR TORNILLOS</button>':''}${caps.zTilt?'<button onclick="printerZTiltAdjust(\''+id+'\')" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);font-weight:800;cursor:pointer">⚙ Z_TILT_ADJUST</button>':''}`;
-    const modal=document.createElement('div');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;display:flex;align-items:center;justify-content:center';
+    const modal=document.createElement('div');modal.className='modal-overlay bed-mesh-modal';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Mapa de nivelación de cama');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:10120;display:flex;align-items:center;justify-content:center;padding:10px';
     modal.innerHTML=`<div style="background:var(--surface);border-radius:14px;padding:20px;max-width:96vw;max-height:92vh;overflow:auto;min-width:340px">
-      <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:14px"><div><div style="font-weight:800;font-size:14px">🗺️ Heatmap de cama — ${escapeHtml(m.nombre)} #${m.numG}</div><div style="font-size:10.5px;color:var(--text3)">mín ${st.min.toFixed(3)} mm · máx ${st.max.toFixed(3)} mm · rango <b style="color:${grade.color}">${Math.round(st.range*1000)} µm</b> · ${rows}×${cols} puntos</div></div><button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">✕</button></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:14px"><div><div style="font-weight:800;font-size:14px">🗺️ Heatmap de cama — ${escapeHtml(m.nombre)} #${m.numG}</div><div style="font-size:10.5px;color:var(--text3)">mín ${st.min.toFixed(3)} mm · máx ${st.max.toFixed(3)} mm · rango <b style="color:${grade.color}">${Math.round(st.range*1000)} µm</b> · ${rows}×${cols} puntos</div></div><button type="button" data-modal-close onclick="this.closest('.bed-mesh-modal').remove()" aria-label="Cerrar mapa de cama" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer">✕</button></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start">
         <div><svg width="${W+offset+4}" height="${H+offset+5}" viewBox="0 0 ${W+offset+4} ${H+offset+5}" style="display:block;max-width:100%;height:auto;border-radius:8px;background:#0b0b0b">${rowLabels}${colLabels}${svgCells}</svg>
           <div style="margin-top:9px;display:flex;gap:8px;align-items:center;font-size:10px;color:var(--text3)"><div style="width:110px;height:10px;background:linear-gradient(to right,rgb(0,60,230),rgb(45,155,45),rgb(230,60,0));border-radius:3px"></div><span>−400 µm · promedio · +400 µm</span></div>
