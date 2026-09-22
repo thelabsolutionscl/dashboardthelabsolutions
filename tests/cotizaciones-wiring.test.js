@@ -178,3 +178,30 @@ test('las acciones auxiliares no reemplazan el flujo principal', () => {
   assert.ok(order >= 0, 'La creación del pedido debe formar parte del flujo principal');
   if (drive >= 0) assert.ok(drive > order, 'La sincronización auxiliar debe ocurrir después de crear el pedido');
 });
+
+test('Nueva cotización permite reordenar productos y conserva el orden visual al guardar', () => {
+  const add = extractFunction('addItemRow');
+  const move = extractFunction('moveItemRow');
+  const drag = extractFunction('dragItemRowOver');
+  const detail = extractFunction('updateItemsDetalle');
+
+  assert.match(add, /draggable="true"/, 'Cada producto debe tener un tirador para arrastrar');
+  assert.match(add, /item-move-up/, 'Debe existir un control accesible para subir');
+  assert.match(add, /item-move-down/, 'Debe existir un control accesible para bajar');
+  assert.match(move, /insertBefore/, 'Las flechas deben cambiar realmente el orden del DOM');
+  assert.match(move, /updateItemTotal\(\)/, 'Reordenar debe sincronizar el detalle guardado');
+  assert.match(drag, /clientY/, 'El arrastre debe decidir la posición antes o después de la fila');
+  assert.match(detail, /querySelectorAll\('#itemsContainer \.item-row'\)/, 'El detalle debe serializar el orden visible de las filas');
+});
+
+test('las observaciones agregadas se editan en línea con teclado y clic', () => {
+  const content = extractFunction('_solicitudItemContent');
+  const edit = extractFunction('editSolicitudItem');
+
+  assert.match(content, /onclick="editSolicitudItem\(this\)"/, 'El texto de cada observación debe activar la edición');
+  assert.match(edit, /dataset\.value=next/, 'La edición debe actualizar el valor persistido');
+  assert.match(edit, /event\.key==='Enter'/, 'Enter debe guardar la edición');
+  assert.match(edit, /event\.key==='Escape'/, 'Escape debe cancelar la edición');
+  assert.match(edit, /addEventListener\('blur'/, 'Salir del campo debe guardar la edición');
+  assert.match(edit, /syncSolicitudToTextarea\(\)/, 'El textarea enviado a Airtable debe quedar sincronizado');
+});

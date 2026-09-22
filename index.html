@@ -1491,7 +1491,7 @@
         </div>
         <input type="hidden" id="cot-subtotal"><input type="hidden" id="cot-total">
         <div class="field-group form-full">
-          <label class="field-label">Detalle productos</label>
+          <label class="field-label">Detalle productos <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">· Ordena con ⠿ o las flechas</span></label>
           <div style="border:1px solid var(--border2);border-radius:7px;overflow:hidden;margin-bottom:6px">
             <div style="display:grid;grid-template-columns:1fr 72px 110px 110px 32px;background:var(--surface3);border-bottom:1px solid var(--border2)">
               <div style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3)">Descripción</div>
@@ -12822,12 +12822,43 @@ function updateItemsDetalle(){const rows=document.querySelectorAll('#itemsContai
 function addItemRow(data){
   const container=document.getElementById('itemsContainer');const row=document.createElement('div');row.className='item-row';row.style.cssText='display:grid;grid-template-columns:1fr 72px 110px 110px 32px;border-bottom:1px solid var(--border2);';
   const inp="background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 10px;width:100%";const inpM="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 8px;width:100%";
-  row.innerHTML=`<input class="item-desc" type="text" placeholder="Descripción" value="${escapeHtml(data?.desc||'')}" oninput="updateItemTotal()" style="${inp}"><input class="item-und" type="number" min="1" value="${data?.und||1}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" readonly onclick="openCostoDetalle(this)" oninput="updateItemTotal()" title="Clic para desglosar el costo por concepto" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right;cursor:pointer"><input class="item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button onclick="removeItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
+  row.setAttribute('ondragover','dragItemRowOver(event,this)');row.setAttribute('ondrop','dropItemRow(event)');
+  row.innerHTML=`<div style="display:flex;align-items:stretch;min-width:0"><div style="display:grid;grid-template-columns:22px 17px;grid-template-rows:1fr 1fr;align-items:stretch;padding:3px 2px 3px 4px;gap:1px;flex-shrink:0"><button type="button" class="item-drag-handle" draggable="true" aria-label="Arrastrar para reordenar ítem" title="Arrastrar para mover" ondragstart="startItemRowDrag(event,this)" ondragend="endItemRowDrag()" style="grid-row:1/3;background:none;border:none;color:var(--text3);cursor:grab;padding:0;font-size:15px;line-height:1">⠿</button><button type="button" class="item-move-up" aria-label="Subir ítem" title="Subir" onclick="moveItemRow(this,-1)" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:0;font-size:10px;line-height:1">▲</button><button type="button" class="item-move-down" aria-label="Bajar ítem" title="Bajar" onclick="moveItemRow(this,1)" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:0;font-size:10px;line-height:1">▼</button></div><input class="item-desc" type="text" placeholder="Descripción" value="${escapeHtml(data?.desc||'')}" oninput="updateItemTotal()" style="${inp};min-width:0;padding-left:5px"></div><input class="item-und" type="number" min="1" value="${data?.und||1}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--text);text-align:center"><input class="item-costo" type="number" min="0" placeholder="0" value="${data?.costoUnit||''}" readonly onclick="openCostoDetalle(this)" oninput="updateItemTotal()" title="Clic para desglosar el costo por concepto" style="${inpM};border-left:1px solid var(--border2);color:var(--text2);text-align:right;cursor:pointer"><input class="item-venta" type="number" min="0" placeholder="0" value="${data?.ventaUnit||''}" oninput="updateItemTotal()" style="${inpM};border-left:1px solid var(--border2);color:var(--accent3);text-align:right"><button type="button" aria-label="Eliminar ítem" onclick="removeItemRow(this)" style="background:none;border:none;border-left:1px solid var(--border2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
   container.appendChild(row);
   if(data&&Array.isArray(data.detalle)&&data.detalle.length){const ce=row.querySelector('.item-costo');if(ce){ce.dataset.detalle=JSON.stringify(data.detalle);ce.title='Costo desglosado en '+data.detalle.length+' concepto(s) — clic para editar';}}
-  updateItemTotal();if(!data) row.querySelector('.item-desc').focus();
+  refreshItemOrderControls();updateItemTotal();if(!data) row.querySelector('.item-desc').focus();
 }
-function removeItemRow(btn){btn.closest('.item-row').remove();updateItemTotal();updateItemsDetalle();}
+let _draggedItemRow=null;
+function refreshItemOrderControls(){
+  const rows=[...document.querySelectorAll('#itemsContainer .item-row')];
+  rows.forEach((row,index)=>{
+    const up=row.querySelector('.item-move-up'),down=row.querySelector('.item-move-down');
+    if(up){up.disabled=index===0;up.style.opacity=up.disabled?'.25':'1';up.style.cursor=up.disabled?'default':'pointer';}
+    if(down){down.disabled=index===rows.length-1;down.style.opacity=down.disabled?'.25':'1';down.style.cursor=down.disabled?'default':'pointer';}
+  });
+}
+function moveItemRow(btn,direction){
+  const row=btn?.closest('.item-row'),container=row?.parentElement;if(!row||!container)return;
+  const sibling=direction<0?row.previousElementSibling:row.nextElementSibling;if(!sibling)return;
+  if(direction<0)container.insertBefore(row,sibling);else container.insertBefore(sibling,row);
+  refreshItemOrderControls();updateItemTotal();btn.focus();
+}
+function startItemRowDrag(event,handle){
+  _draggedItemRow=handle?.closest('.item-row')||null;if(!_draggedItemRow)return;
+  event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain','cotizacion-item');
+  _draggedItemRow.style.opacity='.45';handle.style.cursor='grabbing';
+}
+function dragItemRowOver(event,row){
+  if(!_draggedItemRow||row===_draggedItemRow)return;event.preventDefault();event.dataTransfer.dropEffect='move';
+  const rect=row.getBoundingClientRect(),before=event.clientY<rect.top+rect.height/2;
+  row.parentElement.insertBefore(_draggedItemRow,before?row:row.nextElementSibling);
+}
+function dropItemRow(event){event.preventDefault();endItemRowDrag();}
+function endItemRowDrag(){
+  if(_draggedItemRow){_draggedItemRow.style.opacity='1';const handle=_draggedItemRow.querySelector('.item-drag-handle');if(handle)handle.style.cursor='grab';}
+  _draggedItemRow=null;refreshItemOrderControls();updateItemTotal();
+}
+function removeItemRow(btn){btn.closest('.item-row').remove();refreshItemOrderControls();updateItemTotal();updateItemsDetalle();}
 function initItemsContainer(){const c=document.getElementById('itemsContainer');if(c) c.innerHTML='';const t=document.getElementById('itemsTotalRow');if(t) t.style.display='none';addItemRow();}
 
 // ── DESGLOSE DE COSTO UNITARIO (popup) ─────────────────────────────────────
