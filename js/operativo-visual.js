@@ -79,6 +79,20 @@
     const form=typeof pedFormaPago==='function'?pedFormaPago(f):(f['Forma de pago']||'');
     return {remaining,estimated,form,label:a&&s?'Pagado':a||s?'Pago parcial':'Pendiente',tone:a&&s?'good':'neutral'};
   }
+  function paymentControls(p){
+    const f=p.fields||{},a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'],t=a&&s;
+    const form=typeof pedFormaPago==='function'?pedFormaPago(f):(f['Forma de pago']||'');
+    const d30=/^30 D[ÍI]AS DESDE OC$/i.test(String(form||'').trim());
+    const monto=f['Monto abono (CLP)'];
+    const labelAbono=a&&monto?`✓ Abono ${money(monto)}`:a?'✓ Abono':'Abono';
+    return `<div class="op-payment-quick" aria-label="Cambiar estado de pago">
+      <span class="op-payment-quick-label">Cambiar pago</span>
+      ${button(labelAbono,'order-pay-abono',p.id,a?'op-pay-active':'')}
+      ${button(s?'✓ Saldo':'Saldo','order-pay-saldo',p.id,s?'op-pay-active':'')}
+      ${button(t?'✓ Total':'Total','order-pay-total',p.id,t?'op-pay-active':'')}
+      ${button(d30?'✓ Pago a 30 días':'Pago a 30 días','order-pay-30',p.id,d30?'op-pay-active':'')}
+    </div>`;
+  }
   function quoteInfo(c){
     const f=c.fields,e=f['Estado cotización']||'Sin estado';
     const expires=until(f['Fecha vencimiento']),age=until(f['Fecha cotización']);
@@ -111,6 +125,7 @@
     return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${pill(late?'Entrega atrasada':e,late?'danger':'neutral')}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
       <div class="op-payment"><b>Pago</b> ${pill(pay.label,pay.tone)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
+      ${detail?paymentControls(p):''}
       ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span>${detail&&nextStage?button(nextStage==='En producción'?'Pasar a producción':nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',p.id,'op-primary'):detail?'':button('Ver pedido','order',p.id,'op-primary')}</footer></article>`;
   }
   function orders(rows,all){
@@ -232,6 +247,22 @@
     if(a==='collection-detail'){reveal('finCobranzaActions');return;}
     if(a==='client'){if(!allowed('clientes'))return;openClienteDetalle(arg);return;}
     if(a==='client-tab'){if(!allowed('clientes'))return;cdTab(arg);return;}
+    if(a==='order-pay-abono'||a==='order-pay-saldo'||a==='order-pay-total'||a==='order-pay-30'){
+      const p=own(state.pedidos).find(p=>p.id===arg);if(!p)return;
+      const f=p.fields||{};
+      if(a==='order-pay-abono'){
+        if(f['Anticipo pagado (50%)']){await toggleAnticipo(arg,true);openRecord('order',arg);}
+        else{
+          window._opReturnPaymentDrawer=arg;
+          $('opDrawer')?.close();
+          openAbonoModal(arg);
+        }
+        return;
+      }
+      if(a==='order-pay-saldo'){await toggleSaldo(arg,!!f['Saldo pagado (50%)']);openRecord('order',arg);return;}
+      if(a==='order-pay-total'){await toggleTotal(arg,!!(f['Anticipo pagado (50%)']&&f['Saldo pagado (50%)']));openRecord('order',arg);return;}
+      if(a==='order-pay-30'){await marcarPago30Dias(arg);openRecord('order',arg);return;}
+    }
     if(a==='order-advance'){
       const p=own(state.pedidos).find(p=>p.id===arg),next=nextOrderStage(p);
       if(!p||!next||typeof advancePedido!=='function')return;
@@ -249,7 +280,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,quoteInfo,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);

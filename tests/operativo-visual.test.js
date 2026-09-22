@@ -89,3 +89,15 @@ test('el detalle de pedido permite avanzar por el ciclo operativo',()=>{
   assert.match(src,/['"]order-advance['"]/,'el drawer debe exponer la acción para avanzar');
   assert.match(src,/await\s+advancePedido\(arg,next\)/,'la acción debe usar el flujo persistente advancePedido');
 });
+
+
+test('el detalle de pedido expone controles rápidos de pago',()=>{
+  const {op}=setup();
+  const pending=record('p',{'Forma de pago':'AL CONTADO','Monto total (CLP)':119000});
+  let html=op.paymentControls(pending);
+  assert.match(html,/Abono/);assert.match(html,/Saldo/);assert.match(html,/Total/);assert.match(html,/Pago a 30 días/);
+  assert.match(html,/order-pay-abono/);assert.match(html,/order-pay-saldo/);assert.match(html,/order-pay-total/);assert.match(html,/order-pay-30/);
+  const paid=record('p',{'Forma de pago':'30 DÍAS DESDE OC','Monto total (CLP)':119000,'Anticipo pagado (50%)':true,'Saldo pagado (50%)':true,'Monto abono (CLP)':50000});
+  html=op.paymentControls(paid);
+  assert.match(html,/✓ Abono/);assert.match(html,/✓ Saldo/);assert.match(html,/✓ Total/);assert.match(html,/✓ Pago a 30 días/);
+});
