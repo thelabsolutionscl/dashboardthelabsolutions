@@ -1768,8 +1768,8 @@ async function _sendGcode(id,script,label,opts={}){
   try{
     const r=await fetch(printerUrl(ip,`/printer/gcode/script?script=${encodeURIComponent(script)}`),{method:'POST',signal:AbortSignal.timeout(opts.timeout||9000),headers:getPrinterAuthHeaders(id)});
     if(r.ok){if(label)toast(label,'success');setTimeout(pollPrinters,650);return true;}
-    toast('Error: '+r.status,'error');return false;
-  }catch(e){toast('Sin conexión con la impresora','error');return false;}
+    if(!opts.quietFailure)toast('Error: '+r.status,'error');return false;
+  }catch(e){if(!opts.quietFailure)toast('Sin conexión con la impresora','error');return false;}
 }
 function _printerTempLimit(heater){return heater==='hotend'?300:120;}
 function setPrinterTemp(id,heater){
@@ -2201,11 +2201,16 @@ async function printerAutoBedCalibrate(id,presetKey='current'){
     const thermalOk=await _bedLevelWaitTemperature(id,preset,run);if(!thermalOk){run.cancelled=true;await _bedLevelRefreshAfterFailure(id,'⚠ No se alcanzó una temperatura estable para calibrar.');toast('No se pudo estabilizar la temperatura de cama','error');return;}
     const beforeRead=await _bedLevelReadActive(id,9000),before=beforeRead.st,beforeSig=_bedLevelSignature(before);run.beforeRange=before?.range??null;run.beforeSig=beforeSig;run.uiLabel='CALIBRANDO';run.phaseText='CALIBRANDO · iniciando HOME…';_machineOperationSet(id,{phase:run.phaseText});
     const tempStart=await _bedLevelReadBedTemp(id);run.bedTempStart=tempStart.actual;run.bedTargetStart=tempStart.target;
-    const waitPromise=_bedLevelWaitForCompletion(id,beforeSig,timeoutMs),ok=await _sendGcode(id,'G28\nBED_MESH_CLEAR\nBED_MESH_CALIBRATE',null,{timeout:timeoutMs+30000,allowBusy:true});
-    if(!ok){run.cancelled=true;await _bedLevelRefreshAfterFailure(id,'⚠ La calibración falló. Se releyó la malla real de Moonraker.');toast('No se pudo completar la calibración de cama','error');return;}
+    /* El POST de Moonraker/proxy puede perder su respuesta o agotar su timeout
+       aunque Klipper ya haya aceptado el G-code y siga calibrando físicamente.
+       Por eso la respuesta HTTP no decide el resultado: esperamos en paralelo
+       la evidencia real (CLEAR + malla nueva) y recién después concluimos. */
+    const waitPromise=_bedLevelWaitForCompletion(id,beforeSig,timeoutMs);
+    const sendPromise=_sendGcode(id,'G28\nBED_MESH_CLEAR\nBED_MESH_CALIBRATE',null,{timeout:timeoutMs+30000,allowBusy:true,quietFailure:true});
+    const [transportOk,observedAfter]=await Promise.all([sendPromise,waitPromise]);
     run.phaseText='VERIFICANDO · comprobando malla nueva…';run.uiLabel='VERIFICANDO';_bedLevelSetState(id,'VERIFICANDO','#38bdf8');_bedLevelSetStatus(id,run.phaseText,'#38bdf8');
-    let after=await waitPromise;if(!after){const current=await _bedLevelReadActive(id,9000);if(current.st&&(!beforeSig||_bedLevelSignature(current.st)!==beforeSig))after=current.st;}
-    if(!after){await _bedLevelRefreshAfterFailure(id,'⚠ Terminó el comando, pero no se pudo demostrar que la malla visible sea nueva.');toast('Calibración terminada, pero la malla nueva no pudo verificarse','error');return;}
+    let after=observedAfter;if(!after){const current=await _bedLevelReadActive(id,9000);if(current.st&&(!beforeSig||_bedLevelSignature(current.st)!==beforeSig))after=current.st;}
+    if(!after){const detail=transportOk?'Terminó el comando, pero no se pudo demostrar que la malla visible sea nueva.':'Se perdió la respuesta del comando y no apareció una malla nueva verificable.';await _bedLevelRefreshAfterFailure(id,'⚠ '+detail);toast('Calibración no verificada: '+detail,'error');return;}
     /* Moonraker puede publicar la malla nueva antes de que idle_timeout abandone
        "Printing". Mantenemos CALIBRANDO durante ese cierre para no mostrar un
        falso estado intermedio "EJECUTANDO G-CODE". */
