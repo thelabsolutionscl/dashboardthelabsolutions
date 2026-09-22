@@ -813,8 +813,16 @@ async function fetchPrinterStatus(m){
     const timeout=remote?_REMOTE_STATUS_TIMEOUT_MS:_STATUS_TIMEOUT_MS;
     const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(timeout),headers});
     if(!r.ok){
-      const reason=r.status===401?'Token del bridge inválido o vencido':r.status===424?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
-      if(remote&&(r.status===401||r.status===403||r.status===408||r.status===429||r.status>=500))return _remotePathFailure(ip,reason,r.status);
+      const reason=r.status===401?'Token del bridge inválido o vencido':(r.status===424||r.status===502)?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
+      // Bridge moderno usa 424 cuando él sí está vivo pero no alcanza la
+      // impresora. Un bridge antiguo usaba 502. Si aún vemos ese 502 remoto,
+      // contrastamos primero con la salud central y /healthz: así mantenemos
+      // compatibilidad sin confundir un 502 de Cloudflare con una máquina caída.
+      if(remote&&r.status===502){
+        const central=_centralFarmMachineEvidence(m.id);
+        if(central?.online===true||!(await _remoteBridgeReachable()))return _remotePathFailure(ip,reason,r.status);
+      }
+      if(remote&&(r.status===401||r.status===403||r.status===408||r.status===429||(r.status>=500&&r.status!==502)))return _remotePathFailure(ip,reason,r.status);
       return _printerFetchFailure(m.id,ip,reason,r.status);
     }
     const d=await r.json();const s=d.result?.status||{};
