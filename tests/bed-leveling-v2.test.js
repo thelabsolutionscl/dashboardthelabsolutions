@@ -41,7 +41,7 @@ function context(extra){
 function loadBedMath(){
   const ctx=context();
   const names=['_bedLevelFiniteOrNull','_bedLevelPair','_bedLevelStats','_bedLevelSignature','_bedLevelCoords','_bedLevelPlaneFit'];
-  vm.runInContext(names.map(n=>fn(MAQ,n)).join('\\n')+'\\nthis.api={finite:_bedLevelFiniteOrNull,stats:_bedLevelStats,sig:_bedLevelSignature,fit:_bedLevelPlaneFit};',ctx);
+  vm.runInContext(names.map(n=>fn(MAQ,n)).join('\n')+'\nthis.api={finite:_bedLevelFiniteOrNull,stats:_bedLevelStats,sig:_bedLevelSignature,fit:_bedLevelPlaneFit};',ctx);
   return ctx.api;
 }
 
@@ -62,8 +62,8 @@ test('ajuste de plano separa inclinacion de deformacion local',()=>{
 
 test('historial v2 limita por maquina y conserva firmas',()=>{
   const ctx=context();
-  const prefix="const _BED_LEVEL_HISTORY_PER_MACHINE=16; const _BED_LEVEL_HISTORY_TOTAL=180; const _BED_LEVEL_HISTORY_MAX_NOTES=85000;\\n";
-  vm.runInContext(prefix+[fn(MAQ,'_bedLevelFiniteOrNull'),fn(MAQ,'_bedLevelHistoryNormalize'),fn(MAQ,'_bedLevelHistoryPrune')].join('\\n')+'\\nthis.prune=_bedLevelHistoryPrune;',ctx);
+  const prefix="const _BED_LEVEL_HISTORY_PER_MACHINE=16; const _BED_LEVEL_HISTORY_TOTAL=180; const _BED_LEVEL_HISTORY_MAX_NOTES=85000;\n";
+  vm.runInContext(prefix+[fn(MAQ,'_bedLevelFiniteOrNull'),fn(MAQ,'_bedLevelHistoryNormalize'),fn(MAQ,'_bedLevelHistoryPrune')].join('\n')+'\nthis.prune=_bedLevelHistoryPrune;',ctx);
   const rows=[];
   for(let i=0;i<25;i++)rows.push({id:'a'+i,machineId:'a',calibratedAt:1000+i,updatedAt:1000+i,range:.2,signature:'sig-a-'+i});
   for(let i=0;i<5;i++)rows.push({id:'b'+i,machineId:'b',calibratedAt:2000+i,updatedAt:2000+i,range:.1,signature:'sig-b-'+i});
@@ -75,8 +75,8 @@ test('historial v2 limita por maquina y conserva firmas',()=>{
 
 test('assessment exige coincidencia entre malla activa e historial',()=>{
   const ctx=context();
-  const sources=[fn(MAQ,'_bedLevelSignature'),fn(MAQ,'_bedLevelFiniteOrNull'),fn(MAQ,'_bedLevelTypicalBedTemp'),fn(MAQ,'_bedLevelAge'),fn(MAQ,'_bedLevelAssessment')].join('\\n');
-  vm.runInContext("function _bedLevelVerifiedEntry(){return null;}\\n"+sources+"\\nthis.assess=_bedLevelAssessment;",ctx);
+  const sources=[fn(MAQ,'_bedLevelSignature'),fn(MAQ,'_bedLevelFiniteOrNull'),fn(MAQ,'_bedLevelTypicalBedTemp'),fn(MAQ,'_bedLevelAge'),fn(MAQ,'_bedLevelAssessment')].join('\n');
+  vm.runInContext("function _bedLevelVerifiedEntry(){return null;}\n"+sources+"\nthis.assess=_bedLevelAssessment;",ctx);
   let r=ctx.assess('k1',{matrix:[[0,.1],[.2,.3]],range:.3},'PLA');
   assert.equal(r.code,'unverified');assert.equal(r.strongConfirm,true);
   vm.runInContext("_bedLevelVerifiedEntry=function(){return{calibratedAt:Date.now(),bedTemp:60,verifiedSource:'shared'};};",ctx);
@@ -119,6 +119,8 @@ test('MachineOps hace verificacion live y segunda confirmacion para riesgo fuert
   assert.match(OPS,/window\.getBedLevelPreflightFact/);
   const pf=fn(OPS,'preflightFromFacts');
   assert.match(pf,/strongWarnings/);assert.match(pf,/strongToken/);
-  const open=fn(OPS,'openPreflight');assert.match(open,/await evaluatePreflightLive/);
-  const start=fn(OPS,'startJob');assert.match(start,/const fresh=await evaluatePreflightLive/);assert.match(start,/fresh\.strongToken!==String\(options\.strongToken/);
+  const oi=OPS.indexOf('async function openPreflight('),oe=OPS.indexOf('\nfunction closePreflight',oi);
+  const open=OPS.slice(oi,oe);assert.match(open,/await evaluatePreflightLive/);
+  const si=OPS.indexOf('async function startJob('),se=OPS.indexOf('\nfunction startExistingFile',si);
+  const start=OPS.slice(si,se);assert.match(start,/const fresh=await evaluatePreflightLive/);assert.match(start,/fresh\.strongToken!==String\(options\.strongToken/);
 });
