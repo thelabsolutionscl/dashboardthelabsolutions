@@ -214,3 +214,16 @@ test('editar pedido no se bloquea si faltan campos opcionales de calendario o co
   assert.ok(save.includes('_persistPedidoEdit(id,fields)'), 'Editar pedido debe usar guardado tolerante');
   assert.ok(save.includes('Object.assign(p.fields,result.saved)'), 'solo debe reflejar localmente los campos realmente guardados');
 });
+
+
+test('el menú completo de acciones de pedido se comparte entre Tabla y Tarjetas', () => {
+  const menu = extractFunction('pedidoActMenuHtml');
+  const render = extractFunction('renderPedidos');
+  const card = extractFunction('orderCard');
+  for (const label of ['Editar pedido','Gestionar (guiado)','Iniciar producción','QA (guiado)','Ficha Técnica IA','Checklist QA IA','Cadena IA (Ficha + QA)','Ver adjuntos','Notas internas','Eliminar pedido']) {
+    assert.ok(menu.includes(label), 'Falta en el menú compartido: '+label);
+  }
+  assert.ok(render.includes('pedidoActMenuHtml(p)'), 'Modo Tabla debe usar el menú compartido');
+  assert.ok(card.includes('pedidoActMenuHtml(p,`actmenu-ped-card-${p.id}`)'), 'Modo Tarjetas debe usar el mismo menú con id propio');
+  assert.ok(card.includes('op-card-footer-actions'), 'La tarjeta debe reservar un grupo de acciones junto a Ver pedido');
+});
