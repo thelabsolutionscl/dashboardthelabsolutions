@@ -383,6 +383,54 @@ function _cameraManagedByPrinter(id){
   const raw=_printerCamRaw(id),def=_defaultCamUrl(m);
   return !!raw&&raw===def;
 }
+let _cameraBridgeUpdatePromise=null;
+function _cameraOverlayStatus(overlay,text){
+  const status=overlay?.querySelector('.pcam-off-status');if(status)status.textContent=text||'reconectando automáticamente…';
+}
+async function _cameraBridgeHealthWait(timeoutMs=20000){
+  const started=Date.now();
+  while(Date.now()-started<timeoutMs){
+    try{
+      const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/healthz`),{cache:'no-store',signal:AbortSignal.timeout(3500)});
+      if(r.ok)return true;
+    }catch(_){}
+    await new Promise(resolve=>setTimeout(resolve,1200));
+  }
+  return false;
+}
+async function _ensureCameraRecoveryBridge(overlay){
+  if(_cameraBridgeUpdatePromise)return _cameraBridgeUpdatePromise;
+  _cameraBridgeUpdatePromise=(async()=>{
+    _cameraOverlayStatus(overlay,'actualizando printer bridge…');
+    try{
+      const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/update`),{method:'POST',signal:AbortSignal.timeout(30000)});
+      let d={};try{d=await r.json();}catch(_){}
+      if(!r.ok||!d.ok){
+        _cameraOverlayStatus(overlay,'bridge sin recuperación · actualización falló');
+        return{ok:false,error:d.error||`HTTP ${r.status}`};
+      }
+      _cameraOverlayStatus(overlay,'bridge actualizado · reiniciando…');
+      const healthy=await _cameraBridgeHealthWait(22000);
+      if(!healthy){
+        _cameraOverlayStatus(overlay,'bridge actualizado · esperando reconexión');
+        return{ok:false,error:'el bridge no volvió a responder a tiempo'};
+      }
+      _cameraOverlayStatus(overlay,'bridge actualizado · recuperando cámara…');
+      return{ok:true};
+    }catch(e){
+      _cameraOverlayStatus(overlay,'no se pudo actualizar el bridge');
+      return{ok:false,error:e?.name==='TimeoutError'||e?.name==='AbortError'?'timeout al actualizar bridge':(e?.message||'fallo de red')};
+    }finally{
+      setTimeout(()=>{_cameraBridgeUpdatePromise=null;},1000);
+    }
+  })();
+  return _cameraBridgeUpdatePromise;
+}
+async function _cameraRecoverRequest(ip,kind){
+  const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/recover-camera/${ip}?kind=${kind}`),{method:'POST',signal:AbortSignal.timeout(_CAM_RECOVER_TIMEOUT_MS)});
+  let d={};try{d=await r.json();}catch(_){}
+  return{r,d};
+}
 async function recoverPrinterCamera(id,silent=false){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return false;
   const ip=getPrinterIp(m);if(!ip)return false;
@@ -396,15 +444,37 @@ async function recoverPrinterCamera(id,silent=false){
   if(!silent)toast(`📷 Reiniciando cámara · ${m.nombre} #${m.numG}…`,'info');
   try{
     const kind=/K2/.test(String(m.modelo||''))?'k2':'mjpeg';
-    const r=await fetch(_appendBridgeToken(`${getPrinterTunnel()}/recover-camera/${ip}?kind=${kind}`),{method:'POST',signal:AbortSignal.timeout(_CAM_RECOVER_TIMEOUT_MS)});
-    let d={};try{d=await r.json();}catch(_){}
-    if(r.status===403){if(!silent)toast('El token actual no tiene permiso admin para reiniciar la cámara','error');return false;}
-    if(r.status===404){if(!silent)toast('El bridge todavía no tiene recuperación de cámara. Actualízalo en el iMac.','error');return false;}
-    if(r.status===409)return false;
-    if(!r.ok||!d.ok){
-      if(!silent)toast('No se pudo recuperar la cámara: '+(d.error||`HTTP ${r.status}`),'error');
+    let attempt=await _cameraRecoverRequest(ip,kind);
+    // Un dashboard actualizado puede hablar con un bridge antiguo. Si la ruta
+    // /recover-camera aún no existe, actualizamos el servicio del iMac por su
+    // endpoint seguro /update, esperamos que launchd lo levante y reintentamos.
+    if(attempt.r.status===404){
+      const upgraded=await _ensureCameraRecoveryBridge(overlay);
+      if(!upgraded.ok){
+        if(!silent)toast('No se pudo actualizar el bridge: '+upgraded.error,'error');
+        return false;
+      }
+      attempt=await _cameraRecoverRequest(ip,kind);
+    }
+    const {r,d}=attempt;
+    if(r.status===403){
+      _cameraOverlayStatus(overlay,'sin permiso admin para recuperar cámara');
+      if(!silent)toast('El token actual no tiene permiso admin para reiniciar la cámara','error');
       return false;
     }
+    if(r.status===404){
+      _cameraOverlayStatus(overlay,'bridge sin soporte de recuperación');
+      if(!silent)toast('El bridge sigue sin exponer recuperación de cámara tras actualizar','error');
+      return false;
+    }
+    if(r.status===409){_cameraOverlayStatus(overlay,'recuperación ya en curso…');return false;}
+    if(!r.ok||!d.ok){
+      const why=d.error||`HTTP ${r.status}`;
+      _cameraOverlayStatus(overlay,'no se pudo recuperar · '+why);
+      if(!silent)toast('No se pudo recuperar la cámara: '+why,'error');
+      return false;
+    }
+    _cameraOverlayStatus(overlay,'cámara recuperada · cargando imagen…');
     const cardImg=slot?.querySelector('img');
     if(cardImg){cardImg.dataset.camFails='0';cardImg.dataset.camLoading='0';_cameraClearTimer(cardImg);_cameraRefreshNow(cardImg);}
     const modalId=document.getElementById('webcamModalId')?.value;
@@ -417,7 +487,8 @@ async function recoverPrinterCamera(id,silent=false){
     return false;
   }finally{
     _camRecovering[id]=false;
-    const status=overlay?.querySelector('.pcam-off-status');if(status)status.textContent='reconectando automáticamente…';
+    const status=overlay?.querySelector('.pcam-off-status');
+    if(status&&/recuperando cámara automáticamente|recuperación ya en curso/.test(status.textContent||''))status.textContent='reconectando automáticamente…';
   }
 }
 function _cameraLoadError(im){
