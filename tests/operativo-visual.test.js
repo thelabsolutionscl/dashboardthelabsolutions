@@ -103,14 +103,16 @@ test('el detalle de pedido expone controles rápidos de pago',()=>{
 });
 
 
-test('margen de cotización usa gradiente azul a rojo',()=>{
+test('margen de cotización usa gradiente azul a rojo y queda rojo desde 45%',()=>{
   const {op}=setup();
-  const low=op.marginColor(0),mid=op.marginColor(50),high=op.marginColor(100);
+  const low=op.marginColor(0),mid=op.marginColor(22.5),threshold=op.marginColor(45),high=op.marginColor(73);
   assert.equal(low,'hsl(210 85% 65%)');
   assert.equal(mid,'hsl(105 85% 65%)');
+  assert.equal(threshold,'hsl(0 85% 65%)');
   assert.equal(high,'hsl(0 85% 65%)');
+  assert.equal(op.marginColor(100),'hsl(0 85% 65%)');
   assert.equal(op.marginColor(-20),low);
-  assert.equal(op.marginColor(150),high);
+  assert.equal(op.marginColor(150),'hsl(0 85% 65%)');
 });
 
 
