@@ -11728,20 +11728,7 @@ function renderPedidos(filter){
     _setRows(tbody,'<tr><td colspan="12">'+emptyHtml+'</td></tr>');return;}
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
   _setRows(tbody,data.slice(0,_pedCap).map(p=>{
-    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'',interna=f['Fecha objetivo interna']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Completado','Cancelado'].includes(estado),metaAtrasada=interna&&new Date(interna+'T00:00:00')<today&&!['Listo para despacho','Despachado','Completado','Cancelado'].includes(estado);const idx=stages.indexOf(estado);const sel=selectedPedidos.has(p.id);
-    const facturaLink=localStorage.getItem('factura_drive_'+p.id)||f['Factura URL']||'';
-    const fichaData=parseFichaData(f['Ficha Tecnica']);
-    const pedDriveCotId=f['Cotizaciones']?.[0];
-    const pedDriveLink=pedDriveCotId?localStorage.getItem('fp_drive_folder_'+pedDriveCotId):localStorage.getItem('fp_drive_folder_ped_'+p.id);
-    const pedNotasN=_getNotas('ped',p.id).length;
-    const advLabel=estado==='Despachado'?'✓ &nbsp;Completar y archivar':`→ &nbsp;Avanzar a "${stages[idx+1]||''}"`;
-    const advItem=idx>=0&&idx<stages.length-1?`<button class="act-item ${estado==='Despachado'?'act-item-green':'act-item-yellow'}" onclick="advancePedido('${p.id}','${stages[idx+1]}')">${advLabel}</button><div class="act-sep"></div>`:'';
-    const cerrado=['Despachado','Completado'].includes(estado);
-    const repClienteItem=!cerrado?`<button class="act-item act-item-cyan" onclick="runRepClienteAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-send"/></svg> &nbsp;📢 Update cliente IA</button>`:'';
-    const contentItem=cerrado?`<button class="act-item act-item-cyan" onclick="runContentAgent('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-camera"/></svg> &nbsp;🎬 Contenido IA</button>`:'';
-    const facturarItem=cerrado?`<button class="act-item act-item-green" onclick="openDTEModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-invoice"/></svg> &nbsp;🧾 Facturar (DTE SII)${f['DTE N°']?' ✓ N° '+escapeHtml(String(f['DTE N°'])):''}</button>`:'';
-    const consumoItem=estado!=='Cancelado'?`<button class="act-item" onclick="openConsumoModal('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-nut"/></svg> &nbsp;📦 Descontar material${_pedConsumoN(f)?' <span class="nota-badge">'+_pedConsumoN(f)+'</span>':''}</button>`:'';
-    const seguimientoItem=(estado!=='Cancelado'&&typeof _seguimientoLink==='function'&&_seguimientoLink(p))?`<button class="act-item" onclick="compartirSeguimiento('${p.id}')"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> &nbsp;🔗 Compartir seguimiento</button>`:'';
+    const f=p.fields,estado=f['Estado pedido']||'—',entrega=f['Fecha entrega']||'',interna=f['Fecha objetivo interna']||'';const atrasado=entrega&&new Date(entrega+'T00:00:00')<today&&!['Despachado','Completado','Cancelado'].includes(estado),metaAtrasada=interna&&new Date(interna+'T00:00:00')<today&&!['Listo para despacho','Despachado','Completado','Cancelado'].includes(estado);const sel=selectedPedidos.has(p.id);
     const actMenu=pedidoActMenuHtml(p);
     const formaOpts=['AL CONTADO','30 DÍAS DESDE OC','45 DÍAS DESDE OC','70% ABONO Y 30% CONTRA ENTREGA','50% ABONO Y 50% 30 DÍAS'];
     let formaActual=f['Forma de pago']||'';
