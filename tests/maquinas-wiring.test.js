@@ -308,6 +308,9 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(auto,/_bedLevelTimeoutMs/,'timeout debe ser consistente y adaptable a camas grandes');
   assert.match(auto,/renderMonitorKPIs\(\);renderMonitorGrid\(\)/,'la tarjeta debe cambiar a CALIBRANDO inmediatamente');
   assert.match(auto,/_bedLevelWaitForPhysicalIdle/,'no debe liberar CALIBRANDO mientras idle_timeout siga ejecutando el cierre de la calibración');
+  assert.match(auto,/Promise\.all\(\[sendPromise,waitPromise\]\)/,'un timeout HTTP no debe declarar fallo mientras Klipper sigue calibrando y aún puede publicar la malla');
+  assert.match(auto,/quietFailure:true/,'la pérdida transitoria de la respuesta HTTP no debe mostrar un falso error durante la medición física');
+  assert.ok(auto.indexOf('observedAfter')<auto.indexOf('if(!after)'),'la evidencia física de la malla debe evaluarse antes de declarar la calibración no verificada');
 
   assert.match(wait,/1200/,'durante calibración debe muestrear suficientemente rápido para observar BED_MESH_CLEAR');
   assert.match(idleWait,/idle_timeout&print_stats/,'debe esperar evidencia física de que Klipper dejó de ejecutar G-code');
