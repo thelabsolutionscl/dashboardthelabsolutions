@@ -281,37 +281,48 @@ test('telemetría incluye factor real de velocidad y flujo para el panel de cont
   assert.match(derive,/speedFactor/);
   assert.match(derive,/flowFactor/);
 });
-test('control de cama ofrece calibración automática segura y medidor de desnivel',()=>{
+test('control de cama distingue malla activa, calibración nueva y estado en curso',()=>{
   const auto=functionSource(MAQ,'printerAutoBedCalibrate');
   const refresh=functionSource(MAQ,'printerBedLevelRefresh');
   const stats=functionSource(MAQ,'_bedLevelStats');
   const grade=functionSource(MAQ,'_bedLevelGrade');
   const wait=functionSource(MAQ,'_bedLevelWaitForCompletion');
+  const render=functionSource(MAQ,'_bedLevelRenderStats');
+  const source=functionSource(MAQ,'_bedLevelSetSource');
+  const restore=functionSource(MAQ,'_bedLevelRestoreRunUi');
   const control=functionSource(MAQ,'openPrinterControl');
+
   assert.match(auto,/_printerControlFresh/,'calibración requiere telemetría fresca');
   assert.match(auto,/_isPrinterBusy/,'calibración debe bloquearse durante impresión o pausa');
   assert.match(auto,/_bedLevelRuns\[id\]\?\.active/,'no debe permitir una segunda calibración simultánea');
-  assert.match(auto,/confirm\(/,'debe exigir confirmar cama despejada');
-  assert.match(auto,/G28\\nBED_MESH_CLEAR\\nBED_MESH_CALIBRATE/);
-  assert.match(auto,/_bedLevelWaitForCompletion/,'debe mantener el bloqueo hasta verificar una malla nueva');
-  assert.doesNotMatch(auto,/setTimeout\(\(\)=>_bedLevelSetBusy\(id,false\),5000\)/,'no debe liberar el botón por tiempo fijo');
-  assert.match(wait,/sawCleared/,'debe detectar que la malla fue limpiada antes de aceptar el resultado');
-  assert.match(wait,/_bedLevelSignature/,'debe distinguir una malla nueva de la anterior');
-  assert.match(refresh,/printer\/objects\/query\?bed_mesh/);
-  assert.match(refresh,/SIN RESPUESTA/,'debe distinguir falla de conexión de ausencia de malla');
+  assert.match(auto,/BED_MESH_CLEAR\\nBED_MESH_CALIBRATE/);
+  assert.ok(auto.indexOf('_bedLevelWaitForCompletion')<auto.indexOf('_sendGcode'),'debe observar CLEAR antes/durante el POST para verificar incluso una malla idéntica');
+  assert.match(auto,/CALIBRANDO · 0s/);
+  assert.match(auto,/_bedLevelMetaWrite/,'una calibración verificada debe guardar fecha y firma');
+  assert.match(auto,/_bedLevelTimeoutMs/,'timeout debe ser consistente y adaptable a camas grandes');
+
+  assert.match(wait,/1200/,'durante calibración debe muestrear suficientemente rápido para observar BED_MESH_CLEAR');
+  assert.match(wait,/sawCleared/);
+  assert.match(wait,/CALIBRANDO · \$\{elapsed\}s/);
+  assert.match(wait,/run\.cancelled/);
+
+  assert.match(refresh,/forceDuringRun/,'una lectura manual no debe pisar visualmente el estado CALIBRANDO');
+  assert.match(source,/EDAD DE LA MALLA DESCONOCIDA/,'una lectura de Moonraker no debe fingir fecha de calibración');
+  assert.match(source,/CALIBRACIÓN VERIFICADA/);
+  assert.match(render,/Malla leída ahora/,'debe distinguir hora de lectura de hora de calibración');
+  assert.match(restore,/CALIBRANDO/,'al reabrir CONTROL debe recuperar el estado activo');
+
   assert.match(stats,/probed_matrix\|\|mesh\?\.mesh_matrix/);
-  assert.match(stats,/minPos/);
-  assert.match(stats,/maxPos/);
   assert.match(grade,/range<=0\.15/);
   assert.match(grade,/range<=0\.25/);
   assert.match(grade,/range<=0\.40/);
-  assert.match(control,/pcBedLevelValue_/);
-  assert.match(control,/pcBedLevelRun_/);
-  assert.match(control,/repeat\(auto-fit,minmax\(220px,1fr\)\)/,'panel debe apilarse correctamente en pantallas estrechas');
-  assert.match(control,/left:25%/,'la escala visual debe respetar la posición real de 150 µm sobre 600 µm');
-  assert.match(control,/CALIBRAR AUTOMÁTICAMENTE/);
-  assert.match(control,/MEDIR DESNIVEL/);
-  assert.match(control,/VER MAPA DE CAMA/);
+  assert.match(control,/pcBedLevelState_/);
+  assert.match(control,/pcBedLevelSource_/);
+  assert.match(control,/ACTUALIZAR LECTURA/);
+  assert.doesNotMatch(control,/MEDIR DESNIVEL/,'el botón que solo relee Moonraker no debe presentarse como medición física');
+  assert.match(control,/BED_MESH_CLEAR/);
+  assert.match(control,/_bedLevelRestoreRunUi/);
+  assert.match(control,/repeat\(auto-fit,minmax\(220px,1fr\)\)/);
 });
 
 test('preflight, QA, postproducción e incidentes forman un flujo continuo',()=>{
