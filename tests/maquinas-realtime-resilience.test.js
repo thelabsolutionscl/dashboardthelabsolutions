@@ -132,7 +132,7 @@ test('cámaras hacen autoretry y K2 conserva el último frame sin parpadear',()=
   assert.match(sync,/onerror="_cameraLoadError\(this\)"/);
   assert.match(sync,/onload="_cameraLoadOk\(this\)"/);
   const ok=fn(MAQ,'_cameraLoadOk');
-  assert.match(ok,/_CAM_SNAPSHOT_MS/,'el siguiente snapshot parte después del frame recibido');
+  assert.match(ok,/_cameraSnapshotDelay/,'el siguiente snapshot parte después del frame recibido y respeta cadencia local/remota');
   const err=fn(MAQ,'_cameraLoadError');
   assert.match(err,/_CAM_RETRY_MAX_MS/,'los fallos deben reintentarse con backoff');
   assert.match(err,/hadGood/,'un fallo transitorio debe distinguir una cámara que ya entregó imagen');
