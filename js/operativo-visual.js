@@ -97,11 +97,18 @@
     const n=Number(value);
     if(!Number.isFinite(n))return '';
     const p=Math.max(0,Math.min(100,n));
-    // Escala visual: 0–45% transiciona de azul a rojo.
-    // Desde 45% en adelante se mantiene rojo para destacar márgenes altos.
-    if(p>=45)return 'hsl(0 85% 65%)';
-    const hue=Math.round(210*(1-p/45));
-    return `hsl(${hue} 85% 65%)`;
+    const shade=(start,end,h1,h2,sat,l1,l2)=>{
+      const t=end===start?1:Math.max(0,Math.min(1,(p-start)/(end-start)));
+      const hue=Math.round(h1+(h2-h1)*t);
+      const light=Math.round(l1+(l2-l1)*t);
+      return `hsl(${hue} ${sat}% ${light}%)`;
+    };
+    // Rangos visuales con degradé dentro de cada familia:
+    // <25 azul · 25–40 verde · 40–55 naranjo · >55 rojo.
+    if(p<25)return shade(0,25,215,200,88,68,56);
+    if(p<40)return shade(25,40,145,115,78,60,52);
+    if(p<=55)return shade(40,55,38,22,95,62,55);
+    return shade(55,100,4,0,90,61,50);
   }
   function quoteStateActions(c){
     const q=quoteInfo(c),e=q.e,id=c.id,parts=[];
