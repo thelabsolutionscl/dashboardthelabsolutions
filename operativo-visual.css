@@ -51,6 +51,10 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-record footer{border-top:1px solid var(--border);padding-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;line-height:1.5}
 .op-record footer small{display:block;font-size:11px;color:var(--text2)}
 .op-record footer>span{flex:1;min-width:0}.op-record footer>button{flex-shrink:0}
+.op-card-footer-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-shrink:0}
+.op-card-footer-actions .act-drop{display:inline-flex}
+.op-card-footer-actions .act-toggle{min-height:36px;min-width:38px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer}
+.op-card-footer-actions .act-toggle:hover{border-color:var(--accent);color:var(--accent)}
 .pv-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px;margin:0 0 18px}
 .pv-card{position:relative}
 .pv-card.is-blocked{border-left:4px solid var(--danger)}
@@ -110,6 +114,7 @@ dialog.op-drawer[data-kind="quote"]{
 @media(max-width:768px){
 dialog.op-drawer[data-kind="quote"]{inset:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;padding:16px;border:0;border-radius:0}
 .op-surface{padding:16px}.op-metrics{grid-template-columns:1fr}.op-priority{display:grid;grid-template-columns:1fr auto;gap:5px 12px}.op-priority>strong{grid-column:2;grid-row:1/3;margin:0}.op-priority>p{min-height:0}.op-priority>b{grid-column:1/-1}.op-section-heading{align-items:flex-start;flex-wrap:wrap}.op-section-heading h2{font-size:20px}.op-records{grid-template-columns:1fr}.op-record{padding:16px}.op-buckets{grid-template-columns:repeat(2,minmax(0,1fr))}.op-buckets .op-metric:first-child{grid-column:1/-1}.op-toolbar input{width:100%;min-width:0}.op-switch{margin-left:0}.op-drawer{padding:16px}.op-record header{flex-wrap:wrap}.op-record footer{flex-wrap:wrap}.op-record footer>button{min-height:42px}.op-metric>strong{font-size:25px}#opClient .op-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}#opClient .op-metric{padding:10px}#opClient .op-metric small{font-size:11px}}
+@media(max-width:720px){.op-card-footer-actions{width:100%;justify-content:flex-end}.op-card-footer-actions>.op-button,.op-card-footer-actions .act-toggle{min-height:42px}}
 @media(prefers-reduced-motion:reduce){.op-metric,.op-priority{transition:none}}
 
 /* El formato (tarjetas / kanban / calendario) es independiente del detalle. */

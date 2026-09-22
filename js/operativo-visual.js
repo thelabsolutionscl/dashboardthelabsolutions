@@ -155,11 +155,13 @@
     const cot=state.cotizacionesById?.[f['Cotizaciones']?.[0]];
     const title=f['Alias / Título']||cot?.fields?.['Alias / Título']||f['N° Pedido']||'Pedido';
     const next=e==='Listo para despacho'&&f['Resultado QA']!=='QA aprobado'?'Revisar control de calidad':e==='Confirmado'?'Preparar producción':e==='En producción'?'Revisar avance y entrega':e==='Despachado'?'Revisar entrega y pago':e==='Cancelado'?'Pedido cancelado':'Consultar detalle';
+    const cardMenu=!detail&&typeof pedidoActMenuHtml==='function'?pedidoActMenuHtml(p,`actmenu-ped-card-${p.id}`):'';
+    const mainAction=detail&&nextStage?button(nextStage==='En producción'?'Pasar a producción':nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',p.id,'op-primary'):detail?'':button('Ver pedido','order',p.id,'op-primary');
     return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${pill(late?'Entrega atrasada':e,late?'danger':'neutral')}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
       <div class="op-payment"><b>Pago</b> ${pill(pay.label,pay.tone)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
       ${detail?paymentControls(p):''}
-      ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span>${detail&&nextStage?button(nextStage==='En producción'?'Pasar a producción':nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',p.id,'op-primary'):detail?'':button('Ver pedido','order',p.id,'op-primary')}</footer></article>`;
+      ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span><div class="op-card-footer-actions">${cardMenu}${mainAction}</div></footer></article>`;
   }
   function orders(rows,all){
     mount();const el=$('opOrders');if(!el)return;
