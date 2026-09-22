@@ -12313,6 +12313,26 @@ function _epCostoCalc(){
   info.innerHTML=html;
 }
 function closeEditPedidoModal(){document.getElementById('editPedidoModal').style.display='none';}
+async function _persistPedidoEdit(id,fields){
+  // Los campos de calendario/costos son extensiones del dashboard. Si una base
+  // antigua aún no los tiene, no deben bloquear cambios esenciales del pedido
+  // (estado, pago, equipo, proveedor, entrega, etc.).
+  const optional=new Set(['Fecha objetivo interna','Historial fechas calendario','Costo material real (CLP)','Horas máquina reales','Costo mano de obra (CLP)','Costo real total (CLP)']);
+  let pending={...fields},dropped=[];
+  for(let i=0;i<8;i++){
+    try{await airtableWrite('Pedidos','PATCH',id,pending);return{saved:pending,dropped};}
+    catch(err){
+      const m=String(err?.message||'').match(/Unknown field name:?\s*["']?([^"'\n]+)["']?/i);
+      const field=m?.[1]?.trim();
+      if(field&&optional.has(field)&&Object.prototype.hasOwnProperty.call(pending,field)){
+        delete pending[field];dropped.push(field);continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('No se pudo guardar el pedido por campos opcionales incompatibles');
+}
+
 async function saveEditPedido(){
   const btn=document.getElementById('saveEditPedidoBtn');
   const id=document.getElementById('editPedidoId').value;
@@ -12335,13 +12355,18 @@ async function saveEditPedido(){
     if(_cm>0||_ch>0||_cmo>0)fields['Costo real total (CLP)']=Math.round(_cm+_ch*TARIFA_HORA_MAQUINA+_cmo);
     const _pedRec=state.pedidosById[id],_pedDateChanges=['Fecha objetivo interna','Fecha entrega'].filter(k=>(_pedRec?.fields?.[k]||'')!==(fields[k]||'')).map(k=>({field:k,to:fields[k]||''}));
     if(_pedDateChanges.length){let _reason='Fecha inicial';if(_pedDateChanges.some(x=>_pedRec?.fields?.[x.field])){_reason=(prompt('Motivo de la reprogramación del pedido:','Ajuste de producción')||'').trim();if(!_reason)throw new Error('Debes indicar el motivo para cambiar una fecha comprometida');}fields['Historial fechas calendario']=calHistoryForChanges(_pedRec,_pedDateChanges,_reason);}
-    try{await airtableWrite('Pedidos','PATCH',id,fields);}
+    let result;
+    try{result=await _persistPedidoEdit(id,fields);}
     catch(err){
-      if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){await ensureCalendarioCrmFields();await ensureCostosPedidoFields();await airtableWrite('Pedidos','PATCH',id,fields);}
-      else throw err;
+      if(/field|unknown|422|INVALID|UNKNOWN/i.test(err.message||'')){
+        await ensureCalendarioCrmFields();await ensureCostosPedidoFields();
+        result=await _persistPedidoEdit(id,fields);
+      }else throw err;
     }
-    const p=state.pedidosById[id];if(p) Object.assign(p.fields,fields);
-    toast('✓ Pedido actualizado','success');closeEditPedidoModal();renderPedidos();renderOverview();
+    const p=state.pedidosById[id];if(p) Object.assign(p.fields,result.saved);
+    if(result.dropped.length)toast('✓ Pedido actualizado · campos opcionales no disponibles: '+result.dropped.join(', '),'info');
+    else toast('✓ Pedido actualizado','success');
+    closeEditPedidoModal();renderPedidos();renderOverview();
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='💾 Guardar';
 }
