@@ -321,6 +321,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(control,/_printerControlRefreshActivity\(id\)/,'el modal debe redibujar la actividad después de rehidratarla');
   assert.match(control,/rehydrated\.physicalBusy!==activity\.physicalBusy/,'si aparece una operación durable debe reconstruir también los bloqueos de seguridad');
   assert.match(controlRefresh,/activity\.state==='calibrating'/,'la rehidratación debe restaurar visualmente la calibración');
+  assert.match(controlRefresh,/renderedBusy!==activity\.physicalBusy/,'al terminar o fallar debe reconstruir banner y bloqueos del modal');
   assert.match(controlView,/CALIBRANDO/,'la cabecera del modal debe priorizar calibración sobre EN LÍNEA');
   assert.match(control,/pcActivityBadge/,'la cabecera debe poder actualizarse sin reconstruir el modal');
 
@@ -351,6 +352,18 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(MAQ,/PETG 75°/);
   assert.match(MAQ,/ABS 100°/);
   assert.match(MAQ,/DIAGNÓSTICO GEOMÉTRICO/);
+});
+
+test('las escrituras de operación física se serializan para que un PUT tardío no reviva una calibración cerrada',()=>{
+  const set=functionSource(MAQ,'_machineOperationSet');
+  const clear=functionSource(MAQ,'_machineOperationClear');
+  const enqueue=functionSource(MAQ,'_machineOperationEnqueue');
+  const reconcile=functionSource(MAQ,'_machineOperationReconcileLocal');
+  assert.match(set,/_machineOperationEnqueue/);
+  assert.match(clear,/_machineOperationEnqueue/);
+  assert.match(enqueue,/previous\.catch\(\(\)=>\{\}\)\.then\(task\)/,'PUT y DELETE deben conservar orden por impresora');
+  assert.match(reconcile,/_machineOperationDesired/,'la respuesta remota tardía debe reconciliarse con la intención más nueva');
+  assert.match(clear,/_machineOperationDesired\[id\]=null/,'cerrar debe ganar sobre cualquier guardado anterior');
 });
 
 test('la tarjeta prioriza actividad física sobre standby/libre',()=>{

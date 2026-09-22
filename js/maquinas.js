@@ -1755,15 +1755,31 @@ function preheatPrinter(id,mat){
 function cooldownPrinter(id){_sendGcode(id,'M104 S0\nM140 S0','❄️ Enfriando — calentadores apagados');}
 
 const _bedLevelRuns={};
+const _machineOperationWrites=Object.create(null),_machineOperationDesired=Object.create(null);
+function _machineOperationReconcileLocal(id){
+  const desired=_machineOperationDesired[id];
+  try{if(desired)window.MachineActivityStore?.set?.(id,desired);else window.MachineActivityStore?.clear?.(id);}catch(_){ }
+}
+function _machineOperationEnqueue(id,task){
+  const previous=_machineOperationWrites[id]||Promise.resolve();
+  const next=previous.catch(()=>{}).then(task).catch(e=>{console.warn('[MachineOperation]',id,e?.message||e);}).finally(()=>{
+    _machineOperationReconcileLocal(id);
+    if(_machineOperationWrites[id]===next)delete _machineOperationWrites[id];
+  });
+  _machineOperationWrites[id]=next;
+  return next;
+}
 function _machineOperationSet(id,patch){
   const op=window.MachineActivityStore?.set?.(id,patch)||null;
-  try{window.FarmOperations?.set?.(id,op||patch).catch(()=>{});}catch(_){}
+  _machineOperationDesired[id]=op||patch;
+  _machineOperationEnqueue(id,async()=>{if(window.FarmOperations?.set)await window.FarmOperations.set(id,op||patch);});
   try{renderMonitorKPIs();renderMonitorGrid();}catch(_){}
   return op;
 }
 function _machineOperationClear(id){
+  _machineOperationDesired[id]=null;
   try{window.MachineActivityStore?.clear?.(id);}catch(_){}
-  try{window.FarmOperations?.clear?.(id).catch(()=>{});}catch(_){}
+  _machineOperationEnqueue(id,async()=>{if(window.FarmOperations?.clear)await window.FarmOperations.clear(id);});
   try{renderMonitorKPIs();renderMonitorGrid();}catch(_){}
 }
 const _BED_LEVEL_TIMEOUT_MS=300000;
@@ -2276,6 +2292,8 @@ function _printerControlRefreshActivity(id=''){
   const current=id||body?.dataset?.machineId||'';
   if(!current||body?.dataset?.machineId!==current)return false;
   const status=_printerStatus[current]||{},activity=_printerActivity(current,status),fresh=_printerControlFresh(current),view=_printerControlActivityView(activity,fresh,status);
+  const renderedBusy=body.dataset.physicalBusy==='1',renderedFresh=body.dataset.telemetryFresh==='1';
+  if(renderedBusy!==activity.physicalBusy||renderedFresh!==fresh){openPrinterControl(current,{skipOperationSync:true});return true;}
   const badge=document.getElementById('pcActivityBadge'),detail=document.getElementById('pcActivityDetail');
   if(badge){badge.textContent='● '+view.label;badge.style.color=view.color;badge.style.borderColor=view.color;badge.style.background=view.bg;}
   if(detail)detail.textContent=view.detail;
@@ -2299,7 +2317,7 @@ function openPrinterControl(id,opts={}){
     :busy?`<div style="background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.32);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#ffaa00">🛡️ <b>${escapeHtml(activity.label)}:</b> movimiento, Home, filamento, precalentados y enfriado están bloqueados. ${escapeHtml(activity.reason)}.</div>`:'';
   const hotTarget=s.hotend?.target||s.hotend?.actual||0,bedTarget=s.bed?.target||s.bed?.actual||0;
   const speed=Math.max(50,Math.min(150,Number(s.speedFactor)||100)),flow=Math.max(80,Math.min(120,Number(s.flowFactor)||100));
-  const pcBody=document.getElementById('pcBody');pcBody.dataset.machineId=id;pcBody.innerHTML=`
+  const pcBody=document.getElementById('pcBody');pcBody.dataset.machineId=id;pcBody.dataset.physicalBusy=busy?'1':'0';pcBody.dataset.telemetryFresh=fresh?'1':'0';pcBody.innerHTML=`
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <span id="pcActivityBadge" style="padding:4px 9px;border-radius:999px;background:${activityView.bg};border:1px solid ${activityView.color};color:${activityView.color};font-size:11px;font-weight:800">● ${activityView.label}</span>
       <span id="pcActivityDetail" style="font-size:11px;color:var(--text3)">${escapeHtml(activityView.detail)}</span>
@@ -2391,7 +2409,7 @@ function openPrinterControl(id,opts={}){
     }).catch(()=>{});
   },0);
 }
-function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';const body=document.getElementById('pcBody');if(body)delete body.dataset.machineId;}
+function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';const body=document.getElementById('pcBody');if(body){delete body.dataset.machineId;delete body.dataset.physicalBusy;delete body.dataset.telemetryFresh;}}
 if(typeof window!=='undefined'){
   setTimeout(()=>_bedLevelHistoryLoadRemote(false).catch(()=>{}),2500);
   window.addEventListener?.('focus',()=>{if(Date.now()-_bedLevelHistoryRemoteAt>60000)_bedLevelHistoryLoadRemote(false).catch(()=>{});});
