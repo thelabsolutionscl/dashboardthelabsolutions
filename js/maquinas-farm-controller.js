@@ -72,8 +72,9 @@ function confirmedPrinterIp(id){
 }
 function durableGetPrinterIp(m){
   if(m&&m.id){
-    const confirmed=confirmedPrinterIp(m.id);if(confirmed)return confirmed;
     const hit=registryById[m.id];if(hit&&hit.ip)return hit.ip;
+    if(m.ip)return m.ip;
+    const confirmed=confirmedPrinterIp(m.id);if(confirmed)return confirmed;
   }
   return original.getIp?original.getIp(m):(m&&m.ip)||null;
 }
@@ -106,8 +107,11 @@ async function seedRegistry(){
     if(!m||!m.id)continue;
     const confirmed=confirmedPrinterIp(m.id),current=registryById[m.id];
     try{
-      if(confirmed&&(!current||current.ip!==confirmed)){await patchRegistryMachine(m,confirmed);continue;}
-      if(!current)await patchRegistryMachine(m);
+      // Un navegador viejo jamás puede pisar un registry que ya existe.
+      // Los cambios manuales explícitos pasan por updateRegistryAfterManualSave.
+      if(current)continue;
+      if(confirmed)await patchRegistryMachine(m,confirmed);
+      else await patchRegistryMachine(m);
     }catch(e){console.warn('[FarmRegistry] seed',m.id,e.message);}
   }
   await syncRegistry(true);
