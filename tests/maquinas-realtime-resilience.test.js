@@ -92,6 +92,13 @@ test('monitor permite ordenar por señal de cámara y luego por modelo',()=>{
   assert.match(loadError,/_setCameraSignalState\(machineId,'down'\)/);
 });
 
+test('cambio de señal de cámara no repinta el grid salvo cuando ese orden lo necesita',()=>{
+  const set=fn(MAQ,'_setCameraSignalState');
+  assert.match(set,/_monitorSortMode==='camera_model'/);
+  assert.doesNotMatch(set,/renderMonitorFilterTabs/,'la señal no cambia los conteos por modelo');
+  assert.match(set,/350/,'agrupa cambios rápidos de salud para evitar repaints consecutivos');
+});
+
 test('modo remoto aligera polling y distingue bridge de impresora',()=>{
   const poll=fn(MAQ,'pollPrinters');
   const fetchStatus=fn(MAQ,'fetchPrinterStatus');
@@ -127,8 +134,12 @@ test('cámaras permanecen montadas aunque cambie estado, orden o filtro',()=>{
   const render=fn(MAQ,'renderMonitorGrid');
   assert.match(render,/const showCam=!!_rawCam/,'Moonraker caído no debe apagar una cámara configurada');
   assert.match(render,/sortedList\(MAQUINAS\)/,'los filtros no deben desmontar cámaras');
-  assert.match(render,/appendChild\(node\)/,'reordenar debe mover nodos, no recrearlos');
+  assert.match(render,/_reorderMonitorCardsStable\(el,__cards\)/,'reordenar debe usar reconciliación estable');
+  assert.doesNotMatch(render,/appendChild\(node\)/,'un render periódico no debe mover todas las tarjetas y repintar cámaras');
   assert.doesNotMatch(render,/el\.innerHTML=__cards/,'no debe vaciar el grid al cambiar orden');
+  const reorder=fn(MAQ,'_reorderMonitorCardsStable');
+  assert.match(reorder,/current\.every/,'si el orden ya coincide debe ser no-op');
+  assert.match(reorder,/insertBefore\(node,at\)/,'solo mueve la tarjeta que realmente está fuera de posición');
   const replace=fn(MAQ,'_replaceMonitorCardPreservingCamera');
   assert.match(replace,/oldSlot/);
   assert.match(replace,/replaceWith\(oldSlot\)/,'una tarjeta actualizada debe conservar el slot de cámara');
@@ -151,7 +162,9 @@ test('cámaras hacen autoretry y K2 conserva el último frame sin parpadear',()=
   assert.match(MAQ,/const _CAM_SNAPSHOT_MS=2500/,'go2rtc no debe saturarse con solicitudes cada segundo');
   const refreshNow=fn(MAQ,'_cameraRefreshNow');
   assert.match(refreshNow,/const probe=new Image\(\)/,'K2 debe precargar el frame fuera del img visible');
-  assert.match(refreshNow,/im\.src=probe\.src/,'solo cambia el frame visible después de una carga exitosa');
+  assert.match(refreshNow,/probe\.decode/,'el frame nuevo debe decodificarse antes de entrar en pantalla');
+  assert.match(refreshNow,/im\.replaceWith\(probe\)/,'el probe ya cargado debe convertirse en el frame visible sin segunda descarga');
+  assert.doesNotMatch(refreshNow,/im\.src=probe\.src/,'no debe volver a pedir la misma snapshot al ponerla visible');
   assert.match(refreshNow,/_cameraLoadError\(im\)/,'timeouts reales sí alimentan recuperación');
 });
 

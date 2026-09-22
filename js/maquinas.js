@@ -316,11 +316,13 @@ function _setCameraSignalState(id,state){
   const next=['ok','down','unknown'].includes(state)?state:'unknown';
   if(_camSignalState[id]===next)return;
   _camSignalState[id]=next;
+  // La señal de cámara solo afecta el orden "camera_model". Antes cualquier
+  // cambio ok/down repintaba todo el grid (y movía nodos con streams vivos),
+  // provocando destellos aunque nunca se perdiera realmente la imagen.
   clearTimeout(_camSortRenderTimer);
   _camSortRenderTimer=setTimeout(()=>{
-    if(typeof renderMonitorGrid==='function')renderMonitorGrid();
-    if(typeof renderMonitorFilterTabs==='function')renderMonitorFilterTabs();
-  },120);
+    if(_monitorSortMode==='camera_model'&&typeof renderMonitorGrid==='function')renderMonitorGrid();
+  },350);
 }
 function _cameraTimerKey(im){return im?.dataset?.machineId||im?.id||'';}
 function _cameraClearTimer(im){
@@ -338,25 +340,36 @@ function _cameraRefreshNow(im){
   const nextUrl=base+(base.includes('?')?'&':'?')+'_cam='+Date.now();
   const key=_cameraTimerKey(im);
   if(im.dataset.camKind==='snapshot'){
-    // Doble buffer: nunca reemplazamos el frame visible hasta que el siguiente
-    // JPEG esté completamente cargado. Un timeout/transitorio de go2rtc ya no
-    // deja la tarjeta negra ni provoca el parpadeo ocultar/mostrar.
-    const probe=new Image();if(key)_camPendingImages[key]=probe;
-    probe.decoding='async';
-    probe.onload=()=>{
+    // Doble buffer REAL: el siguiente JPEG se carga en un <img> separado.
+    // Cuando ya está cargado y decodificado, ese nodo reemplaza al visible en
+    // una sola operación. Así no hacemos "probe + segunda descarga" al volver
+    // a asignar la URL al mismo IMG, que en Chrome podía generar un flash.
+    const probe=new Image();
+    probe.loading='eager';probe.decoding='async';
+    probe.id=im.id||'';probe.className=im.className||'';probe.alt=im.alt||'';
+    probe.style.cssText=im.style.cssText||'';
+    Object.entries(im.dataset||{}).forEach(([k,v])=>{probe.dataset[k]=v;});
+    probe.dataset.camLoading='1';
+    if(key)_camPendingImages[key]=probe;
+    probe.onload=async()=>{
+      if(key&&_camPendingImages[key]!==probe)return;
+      if(key){clearTimeout(_camRetryTimers[key]);delete _camRetryTimers[key];}
+      try{if(typeof probe.decode==='function')await probe.decode();}catch(_){}
       if(key&&_camPendingImages[key]!==probe)return;
       if(key)delete _camPendingImages[key];
       if(!im.isConnected||im.dataset.camSuspended==='1')return;
-      im.src=probe.src; // queda en caché del navegador; onload visible programa el siguiente frame
+      probe.onload=null;probe.onerror=null;probe.dataset.camLoading='0';
+      im.replaceWith(probe);
+      _cameraLoadOk(probe);
     };
     probe.onerror=()=>{
       if(key&&_camPendingImages[key]!==probe)return;
-      if(key)delete _camPendingImages[key];
+      if(key){clearTimeout(_camRetryTimers[key]);delete _camRetryTimers[key];delete _camPendingImages[key];}
       _cameraLoadError(im);
     };
     if(key)_camRetryTimers[key]=setTimeout(()=>{
       if(_camPendingImages[key]!==probe)return;
-      probe.onload=null;probe.onerror=null;delete _camPendingImages[key];
+      probe.onload=null;probe.onerror=null;delete _camPendingImages[key];delete _camRetryTimers[key];
       im.dataset.camLoading='0';_cameraLoadError(im);
     },_CAM_LOAD_TIMEOUT_MS);
     probe.src=nextUrl;
@@ -1470,12 +1483,27 @@ function renderMonitorGrid(){
     const slot=document.getElementById('mccam_'+c.id);
     if((slot?.__camKey||'')!==c.camKey)_syncPrinterCam(c.id,c.camKey,false);
     el.__cam[c.id]=c.camKey;
-    if(node&&node.parentElement===el)el.appendChild(node);
     _patchLivePrinter(c.id,_printerStatus[c.id]);
   });
+  // No mover nodos si ya están en el orden correcto: appendChild sobre cada
+  // tarjeta desconectaba/reinsertaba los IMG en cada ciclo de telemetría y era
+  // visible como un parpadeo, sobre todo con varias cámaras a la vez.
+  if(el.__order!==__ids)_reorderMonitorCardsStable(el,__cards);
   el.__order=__ids;
   const lu=document.getElementById('monitorLastUpdate');
   if(lu)lu.textContent=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function _reorderMonitorCardsStable(el,cards){
+  if(!el||!Array.isArray(cards))return false;
+  const desired=cards.map(c=>String(c.id));
+  const current=Array.from(el.children).filter(n=>n.id?.startsWith('mcard_')).map(n=>n.id.replace(/^mcard_/,''));
+  if(current.length===desired.length&&current.every((id,i)=>id===desired[i]))return false;
+  desired.forEach((id,i)=>{
+    const node=document.getElementById('mcard_'+id);if(!node||node.parentElement!==el)return;
+    const at=el.children[i]||null;
+    if(at!==node)el.insertBefore(node,at);
+  });
+  return true;
 }
 function _replaceMonitorCardPreservingCamera(id,html){
   const old=document.getElementById('mcard_'+id);if(!old)return null;
