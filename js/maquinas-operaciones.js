@@ -1012,10 +1012,10 @@ function renderWorkshopHome(){
       ${workshopNavCard('seguridad','Seguridad','Sensor/lectura manual y reglas de preflight',safetyState,safetyTone)}
       ${workshopNavCard('capacidad','Capacidad','Simulador de escenario; no promesa automática','Simular','neutral')}
     </div>
-    <div class="mops-workshop-section-title op-expert-only"><div><b>Herramientas avanzadas</b><small>Configuración y análisis; no necesitas tenerlas abiertas todo el tiempo.</small></div></div>
-    <div class="mops-workshop-nav-grid advanced op-expert-only">
-      ${workshopNavCard('perfiles','Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
+    <div class="mops-workshop-section-title"><div><b>Herramientas de producción</b><small>Laminado, perfiles, análisis y configuración disponibles también en modo Simple.</small></div></div>
+    <div class="mops-workshop-nav-grid advanced">
       ${workshopNavCard('laminado','Laminador','Agente 3D, G-code y preflight','Abrir','neutral')}
+      ${workshopNavCard('perfiles','Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
       ${workshopNavCard('analitica','Analítica','QA, tiempos reales y costos modelados','Abrir','neutral')}
       ${workshopNavCard('automatizacion','Configuración','Umbrales, automatización y costos','Avanzado','neutral')}
     </div>

@@ -78,13 +78,13 @@ test('Taller tiene dashboard inicial y módulos bajo demanda',()=>{
   assert.match(OPS,/function ensureWorkshopShell\(/);
   assert.match(OPS,/function renderWorkshopHome\(/);
   assert.match(OPS,/Operación física/);
-  assert.match(OPS,/Herramientas avanzadas/);
+  assert.match(OPS,/Herramientas de producción/);
   assert.match(OPS,/WORKSHOP_CORE/);
   assert.match(CSS,/Máquinas · Taller confiable/);
   assert.match(CSS,/mops-workshop-nav-grid/);
 });
 
-test('Operación física y Herramientas avanzadas usan botones visuales TLS con iconos temáticos',()=>{
+test('Operación física y Herramientas de producción usan botones visuales TLS con iconos temáticos',()=>{
   assert.match(OPS,/WORKSHOP_CARD_META/);
   for(const icon of ['spool','wrench','shield','capacity','sliders','printer','chart','gear'])assert.match(OPS,new RegExp(icon));
   assert.match(OPS,/mops-workshop-tile/);
