@@ -307,7 +307,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(wait,/run\.cancelled/);
 
   assert.match(refresh,/forceDuringRun/,'una lectura manual no debe pisar visualmente el estado CALIBRANDO');
-  assert.match(source,/EDAD DE LA MALLA DESCONOCIDA/,'una lectura de Moonraker no debe fingir fecha de calibración');
+  assert.match(source,/MALLA ACTIVA NO VERIFICADA/,'una lectura de Moonraker no debe fingir que coincide con una calibración verificada');
   assert.match(source,/CALIBRACIÓN VERIFICADA/);
   assert.match(render,/Malla leída ahora/,'debe distinguir hora de lectura de hora de calibración');
   assert.match(restore,/CALIBRANDO/,'al reabrir CONTROL debe recuperar el estado activo');
