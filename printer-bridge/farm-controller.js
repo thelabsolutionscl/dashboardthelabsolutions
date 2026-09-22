@@ -22,6 +22,7 @@ const DATA_DIR = process.env.FARM_DATA_DIR || path.join(ROOT, 'data');
 const QUEUE_FILE = process.env.FARM_QUEUE_FILE || path.join(DATA_DIR, 'queue.json');
 const REGISTRY_FILE = process.env.FARM_REGISTRY_FILE || path.join(DATA_DIR, 'registry.json');
 const SAFETY_FILE = process.env.FARM_SAFETY_FILE || path.join(DATA_DIR, 'safety.json');
+const OPERATIONS_FILE = process.env.FARM_OPERATIONS_FILE || path.join(DATA_DIR, 'operations.json');
 const PAYLOAD_DIR = process.env.FARM_PAYLOAD_DIR || path.join(DATA_DIR, 'payloads');
 const PUBLIC_PORT = Number(process.env.BRIDGE_PORT || 8347);
 const LEGACY_PORT = Number(process.env.LEGACY_BRIDGE_PORT || 8348);
@@ -159,10 +160,26 @@ function normalizeRegistry(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
   return { version: 1, updatedAt: r.updatedAt || 0, machines: Array.isArray(r.machines) ? r.machines : [] };
 }
+function normalizeOperations(raw,now=Date.now()){
+  const source=raw&&typeof raw==='object'?raw:{},rows=source.machines&&typeof source.machines==='object'?source.machines:{};
+  const machines={};
+  for(const [id,value] of Object.entries(rows)){
+    const expiresAt=Number(value?.expiresAt||0);if(!id||!expiresAt||expiresAt<=now)continue;
+    machines[id]={machineId:id,type:['bed_calibration','gcode','maintenance'].includes(value.type)?value.type:'gcode',label:String(value.label||'').slice(0,120),phase:String(value.phase||'').slice(0,240),source:String(value.source||'').slice(0,80),sessionId:String(value.sessionId||'').slice(0,120),startedAt:Number(value.startedAt||now),expiresAt,updatedAt:Number(value.updatedAt||now)};
+  }
+  return{version:1,updatedAt:Number(source.updatedAt||0),machines};
+}
+function sanitizeOperation(machineId,body={},now=Date.now()){
+  const id=String(machineId||'').trim();if(!id)throw new Error('machineId requerido');
+  const type=String(body.type||'');if(!['bed_calibration','gcode','maintenance'].includes(type))throw new Error('tipo de operación no válido');
+  const startedAt=Number(body.startedAt||now),expiresAt=Math.min(now+24*60*60*1000,Math.max(now+5000,Number(body.expiresAt||now+30*60*1000)));
+  return{machineId:id,type,label:String(body.label||'').slice(0,120),phase:String(body.phase||'').slice(0,240),source:String(body.source||'').slice(0,80),sessionId:String(body.sessionId||'').slice(0,120),startedAt,expiresAt,updatedAt:now};
+}
 let queue = normalizeQueue(readJson(QUEUE_FILE, null));
 let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
 let safety = SafetyPolicy.normalizeSnapshot(readJson(SAFETY_FILE, null));
-let queueWrite = Promise.resolve(), registryWrite = Promise.resolve(), safetyWrite = Promise.resolve();
+let operations = normalizeOperations(readJson(OPERATIONS_FILE, null));
+let queueWrite = Promise.resolve(), registryWrite = Promise.resolve(), safetyWrite = Promise.resolve(), operationsWrite=Promise.resolve();
 function persistQueue() {
   queue.updatedAt=Date.now();
   const snapshot=JSON.parse(JSON.stringify(queue));
@@ -180,6 +197,12 @@ function persistSafety() {
   const snapshot=JSON.parse(JSON.stringify(safety));
   safetyWrite=safetyWrite.then(()=>atomicWrite(SAFETY_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[safety] persist',e);return false;});
   return safetyWrite;
+}
+function persistOperations(){
+  operations=normalizeOperations({...operations,updatedAt:Date.now()});
+  const snapshot=JSON.parse(JSON.stringify(operations));
+  operationsWrite=operationsWrite.then(()=>atomicWrite(OPERATIONS_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[operations] persist',e);return false;});
+  return operationsWrite;
 }
 const recoveredAtBoot = recoverQueueJobs(queue);
 if (recoveredAtBoot) {
@@ -543,7 +566,7 @@ const server = http.createServer(async (req, res) => {
   // El bridge legado ejecutaba /restart sin validar método. Desde el controller
   // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
   if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, safetyUpdatedAt: safety.updatedAt || 0 });
+  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
@@ -603,6 +626,27 @@ const server = http.createServer(async (req, res) => {
     if(removed)await deletePayload(removed);
     return json(res, 200, { ok: true });
   }
+  if(p==='/farm/operations'&&req.method==='GET'){
+    const role=requireRole(req,res,'viewer');if(!role)return;
+    operations=normalizeOperations(operations);
+    return json(res,200,{ok:true,updatedAt:operations.updatedAt,operations:Object.values(operations.machines)});
+  }
+  const operationRoute=p.match(/^\/farm\/operations\/([^/]+)$/);
+  if(operationRoute&&req.method==='PUT'){
+    const role=requireRole(req,res,'operator');if(!role)return;
+    try{
+      const id=decodeURIComponent(operationRoute[1]);if(!machineByIdentity({id}))return json(res,404,{ok:false,error:'máquina no registrada'});
+      const body=JSON.parse((await readBody(req,128*1024)).toString('utf8')||'{}'),operation=sanitizeOperation(id,body);
+      operations.machines[id]=operation;const durable=await persistOperations();if(!durable)return json(res,503,{ok:false,error:'no se pudo persistir la operación'});
+      return json(res,200,{ok:true,operation});
+    }catch(e){return json(res,400,{ok:false,error:e.message});}
+  }
+  if(operationRoute&&req.method==='DELETE'){
+    const role=requireRole(req,res,'operator');if(!role)return;
+    const id=decodeURIComponent(operationRoute[1]),existed=!!operations.machines[id];delete operations.machines[id];
+    const durable=await persistOperations();if(!durable)return json(res,503,{ok:false,error:'no se pudo persistir el cierre de operación'});
+    return json(res,200,{ok:true,removed:existed});
+  }
   if (p === '/farm/safety' && req.method === 'GET') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, safety });
@@ -661,6 +705,7 @@ function start(){
     console.log(`  Queue           : ${QUEUE_FILE}`);
     console.log(`  Registry        : ${REGISTRY_FILE}`);
     console.log(`  Safety          : ${SAFETY_FILE}`);
+    console.log(`  Operations      : ${OPERATIONS_FILE}`);
     console.log(`  Payloads        : ${PAYLOAD_DIR}`);
     console.log(`  Roles           : viewer=${TOKENS.viewer ? 'sí' : 'fallback'} operator=${TOKENS.operator ? 'sí' : 'fallback'} admin=sí`);
     console.log('─'.repeat(64));
@@ -676,5 +721,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };

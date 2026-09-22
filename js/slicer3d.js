@@ -2527,11 +2527,11 @@ self.onmessage=function(ev){
   function toggleTravel(on){S.showTravel=on;_drawGcodeLayer(S.previewIdx||0);}
   function _machineReadiness(m,requireIdle=true){
     const st=(typeof _printerStatus!=='undefined'&&_printerStatus[m.id])||{},state=String(st.state||'offline');
-    const last=Number(st.lastSeenAt||0),fresh=!!last&&Date.now()-last<60000;
     let admin=true;try{if(typeof getMaquinaEstadoGlobal==='function')admin=getMaquinaEstadoGlobal(m.id)==='disponible';}catch(_){}
-    const known=fresh&&!['','connecting','unknown','startup','offline','noip','shutdown','error','apidown'].includes(state);
-    const idle=['idle','ready','standby'].includes(state);
-    return{ready:admin&&known&&(!requireIdle||idle),admin,known,idle,state,fresh,lastSeenAt:last};
+    const operation=window.MachineActivityStore?.get?.(m.id)||null,activity=window.MachineActivity?.derive?window.MachineActivity.derive(st,{operation,adminAvailable:admin}):null;
+    const last=Number(st.lastSeenAt||0),fresh=activity?.telemetryFresh??(!!last&&Date.now()-last<60000),known=fresh&&!['','connecting','unknown','startup','offline','noip','shutdown','error','apidown'].includes(state);
+    const idle=activity?activity.available:['idle','ready','standby'].includes(state)&&!st.busyGcode;
+    return{ready:admin&&known&&(!requireIdle||idle),admin,known,idle,state:activity?.state||state,rawState:state,fresh,lastSeenAt:last,physicalBusy:activity?.physicalBusy??!!st.busyGcode,reason:activity?.reason||''};
   }
   function _abrasiveKnown(m){
     const mat=MATS[el('slMaterial')?.value]||{};if(!mat.abrasive)return true;
