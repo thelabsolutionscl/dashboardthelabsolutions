@@ -97,6 +97,10 @@
     });
   }
   function stepper(e){const current=stages.indexOf(e);return `<ol class="op-stages" aria-label="Etapas de producción">${stages.map((s,i)=>`<li class="${current>=i?'is-done':''}"${i===current?' aria-current="step"':''}><span>${esc(s)}</span></li>`).join('')}</ol>`;}
+  function nextOrderStage(p){
+    const e=p?.fields?.['Estado pedido']||'',i=stages.indexOf(e);
+    return i>=0&&i<stages.length-1?stages[i+1]:null;
+  }
   function orderCard(p,detail=false){
     const f=p.fields,e=f['Estado pedido']||'Sin estado',pay=payment(p),late=until(f['Fecha entrega'])<0&&until(f['Fecha entrega'])!==null&&!closed.includes(e);
     const cot=state.cotizacionesById?.[f['Cotizaciones']?.[0]];
@@ -196,12 +200,15 @@
     dlg.setAttribute('aria-label',kind==='order'?'Detalle del pedido':'Detalle de la cotización');
     dlg.dataset.kind=kind;
     const f=r.fields,isOrder=kind==='order';
-    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div><p>${esc(quoteInfo(r).next)}</p>`}<div class="op-drawer-actions">${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,'op-primary')}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'El envío y los cambios de estado están disponibles al editar la cotización o en Experto.'}</p>`;
+    const nextStage=isOrder?nextOrderStage(r):null;
+    const advanceButton=isOrder&&nextStage?button(nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',id,'op-primary'):'';
+    const editTone=!isOrder||!nextStage?'op-primary':'';
+    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div><p>${esc(quoteInfo(r).next)}</p>`}<div class="op-drawer-actions">${advanceButton}${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,editTone)}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'El envío y los cambios de estado están disponibles al editar la cotización o en Experto.'}</p>`;
     if(!dlg.open)dlg.showModal();
   }
   function goFinance(tab){if(!allowed('finanzas'))return;switchTab('finanzas');finSwitchTab(tab);finance();}
   function selectCot(filter){ui.cot=filter;ui.limit=24;renderCotizaciones();}
-  function events(e){
+  async function events(e){
     const b=e.target.closest('[data-op]');if(!b)return;
     const a=b.dataset.op,arg=b.dataset.arg||'';
     if(a==='mode'){const [page,value]=arg.split(':');mode(page,value);return;}
@@ -224,6 +231,14 @@
     if(a==='collection-detail'){reveal('finCobranzaActions');return;}
     if(a==='client'){if(!allowed('clientes'))return;openClienteDetalle(arg);return;}
     if(a==='client-tab'){if(!allowed('clientes'))return;cdTab(arg);return;}
+    if(a==='order-advance'){
+      const p=own(state.pedidos).find(p=>p.id===arg),next=nextOrderStage(p);
+      if(!p||!next||typeof advancePedido!=='function')return;
+      await advancePedido(arg,next);
+      const current=own(state.pedidos).find(p=>p.id===arg);
+      if(current?.fields?.['Estado pedido']===next)openRecord('order',arg);
+      return;
+    }
     $('opDrawer')?.close();
     if(a==='edit-order')openEditPedidoModal(arg);
     if(a==='edit-quote')openEditCot(arg);
@@ -233,7 +248,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,quoteInfo,agingMatch,day,until,openRecord};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,quoteInfo,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
