@@ -158,6 +158,21 @@ test('K1 y Ender tienen sonda finita de cámara aunque el MJPEG quede colgado',(
   assert.match(MAQ,/setInterval\(_cameraHealthSweep,_CAM_HEALTH_INTERVAL_MS\)/,'la vigilancia debe continuar durante la sesión');
 });
 
+test('si el bridge remoto es viejo se autoactualiza y reintenta recover-camera',()=>{
+  const recover=fn(MAQ,'recoverPrinterCamera');
+  const ensure=fn(MAQ,'_ensureCameraRecoveryBridge');
+  const wait=fn(MAQ,'_cameraBridgeHealthWait');
+  assert.match(recover,/attempt\.r\.status===404/);
+  assert.match(recover,/_ensureCameraRecoveryBridge\(overlay\)/);
+  assert.match(recover,/attempt=await _cameraRecoverRequest\(ip,kind\)/);
+  assert.match(ensure,/\/update/,'debe actualizar el bridge sin ir físicamente al iMac');
+  assert.match(ensure,/method:'POST'/);
+  assert.match(ensure,/_cameraBridgeUpdatePromise/,'dos cámaras no deben actualizar el bridge en paralelo');
+  assert.match(ensure,/_cameraBridgeHealthWait/,'debe esperar a launchd después del update');
+  assert.match(wait,/\/healthz/);
+  assert.match(MAQ,/no se pudo recuperar ·/,'la tarjeta debe mostrar el motivo concreto si falla');
+});
+
 test('K2/K2 Plus recuperan go2rtc desde el primer frame fallido',()=>{
   const err=fn(MAQ,'_cameraLoadError');
   const sync=fn(MAQ,'_syncPrinterCam');
