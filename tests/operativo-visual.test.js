@@ -140,3 +140,25 @@ test('el margen dinámico no puede ser sobrescrito por el color semántico púrp
   assert.match(css,/\.op-margin-fact b\{color:var\(--op-margin-color[^}]*!important/);
   assert.match(semantic,/matches\?\.\('\.op-margin-fact'\)/,'el decorador semántico debe omitir el margen dinámico');
 });
+
+
+test('tarjetas de pedidos muestran equipo seleccionable y todos los estados editables',()=>{
+  const {context,op}=setup();
+  context.PERSONAS=[
+    {id:'gustavo',nombre:'Gustavo Kaiser'},
+    {id:'nicanor',nombre:'Nicanor Marambio'},
+    {id:'florencia',nombre:'Florencia Cancino'}
+  ];
+  const pedido=record('p',{'Estado pedido':'En producción','Equipo asignado':'Gustavo Kaiser, Florencia Cancino'});
+  const team=op.orderTeamControls(pedido);
+  assert.match(team,/Equipo/);
+  assert.match(team,/Gustavo/);assert.match(team,/Nicanor/);assert.match(team,/Florencia/);
+  assert.equal((team.match(/is-selected/g)||[]).length,2,'debe marcar exactamente a las personas asignadas');
+  assert.match(team,/toggleEquipoPedidoCard/,'cada etiqueta de equipo debe ser seleccionable desde la tarjeta');
+
+  const states=op.orderStageControls(pedido);
+  for(const label of ['Confirmado','En producción','Listo','Despachado','Completado'])assert.match(states,new RegExp(label));
+  assert.match(states,/advancePedido\('p','Confirmado'\)/);
+  assert.match(states,/advancePedido\('p','Despachado'\)/);
+  assert.match(states,/aria-pressed="true"/,'el estado actual debe quedar visualmente seleccionado');
+});
