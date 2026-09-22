@@ -41,6 +41,7 @@ function statusApi(initial={}){
     _failCount:{},_nextPollAt:{},_printerStatus:{...initial},_tempHistory:{},
     getPrinterIp:()=> '192.168.100.71',
     _emitPrinterStatus:()=>{},checkTransitions:()=>{},
+    _printerUsesRemoteTunnel:()=>false,_centralFarmMachineEvidence:()=>null,
   };
   vm.createContext(context);
   vm.runInContext([
@@ -159,6 +160,27 @@ test('el sondeo se cachea por máquina para no repetirse en cada ciclo',async()=
   await ctx.fail('k1-3','192.168.100.7','sin respuesta');
   assert.equal(ctx.cache['k1-3'].at,primera,'no debe re-sondear dentro de la ventana de caché');
   assert.equal(ctx.cache['k1-3'].port,80);
+});
+
+test('un fallo del túnel remoto conserva estado bueno y no suma fallos de impresora',()=>{
+  const context=statusApi({'k2-2':{state:'printing',progress:44,lastSeenAt:777}}),machine={id:'k2-2'};
+  context.apply(machine,{state:'remote',_remotePathFail:true,connectionError:'túnel intermitente',checkedAt:Date.now()});
+  assert.equal(context._printerStatus[machine.id].state,'printing');
+  assert.equal(context._printerStatus[machine.id].progress,44);
+  assert.equal(context._printerStatus[machine.id].stale,true);
+  assert.equal(context._printerStatus[machine.id].remoteDegraded,true);
+  assert.equal(context._failCount[machine.id]||0,0);
+});
+
+test('si el Farm Controller local confirma online, un timeout remoto no declara offline',()=>{
+  const context=statusApi({'k2-2':{state:'standby',lastSeenAt:555}}),machine={id:'k2-2'};
+  context._printerUsesRemoteTunnel=()=>true;
+  context._centralFarmMachineEvidence=()=>({id:'k2-2',online:true,health:'online'});
+  const failure={state:'offline',_fetchFail:true,connectionError:'timeout',checkedAt:Date.now()};
+  for(let i=0;i<5;i++)context.apply(machine,failure);
+  assert.equal(context._printerStatus[machine.id].state,'standby');
+  assert.equal(context._printerStatus[machine.id].stale,true);
+  assert.equal(context._failCount[machine.id],0);
 });
 
 test('un fallo transitorio conserva la última impresión conocida',()=>{
