@@ -149,6 +149,24 @@
     const i=stages.findIndex(s=>s.toLocaleLowerCase('es')===raw.toLocaleLowerCase('es'));
     return i>=0&&i<stages.length-1?stages[i+1]:null;
   }
+  function orderTeamControls(p){
+    let people=[];try{people=(typeof PERSONAS!=='undefined'&&Array.isArray(PERSONAS))?PERSONAS:[];}catch(_){}
+    if(!people.length)return '';
+    const selected=new Set(String(p?.fields?.['Equipo asignado']||'').split(',').map(x=>x.trim()).filter(Boolean));
+    const chips=people.map(person=>{
+      const name=String(person?.nombre||person?.name||person?.id||'').trim();if(!name)return '';
+      const on=selected.has(name),short=name.split(/\s+/)[0]||name;
+      return `<button type="button" class="op-team-chip${on?' is-selected':''}" data-persona="${esc(name)}" aria-pressed="${on?'true':'false'}" title="${on?'Quitar':'Asignar'} a ${esc(name)}" onclick="event.stopPropagation();toggleEquipoPedidoCard('${p.id}',this.dataset.persona,event)">${on?'✓ ':''}${esc(short)}</button>`;
+    }).join('');
+    return `<div class="op-card-control"><div class="op-card-control-head"><span>Equipo</span><small>clic para asignar</small></div><div class="op-team-chips">${chips}</div></div>`;
+  }
+  function orderStageControls(p){
+    const current=String(p?.fields?.['Estado pedido']||'').trim();
+    return `<div class="op-card-control"><div class="op-card-control-head"><span>Estado</span><small>clic para cambiar</small></div><div class="op-stage-picks">${stages.map(s=>{
+      const active=s===current,label=s==='Listo para despacho'?'Listo':s;
+      return `<button type="button" class="op-stage-pick${active?' is-selected':''}" aria-pressed="${active?'true':'false'}" title="${esc(s)}" ${active?'disabled':''} onclick="event.stopPropagation();advancePedido('${p.id}','${s}')">${esc(label)}</button>`;
+    }).join('')}</div></div>`;
+  }
   function orderCard(p,detail=false){
     const f=p.fields,e=f['Estado pedido']||'Sin estado',pay=payment(p),late=until(f['Fecha entrega'])<0&&until(f['Fecha entrega'])!==null&&!closed.includes(e);
     const nextStage=detail?nextOrderStage(p):null;
@@ -160,8 +178,8 @@
     return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${pill(late?'Entrega atrasada':e,late?'danger':'neutral')}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
       <div class="op-payment"><b>Pago</b> ${pill(pay.label,pay.tone)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
-      ${detail?paymentControls(p):''}
-      ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span><div class="op-card-footer-actions">${cardMenu}${mainAction}</div></footer></article>`;
+      ${detail?paymentControls(p):orderTeamControls(p)}
+      ${detail?stepper(e):orderStageControls(p)}<footer><span><small>Siguiente paso</small>${esc(next)}</span><div class="op-card-footer-actions">${cardMenu}${mainAction}</div></footer></article>`;
   }
   function orders(rows,all){
     mount();const el=$('opOrders');if(!el)return;
@@ -323,7 +341,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,quoteStateActions,marginColor,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStageControls,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
