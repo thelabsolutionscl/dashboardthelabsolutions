@@ -199,7 +199,9 @@ test('K2 evita doble consumidor y recupera su stack de cámara automáticamente'
   assert.match(refresh,/camSuspended/,'el watchdog global no puede reactivar la tarjeta mientras el modal consume la K2');
   assert.match(err,/_CAM_AUTORECOVER_FAILS/,'la cámara caída debe escalar de retry a recuperación');
   assert.match(err,/recoverPrinterCamera\(machineId,true\)/,'la recuperación automática debe ser silenciosa');
-  assert.match(recover,/\/recover-camera\/\$\{ip\}/,'la recuperación física va por el bridge del taller');
+  const request=fn(MAQ,'_cameraRecoverRequest');
+  assert.match(request,/\/recover-camera\/\$\{ip\}/,'la recuperación física va por el bridge del taller');
+  assert.match(request,/\?kind=\$\{kind\}/,'el modelo viaja al bridge para elegir backend');
   assert.match(recover,/_CAM_AUTORECOVER_COOLDOWN_MS/,'debe tener cooldown para no reiniciar en bucle');
   assert.match(MAQ,/↻ Reiniciar cámara/,'también debe existir recuperación manual en la tarjeta');
 });
