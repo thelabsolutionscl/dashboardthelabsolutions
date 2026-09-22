@@ -507,23 +507,17 @@ function machineReliability(machineId){
     ((central.fresh||liveFresh)&&(history.durable||sample>=2)?'media':'baja');
   return{level,label,confidence,history,central,current,liveFresh,completion,confirmed:confirmed.length,detected:detected.length,maintenance:maintenanceAlerts.length};
 }
-const _BED_LEVEL_PREFLIGHT_KEY='printer_bedmesh_history_v1';
+const _BED_LEVEL_PREFLIGHT_KEY='printer_bedmesh_history_v2';
 function bedLevelPreflightFact(machineId,material=''){
-  let rows=[];try{const parsed=JSON.parse(localStorage.getItem(_BED_LEVEL_PREFLIGHT_KEY)||'[]');if(Array.isArray(parsed))rows=parsed;}catch(_){}
-  const latest=rows.filter(x=>x&&x.machineId===machineId&&Number(x.calibratedAt)>0).sort((a,b)=>Number(b.calibratedAt)-Number(a.calibratedAt))[0];
-  if(!latest)return null;
-  const range=Number(latest.range)||0,um=Math.round(range*1000),ageDays=(Date.now()-Number(latest.calibratedAt))/86400000;
-  const mat=String(material||'').toUpperCase(),expected=mat.includes('ABS')||mat.includes('ASA')?100:mat.includes('PETG')?75:mat.includes('TPU')?50:mat.includes('PLA')?60:0;
-  const temp=Number(latest.bedTemp),issues=[];
-  if(range>0.80)issues.push(`desnivel MUY ALTO: ${um} µm; revisa físicamente la cama antes de iniciar`);
-  else if(range>0.40)issues.push(`desnivel alto: ${um} µm; conviene corregir y recalibrar`);
-  if(ageDays>=7)issues.push(`calibración verificada hace ${Math.floor(ageDays)} día(s)`);
-  if(expected&&Number.isFinite(temp)&&Math.abs(expected-temp)>=20)issues.push(`mesh calibrado a ${temp.toFixed(0)} °C y ${material||'este material'} trabaja cerca de ${expected} °C`);
-  return{level:issues.length?'warn':'pass',detail:issues.length?issues.join(' · '):`Calibración verificada · ${um} µm · hace ${Math.max(0,Math.floor(ageDays))} día(s)`,range,calibratedAt:Number(latest.calibratedAt)};
+  // Fallback únicamente. La validación autoritativa vive en maquinas.js y
+  // consulta bed_mesh en Moonraker justo antes del inicio.
+  let obs=null;try{obs=JSON.parse(localStorage.getItem('printer_bedmesh_active_v1_'+machineId)||'null');}catch(_){}
+  const recent=obs&&Date.now()-Number(obs.observedAt)<30000;
+  return{code:'live-check-required',level:'warn',strongConfirm:true,detail:recent?'Existe una lectura reciente, pero el preflight requiere volver a verificar la malla activa en Moonraker.':'Aún no se ha verificado en vivo la malla activa para este inicio.'};
 }
 function preflightFromFacts(facts){
   const checks=[];
-  const add=(key,label,level,detail)=>checks.push({key,label,level,detail});
+  const add=(key,label,level,detail,extra={})=>checks.push({key,label,level,detail,...extra});
   add('connection','Conectividad',facts.connectionReady?'pass':'block',facts.connectionReady?'Moonraker disponible':facts.connectionDetail||'Sin telemetría');
   add('availability','Máquina lista',facts.machineFree?'pass':'block',facts.machineFree?'Sin impresión activa y cama liberada':facts.bedNeedsClear?'La impresión terminó, pero falta confirmar retiro de pieza / cama libre':'La máquina está ocupada o detenida');
   const dimLevel=facts.dimensionsPartial?'block':facts.dimensionsKnown?'pass':'warn';
@@ -538,13 +532,14 @@ function preflightFromFacts(facts){
   else add('sensor','Sensor físico',facts.filamentDetected===true?'pass':'warn',facts.filamentDetected===true?'Filamento detectado':'Sensor físico sin lectura');
   add('camera','Cámara',facts.cameraConfigured?'pass':'warn',facts.cameraConfigured?'Cámara configurada':'Sin cámara configurada');
   add('maintenance','Mantención',facts.maintenanceOverdue?'block':facts.maintenanceSoon?'warn':'pass',facts.maintenanceOverdue?'Mantención vencida':facts.maintenanceSoon?'Mantención próxima':'Mantención al día');
-  if(facts.bedLevel)add('bed-level','Nivelación de cama',facts.bedLevel.level,facts.bedLevel.detail);
+  if(facts.bedLevel)add('bed-level','Nivelación de cama',facts.bedLevel.level,facts.bedLevel.detail,{strongConfirm:!!facts.bedLevel.strongConfirm,code:facts.bedLevel.code||''});
   (facts.safetyBlockers||[]).forEach((detail,index)=>add('safety-b'+index,'Seguridad ambiental','block',detail));
   (facts.safetyWarnings||[]).forEach((detail,index)=>add('safety-w'+index,'Seguridad ambiental','warn',detail));
-  const blockers=checks.filter(c=>c.level==='block'),warnings=checks.filter(c=>c.level==='warn');
-  return{ok:!blockers.length,checks,blockers,warnings};
+  const blockers=checks.filter(c=>c.level==='block'),warnings=checks.filter(c=>c.level==='warn'),strongWarnings=warnings.filter(c=>c.strongConfirm);
+  const strongToken=strongWarnings.map(c=>c.key+':'+c.code+':'+c.detail).join('|');
+  return{ok:!blockers.length,checks,blockers,warnings,strongWarnings,strongToken};
 }
-function evaluatePreflight(job,machine){
+function evaluatePreflight(job,machine,opts={}){
   const stateNow=liveState(machine.id),live=typeof _printerStatus!=='undefined'?_printerStatus[machine.id]||{}:{};
   const spool=data().spools.find(s=>s.id===job.spoolId),free=spool?spoolAvailable(spool):0;
   let maint=[];try{maint=getMaintAlerts(machine);}catch(_){ }
@@ -561,9 +556,20 @@ function evaluatePreflight(job,machine){
     gramsRequired:num(job.grams),spoolKnown:!!spool,spoolAvailable:free,filamentDetected:live.filament?.detected??null,
     cameraConfigured:!!(localStorage.getItem('printer_cam_'+machine.id)||machine.cam),maintenanceOverdue:overdue,maintenanceSoon:maint.length>0,
     safetyBlockers:safety.blockers,safetyWarnings:safety.warnings,
-    bedLevel:bedLevelPreflightFact(machine.id,job.material),
+    bedLevel:Object.prototype.hasOwnProperty.call(opts,'bedLevel')?opts.bedLevel:bedLevelPreflightFact(machine.id,job.material),
   });
 }
+async function evaluatePreflightLive(job,machine){
+  let bedLevel=null;
+  try{
+    if(typeof window!=='undefined'&&typeof window.getBedLevelPreflightFact==='function')bedLevel=await window.getBedLevelPreflightFact(machine.id,job.material);
+    else bedLevel=bedLevelPreflightFact(machine.id,job.material);
+  }catch(e){
+    bedLevel={code:'live-check-error',level:'warn',strongConfirm:true,detail:'No se pudo verificar en vivo la malla activa: '+(e?.message||'error desconocido')};
+  }
+  return evaluatePreflight(job,machine,{bedLevel});
+}
+
 function alertRow(key,machineId,severity,title,detail,action=''){
   return{key,machineId,severity,title,detail,action,at:Date.now()};
 }
@@ -1524,28 +1530,45 @@ function enqueueJob(id){
   j.status='en_cola';j.queuedAt=nowIso();j.updatedAt=nowIso();persist('Trabajo preparado para iniciar');
   toast(`${j.name} preparado en ${machineLabel(j.machineId)} · esto aún no crea una cola durable`,'success');
 }
-function openPreflight(id){
+async function openPreflight(id){
   const j=data().jobs.find(x=>x.id===id);if(!j||!j.machineId){toast('Asigna una máquina antes de iniciar','error');return;}
-  const m=getMachine(j.machineId),result=evaluatePreflight(j,m),modal=input('mopsPreflightModal'),body=input('mopsPreflightBody'),confirmBtn=input('mopsPreflightConfirm');
+  const m=getMachine(j.machineId),modal=input('mopsPreflightModal'),body=input('mopsPreflightBody'),confirmBtn=input('mopsPreflightConfirm');
   if(!modal||!body||!confirmBtn)return;
   setVal('mopsPreflightJobId',id);setText('mopsPreflightTitle',`${j.name} · ${machineLabel(j.machineId)}`);
-  body.innerHTML=`<div class="mops-preflight-summary ${result.ok?'ok':'blocked'}"><b>${result.ok?'✓ Lista para iniciar':'⛔ Inicio bloqueado'}</b><span>${result.blockers.length?result.blockers.length+' condición(es) críticas':result.warnings.length?result.warnings.length+' advertencia(s) para confirmar':'Todos los controles aprobaron'}</span></div><div class="mops-preflight-list">${result.checks.map(check=>`<div class="mops-preflight-row ${check.level}"><span>${check.level==='pass'?'✓':check.level==='warn'?'!':'×'}</span><div><b>${esc(check.label)}</b><small>${esc(check.detail)}</small></div></div>`).join('')}</div>`;
-  confirmBtn.disabled=!result.ok;confirmBtn.textContent=result.ok?'Confirmar e iniciar':'Corrige los bloqueos';modal.style.display='flex';
+  modal.dataset.strongToken='';modal.dataset.strongText='';confirmBtn.disabled=true;confirmBtn.textContent='Verificando…';
+  body.innerHTML='<div class="mops-preflight-summary"><b>⏳ Verificando condiciones reales…</b><span>Consultando telemetría y malla activa en Moonraker.</span></div>';modal.style.display='flex';
+  const result=await evaluatePreflightLive(j,m);
+  if(inputVal('mopsPreflightJobId')!==id||modal.style.display==='none')return;
+  modal.dataset.strongToken=result.strongToken||'';
+  modal.dataset.strongText=(result.strongWarnings||[]).map(x=>x.label+': '+x.detail).join('\n');
+  body.innerHTML=`<div class="mops-preflight-summary ${result.ok?'ok':'blocked'}"><b>${result.ok?'✓ Lista para iniciar':'⛔ Inicio bloqueado'}</b><span>${result.blockers.length?result.blockers.length+' condición(es) críticas':result.warnings.length?result.warnings.length+' advertencia(s) para confirmar':'Todos los controles aprobaron'}</span></div><div class="mops-preflight-list">${result.checks.map(check=>`<div class="mops-preflight-row ${check.level}"><span>${check.level==='pass'?'✓':check.level==='warn'?'!':'×'}</span><div><b>${esc(check.label)}${check.strongConfirm?' · CONFIRMACIÓN EXTRA':''}</b><small>${esc(check.detail)}</small></div></div>`).join('')}</div>`;
+  confirmBtn.disabled=!result.ok;
+  confirmBtn.textContent=!result.ok?'Corrige los bloqueos':result.strongWarnings.length?'Confirmar riesgo e iniciar':'Confirmar e iniciar';
 }
+
 function closePreflight(){const modal=input('mopsPreflightModal');if(modal)modal.style.display='none';}
-function confirmPreflight(){const id=inputVal('mopsPreflightJobId');if(!id)return;closePreflight();startJob(id,{preflightConfirmed:true});}
+function confirmPreflight(){
+  const id=inputVal('mopsPreflightJobId'),modal=input('mopsPreflightModal');if(!id)return;
+  const strongToken=modal?.dataset?.strongToken||'',strongText=modal?.dataset?.strongText||'';
+  if(strongToken&&!confirm('⚠ CONFIRMACIÓN EXTRA\n\n'+strongText+'\n\n¿Confirmas que quieres iniciar igualmente?'))return;
+  closePreflight();startJob(id,{preflightConfirmed:true,strongToken});
+}
 async function startJob(id,options={}){
   const j=data().jobs.find(x=>x.id===id);if(!j||!j.machineId)return false;
-  const m=getMachine(j.machineId),st=liveState(j.machineId);
+  const m=getMachine(j.machineId);
   if(!options.preflightConfirmed){openPreflight(id);return false;}
-  // El modal puede quedar abierto mientras cambia filamento, mantención o estado.
-  // Por eso el preflight se repite justo antes del comando físico.
-  const fresh=evaluatePreflight(j,m);
+  // Revalidación física inmediatamente antes de entregar el START al Controller.
+  const fresh=await evaluatePreflightLive(j,m);
   if(!fresh.ok){
     audit('Inicio detenido por preflight revalidado',m.id,fresh.blockers.map(x=>x.detail).join(' · '),'warn');
     toast(fresh.blockers[0]?.detail||'Las condiciones cambiaron; revisa el preflight','error');
     openPreflight(id);return false;
   }
+  if(fresh.strongWarnings.length&&fresh.strongToken!==String(options.strongToken||'')){
+    audit('Inicio detenido: cambió advertencia crítica de nivelación',m.id,fresh.strongWarnings.map(x=>x.detail).join(' · '),'warn');
+    toast('Cambió la condición de la cama; confirma nuevamente el preflight','error');openPreflight(id);return false;
+  }
+  const st=liveState(j.machineId);
   if(!machineOperational(m)){toast('La máquina no está operativa o la cama no fue liberada','error');return false;}
   if(st==='printing'||st==='paused'){j.status='en_cola';persist('Trabajo conservado en cola');toast('La impresora está ocupada; el trabajo permanece en cola','info');return false;}
   if(!jobGcodeReady(j)){toast('Sube el G-code a la impresora asignada antes de iniciar','error');return false;}

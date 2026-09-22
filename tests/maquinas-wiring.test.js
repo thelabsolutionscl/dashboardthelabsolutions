@@ -297,7 +297,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(auto,/_bedLevelRuns\[id\]\?\.active/,'no debe permitir una segunda calibración simultánea');
   assert.match(auto,/BED_MESH_CLEAR\\nBED_MESH_CALIBRATE/);
   assert.ok(auto.indexOf('_bedLevelWaitForCompletion')<auto.indexOf('_sendGcode'),'debe observar CLEAR antes/durante el POST para verificar incluso una malla idéntica');
-  assert.match(auto,/CALIBRANDO · 0s/);
+  assert.match(auto,/\$\{run\.uiLabel\} · 0s/);
   assert.match(auto,/_bedLevelMetaWrite/,'una calibración verificada debe guardar fecha y firma');
   assert.match(auto,/_bedLevelTimeoutMs/,'timeout debe ser consistente y adaptable a camas grandes');
 
@@ -307,7 +307,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(wait,/run\.cancelled/);
 
   assert.match(refresh,/forceDuringRun/,'una lectura manual no debe pisar visualmente el estado CALIBRANDO');
-  assert.match(source,/EDAD DE LA MALLA DESCONOCIDA/,'una lectura de Moonraker no debe fingir fecha de calibración');
+  assert.match(source,/MALLA ACTIVA NO VERIFICADA/,'una lectura de Moonraker no debe fingir que coincide con una calibración verificada');
   assert.match(source,/CALIBRACIÓN VERIFICADA/);
   assert.match(render,/Malla leída ahora/,'debe distinguir hora de lectura de hora de calibración');
   assert.match(restore,/CALIBRANDO/,'al reabrir CONTROL debe recuperar el estado activo');
@@ -325,12 +325,20 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(control,/repeat\(auto-fit,minmax\(220px,1fr\)\)/);
   assert.match(control,/pcBedRecommendation_/);
   assert.match(control,/pcBedHistory_/);
-  assert.match(MAQ,/BED_LEVEL_HISTORY_V1/,'historial debe tener respaldo compartido');
+  assert.match(MAQ,/BED_LEVEL_HISTORY_V2/,'historial v2 debe tener respaldo compartido con firma de malla');
   assert.match(MAQ,/function _bedLevelDiagnose\(/);
+  assert.match(MAQ,/function _bedLevelPlaneFit\(/,'debe separar inclinación global de deformación local');
   assert.match(MAQ,/function _bedLevelHistoryTrendSvg\(/);
   assert.match(MAQ,/function _bedLevelRecommendation\(/);
+  assert.match(MAQ,/function getBedLevelPreflightFact\(/,'preflight debe poder consultar la malla activa en Moonraker');
+  assert.match(MAQ,/signature/,'el historial debe guardar firma de la malla');
   assert.match(MAQ,/bedTempStart/,'calibración debe registrar temperatura de cama');
-  assert.match(MAQ,/DIAGNÓSTICO FÍSICO GUIADO/);
+  assert.match(MAQ,/printerScrewsTiltGuide/);
+  assert.match(MAQ,/printerZTiltAdjust/);
+  assert.match(MAQ,/PLA 60°/);
+  assert.match(MAQ,/PETG 75°/);
+  assert.match(MAQ,/ABS 100°/);
+  assert.match(MAQ,/DIAGNÓSTICO GEOMÉTRICO/);
 });
 
 test('preflight, QA, postproducción e incidentes forman un flujo continuo',()=>{

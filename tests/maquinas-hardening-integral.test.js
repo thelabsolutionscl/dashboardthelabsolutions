@@ -81,7 +81,7 @@ test('reimpresión no usa Moonraker directo',()=>{
 
 test('preflight final se vuelve a calcular justo antes del Controller',()=>{
   const start=fn(OPS,'startJob');
-  assert.match(start,/evaluatePreflight\(j,m\)/);
+  assert.match(start,/await evaluatePreflightLive\(j,m\)/);
   assert.match(start,/FarmQueue\.startExisting/);
   assert.doesNotMatch(start,/printer\/print\/start/);
 });
