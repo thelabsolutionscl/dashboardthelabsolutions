@@ -847,7 +847,7 @@ function savePrinterConn(){
 // (status = {print_stats, virtual_sdcard, heater_bed, extruder, webhooks, …}).
 // Es puro/síncrono para reusarlo igual desde el polling REST y desde el WebSocket.
 function _deriveStatus(m,s,ip){
-  const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{},gm=s.gcode_move||{};
+  const ps=s.print_stats||{},vs=s.virtual_sdcard||{},hb=s.heater_bed||{},ex=s.extruder||{},wh=s.webhooks||{},gm=s.gcode_move||{},it=s.idle_timeout||{};
   // Estado real del firmware Klipper. Si está "shutdown"/"error" la impresora
   // dejó de imprimir y NO reporta sensores (todo 0) → hay que reiniciar el firmware.
   const klState=wh.state||'ready';
@@ -869,8 +869,10 @@ function _deriveStatus(m,s,ip){
   if(klState==='shutdown'||klState==='error')state='shutdown';
   else if(klState==='startup')state='startup';
   const light=_printerLightApplyStatus(m.id,s);
+  const busyPrint=state==='printing'||state==='paused';
+  const busyGcode=!busyPrint&&!['shutdown','error','startup'].includes(klState)&&String(it.state||'').toLowerCase()==='printing';
   const seen=Date.now();
-  return{state,klState,klMsg,progress,progressRaw,filename,filamentMm,hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},speedFactor:Math.round(Number(gm.speed_factor||1)*100),flowFactor:Math.round(Number(gm.extrude_factor||1)*100),elapsed,eta,ip,filament:_extractFilamentTelemetry(s),updatedAt:seen,lastSeenAt:seen,checkedAt:seen,light:light?.available?{available:true,on:!!light.on}:null};
+  return{state,klState,klMsg,progress,progressRaw,filename,filamentMm,busyGcode,idleTimeoutState:String(it.state||''),hotend:{actual:Math.round(ex.temperature||0),target:Math.round(ex.target||0)},bed:{actual:Math.round(hb.temperature||0),target:Math.round(hb.target||0)},speedFactor:Math.round(Number(gm.speed_factor||1)*100),flowFactor:Math.round(Number(gm.extrude_factor||1)*100),elapsed,eta,ip,filament:_extractFilamentTelemetry(s),updatedAt:seen,lastSeenAt:seen,checkedAt:seen,light:light?.available?{available:true,on:!!light.on}:null};
 }
 // Miniatura del trabajo en curso (cacheada por archivo). Devuelve la URL o null.
 async function _ensureThumb(m,ip,st){
@@ -889,7 +891,7 @@ async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id),remote=_printerUsesRemoteTunnel();
   try{
-    const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks','gcode_move'];
+    const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks','gcode_move','idle_timeout'];
     if(machineHasPhysicalCfs(m))objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
     const path='/printer/objects/query?'+objects.map(encodeURIComponent).join('&')+_printerLightQuerySuffix(m.id);
     const timeout=remote?_REMOTE_STATUS_TIMEOUT_MS:_STATUS_TIMEOUT_MS;
@@ -1078,11 +1080,26 @@ function fmtPrinterSeen(ts){
   const h=Math.floor(min/60);return`Última lectura hace ${h} h`;
 }
 
+// print_stats solo describe trabajos del virtual SD. Una calibración, HOME o
+// macro puede mover físicamente la impresora mientras print_stats sigue en
+// standby. Esta capa evita mostrar "libre" cuando existe actividad real.
+function _printerEffectiveState(id,state,status=null){
+  const raw=String(state||status?.state||'unknown');
+  if(['shutdown','error','offline','noip','apidown','connecting','startup'].includes(raw))return raw;
+  let calibrating=false;
+  try{calibrating=!!_bedLevelRuns?.[id]?.active;}catch(_){}
+  if(calibrating)return'calibrating';
+  if(status?.busyGcode)return'gcode';
+  return raw;
+}
+
 function printerStateMeta(state){
   return({
     connecting:{label:'Conectando…',color:'#38bdf8',bg:'rgba(56,189,248,0.12)'},
     printing:{label:'Imprimiendo',color:'#fb923c',bg:'rgba(251,146,60,0.15)'},
     paused:{label:'Pausado',color:'#ffaa00',bg:'rgba(255,170,0,0.15)'},
+    calibrating:{label:'Calibrando',color:'#ffaa00',bg:'rgba(255,170,0,0.15)'},
+    gcode:{label:'Ejecutando G-code',color:'#a78bfa',bg:'rgba(167,139,250,0.14)'},
     error:{label:'Error',color:'#ff4444',bg:'rgba(255,68,68,0.15)'},
     complete:{label:'Impresión finalizada',color:'#34d399',bg:'rgba(52,211,153,0.15)'},
     cancelled:{label:'Impresión cancelada',color:'#ffaa00',bg:'rgba(255,170,0,0.12)'},
@@ -1129,12 +1146,17 @@ function filterMonitor(grupo){_monitorFilter=grupo;renderMonitorFilterTabs();ren
 function renderMonitorKPIs(){
   const el=document.getElementById('monitorKPIs');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
-  let printing=0,paused=0,idle=0,error=0,down=0,offline=0,noip=0,connecting=0,apidown=0;
-  lista.forEach(m=>{const st=(_printerStatus[m.id]||_printerInitialStatus(m)).state;if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='apidown')apidown++;else if(st==='offline')offline++;else if(st==='connecting')connecting++;else idle++;});
-  const total=lista.length,utilPct=total>0?Math.round((printing+paused)/total*100):0;
+  let printing=0,paused=0,calibrating=0,gcode=0,idle=0,error=0,down=0,offline=0,noip=0,connecting=0,apidown=0;
+  lista.forEach(m=>{
+    const status=_printerStatus[m.id]||_printerInitialStatus(m),st=_printerEffectiveState(m.id,status.state,status);
+    if(st==='printing')printing++;else if(st==='paused')paused++;else if(st==='calibrating')calibrating++;else if(st==='gcode')gcode++;else if(st==='error')error++;else if(st==='shutdown')down++;else if(st==='noip')noip++;else if(st==='apidown')apidown++;else if(st==='offline')offline++;else if(st==='connecting')connecting++;else idle++;
+  });
+  const total=lista.length,utilPct=total>0?Math.round((printing+paused+calibrating+gcode)/total*100):0;
   el.innerHTML=`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:12px">
     ${printing>0?`<span style="color:#00d4aa;font-weight:700">🟢 ${printing} Imprimiendo</span>`:''}
     ${paused>0?`<span style="color:#ffaa00;font-weight:700">⏸ ${paused} Pausado</span>`:''}
+    ${calibrating>0?`<span style="color:#ffaa00;font-weight:700">📐 ${calibrating} Calibrando</span>`:''}
+    ${gcode>0?`<span style="color:#a78bfa;font-weight:700">⚙ ${gcode} Ejecutando G-code</span>`:''}
     ${idle>0?`<span style="color:var(--accent3)">⚪ ${idle} En línea · libres</span>`:''}
     ${connecting>0?`<span style="color:#38bdf8">◌ ${connecting} Conectando</span>`:''}
     ${error>0?`<span style="color:#ff4444;font-weight:700">🔴 ${error} Error</span>`:''}
@@ -1155,12 +1177,14 @@ function renderMaqOcupacion(){
   const el=document.getElementById('maqOcupacion');if(!el)return;
   const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
   if(!lista.length){el.style.display='none';return;}
-  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown'||st==='apidown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'idle';
-  const rows=lista.map(m=>{const s=_printerStatus[m.id]||_printerInitialStatus(m);return{m,s,k:clasif(s.state),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
+  const clasif=st=>st==='printing'?'print':st==='paused'?'paused':st==='calibrating'?'calibrating':st==='gcode'?'gcode':(st==='error'||st==='shutdown'||st==='apidown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'idle';
+  const rows=lista.map(m=>{const s=_printerStatus[m.id]||_printerInitialStatus(m),effective=_printerEffectiveState(m.id,s.state,s);return{m,s,k:clasif(effective),effective,eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
   const etas=rows.filter(r=>r.eta>0).map(r=>r.eta);
   const horizon=Math.max(4*3600,Math.min(12*3600,etas.length?Math.max(...etas)*1.15:4*3600));
   const libres=rows.filter(r=>r.k==='idle').length;
   const imprimiendo=rows.filter(r=>r.k==='print').length;
+  const calibrando=rows.filter(r=>r.k==='calibrating').length;
+  const ejecutando=rows.filter(r=>r.k==='gcode').length;
   const hhmm=seg=>new Date(Date.now()+seg*1000).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
   const proxima=etas.length?hhmm(Math.min(...etas)):null;
   // Eje: marcas de hora sobre el horizonte
@@ -1190,6 +1214,12 @@ function renderMaqOcupacion(){
     }else if(r.k==='paused'){
       bar=`<div style="height:100%;width:45%;background:rgba(255,170,0,0.6);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#1a1206">⏸ en pausa</span></div>`;
       lbl=`<span style="color:#ffaa00">⏸</span>`;
+    }else if(r.k==='calibrating'){
+      bar=`<div style="height:100%;width:100%;background:rgba(255,170,0,.14);border:1px dashed rgba(255,170,0,.55);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:800;color:#ffaa00">📐 calibrando cama</span></div>`;
+      lbl=`<span style="color:#ffaa00">📐</span>`;
+    }else if(r.k==='gcode'){
+      bar=`<div style="height:100%;width:100%;background:rgba(167,139,250,.12);border:1px dashed rgba(167,139,250,.45);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:800;color:#a78bfa">⚙ ejecutando G-code</span></div>`;
+      lbl=`<span style="color:#a78bfa">⚙</span>`;
     }else if(r.k==='error'){
       bar=`<div style="height:100%;width:100%;background:rgba(255,68,68,0.14);border:1px dashed rgba(255,68,68,0.5);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:var(--danger)">⚠ con falla — revisar</span></div>`;
       lbl=`<span style="color:var(--danger)">🔴</span>`;
@@ -1235,7 +1265,7 @@ function renderMaqOcupacion(){
   el.style.display='';
   el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <span style="font-size:12px;font-weight:700;color:var(--text)">⏱️ Ocupación de máquinas</span>
-      <span style="font-size:10.5px;color:var(--text3)">${libres} libre${libres!==1?'s':''} ahora · ${imprimiendo} imprimiendo${proxima?' · próxima máquina libre ~'+proxima:''}</span>
+      <span style="font-size:10.5px;color:var(--text3)">${libres} libre${libres!==1?'s':''} ahora · ${imprimiendo} imprimiendo${calibrando?' · '+calibrando+' calibrando':''}${ejecutando?' · '+ejecutando+' ejecutando G-code':''}${proxima?' · próxima máquina libre ~'+proxima:''}</span>
     </div>
     <div style="position:relative;height:12px;margin:0 0 4px calc(${nameW} + 23px)">${marks.join('')}</div>
     ${cuerpo}`;
@@ -1249,7 +1279,8 @@ function renderMonitorGrid(){
   const __cards=lista.map(m=>{
     const visible=_monitorFilter==='all'||m.modelo===_monitorFilter;
     const s=_printerStatus[m.id]||_printerInitialStatus(m);
-    const sm=printerStateMeta(s.state);
+    const effectiveState=_printerEffectiveState(m.id,s.state,s);
+    const sm=printerStateMeta(effectiveState);
     const ip=getPrinterIp(m);
     const _rawCam=_printerCamRaw(m.id);
     const _gridCamRaw=_printerGridCamRaw(m.id);
@@ -1258,7 +1289,9 @@ function renderMonitorGrid(){
     const img=MODELO_IMGS[m.modelo]||'';
     const isPrinting=s.state==='printing';
     const isPaused=s.state==='paused';
-    const isActive=isPrinting||isPaused;
+    const isCalibrating=effectiveState==='calibrating';
+    const isGcode=effectiveState==='gcode';
+    const isActive=isPrinting||isPaused||isCalibrating||isGcode;
     const gc=MONITOR_GRUPOS.find(g=>g.key===m.modelo);
     const hist=getHistoryForPrinter(m.id);
     const th=_tempHistory[m.id]||[];
@@ -1274,7 +1307,7 @@ function renderMonitorGrid(){
     // Huella estructural: SOLO lo que cambia qué ramas se dibujan. Excluye
     // progreso/eta/temperaturas (se parchean en vivo) → la tarjeta no se
     // reconstruye cada 15s mientras imprime, evitando el parpadeo.
-    const structFP=[visible?1:0,s.state,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0),_printerLightFingerprint(m.id)].join('~');
+    const structFP=[visible?1:0,s.state,effectiveState,s.stale?1:0,s.filename||'',s.thumbUrl?1:0,isActive?1:0,isPrinting?1:0,isPaused?1:0,isCalibrating?1:0,isGcode?1:0,s.hotend?.target||0,s.bed?.target||0,maintAlerts.length,idleWarn?1:0,idleHours,ip||'',getPrinterApiKey(m.id)?1:0,_queueCount(m.id),hist.length,(_rawCam?1:0),(th.length>=2?1:0),_printerLightFingerprint(m.id)].join('~');
 
     let body='';
     if(s.state==='connecting'){
@@ -2055,6 +2088,7 @@ async function printerAutoBedCalibrate(id,presetKey='current'){
   const preset=_bedLevelPreset(presetKey);if(!confirm(`🛏 Calibrar automáticamente la cama de ${m.nombre} #${m.numG}?\n\nModo: ${preset.label}.\n\nLa impresora hará HOME, BED_MESH_CLEAR y BED_MESH_CALIBRATE. La cifra actual se marcará como VALOR ANTERIOR hasta verificar la nueva malla.\n\nAsegúrate de que la cama esté despejada.`))return;
   const timeoutMs=_bedLevelTimeoutMs(m),run={active:true,cancelled:false,startedAt:Date.now(),phaseText:'Preparando calibración…',uiLabel:preset.target===null?'CALIBRANDO':preset.key==='cold'?'ENFRIANDO':'ESTABILIZANDO',observedFresh:false,preset};
   _bedLevelRuns[id]=run;_bedLevelSetBusy(id,true,`⏳ ${run.uiLabel} · 0s`);_bedLevelSetState(id,run.uiLabel,'#ffaa00');_bedLevelSetStatus(id,run.phaseText,'#ffaa00');_bedLevelMarkPrevious(id);
+  try{renderMonitorKPIs();renderMonitorGrid();}catch(_){}
   try{
     const thermalOk=await _bedLevelWaitTemperature(id,preset,run);if(!thermalOk){run.cancelled=true;await _bedLevelRefreshAfterFailure(id,'⚠ No se alcanzó una temperatura estable para calibrar.');toast('No se pudo estabilizar la temperatura de cama','error');return;}
     const beforeRead=await _bedLevelReadActive(id,9000),before=beforeRead.st,beforeSig=_bedLevelSignature(before);run.beforeRange=before?.range??null;run.beforeSig=beforeSig;run.uiLabel='CALIBRANDO';run.phaseText='CALIBRANDO · iniciando HOME…';
@@ -2068,7 +2102,10 @@ async function printerAutoBedCalibrate(id,presetKey='current'){
     _bedLevelHistoryAppend(id,after,{calibratedAt:verifiedAt,bedTemp,bedTarget});
     const delta=before?after.range-before.range:null;let resultText='Calibración nueva verificada';if(delta!==null&&Math.abs(delta)>=0.005)resultText+=delta<0?` · mejoró ${Math.abs(delta*1000).toFixed(0)} µm`:` · aumentó ${Math.abs(delta*1000).toFixed(0)} µm`;else if(delta!==null)resultText+=' · cambio <5 µm';
     _bedLevelRenderStats(id,after,{statusText:resultText,verifiedAt:meta?.calibratedAt||verifiedAt});const g=_bedLevelGrade(after.range);toast(`🛏 ${resultText} · ${(after.range*1000).toFixed(0)} µm · ${g.label}`,after.range<=0.25?'success':after.range<=0.40?'info':'error');_audit3DRefreshBurst([1500,8000,30000]);
-  }finally{run.active=false;_bedLevelSetBusy(id,false);}
+  }finally{
+    run.active=false;_bedLevelSetBusy(id,false);
+    try{renderMonitorKPIs();renderMonitorGrid();}catch(_){}
+  }
 }
 function _bedLevelCapabilitiesFromConfig(configfile){
   const settings=configfile?.settings||configfile?.config||{},keys=Object.keys(settings||{}).map(k=>String(k).toLowerCase());return{screwsTilt:keys.some(k=>k==='screws_tilt_adjust'||k.startsWith('screws_tilt_adjust ')),zTilt:keys.some(k=>k==='z_tilt'||k.startsWith('z_tilt '))};
@@ -2576,7 +2613,7 @@ try{
   const saved=localStorage.getItem('monitor_sort_mode');
   if(MONITOR_SORT_MODES.includes(saved))_monitorSortMode=saved;
 }catch(_){}
-function stateOrder(s){return{error:0,shutdown:1,paused:2,apidown:3,printing:4,complete:5,standby:6,idle:6,offline:7,noip:8}[s]??9;}
+function stateOrder(s){return{error:0,shutdown:1,paused:2,calibrating:3,gcode:4,apidown:5,printing:6,complete:7,standby:8,idle:8,offline:9,noip:10}[s]??11;}
 function _monitorModelOrder(m){
   const i=MONITOR_GRUPOS.findIndex(g=>g.key===m?.modelo);
   return i<=0?99:i;
@@ -2594,7 +2631,11 @@ function sortedList(lista){
   const rows=[...(lista||[])];
   if(_monitorSortMode==='original')return rows;
   if(_monitorSortMode==='model')return rows.sort(_monitorModelCompare);
-  if(_monitorSortMode==='state')return rows.sort((a,b)=>stateOrder((_printerStatus[a.id]||{}).state||'offline')-stateOrder((_printerStatus[b.id]||{}).state||'offline')||((_printerStatus[a.id]?.state==='printing'&&_printerStatus[b.id]?.state==='printing')?((_printerStatus[a.id].eta??Infinity)-(_printerStatus[b.id].eta??Infinity)):0)||_monitorModelCompare(a,b));
+  if(_monitorSortMode==='state')return rows.sort((a,b)=>{
+    const sa=_printerStatus[a.id]||{},sb=_printerStatus[b.id]||{};
+    const ea=_printerEffectiveState(a.id,sa.state||'offline',sa),eb=_printerEffectiveState(b.id,sb.state||'offline',sb);
+    return stateOrder(ea)-stateOrder(eb)||((sa.state==='printing'&&sb.state==='printing')?((sa.eta??Infinity)-(sb.eta??Infinity)):0)||_monitorModelCompare(a,b);
+  });
   return rows.sort((a,b)=>_cameraSignalRank(a)-_cameraSignalRank(b)||_monitorModelCompare(a,b));
 }
 function setMonitorSort(mode){
@@ -2616,7 +2657,8 @@ document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement
 // ── IDLE ALERT ────────────────────────────────────────────────
 const _lastActiveTime={},_idleAlerted={};
 function getIdleHours(id,state){
-  if(state==='printing'||state==='paused'||state==='offline'||state==='noip')return 0;
+  const effective=_printerEffectiveState(id,state,_printerStatus[id]||null);
+  if(['printing','paused','calibrating','gcode','offline','noip'].includes(effective))return 0;
   const last=_lastActiveTime[id];if(!last)return 0;
   const threshold=parseFloat(localStorage.getItem('idle_alert_hours')||'2');
   const h=(Date.now()-last)/3600000;
@@ -2626,8 +2668,8 @@ function checkIdleAlerts(){
   const now=new Date();const h=now.getHours();
   const isWork=h>=8&&h<19&&now.getDay()>0&&now.getDay()<6;
   MAQUINAS.forEach(m=>{
-    const st=(_printerStatus[m.id]||{}).state||'offline';
-    if(st==='printing'||st==='paused'){_lastActiveTime[m.id]=Date.now();delete _idleAlerted[m.id];}
+    const raw=_printerStatus[m.id]||{},st=_printerEffectiveState(m.id,raw.state||'offline',raw);
+    if(['printing','paused','calibrating','gcode'].includes(st)){_lastActiveTime[m.id]=Date.now();delete _idleAlerted[m.id];}
     else if(isWork&&_lastActiveTime[m.id]&&!_idleAlerted[m.id]){
       const idleH=(Date.now()-_lastActiveTime[m.id])/3600000;
       const threshold=parseFloat(localStorage.getItem('idle_alert_hours')||'2');
