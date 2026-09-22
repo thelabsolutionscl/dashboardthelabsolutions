@@ -11776,6 +11776,13 @@ async function toggleEquipoPedido(pedidoId,personaNombre,evt){
     toast('Error: '+e.message,'error');
   }
 }
+async function toggleEquipoPedidoCard(pedidoId,personaNombre,evt){
+  if(evt)evt.stopPropagation();
+  await toggleEquipoPedido(pedidoId,personaNombre,evt);
+  // La tabla actualiza su celda en forma optimista; Tarjetas necesita volver
+  // a pintar el mismo registro para reflejar la etiqueta seleccionada.
+  renderPedidos(state.pedidoFilter||'all');
+}
 function qaColor(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.2)';if(r==='Rechazado') return 'rgba(255,68,68,0.15)';return 'rgba(255,255,255,0.06)';}
 function qaBorder(r){if(r==='QA aprobado') return 'rgba(0,212,170,0.4)';if(r==='Rechazado') return 'rgba(255,68,68,0.3)';return 'var(--border2)';}
 function qaTextColor(r){if(r==='QA aprobado') return 'var(--accent3)';if(r==='Rechazado') return 'var(--danger)';return 'var(--text2)';}
