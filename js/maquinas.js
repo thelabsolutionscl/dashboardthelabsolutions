@@ -134,6 +134,37 @@ const _CAM_AUTORECOVER_FAILS=3;     // tras varios fallos reales, reinicia el st
 const _CAM_AUTORECOVER_COOLDOWN_MS=10*60*1000;
 const _CAM_RECOVER_TIMEOUT_MS=150000; // incluye preflight + S99camera + espera de imagen del bridge
 const _CAM_HEALTH_INTERVAL_MS=60000;
+const _REMOTE_STATUS_TIMEOUT_MS=13000;
+const _REMOTE_CAM_SNAPSHOT_MS=5000;
+const _REMOTE_BRIDGE_HEALTH_TTL_MS=5000;
+let _remoteBridgeHealth={at:0,ok:null,promise:null};
+function _printerUsesRemoteTunnel(){return !(typeof _isLocalMode==='function'&&_isLocalMode());}
+function _centralFarmMachineEvidence(id,now=Date.now()){
+  try{
+    if(typeof window==='undefined'||!window.FarmHealth?.status)return null;
+    const st=window.FarmHealth.status();
+    if(!st?.lastSync||now-st.lastSync>90000)return null;
+    return (Array.isArray(st.machines)?st.machines:[]).find(x=>x&&x.id===id)||null;
+  }catch(_){return null;}
+}
+async function _remoteBridgeReachable(force=false){
+  if(!_printerUsesRemoteTunnel())return true;
+  const now=Date.now();
+  if(!force&&_remoteBridgeHealth.ok!==null&&now-_remoteBridgeHealth.at<_REMOTE_BRIDGE_HEALTH_TTL_MS)return _remoteBridgeHealth.ok;
+  if(_remoteBridgeHealth.promise)return _remoteBridgeHealth.promise;
+  _remoteBridgeHealth.promise=(async()=>{
+    let ok=false;
+    try{
+      const r=await fetch(getPrinterTunnel()+'/healthz',{cache:'no-store',signal:AbortSignal.timeout(4500)});
+      ok=!!r?.ok;
+    }catch(_){ok=false;}
+    _remoteBridgeHealth={at:Date.now(),ok,promise:null};return ok;
+  })();
+  return _remoteBridgeHealth.promise;
+}
+function _remotePathFailure(ip,reason,code=0){
+  return{_remotePathFail:true,ip,state:'remote',connectionError:reason||'Intermitencia en túnel/bridge remoto',httpStatus:code||0,checkedAt:Date.now()};
+}
 function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
 let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0;
 function _getPrinterTunnelLongToken(){
@@ -256,7 +287,17 @@ function _cameraProbeUrl(id){
 }
 // Cámaras tipo "snapshot" (p.ej. go2rtc /api/frame.jpeg de las K2, que no dan
 // MJPEG): el <img> con data-snap se refresca solo cada ~1s para simular video.
-function _camIsSnapshot(raw){return /\/api\/frame\.jpe?g/i.test(raw||'');}
+function _camIsSnapshot(raw){return /\/api\/frame\.jpe?g|[?&]action=snapshot(?:&|$)/i.test(raw||'');}
+function _printerGridCamRaw(id){
+  const raw=_printerCamRaw(id);
+  if(_printerUsesRemoteTunnel()&&/[?&]action=stream(?:&|$)/i.test(raw||''))return String(raw).replace(/action=stream/i,'action=snapshot');
+  return raw;
+}
+function _printerGridCamUrl(id){const raw=_printerGridCamRaw(id);return raw?_printerCamUrlFromRaw(raw):'';}
+function _cameraSnapshotDelay(im){
+  const v=Number(im?.dataset?.camInterval||0);
+  return Number.isFinite(v)&&v>0?v:_CAM_SNAPSHOT_MS;
+}
 function _safePrinterMediaUrl(raw){
   const s=String(raw||'').trim();
   if(!s)return'';
@@ -335,7 +376,7 @@ function _cameraLoadOk(im){
   _setCameraSignalState(im.dataset.machineId,'ok');
   const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display='none';
   _cameraClearTimer(im);
-  if(im.dataset.camKind==='snapshot'&&im.dataset.camSuspended!=='1')_cameraSchedule(im,_CAM_SNAPSHOT_MS);
+  if(im.dataset.camKind==='snapshot'&&im.dataset.camSuspended!=='1')_cameraSchedule(im,_cameraSnapshotDelay(im));
 }
 function _cameraManagedByPrinter(id){
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return false;
@@ -411,7 +452,7 @@ function _cameraHealthProbe(id){
 }
 function _cameraHealthSweep(){
   if(document.hidden)return;
-  (MAQUINAS||[]).filter(m=>_cameraManagedByPrinter(m.id)&&!_camIsSnapshot(_printerCamRaw(m.id))).forEach((m,i)=>{
+  (MAQUINAS||[]).filter(m=>_cameraManagedByPrinter(m.id)&&!_camIsSnapshot(_printerGridCamRaw(m.id))).forEach((m,i)=>{
     setTimeout(()=>_cameraHealthProbe(m.id).catch(()=>{}),i*350);
   });
 }
@@ -542,7 +583,12 @@ function machineHasPhysicalCfs(machine){
   return machine.modelo==='K2 Plus'||id==='k1-1'||(machine.modelo==='K1'&&globalNo===1);
 }
 
-function getPrinterIp(m){return localStorage.getItem('printer_ip_'+m.id)||m.ip||null;}
+function getPrinterIp(m){
+  if(!m)return null;
+  // La IP compartida/registry debe ganar sobre un override guardado hace meses
+  // en un navegador. Un guardado manual también actualiza m.ip inmediatamente.
+  return m.ip||localStorage.getItem('printer_ip_'+m.id)||null;
+}
 function getPrinterApiKey(id){
   const key='printer_key_'+id;
   const session=sessionStorage.getItem(key);
@@ -759,21 +805,39 @@ async function _ensureThumb(m,ip,st){
 }
 async function fetchPrinterStatus(m){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
-  const headers=getPrinterAuthHeaders(m.id);
+  const headers=getPrinterAuthHeaders(m.id),remote=_printerUsesRemoteTunnel();
   try{
     const objects=['print_stats','heater_bed','extruder','display_status','virtual_sdcard','webhooks','gcode_move'];
     if(machineHasPhysicalCfs(m))objects.push('filament_switch_sensor filament_sensor','temperature_sensor chamber_temp','filament_rack','box');
     const path='/printer/objects/query?'+objects.map(encodeURIComponent).join('&')+_printerLightQuerySuffix(m.id);
-    const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(_STATUS_TIMEOUT_MS),headers});
+    const timeout=remote?_REMOTE_STATUS_TIMEOUT_MS:_STATUS_TIMEOUT_MS;
+    const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(timeout),headers});
     if(!r.ok){
       const reason=r.status===401?'Token del bridge inválido o vencido':(r.status===424||r.status===502)?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
+      // Bridge moderno usa 424 cuando él sí está vivo pero no alcanza la
+      // impresora. Un bridge antiguo usaba 502. Si aún vemos ese 502 remoto,
+      // contrastamos primero con la salud central y /healthz: así mantenemos
+      // compatibilidad sin confundir un 502 de Cloudflare con una máquina caída.
+      if(remote&&r.status===502){
+        const central=_centralFarmMachineEvidence(m.id);
+        if(central?.online===true||!(await _remoteBridgeReachable()))return _remotePathFailure(ip,reason,r.status);
+      }
+      if(remote&&(r.status===401||r.status===403||r.status===408||r.status===429||(r.status>=500&&r.status!==502)))return _remotePathFailure(ip,reason,r.status);
       return _printerFetchFailure(m.id,ip,reason,r.status);
     }
     const d=await r.json();const s=d.result?.status||{};
     const st=_deriveStatus(m,s,ip);
     st.thumbUrl=await _ensureThumb(m,ip,st);
     return st;
-  }catch(e){return _printerFetchFailure(m.id,ip,e?.name==='TimeoutError'||e?.name==='AbortError'?'Tiempo de espera agotado al consultar Moonraker':'No se pudo alcanzar Moonraker');}
+  }catch(e){
+    const reason=e?.name==='TimeoutError'||e?.name==='AbortError'?'Tiempo de espera agotado al consultar Moonraker':'No se pudo alcanzar Moonraker';
+    if(remote){
+      const central=_centralFarmMachineEvidence(m.id);
+      if(central?.online===true)return _remotePathFailure(ip,'Intermitencia remota: el Farm Controller confirma la impresora en línea');
+      if(!(await _remoteBridgeReachable()))return _remotePathFailure(ip,'Intermitencia del túnel/bridge remoto');
+    }
+    return _printerFetchFailure(m.id,ip,reason);
+  }
 }
 
 // ── Estado en vivo por WebSocket (Moonraker) ──────────────────────────────
@@ -1106,8 +1170,9 @@ function renderMonitorGrid(){
     const sm=printerStateMeta(s.state);
     const ip=getPrinterIp(m);
     const _rawCam=_printerCamRaw(m.id);
-    const _camU=_rawCam?printerCamUrl(m.id):'';
-    const _camSnap=_camIsSnapshot(_rawCam);
+    const _gridCamRaw=_printerGridCamRaw(m.id);
+    const _camU=_gridCamRaw?_printerCamUrlFromRaw(_gridCamRaw):'';
+    const _camSnap=_camIsSnapshot(_gridCamRaw);
     const img=MODELO_IMGS[m.modelo]||'';
     const isPrinting=s.state==='printing';
     const isPaused=s.state==='paused';
@@ -1288,11 +1353,12 @@ function _syncPrinterCam(id,camKey,force){
   const prev=slot.querySelector('img');if(prev)_cameraClearTimer(prev);
   if(!camKey){slot.innerHTML='';slot.__camKey='';return;}
   const m=MAQUINAS.find(x=>x.id===id);if(!m)return;
-  const raw=_printerCamRaw(id);
-  const camU=_safePrinterMediaUrl(printerCamUrl(id)),snap=_camIsSnapshot(raw);
+  const raw=_printerGridCamRaw(id);
+  const camU=_safePrinterMediaUrl(_printerGridCamUrl(id)),snap=_camIsSnapshot(raw);
+  const camInterval=_printerUsesRemoteTunnel()?_REMOTE_CAM_SNAPSHOT_MS:_CAM_SNAPSHOT_MS;
   if(!camU){slot.innerHTML='';slot.__camKey='';return;}
   slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative;min-height:56px">
-    <img loading="eager" decoding="async" data-machine-id="${id}" data-cam-base="${camU}" data-cam-kind="${snap?'snapshot':'mjpeg'}" data-cam-loading="1" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="_cameraLoadOk(this)" onerror="_cameraLoadError(this)">
+    <img loading="eager" decoding="async" data-machine-id="${id}" data-cam-base="${camU}" data-cam-kind="${snap?'snapshot':'mjpeg'}" data-cam-interval="${camInterval}" data-cam-loading="1" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="_cameraLoadOk(this)" onerror="_cameraLoadError(this)">
     <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:10px;color:#666">reconectando automáticamente…</span><button type="button" onclick="event.stopPropagation();recoverPrinterCamera('${id}')" style="margin-top:3px;background:#151515;border:1px solid #333;border-radius:6px;color:#bbb;padding:4px 8px;font-size:9.5px;cursor:pointer">↻ Reiniciar cámara</button></div>
   </div>`;
   slot.__camKey=camKey;
@@ -2603,7 +2669,28 @@ async function _mapLimit(items,limit,fn){
 // _OFFLINE_AFTER_FAILS fallos seguidos. Además programa backoff por máquina
 // para no martillar al bridge con una impresora apagada. Lo usan polling y WS.
 function _applyStatus(m,s){
+  if(s&&s._remotePathFail){
+    const prev=_printerStatus[m.id];
+    _nextPollAt[m.id]=Date.now()+4000+Math.floor(Math.random()*1200);
+    if(prev&&prev.state!=='offline'&&prev.state!=='noip'&&prev.state!=='connecting'){
+      _printerStatus[m.id]={...prev,stale:true,remoteDegraded:true,connectionError:s.connectionError,checkedAt:s.checkedAt,staleSince:prev.staleSince||Date.now()};
+    }else{
+      _printerStatus[m.id]={...(prev||_printerInitialStatus(m)),state:'connecting',remoteDegraded:true,connectionError:s.connectionError,checkedAt:s.checkedAt};
+    }
+    _emitPrinterStatus(m,_printerStatus[m.id]);return;
+  }
   if(s&&s._fetchFail){
+    const central=_printerUsesRemoteTunnel()?_centralFarmMachineEvidence(m.id):null;
+    if(central?.online===true){
+      const prev=_printerStatus[m.id];
+      _failCount[m.id]=0;_nextPollAt[m.id]=Date.now()+5000+Math.floor(Math.random()*1200);
+      if(prev&&prev.state!=='offline'&&prev.state!=='noip'&&prev.state!=='connecting'){
+        _printerStatus[m.id]={...prev,stale:true,remoteDegraded:true,connectionError:'Lectura remota intermitente; Farm Controller confirma máquina en línea',checkedAt:s.checkedAt,staleSince:prev.staleSince||Date.now()};
+      }else{
+        _printerStatus[m.id]={...(prev||_printerInitialStatus(m)),state:'connecting',remoteDegraded:true,connectionError:'Farm Controller confirma máquina en línea; esperando telemetría remota',checkedAt:s.checkedAt};
+      }
+      _emitPrinterStatus(m,_printerStatus[m.id]);return;
+    }
     const n=(_failCount[m.id]=(_failCount[m.id]||0)+1);
     const prev=_printerStatus[m.id];
     // backoff exponencial (2s,4s,8s… máx 60s) + jitter
@@ -2631,7 +2718,7 @@ async function pollPrinters(){
   _pollInFlight=true;
   try{
     const now=Date.now();
-    await _mapLimit(MAQUINAS,4,async m=>{
+    await _mapLimit(MAQUINAS,_printerUsesRemoteTunnel()?2:4,async m=>{
       if(_wsFresh(m.id,now))return;
       if(_nextPollAt[m.id]&&now<_nextPollAt[m.id])return;
       const s=await fetchPrinterStatus(m);

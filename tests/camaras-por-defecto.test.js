@@ -30,8 +30,8 @@ function api(store={},maquinas=[],local=false){
     _appendBridgeToken:u=>u+(u.includes('?')?'&':'?')+'bt=TK',
   };
   vm.createContext(ctx);
-  vm.runInContext([fn('_defaultCamUrl'),fn('_camFollowLivePrinterIp'),fn('_printerCamRaw'),fn('_printerCamUrlFromRaw'),fn('_cameraProbeUrl'),fn('_camIsSnapshot'),fn('printerCamUrl'),
-    'this.api={def:_defaultCamUrl,raw:_printerCamRaw,probe:_cameraProbeUrl,snap:_camIsSnapshot,url:printerCamUrl};'].join('\n'),ctx);
+  vm.runInContext([fn('_defaultCamUrl'),fn('_camFollowLivePrinterIp'),fn('_printerCamRaw'),fn('_printerCamUrlFromRaw'),fn('_cameraProbeUrl'),fn('_camIsSnapshot'),fn('_printerUsesRemoteTunnel'),fn('_printerGridCamRaw'),fn('_printerGridCamUrl'),fn('printerCamUrl'),
+    'this.api={def:_defaultCamUrl,raw:_printerCamRaw,probe:_cameraProbeUrl,snap:_camIsSnapshot,gridRaw:_printerGridCamRaw,gridUrl:_printerGridCamUrl,url:printerCamUrl};'].join('\n'),ctx);
   return ctx.api;
 }
 
@@ -46,6 +46,14 @@ test('K1 y Ender derivan MJPEG en :8080',()=>{
   assert.equal(a.def(K1),'http://192.168.100.7:8080/?action=stream');
   assert.equal(a.def(ENDER),'http://192.168.100.67:8080/?action=stream');
   assert.equal(a.snap(a.def(K1)),false,'MJPEG no es snapshot');
+});
+
+test('el grid remoto de K1 usa snapshot en vez de MJPEG continuo',()=>{
+  const remote=api({},[K1],false),local=api({},[K1],true);
+  assert.equal(remote.gridRaw('k1-3'),'http://192.168.100.7:8080/?action=snapshot');
+  assert.match(remote.gridUrl('k1-3'),/action=snapshot/);
+  assert.equal(remote.snap(remote.gridRaw('k1-3')),true);
+  assert.equal(local.gridRaw('k1-3'),'http://192.168.100.7:8080/?action=stream');
 });
 
 test('la sonda K1 usa snapshot finito y conserva el túnel remoto',()=>{
