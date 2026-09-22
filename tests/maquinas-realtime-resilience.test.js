@@ -115,6 +115,14 @@ test('grid remoto convierte MJPEG continuo en snapshots finitos',()=>{
   assert.match(ok,/_cameraSnapshotDelay/);
 });
 
+test('orden por estado usa la actividad efectiva de la máquina',()=>{
+  const sort=fn(MAQ,'sortedList');
+  const order=fn(MAQ,'stateOrder');
+  assert.match(sort,/_printerEffectiveState/);
+  assert.match(order,/calibrating:3/);
+  assert.match(order,/gcode:4/);
+});
+
 test('cámaras permanecen montadas aunque cambie estado, orden o filtro',()=>{
   const render=fn(MAQ,'renderMonitorGrid');
   assert.match(render,/const showCam=!!_rawCam/,'Moonraker caído no debe apagar una cámara configurada');
