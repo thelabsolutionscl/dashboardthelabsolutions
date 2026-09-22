@@ -2091,7 +2091,7 @@ async function printerBedLevelRefresh(id,opts={}){
     if(value)value.textContent='—';if(gradeEl){gradeEl.textContent='SIN RESPUESTA';gradeEl.style.color='var(--danger)';}if(detail)detail.textContent='No se pudo leer la malla desde Moonraker.';if(fill)fill.style.width='0%';if(marker)marker.style.left='0%';const src=document.getElementById('pcBedLevelSource_'+id);if(src)src.textContent='No hay una lectura confiable disponible.';_bedLevelSetState(id,'SIN RESPUESTA','var(--danger)');_bedLevelSetStatus(id,'Moonraker no respondió','var(--danger)');return null;
   }
   const st=read.st;if(!st){
-    if(_bedLevelCalibrationActive(id)){_bedLevelRenderMeasuring(id);return null;}
+    if(_bedLevelCalibrationActive(id)&&!opts.forceDuringRun){_bedLevelRenderMeasuring(id);return null;}
     if(value)value.textContent='—';if(gradeEl){gradeEl.textContent='SIN MALLA';gradeEl.style.color='#ff5555';}if(detail)detail.textContent='Moonraker no tiene una malla activa. Ejecuta calibración o carga un perfil antes de producción.';if(fill)fill.style.width='0%';if(marker)marker.style.left='0%';const src=document.getElementById('pcBedLevelSource_'+id);if(src)src.innerHTML='<b style="color:#ff5555">SIN MALLA ACTIVA</b><br><span style="color:var(--text3)">El historial no sustituye una malla cargada en la impresora.</span>';_bedLevelSetState(id,'SIN MALLA','#ff5555');_bedLevelSetStatus(id,'Sin bed mesh activo','#ff5555');_bedLevelHistoryRender(id,null,opts.material||'');return null;
   }
   _bedLevelRenderStats(id,st,{status:!opts.quietStatus,statusText:opts.statusText,verifiedAt:opts.verifiedAt,material:opts.material});
