@@ -125,3 +125,12 @@ test('el detalle de cotización expone acciones de estado equivalentes a la vist
   html=linked.op.quoteStateActions(record('c',{'Estado cotización':'Aprobada'}));assert.match(html,/Ver pedido vinculado/);assert.match(html,/quote-linked-order/);
   const src=fs.readFileSync('js/operativo-visual.js','utf8');assert.match(src,/updateCotizacionEstado\(id,estado\)/,'las acciones deben reutilizar el flujo persistente existente');
 });
+
+
+test('el margen dinámico no puede ser sobrescrito por el color semántico púrpura',()=>{
+  const css=fs.readFileSync('operativo-visual.css','utf8');
+  const semantic=fs.readFileSync('js/semantic-colors.js','utf8');
+  assert.match(css,/\.op-margin-fact\{[^}]*box-shadow:inset 4px 0 0 var\(--op-margin-color[^}]*!important/);
+  assert.match(css,/\.op-margin-fact b\{color:var\(--op-margin-color[^}]*!important/);
+  assert.match(semantic,/matches\?\.\('\.op-margin-fact'\)/,'el decorador semántico debe omitir el margen dinámico');
+});
