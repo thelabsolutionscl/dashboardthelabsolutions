@@ -38,6 +38,14 @@ test('hoy solo se marca libre con telemetría reciente y estado libre',()=>{
   assert.equal(printing.kind,'printing');
 });
 
+test('standby con G-code o calibración no se presenta como libre',()=>{
+  const now=Date.now();
+  const gcode=api.classifyDay({isToday:true,adminState:'disponible',live:{state:'standby',busyGcode:true,lastSeenAt:now},event:null});
+  const calibration=api.classifyDay({isToday:true,adminState:'disponible',live:{state:'standby',lastSeenAt:now-120000,operation:{type:'bed_calibration'}},event:null});
+  assert.equal(gcode.kind,'gcode');
+  assert.equal(calibration.kind,'calibrating');
+});
+
 test('estado administrativo bloqueado domina una supuesta disponibilidad técnica',()=>{
   const row=api.classifyDay({isToday:true,adminState:'mantencion',live:{state:'idle',lastSeenAt:Date.now()},event:null});
   assert.equal(row.kind,'blocked');

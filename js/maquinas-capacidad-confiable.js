@@ -41,7 +41,10 @@ function liveEvidence(status,now=Date.now()){
   const state=String(status?.state||'');
   const lastSeen=num(status?.lastSeenAt);
   const fresh=!!lastSeen&&now-lastSeen<60000;
-  return{state,lastSeen,fresh,known:fresh&&!LIVE_UNKNOWN.has(state)};
+  const operation=status?.operation||null,busyGcode=status?.busyGcode===true||String(status?.idleTimeoutState||'').toLowerCase()==='printing'&&!['printing','paused'].includes(state);
+  const effectiveState=operation?.type==='bed_calibration'?'calibrating':busyGcode?'gcode':state;
+  const known=fresh&&!LIVE_UNKNOWN.has(state),physicalBusy=['printing','paused','calibrating','gcode'].includes(effectiveState),available=known&&LIVE_FREE.has(state)&&!physicalBusy;
+  return{state,effectiveState,lastSeen,fresh,known,physicalBusy,available};
 }
 function farmEvidence(status,now=Date.now()){
   const lastSync=num(status?.lastSync);
@@ -58,13 +61,15 @@ function classifyDay({isToday=false,isPast=false,adminState='disponible',event=n
   }
   if(isToday){
     const ev=liveEvidence(live||{});
+    if(ev.effectiveState==='calibrating')return{kind:'calibrating',tone:'warning',label:'Calibrando',detail:'Operación física en curso'};
     if(!ev.known)return{kind:'unknown',tone:'neutral',label:'Sin dato actual',detail:'Telemetría > 60 s o sin lectura'};
     if(ev.state==='printing')return{kind:'printing',tone:'ok',label:'Imprimiendo',detail:'Confirmado por telemetría'};
     if(ev.state==='paused')return{kind:'paused',tone:'warning',label:'Pausada',detail:'Confirmado por telemetría'};
+    if(ev.effectiveState==='gcode')return{kind:'gcode',tone:'warning',label:'Ejecutando G-code',detail:'Macro o G-code en curso'};
     if(LIVE_BAD.has(ev.state))return{kind:'issue',tone:'danger',label:'No disponible',detail:'Estado técnico '+ev.state};
     if(ev.state==='complete')return{kind:'complete',tone:'warning',label:'Terminó impresión',detail:'Retirar pieza / QA antes de reutilizar'};
     if(event?.tipo==='uso')return{kind:'reserved',tone:'info',label:'Reservada',detail:'Agenda manual registrada'};
-    if(LIVE_FREE.has(ev.state))return{kind:'free',tone:'ok',label:'Libre ahora',detail:'Telemetría reciente'};
+    if(ev.available)return{kind:'free',tone:'ok',label:'Libre ahora',detail:'Telemetría reciente'};
     return{kind:'unknown',tone:'neutral',label:'Estado no confirmado',detail:'Telemetría reciente sin estado utilizable'};
   }
   if(event?.tipo==='uso')return{kind:'reserved',tone:'info',label:'Reservada',detail:'Agenda manual registrada'};
@@ -121,15 +126,18 @@ function install(root){
   };
   const adminState=id=>{try{return getMaquinaEstadoGlobal(id);}catch(_){return'disponible';}};
   const liveView=id=>{
-    const e=liveEvidence(rawLive(id));
+    const raw=rawLive(id),operation=root.MachineActivityStore?.get?.(id)||null,activity=root.MachineActivity?.derive?.(raw,{operation,adminAvailable:adminState(id)==='disponible'})||null,e=liveEvidence({...raw,operation});
     const admin=adminState(id);
     if(admin!=='disponible')return{...e,tone:'danger',label:'NO OPERATIVA',free:false,admin};
+    if(activity?.state==='calibrating')return{...e,tone:'warning',label:'CALIBRANDO',free:false,admin};
     if(!e.known)return{...e,tone:'neutral',label:'SIN TELEMETRÍA',free:false,admin};
     if(e.state==='printing')return{...e,tone:'ok',label:'IMPRIMIENDO',free:false,admin};
     if(e.state==='paused')return{...e,tone:'warning',label:'PAUSADA',free:false,admin};
+    if(e.effectiveState==='calibrating')return{...e,tone:'warning',label:'CALIBRANDO',free:false,admin};
+    if(activity?.state==='gcode'||e.effectiveState==='gcode')return{...e,tone:'warning',label:'EJECUTANDO G-CODE',free:false,admin};
     if(e.state==='complete')return{...e,tone:'warning',label:'TERMINÓ · RETIRAR/QA',free:false,admin};
     if(LIVE_BAD.has(e.state))return{...e,tone:'danger',label:'REVISAR · '+e.state.toUpperCase(),free:false,admin};
-    if(LIVE_FREE.has(e.state))return{...e,tone:'ok',label:'LIBRE AHORA',free:true,admin};
+    if(activity?.available||e.available)return{...e,tone:'ok',label:'LIBRE AHORA',free:true,admin};
     return{...e,tone:'neutral',label:'ESTADO NO CONFIRMADO',free:false,admin};
   };
   const jobsByOrder=()=>{

@@ -232,7 +232,7 @@ test('cargas concurrentes de Máquinas comparten una sola inicialización',()=>{
 });
 
 test('registry, cola y salud central no se pausan explícitamente al ocultar el navegador',()=>{
-  assert.match(CTRL,/setInterval\(\(\)=>\{syncQueue\(false\);syncRegistry\(false\);\},15000\)/);
+  assert.match(CTRL,/setInterval\(\(\)=>\{syncQueue\(false\);syncRegistry\(false\);syncOperations\(false\);\},15000\)/);
   assert.match(CTRL,/visibilitychange/);
   assert.match(CTRL,/addEventListener\('online'/);
   assert.match(HEALTH,/setInterval\(\(\)=>refresh\(false\),30000\)/);

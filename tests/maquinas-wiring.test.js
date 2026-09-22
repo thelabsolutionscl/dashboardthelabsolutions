@@ -248,7 +248,7 @@ test('credenciales y enlaces remotos no quedan expuestos permanentemente',()=>{
 
 test('controles operativos separan ajustes en vivo de movimientos peligrosos',()=>{
   const send=functionSource(MAQ,'_sendGcode');
-  assert.match(send,/!opts\.allowBusy&&_isPrinterBusy/,'movimiento y utilidades siguen bloqueados durante impresión');
+  assert.match(send,/!opts\.allowBusy&&_printerPhysicallyBusy/,'movimiento y utilidades se bloquean durante cualquier actividad física');
   assert.match(send,/_printerControlFresh/,'ningún comando normal debe salir con telemetría stale/offline');
   const temp=functionSource(MAQ,'setPrinterTemp');
   assert.match(temp,/allowBusy:true/,'temperatura sí puede ajustarse durante una impresión');
@@ -294,10 +294,12 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   const source=functionSource(MAQ,'_bedLevelSetSource');
   const restore=functionSource(MAQ,'_bedLevelRestoreRunUi');
   const control=functionSource(MAQ,'openPrinterControl');
+  const controlRefresh=functionSource(MAQ,'_printerControlRefreshActivity');
+  const controlView=functionSource(MAQ,'_printerControlActivityView');
 
   assert.match(auto,/_printerControlFresh/,'calibración requiere telemetría fresca');
-  assert.match(auto,/_isPrinterBusy/,'calibración debe bloquearse durante impresión o pausa');
-  assert.match(auto,/_bedLevelRuns\[id\]\?\.active/,'no debe permitir una segunda calibración simultánea');
+  assert.match(auto,/_printerAvailable/,'calibración debe exigir disponibilidad física confirmada');
+  assert.match(auto,/_printerActivity\(id\)\.state==='calibrating'/,'no debe permitir una segunda calibración simultánea incluso tras recarga');
   assert.match(auto,/BED_MESH_CLEAR\\nBED_MESH_CALIBRATE/);
   assert.ok(auto.indexOf('_bedLevelWaitForCompletion')<auto.indexOf('_sendGcode'),'debe observar CLEAR antes/durante el POST para verificar incluso una malla idéntica');
   assert.match(auto,/\$\{run\.uiLabel\} · 0s/);
@@ -315,6 +317,12 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(source,/CALIBRACIÓN VERIFICADA/);
   assert.match(render,/Malla leída ahora/,'debe distinguir hora de lectura de hora de calibración');
   assert.match(restore,/CALIBRANDO/,'al reabrir CONTROL debe recuperar el estado activo');
+  assert.match(control,/FarmOperations\?\.sync\?\.\(true\)/,'al reabrir CONTROL debe consultar la operación durable antes de decidir que está libre');
+  assert.match(control,/_printerControlRefreshActivity\(id\)/,'el modal debe redibujar la actividad después de rehidratarla');
+  assert.match(control,/rehydrated\.physicalBusy!==activity\.physicalBusy/,'si aparece una operación durable debe reconstruir también los bloqueos de seguridad');
+  assert.match(controlRefresh,/activity\.state==='calibrating'/,'la rehidratación debe restaurar visualmente la calibración');
+  assert.match(controlView,/CALIBRANDO/,'la cabecera del modal debe priorizar calibración sobre EN LÍNEA');
+  assert.match(control,/pcActivityBadge/,'la cabecera debe poder actualizarse sin reconstruir el modal');
 
   assert.match(stats,/probed_matrix\|\|mesh\?\.mesh_matrix/);
   assert.match(grade,/range<=0\.15/);
@@ -347,12 +355,14 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
 
 test('la tarjeta prioriza actividad física sobre standby/libre',()=>{
   const effective=functionSource(MAQ,'_printerEffectiveState');
+  const activity=functionSource(MAQ,'_printerActivity');
   const meta=functionSource(MAQ,'printerStateMeta');
   const grid=functionSource(MAQ,'renderMonitorGrid');
   const kpis=functionSource(MAQ,'renderMonitorKPIs');
   const ocupacion=functionSource(MAQ,'renderMaqOcupacion');
-  assert.match(effective,/_bedLevelRuns/,'una calibración lanzada desde CONTROL debe dominar el estado standby');
-  assert.match(effective,/busyGcode/,'macros G-code también deben dejar de verse libres');
+  assert.match(effective,/_printerActivity/,'todas las vistas deben consumir la fuente única de actividad');
+  assert.match(activity,/MachineActivityStore/,'una calibración durable debe dominar standby incluso tras recarga');
+  assert.match(activity,/MachineActivity\.derive/,'macros G-code también deben dejar de verse libres');
   assert.match(meta,/calibrating:\{label:'Calibrando'/);
   assert.match(meta,/gcode:\{label:'Ejecutando G-code'/);
   assert.match(grid,/effectiveState=_printerEffectiveState/);

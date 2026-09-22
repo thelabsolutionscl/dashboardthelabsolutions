@@ -37,8 +37,8 @@ function install(root){
     const el=document.getElementById('maqOcupacion');if(!el)return;
     const lista=_monitorFilter==='all'?MAQUINAS:MAQUINAS.filter(m=>m.modelo===_monitorFilter);
     if(!lista.length){el.style.display='none';return;}
-    const clasif=st=>st==='printing'?'print':st==='paused'?'paused':(st==='error'||st==='shutdown'||st==='apidown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'idle';
-    const rows=lista.map(m=>{const s=_printerStatus[m.id]||_printerInitialStatus(m);return{m,s,k:clasif(s.state),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
+    const clasif=(st,available)=>available?'idle':st==='printing'?'print':st==='paused'?'paused':st==='calibrating'?'calibrating':st==='gcode'?'gcode':(st==='error'||st==='shutdown'||st==='apidown')?'error':(st==='offline'||st==='noip')?'off':st==='connecting'?'connecting':'blocked';
+    const rows=lista.map(m=>{const s=_printerStatus[m.id]||_printerInitialStatus(m),activity=typeof _printerActivity==='function'?_printerActivity(m.id,s):(root.MachineActivity?.derive?.(s,{operation:root.MachineActivityStore?.get?.(m.id)||null})||{state:s.state,available:false,reason:''});return{m,s,activity,k:clasif(activity.state,activity.available),eta:(s.state==='printing'&&s.eta>0)?s.eta:0};});
     const etas=rows.filter(r=>r.eta>0).map(r=>r.eta);
     const horizon=Math.max(4*3600,Math.min(12*3600,etas.length?Math.max(...etas)*1.15:4*3600));
     const libres=rows.filter(r=>r.k==='idle').length;
@@ -66,6 +66,12 @@ function install(root){
       }else if(r.k==='paused'){
         bar=`<div style="height:100%;width:45%;background:rgba(255,170,0,0.6);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#1a1206">⏸ En pausa · sin hora de liberación fiable</span></div>`;
         lbl=`<span style="color:#ffaa00">⏸</span>`;
+      }else if(r.k==='calibrating'){
+        bar=`<div style="height:100%;width:100%;background:rgba(255,170,0,.14);border:1px dashed rgba(255,170,0,.55);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:800;color:#ffaa00">📐 Calibrando cama · no disponible</span></div>`;
+        lbl=`<span style="color:#ffaa00">📐</span>`;
+      }else if(r.k==='gcode'){
+        bar=`<div style="height:100%;width:100%;background:rgba(167,139,250,.12);border:1px dashed rgba(167,139,250,.45);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:800;color:#a78bfa">⚙ Ejecutando G-code · no disponible</span></div>`;
+        lbl=`<span style="color:#a78bfa">⚙</span>`;
       }else if(r.k==='error'){
         bar=`<div style="height:100%;width:100%;background:rgba(255,68,68,0.14);border:1px dashed rgba(255,68,68,0.5);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:var(--danger)">⚠ Con falla — revisar antes de asignar</span></div>`;
         lbl=`<span style="color:var(--danger)">🔴</span>`;
@@ -75,9 +81,12 @@ function install(root){
       }else if(r.k==='off'){
         bar=`<div style="height:100%;width:100%;background:var(--surface3);border-radius:5px;display:flex;align-items:center;padding-left:8px;opacity:.55"><span style="font-size:10px;color:var(--text3)">Sin conexión · disponibilidad desconocida</span></div>`;
         lbl=`<span style="color:var(--text3)">⚫</span>`;
-      }else{
+      }else if(r.k==='idle'){
         bar=`<div style="height:100%;width:100%;background:rgba(0,212,170,0.08);border:1px dashed rgba(0,212,170,0.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#00d4aa">✓ Libre ahora</span></div>`;
         lbl=`<span style="color:#00d4aa">⚪</span>`;
+      }else{
+        bar=`<div title="${escapeHtml(r.activity.reason||'Estado no confirmado')}" style="height:100%;width:100%;background:rgba(255,170,0,.08);border:1px dashed rgba(255,170,0,.35);border-radius:5px;display:flex;align-items:center;padding-left:8px"><span style="font-size:10px;font-weight:700;color:#ffaa00">⚠ ${escapeHtml(r.activity.label||'Estado no confirmado')}</span></div>`;
+        lbl=`<span style="color:#ffaa00">?</span>`;
       }
       return`<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">
         <span style="flex-shrink:0;width:14px;text-align:center;font-size:12px">${lbl}</span>

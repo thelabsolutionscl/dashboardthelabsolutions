@@ -289,6 +289,12 @@ function audit(action,machineId='',detail='',severity='info'){
 function getMachine(id){return (typeof MAQUINAS!=='undefined'?MAQUINAS:[]).find(m=>m.id===id);}
 function machineLabel(id){const m=getMachine(id);return m?`${m.nombre} #${m.numG||m.num}`:'Sin asignar';}
 function liveState(id){try{return (_printerStatus[id]||{}).state||'';}catch(_){return'';}}
+function machineActivity(id){
+  let live={};try{live=_printerStatus[id]||{};}catch(_){}
+  let adminAvailable=true;try{adminAvailable=getMaquinaEstadoGlobal(id)==='disponible';}catch(_){}
+  const operation=window.MachineActivityStore?.get?.(id)||null;
+  return window.MachineActivity?.derive?window.MachineActivity.derive(live,{operation,adminAvailable,bedCleared:bedIsCleared(id)}):{state:String(live.state||''),rawState:String(live.state||''),physicalBusy:['printing','paused'].includes(live.state)||!!live.busyGcode,available:['idle','ready','standby'].includes(live.state)&&!live.busyGcode,plannable:!live.busyGcode,telemetryFresh:!live.stale,reason:''};
+}
 function bedClearSignature(id){
   let live={};try{live=_printerStatus[id]||{};}catch(_){}
   return [fileKey(live.filename||''),Math.round(num(live.elapsed)),String(live.state||'')].join('|');
@@ -323,7 +329,8 @@ function liveEvidence(id,now=Date.now()){
   const state=String(live.state||''),lastSeen=num(live.lastSeenAt);
   const fresh=!!lastSeen&&now-lastSeen<60000;
   const known=fresh&&!['','connecting','unknown','startup'].includes(state);
-  return{live,state,lastSeen,fresh,known};
+  const activity=machineActivity(id);
+  return{live,state,lastSeen,fresh,known,activity,effectiveState:activity.state,available:activity.available,physicalBusy:activity.physicalBusy};
 }
 function farmQueueEvidence(now=Date.now()){
   let status={};try{status=window.FarmQueue?.status?.()||{};}catch(_){}
@@ -373,9 +380,11 @@ function machineOperational(m){
   const evidence=liveEvidence(m.id);
   if(!evidence.known)return false;
   if(['offline','apidown','noip','shutdown','error'].includes(evidence.state))return false;
+  if(['calibrating','gcode'].includes(evidence.activity.state))return false;
   if(evidence.state==='complete'&&!bedIsCleared(m.id))return false;
   return true;
 }
+function machineAvailable(m){return !!m&&machineOperational(m)&&machineActivity(m.id).available;}
 function machineCapabilities(m){return MODEL_CAPS[m?.modelo]||MODEL_CAPS.K1;}
 function jobMinutes(j){return Math.max(1,num(j.cycles,1))*Math.max(1,num(j.minutesPerCycle,60));}
 function jobModels(j){
@@ -411,7 +420,7 @@ function dueUrgency(j){
 }
 function machineScore(j,m,loadMinutes=0){
   if(!machineOperational(m)||!jobModels(j).includes(m.modelo)||!modelCanRun(m.modelo,j))return Infinity;
-  const cap=machineCapabilities(m),st=liveState(m.id);
+  const cap=machineCapabilities(m),st=machineActivity(m.id).state;
   const eta=st==='printing'?num(_printerStatus[m.id]?.eta)/60:st==='paused'?1440:0;
   const materialBonus=compatibleSpools(j,m.id).some(s=>spoolAvailable(s)>=num(j.grams))?-180:0;
   const jobVol=Math.max(1,num(j.sizeX)*num(j.sizeY)*num(j.sizeZ));
@@ -447,7 +456,7 @@ function recommendationForJob(job){
   const candidates=(MAQUINAS||[]).map(machine=>{
     const score=machineScore(job,machine,loads.get(machine.id)||0),reasons=[];
     if(!Number.isFinite(score))return{machine,score,reasons:['Sin telemetría reciente, no operativa o incompatible']};
-    const live=liveState(machine.id)||'sin telemetría';reasons.push(live==='standby'||live==='idle'?'Libre ahora':live==='printing'?'Disponible al terminar':live==='unknown'?'Sin telemetría de impresión':'Estado '+live);
+    const activity=machineActivity(machine.id),live=activity.state||'sin telemetría';reasons.push(activity.available?'Libre ahora':live==='printing'?'Disponible al terminar':live==='unknown'?'Sin telemetría de impresión':activity.reason||'Estado '+live);
     const spool=compatibleSpools(job,machine.id).find(s=>spoolAvailable(s)>=num(job.grams));
     reasons.push(spool?`Material disponible: ${spool.name}`:'Sin rollo suficiente asignado');
     let maint=0;try{maint=getMaintAlerts(machine).length;}catch(_){ }
@@ -551,7 +560,7 @@ function evaluatePreflight(job,machine,opts={}){
     `${job.gcodeFile} fue subido a ${machineLabel(job.gcodeUploadedMachineId)}; vuelve a subirlo para ${machineLabel(machine.id)}`;
   return preflightFromFacts({
     connectionReady:!['','connecting','offline','noip','shutdown','error','startup'].includes(stateNow),connectionDetail:live.connectionError,
-    machineFree:!['printing','paused'].includes(stateNow)&&machineOperational(machine),bedNeedsClear:stateNow==='complete'&&!bedIsCleared(machine.id),
+    machineFree:machineAvailable(machine),bedNeedsClear:stateNow==='complete'&&!bedIsCleared(machine.id),
     compatible:modelCanRun(machine.modelo,job),dimensionsKnown,dimensionsPartial,jobNozzle,installedNozzle:nozzle,nozzleKnown,nozzleMatch,hasFile:fileReady,fileDetail,
     gramsRequired:num(job.grams),spoolKnown:!!spool,spoolAvailable:free,filamentDetected:live.filament?.detected??null,
     cameraConfigured:!!(localStorage.getItem('printer_cam_'+machine.id)||machine.cam),maintenanceOverdue:overdue,maintenanceSoon:maint.length>0,
@@ -1569,7 +1578,7 @@ async function startJob(id,options={}){
     toast('Cambió la condición de la cama; confirma nuevamente el preflight','error');openPreflight(id);return false;
   }
   const st=liveState(j.machineId);
-  if(!machineOperational(m)){toast('La máquina no está operativa o la cama no fue liberada','error');return false;}
+  if(!machineAvailable(m)){toast('La máquina no está confirmada libre o la cama no fue liberada','error');return false;}
   if(st==='printing'||st==='paused'){j.status='en_cola';persist('Trabajo conservado en cola');toast('La impresora está ocupada; el trabajo permanece en cola','info');return false;}
   if(!jobGcodeReady(j)){toast('Sube el G-code a la impresora asignada antes de iniciar','error');return false;}
   if(!checkSafetyBeforeStart(j,m,true))return false;
@@ -1998,7 +2007,7 @@ function checkSafetyBeforeStart(job,m,warningsConfirmed=false){
 }
 function canAutoStart(id,secs=0){
   const m=getMachine(id),live=typeof _printerStatus!=='undefined'?_printerStatus[id]||{}:{},stateNow=live.state||'connecting';
-  if(!machineOperational(m)||['connecting','offline','noip','shutdown','error','startup'].includes(stateNow)){audit('Auto-inicio detenido por conexión',id,live.connectionError||stateNow,'warn');writeLocal();scheduleRemote();toast('Cola detenida: no hay telemetría confiable','error');return false;}
+  if(!machineAvailable(m)||['connecting','offline','noip','shutdown','error','startup'].includes(stateNow)){const activity=machineActivity(id);audit('Auto-inicio detenido por disponibilidad',id,activity.reason||live.connectionError||stateNow,'warn');writeLocal();scheduleRemote();toast('Cola detenida: la impresora no está confirmada libre','error');return false;}
   if(live.filament?.detected===false){audit('Auto-inicio detenido por filamento',id,'Sensor físico vacío','warn');writeLocal();scheduleRemote();toast('Cola detenida: la impresora no detecta filamento','error');return false;}
   try{if(getMaintAlerts(m).some(row=>row.hours>=row.threshold)){audit('Auto-inicio detenido por mantención',id,'Umbral vencido','warn');writeLocal();scheduleRemote();toast('Cola detenida: hay una mantención vencida','error');return false;}}catch(_){ }
   const dummy={cycles:1,minutesPerCycle:Math.max(1,num(secs)/60||300)},d=safetyDecision(data().safetyConfig,latestSafetyReading(),safetyContext(dummy,m));
@@ -2551,10 +2560,10 @@ const api={
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
   renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,checkBridgeHealth,saveIntelligenceConfig,
   openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
-  openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
+  openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 
