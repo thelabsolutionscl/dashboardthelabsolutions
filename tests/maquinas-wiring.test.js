@@ -297,7 +297,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(auto,/_bedLevelRuns\[id\]\?\.active/,'no debe permitir una segunda calibración simultánea');
   assert.match(auto,/BED_MESH_CLEAR\\nBED_MESH_CALIBRATE/);
   assert.ok(auto.indexOf('_bedLevelWaitForCompletion')<auto.indexOf('_sendGcode'),'debe observar CLEAR antes/durante el POST para verificar incluso una malla idéntica');
-  assert.match(auto,/CALIBRANDO · 0s/);
+  assert.match(auto,/\$\{run\.uiLabel\} · 0s/);
   assert.match(auto,/_bedLevelMetaWrite/,'una calibración verificada debe guardar fecha y firma');
   assert.match(auto,/_bedLevelTimeoutMs/,'timeout debe ser consistente y adaptable a camas grandes');
 
