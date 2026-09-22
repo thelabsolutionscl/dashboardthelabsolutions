@@ -101,3 +101,14 @@ test('el detalle de pedido expone controles rápidos de pago',()=>{
   html=op.paymentControls(paid);
   assert.match(html,/✓ Abono/);assert.match(html,/✓ Saldo/);assert.match(html,/✓ Total/);assert.match(html,/✓ Pago a 30 días/);
 });
+
+
+test('margen de cotización usa gradiente azul a rojo',()=>{
+  const {op}=setup();
+  const low=op.marginColor(0),mid=op.marginColor(50),high=op.marginColor(100);
+  assert.equal(low,'hsl(210 85% 65%)');
+  assert.equal(mid,'hsl(105 85% 65%)');
+  assert.equal(high,'hsl(0 85% 65%)');
+  assert.equal(op.marginColor(-20),low);
+  assert.equal(op.marginColor(150),high);
+});
