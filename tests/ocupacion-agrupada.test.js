@@ -33,6 +33,7 @@ function render(maquinas,estados,filtro='all'){
     MAQUINAS:maquinas,
     _printerStatus:estados,
     _printerInitialStatus:m=>({state:'offline'}),
+    _printerActivity:(id,s)=>({state:s.state,available:['standby','idle','ready'].includes(s.state),reason:'',label:s.state}),
     escapeHtml:s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
   };
   vm.createContext(ctx);

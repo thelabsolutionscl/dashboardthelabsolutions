@@ -954,14 +954,17 @@ async function _renderOficina(){
     // Telemetría EN VIVO del bridge (si la pestaña Impresoras la ha poblado): manda sobre el estado de Airtable
     const lv=_liveP[String(p.id)]||null;
     let cls,lbl,progress=null,eta=0;
-    if(lv && lv.state){ const ls=lv.state;
+    if(lv && lv.state){ const activity=window.MachineActivity?.derive?.(lv,{operation:window.MachineActivityStore?.get?.(String(p.id))||null})||null,ls=activity?.state||lv.state;
       if(ls==='printing'){ cls='of-work'; lbl='Imprimiendo'; progress=(typeof lv.progress==='number'?lv.progress:-1); eta=lv.eta||0; }
       else if(ls==='paused'){ cls='of-active'; lbl='En pausa'; progress=(typeof lv.progress==='number'?lv.progress:null); }
+      else if(ls==='calibrating'){ cls='of-active'; lbl='Calibrando'; }
+      else if(ls==='gcode'){ cls='of-active'; lbl='Ejecutando G-code'; }
       else if(ls==='error'||ls==='shutdown'){ cls='of-error'; lbl='Con falla'; }
       else if(ls==='offline'||ls==='noip'){ cls='of-off'; lbl='Sin conexión'; }
       else if(ls==='connecting'){ cls='of-active'; lbl='Conectando'; }
       else if(ls==='cancelled'){ cls='of-active'; lbl='Impresión cancelada'; }
-      else { cls='of-off'; lbl='Disponible'; }
+      else if(activity?.available){ cls='of-off'; lbl='Disponible'; }
+      else { cls='of-active'; lbl=activity?.label||'Estado no confirmado'; }
     } else { cls=_ofPrinterCls(p.estado); lbl=_ofPrinterLbl(p.estado); if(cls==='of-work') progress=-1; }   // sin bridge: barra indeterminada si "imprimiendo"
     if(cls==='of-work')working++;
     const pct=(progress!=null&&progress>=0)?(' · '+progress+'%'):'';

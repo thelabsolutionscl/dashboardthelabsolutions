@@ -53,6 +53,19 @@ test('persistencia normaliza documentos dañados o incompletos',()=>{
   assert.deepEqual(api.normalizeQueue(null).jobs,[]);
   assert.deepEqual(api.normalizeRegistry({machines:'bad'}).machines,[]);
   assert.equal(api.normalizeSafetySnapshot(null).config.strict,true);
+  assert.deepEqual(api.normalizeOperations(null).machines,{});
+});
+
+test('operaciones físicas se validan y vencen de forma durable',()=>{
+  const now=1_800_000_000_000;
+  const op=api.sanitizeOperation('k1-1',{type:'bed_calibration',phase:'Midiendo',expiresAt:now+60000},now);
+  assert.equal(op.machineId,'k1-1');
+  assert.equal(op.type,'bed_calibration');
+  assert.equal(api.normalizeOperations({machines:{'k1-1':op}},now).machines['k1-1'].phase,'Midiendo');
+  assert.deepEqual(api.normalizeOperations({machines:{'k1-1':{...op,expiresAt:now-1}}},now).machines,{});
+  assert.throws(()=>api.sanitizeOperation('k1-1',{type:'inventado'},now),/tipo/);
+  assert.match(source,/\/farm\/operations/);
+  assert.match(source,/persistOperations/);
 });
 
 test('reinicio recupera estados intermedios sin perder el G-code',()=>{

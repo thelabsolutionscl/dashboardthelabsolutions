@@ -21,6 +21,7 @@ const counts=Object.create(null);
 let jobs=[],lastQueueSync=0,queueSyncing=null,controllerOk=null;
 let registry=[],registryById=Object.create(null),lastRegistrySync=0,registrySyncing=null;
 let controllerRole='';
+let operations=[],lastOperationsSync=0,operationsSyncing=null;
 
 function token(){try{return typeof getPrinterTunnelToken==='function'?getPrinterTunnelToken():'';}catch(_){return'';}}
 function base(){try{return typeof getPrinterTunnel==='function'?getPrinterTunnel().replace(/\/$/,''):'';}catch(_){return'';}}
@@ -220,6 +221,33 @@ async function confirmBedClear(id,signature){
   const d=await _postQueue('/farm/ready/'+encodeURIComponent(id),{signature},8000);
   controllerOk=true;await syncQueue(true);render();return d;
 }
+async function syncOperations(force=false){
+  if(operationsSyncing)return operationsSyncing;
+  if(!force&&Date.now()-lastOperationsSync<5000)return operations;
+  const b=base(),t=token();if(!b||!t)return operations;
+  operationsSyncing=(async()=>{
+    try{
+      const r=await fetch(url('/farm/operations'),{cache:'no-store',signal:AbortSignal.timeout(5000)}),d=await readJson(r);
+      const previousIds=new Set(operations.map(x=>x.machineId));operations=Array.isArray(d.operations)?d.operations:[];const nextIds=new Set(operations.map(x=>x.machineId));
+      previousIds.forEach(id=>{if(!nextIds.has(id))window.MachineActivityStore?.clear?.(id);});lastOperationsSync=Date.now();controllerOk=true;
+      window.MachineActivityStore?.merge?.(operations);render();
+    }catch(_){controllerOk=false;}
+    finally{operationsSyncing=null;}
+    return operations;
+  })();
+  return operationsSyncing;
+}
+async function setOperation(id,operation={}){
+  if(!id)throw new Error('machineId requerido');
+  window.MachineActivityStore?.set?.(id,operation);
+  const r=await fetch(url('/farm/operations/'+encodeURIComponent(id)),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(operation),signal:AbortSignal.timeout(6000)}),d=await readJson(r);
+  if(d.operation)window.MachineActivityStore?.set?.(id,d.operation);await syncOperations(true);return d.operation||operation;
+}
+async function clearOperation(id){
+  if(!id)return false;window.MachineActivityStore?.clear?.(id);
+  const r=await fetch(url('/farm/operations/'+encodeURIComponent(id)),{method:'DELETE',signal:AbortSignal.timeout(6000)}),d=await readJson(r);
+  await syncOperations(true);return d.removed!==false;
+}
 async function durableStartNext(id){
   try{
     await syncQueue(true);
@@ -246,9 +274,9 @@ if(original.getIp)window.getPrinterIp=durableGetPrinterIp;
 if(original.saveIp)window.savePrinterIp=function(id){const out=original.saveIp.apply(this,arguments);setTimeout(()=>updateRegistryAfterManualSave(id),0);return out;};
 if(original.saveConn)window.savePrinterConn=function(){const id=document.getElementById('printerConnId')?.value||'';const out=original.saveConn.apply(this,arguments);if(id)setTimeout(()=>updateRegistryAfterManualSave(id),0);return out;};
 
-Promise.all([syncQueue(true),syncRegistry(true),authRole(true)]).then(()=>seedRegistry()).catch(()=>{});
-setInterval(()=>{syncQueue(false);syncRegistry(false);},15000);
-const _resumeControllerSync=()=>{syncQueue(true);syncRegistry(true);};
+Promise.all([syncQueue(true),syncRegistry(true),syncOperations(true),authRole(true)]).then(()=>seedRegistry()).catch(()=>{});
+setInterval(()=>{syncQueue(false);syncRegistry(false);syncOperations(false);},15000);
+const _resumeControllerSync=()=>{syncQueue(true);syncRegistry(true);syncOperations(true);};
 window.addEventListener('focus',_resumeControllerSync);
 window.addEventListener('online',_resumeControllerSync);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)_resumeControllerSync();});
@@ -256,4 +284,5 @@ window.addEventListener('farm-controller-health',_resumeControllerSync);
 
 window.FarmQueue={sync:syncQueue,startExisting,confirmBedClear,status:()=>({controllerOk,lastSync:lastQueueSync,jobs:[...jobs],counts:{...counts}})};
 window.FarmRegistry={sync:syncRegistry,seed:seedRegistry,discover:discoverRegistry,ipFor:durableGetPrinterIp,status:()=>({controllerOk,role:controllerRole,lastSync:lastRegistrySync,machines:[...registry]})};
+window.FarmOperations={sync:syncOperations,set:setOperation,clear:clearOperation,status:()=>({controllerOk,lastSync:lastOperationsSync,operations:[...operations]})};
 })();
