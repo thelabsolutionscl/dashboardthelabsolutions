@@ -50,6 +50,7 @@
     if(!root||root.nodeType!==1)return;
     each(root,badges,n=>apply(n,status(n.dataset.semanticStatus||n.textContent,n.closest('#tab-newsletter')?'newsletter':null),'badge'));
     each(root,metrics,n=>{
+      if(n.matches?.('.op-margin-fact')){n.removeAttribute('data-semantic-tone');n.removeAttribute('data-semantic-kind');return;}
       const l=n.querySelector(labels)||n.querySelector(':scope>span'),v=n.querySelector(values)||n.querySelector(':scope>strong,:scope>b');if(!l||!v)return;
       let tone=metric(l.textContent,v.textContent);
       if(/\b(margen|roas|roi|conversion|rentabilidad|alertas?|saldo|stock)\b/.test(normalize(l.textContent))){
