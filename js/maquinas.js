@@ -2000,9 +2000,16 @@ async function printerBedLevelRefresh(id,opts={}){
 }
 async function getBedLevelPreflightFact(id,material=''){
   try{
-    await _bedLevelHistoryLoadRemote(false).catch(()=>false);const read=await _bedLevelReadActive(id,9000);
+    const read=await _bedLevelReadActive(id,9000);
     if(!read.ok){const obs=_bedLevelObservationRead(id),fresh=obs&&Date.now()-Number(obs.observedAt)<30000;return{code:'unreachable',level:'warn',strongConfirm:true,detail:fresh?'No se pudo verificar Moonraker en vivo; la última lectura reciente no reemplaza la validación previa al inicio.':'No se pudo verificar en vivo la malla activa de Moonraker.'};}
-    const a=_bedLevelAssessment(id,read.st,material);return{...a,detail:a.detail,activeSignature:read.st?_bedLevelSignature(read.st):'',activeRange:read.st?.range??null};
+    let a=_bedLevelAssessment(id,read.st,material);
+    // Airtable no forma parte del camino crítico si ya hay una coincidencia local.
+    // Solo esperamos una lectura compartida cuando la malla activa aún aparece no verificada.
+    if(a.code==='unverified'){
+      await _bedLevelHistoryLoadRemote(true).catch(()=>false);
+      a=_bedLevelAssessment(id,read.st,material);
+    }else _bedLevelHistoryLoadRemote(false).catch(()=>{});
+    return{...a,detail:a.detail,activeSignature:read.st?_bedLevelSignature(read.st):'',activeRange:read.st?.range??null};
   }catch(e){return{code:'error',level:'warn',strongConfirm:true,detail:'Error verificando malla activa: '+(e?.message||'desconocido')};}
 }
 if(typeof window!=='undefined')window.getBedLevelPreflightFact=getBedLevelPreflightFact;
@@ -2281,9 +2288,12 @@ function openPrinterControl(id){
     <details class="op-expert-only" style="margin-bottom:12px"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📂 Archivos en la impresora</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterFiles('${id}')">↻ Cargar</button></div><div id="pcFiles" style="max-height:160px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:12px;padding:8px">Pulsa “Cargar” para ver los G-code y reimprimir.</div></div></details>
     <details class="op-expert-only"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📊 Historial real (Moonraker)</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterHistory('${id}')">↻ Cargar</button></div><div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:12px;padding:8px">Tiempo y filamento reales de cada trabajo.</div></div></details>`;
   document.getElementById('printerControlModal').style.display='flex';
-  setTimeout(async()=>{
-    await _bedLevelHistoryLoadRemote(false).catch(()=>false);_bedLevelHistoryRender(id);
+  setTimeout(()=>{
+    _bedLevelHistoryRender(id);
     if(!_bedLevelRestoreRunUi(id))printerBedLevelRefresh(id).catch(()=>{});
+    _bedLevelHistoryLoadRemote(false).then(()=>{
+      if(!_bedLevelRuns[id]?.active)printerBedLevelRefresh(id,{quietStatus:true}).catch(()=>{});
+    }).catch(()=>{});
   },0);
 }
 function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
