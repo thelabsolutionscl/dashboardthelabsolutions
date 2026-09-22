@@ -205,3 +205,22 @@ test('las observaciones agregadas se editan en línea con teclado y clic', () =>
   assert.match(edit, /addEventListener\('blur'/, 'Salir del campo debe guardar la edición');
   assert.match(edit, /syncSolicitudToTextarea\(\)/, 'El textarea enviado a Airtable debe quedar sincronizado');
 });
+
+test('COT. ANTERIOR despliega el detalle de productos antes de importar', () => {
+  const picker = extractFunction('openCopyCotPicker');
+  const toggle = extractFunction('toggleCopyCotDetail');
+  const parse = extractFunction('_copyCotItems');
+  const apply = extractFunction('applyCopyCot');
+
+  assert.match(picker, /copy-cot-summary/, 'Cada cotización debe tener una cabecera desplegable');
+  assert.match(picker, /copy-cot-detail/, 'Cada cotización debe contener un panel de detalle');
+  assert.match(picker, />Descripción</, 'El detalle debe identificar la descripción del producto');
+  assert.match(picker, />Costo</, 'El detalle debe mostrar el costo');
+  assert.match(picker, />Venta</, 'El detalle debe mostrar el valor de venta');
+  assert.match(picker, /c\/u/, 'Debe distinguir valores unitarios de los totales por línea');
+  assert.match(picker, /Importar esta cotización/, 'Importar debe ser una acción separada de desplegar');
+  assert.match(toggle, /aria-expanded/, 'El acordeón debe comunicar su estado a tecnologías asistivas');
+  assert.match(parse, /Detalle JSON/, 'Las cotizaciones nuevas deben usar el detalle estructurado exacto');
+  assert.match(parse, /Detalle productos/, 'Las cotizaciones antiguas deben conservar un respaldo de texto');
+  assert.match(apply, /_copyCotItems\(f\)/, 'La vista y la importación deben compartir el mismo detalle normalizado');
+});
