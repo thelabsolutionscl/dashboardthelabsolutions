@@ -3637,8 +3637,29 @@ function addSolicitudItem(){
   const container=document.getElementById('solicitudItems');const item=document.createElement('div');
   item.dataset.value=val;
   item.style.cssText='display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:12px';
-  item.innerHTML=`<span style="color:var(--accent);flex-shrink:0">•</span><span style="flex:1">${escapeHtml(val)}</span><button onclick="removeSolicitudItem(this)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0;line-height:1" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
+  item.innerHTML=_solicitudItemContent(val);
   container.appendChild(item);inp.value='';syncSolicitudToTextarea();inp.focus();
+}
+function _solicitudItemContent(val){
+  return `<span style="color:var(--accent);flex-shrink:0">•</span><button type="button" class="solicitud-item-text" onclick="editSolicitudItem(this)" title="Editar observación" style="flex:1;background:none;border:none;color:var(--text);font:inherit;text-align:left;padding:0;cursor:text">${escapeHtml(val)}</button><button type="button" aria-label="Eliminar observación" onclick="removeSolicitudItem(this)" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0;line-height:1" onmouseenter="this.style.color='var(--danger)'" onmouseleave="this.style.color='var(--text3)'">✕</button>`;
+}
+function editSolicitudItem(trigger){
+  const item=trigger?.closest('[data-value]');if(!item||item.querySelector('.solicitud-item-edit'))return;
+  const original=item.dataset.value||'';const input=document.createElement('input');let finished=false;
+  input.type='text';input.className='solicitud-item-edit';input.value=original;input.setAttribute('aria-label','Editar observación');
+  input.style.cssText="flex:1;min-width:0;background:var(--surface);border:1px solid var(--accent);border-radius:4px;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:4px 7px";
+  trigger.replaceWith(input);
+  const finish=save=>{
+    if(finished)return;finished=true;
+    const next=input.value.trim();if(save&&next)item.dataset.value=next;
+    const wrap=document.createElement('div');wrap.innerHTML=_solicitudItemContent(item.dataset.value);input.replaceWith(wrap.children[1]);
+    syncSolicitudToTextarea();
+  };
+  input.addEventListener('keydown',event=>{
+    if(event.key==='Enter'){event.preventDefault();finish(true);}
+    if(event.key==='Escape'){event.preventDefault();finish(false);}
+  });
+  input.addEventListener('blur',()=>finish(true));input.focus();input.select();
 }
 function removeSolicitudItem(btn){btn.closest('[data-value]').remove();syncSolicitudToTextarea();}
 function syncSolicitudToTextarea(){
