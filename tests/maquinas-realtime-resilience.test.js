@@ -158,6 +158,21 @@ test('K1 y Ender tienen sonda finita de cámara aunque el MJPEG quede colgado',(
   assert.match(MAQ,/setInterval\(_cameraHealthSweep,_CAM_HEALTH_INTERVAL_MS\)/,'la vigilancia debe continuar durante la sesión');
 });
 
+test('si el bridge remoto es viejo se autoactualiza y reintenta recover-camera',()=>{
+  const recover=fn(MAQ,'recoverPrinterCamera');
+  const ensure=fn(MAQ,'_ensureCameraRecoveryBridge');
+  const wait=fn(MAQ,'_cameraBridgeHealthWait');
+  assert.match(recover,/attempt\.r\.status===404/);
+  assert.match(recover,/_ensureCameraRecoveryBridge\(overlay\)/);
+  assert.match(recover,/attempt=await _cameraRecoverRequest\(ip,kind\)/);
+  assert.match(ensure,/\/update/,'debe actualizar el bridge sin ir físicamente al iMac');
+  assert.match(ensure,/method:'POST'/);
+  assert.match(ensure,/_cameraBridgeUpdatePromise/,'dos cámaras no deben actualizar el bridge en paralelo');
+  assert.match(ensure,/_cameraBridgeHealthWait/,'debe esperar a launchd después del update');
+  assert.match(wait,/\/healthz/);
+  assert.match(MAQ,/no se pudo recuperar ·/,'la tarjeta debe mostrar el motivo concreto si falla');
+});
+
 test('K2/K2 Plus recuperan go2rtc desde el primer frame fallido',()=>{
   const err=fn(MAQ,'_cameraLoadError');
   const sync=fn(MAQ,'_syncPrinterCam');
@@ -184,7 +199,9 @@ test('K2 evita doble consumidor y recupera su stack de cámara automáticamente'
   assert.match(refresh,/camSuspended/,'el watchdog global no puede reactivar la tarjeta mientras el modal consume la K2');
   assert.match(err,/_CAM_AUTORECOVER_FAILS/,'la cámara caída debe escalar de retry a recuperación');
   assert.match(err,/recoverPrinterCamera\(machineId,true\)/,'la recuperación automática debe ser silenciosa');
-  assert.match(recover,/\/recover-camera\/\$\{ip\}/,'la recuperación física va por el bridge del taller');
+  const request=fn(MAQ,'_cameraRecoverRequest');
+  assert.match(request,/\/recover-camera\/\$\{ip\}/,'la recuperación física va por el bridge del taller');
+  assert.match(request,/\?kind=\$\{kind\}/,'el modelo viaja al bridge para elegir backend');
   assert.match(recover,/_CAM_AUTORECOVER_COOLDOWN_MS/,'debe tener cooldown para no reiniciar en bucle');
   assert.match(MAQ,/↻ Reiniciar cámara/,'también debe existir recuperación manual en la tarjeta');
 });

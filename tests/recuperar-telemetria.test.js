@@ -125,7 +125,9 @@ test('recuperación de cámara usa el backend correcto y tiene presupuesto de ti
   assert.match(cam,/mode!=='mjpeg'/,'K1/MJPEG no debe perder 25 s probando go2rtc');
   assert.match(cam,/mode!=='k2'/,'K2 no debe perder tiempo probando MJPEG');
   const recover=functionSource(MAQ,'recoverPrinterCamera');
-  assert.match(recover,/\?kind=\$\{kind\}/,'el modelo debe viajar como pista al bridge');
+  const request=functionSource(MAQ,'_cameraRecoverRequest');
+  assert.match(recover,/_cameraRecoverRequest\(ip,kind\)/,'la recuperación usa el helper autenticado del bridge');
+  assert.match(request,/\?kind=\$\{kind\}/,'el modelo debe viajar como pista al bridge');
   const clientMs=Number(MAQ.match(/const _CAM_RECOVER_TIMEOUT_MS=(\d+)/)[1]);
   const waitMs=Number(BRIDGE.match(/const CAMERA_RECOVER_WAIT_MS = (\d+)/)[1]);
   assert.ok(clientMs>waitMs+30000,'el navegador debe esperar holgadamente el arranque físico y la negociación de cámara');
