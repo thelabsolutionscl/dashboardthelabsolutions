@@ -36,7 +36,7 @@ function render(maquinas,estados,filtro='all'){
     escapeHtml:s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
   };
   vm.createContext(ctx);
-  vm.runInContext(functionSource('renderMaqOcupacion')+'\nthis.render=renderMaqOcupacion;',ctx);
+  vm.runInContext(functionSource('_printerEffectiveState')+'\n'+functionSource('renderMaqOcupacion')+'\nthis.render=renderMaqOcupacion;',ctx);
   ctx.render();
   return el.innerHTML;
 }
