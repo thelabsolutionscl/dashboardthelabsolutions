@@ -24,10 +24,14 @@ test('la cola durable propaga metadata a Farm Controller y MachineOps',()=>{
   assert.doesNotMatch(src,/return original\.add\(/);
 });
 
-test('el registry pasa a ser la fuente preferida de IP y se actualiza al guardar manualmente',()=>{
+test('el registry compartido gana sobre overrides viejos del navegador',()=>{
   assert.match(src,/window\.getPrinterIp=durableGetPrinterIp/);
-  assert.match(src,/registryById\[m\.id\]/);
-  assert.match(src,/updateRegistryAfterManualSave/);
+  const start=src.indexOf('function durableGetPrinterIp');
+  const end=src.indexOf('\nasync function patchRegistryMachine',start);
+  const fn=src.slice(start,end);
+  assert.ok(fn.indexOf('registryById[m.id]')<fn.indexOf('confirmedPrinterIp(m.id)'),'registry debe evaluarse antes que IP confirmada local');
+  assert.match(src,/if\(current\)continue/,'seed no debe pisar un registry existente con localStorage viejo');
+  assert.match(src,/updateRegistryAfterManualSave/,'un cambio manual explícito sí actualiza registry');
   assert.match(src,/window\.FarmRegistry=/);
 });
 
