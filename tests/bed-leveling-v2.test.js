@@ -86,11 +86,11 @@ test('assessment exige coincidencia entre malla activa e historial',()=>{
 
 test('calibracion guarda local primero y sincroniza remoto en background',()=>{
   const append=fn(MAQ,'_bedLevelHistoryAppend');
-  assert.doesNotMatch(append,/await\\s+_bedLevelHistoryLoadRemote/);
+  assert.doesNotMatch(append,/await\s+_bedLevelHistoryLoadRemote/);
   assert.match(append,/_bedLevelHistorySave/);
-  assert.match(append,/_bedLevelHistorySyncRemote\\(\\)\\.catch/);
+  assert.match(append,/_bedLevelHistorySyncRemote\(\)\.catch/);
   const sync=fn(MAQ,'_bedLevelHistorySyncRemote');
-  assert.match(sync,/for\\(let attempt=0;attempt<2;attempt\\+\\+\\)/);
+  assert.match(sync,/for\(let attempt=0;attempt<2;attempt\+\+\)/);
   assert.match(sync,/_bedLevelHistoryMerge/);
 });
 
@@ -103,22 +103,22 @@ test('fallo de calibracion relee Moonraker y no conserva un valor viejo',()=>{
 
 test('heatmap usa escala absoluta y ofrece calibracion termica y ayuda fisica',()=>{
   const map=fn(MAQ,'openBedMesh');
-  assert.match(map,/const dev=Math\\.max\\(-scale/);
-  assert.match(map,/Number\\(v\\)-st\\.avg/);
+  assert.match(map,/const dev=Math\.max\(-scale/);
+  assert.match(map,/Number\(v\)-st\.avg/);
   assert.match(map,/400/);
   assert.match(map,/printerScrewsTiltGuide/);
   assert.match(map,/printerZTiltAdjust/);
   const thermal=fn(MAQ,'_bedLevelWaitTemperature');
-  assert.match(thermal,/Math\\.abs\\(actual-preset\\.target\\)<=1\\.5/);
+  assert.match(thermal,/Math\.abs\(actual-preset\.target\)<=1\.5/);
   assert.match(thermal,/20000/);
   assert.match(MAQ,/PLA 60°/);assert.match(MAQ,/PETG 75°/);assert.match(MAQ,/ABS 100°/);
 });
 
 test('MachineOps hace verificacion live y segunda confirmacion para riesgo fuerte',()=>{
-  assert.match(OPS,/async function evaluatePreflightLive\\(/);
-  assert.match(OPS,/window\\.getBedLevelPreflightFact/);
+  assert.match(OPS,/async function evaluatePreflightLive\(/);
+  assert.match(OPS,/window\.getBedLevelPreflightFact/);
   const pf=fn(OPS,'preflightFromFacts');
   assert.match(pf,/strongWarnings/);assert.match(pf,/strongToken/);
   const open=fn(OPS,'openPreflight');assert.match(open,/await evaluatePreflightLive/);
-  const start=fn(OPS,'startJob');assert.match(start,/const fresh=await evaluatePreflightLive/);assert.match(start,/fresh\\.strongToken!==String\\(options\\.strongToken/);
+  const start=fn(OPS,'startJob');assert.match(start,/const fresh=await evaluatePreflightLive/);assert.match(start,/fresh\.strongToken!==String\(options\.strongToken/);
 });
