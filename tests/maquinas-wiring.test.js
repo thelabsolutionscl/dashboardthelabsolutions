@@ -274,10 +274,13 @@ test('controles operativos separan ajustes en vivo de movimientos peligrosos',()
   assert.match(control,/DETENER/);
 });
 
-test('telemetría incluye factor real de velocidad y flujo para el panel de control',()=>{
+test('telemetría incluye factor real de velocidad, flujo y actividad G-code',()=>{
   const derive=functionSource(MAQ,'_deriveStatus');
   assert.match(MAQ,/webhooks','gcode_move/);
+  assert.match(MAQ,/idle_timeout/,'polling debe consultar actividad G-code real');
   assert.match(derive,/gm=s\.gcode_move/);
+  assert.match(derive,/it=s\.idle_timeout/);
+  assert.match(derive,/busyGcode/,'un macro/calibración no debe verse libre si print_stats sigue en standby');
   assert.match(derive,/speedFactor/);
   assert.match(derive,/flowFactor/);
 });
@@ -300,6 +303,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(auto,/\$\{run\.uiLabel\} · 0s/);
   assert.match(auto,/_bedLevelMetaWrite/,'una calibración verificada debe guardar fecha y firma');
   assert.match(auto,/_bedLevelTimeoutMs/,'timeout debe ser consistente y adaptable a camas grandes');
+  assert.match(auto,/renderMonitorKPIs\(\);renderMonitorGrid\(\)/,'la tarjeta debe cambiar a CALIBRANDO inmediatamente');
 
   assert.match(wait,/1200/,'durante calibración debe muestrear suficientemente rápido para observar BED_MESH_CLEAR');
   assert.match(wait,/sawCleared/);
@@ -339,6 +343,22 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(MAQ,/PETG 75°/);
   assert.match(MAQ,/ABS 100°/);
   assert.match(MAQ,/DIAGNÓSTICO GEOMÉTRICO/);
+});
+
+test('la tarjeta prioriza actividad física sobre standby/libre',()=>{
+  const effective=functionSource(MAQ,'_printerEffectiveState');
+  const meta=functionSource(MAQ,'printerStateMeta');
+  const grid=functionSource(MAQ,'renderMonitorGrid');
+  const kpis=functionSource(MAQ,'renderMonitorKPIs');
+  const ocupacion=functionSource(MAQ,'renderMaqOcupacion');
+  assert.match(effective,/_bedLevelRuns/,'una calibración lanzada desde CONTROL debe dominar el estado standby');
+  assert.match(effective,/busyGcode/,'macros G-code también deben dejar de verse libres');
+  assert.match(meta,/calibrating:\{label:'Calibrando'/);
+  assert.match(meta,/gcode:\{label:'Ejecutando G-code'/);
+  assert.match(grid,/effectiveState=_printerEffectiveState/);
+  assert.match(grid,/isCalibrating/);
+  assert.match(kpis,/calibrating/,'calibrando debe salir separado de libres en los KPI');
+  assert.match(ocupacion,/calibrando cama/,'ocupación debe mostrar calibración y no libre');
 });
 
 test('preflight, QA, postproducción e incidentes forman un flujo continuo',()=>{
