@@ -391,6 +391,8 @@ async function recoverPrinterCamera(id,silent=false){
   if(_camRecovering[id])return false;
   if(silent&&_camLastRecover[id]&&now-_camLastRecover[id]<_CAM_AUTORECOVER_COOLDOWN_MS)return false;
   _camLastRecover[id]=now;_camRecovering[id]=true;
+  const slot=document.getElementById('mccam_'+id),overlay=slot?.querySelector('.pcam-off');
+  if(overlay){overlay.style.display='flex';const status=overlay.querySelector('.pcam-off-status');if(status)status.textContent='recuperando cámara automáticamente…';}
   if(!silent)toast(`📷 Reiniciando cámara · ${m.nombre} #${m.numG}…`,'info');
   try{
     const kind=/K2/.test(String(m.modelo||''))?'k2':'mjpeg';
@@ -403,7 +405,7 @@ async function recoverPrinterCamera(id,silent=false){
       if(!silent)toast('No se pudo recuperar la cámara: '+(d.error||`HTTP ${r.status}`),'error');
       return false;
     }
-    const slot=document.getElementById('mccam_'+id),cardImg=slot?.querySelector('img');
+    const cardImg=slot?.querySelector('img');
     if(cardImg){cardImg.dataset.camFails='0';cardImg.dataset.camLoading='0';_cameraClearTimer(cardImg);_cameraRefreshNow(cardImg);}
     const modalId=document.getElementById('webcamModalId')?.value;
     const modalImg=document.getElementById('webcamModalImg');
@@ -413,7 +415,10 @@ async function recoverPrinterCamera(id,silent=false){
   }catch(e){
     if(!silent)toast(e?.name==='TimeoutError'||e?.name==='AbortError'?'La cámara tardó demasiado en recuperarse':'No se pudo hablar con el bridge para recuperar la cámara','error');
     return false;
-  }finally{_camRecovering[id]=false;}
+  }finally{
+    _camRecovering[id]=false;
+    const status=overlay?.querySelector('.pcam-off-status');if(status)status.textContent='reconectando automáticamente…';
+  }
 }
 function _cameraLoadError(im){
   if(!im)return;
@@ -426,8 +431,14 @@ function _cameraLoadError(im){
   const o=im.parentElement?.querySelector('.pcam-off');if(o)o.style.display=hadGood?'none':'flex';
   const n=(parseInt(im.dataset.camFails||'0',10)||0)+1;im.dataset.camFails=String(n);
   const machineId=im.dataset.machineId||'';
-  if(machineId&&n>=_CAM_AUTORECOVER_FAILS)_setCameraSignalState(machineId,'down');
-  if(machineId&&n>=_CAM_AUTORECOVER_FAILS)recoverPrinterCamera(machineId,true).catch(()=>{});
+  const snapshot=im.dataset.camKind==='snapshot';
+  const firstSnapshotFailure=snapshot&&!hadGood&&n===1;
+  // K2/K2 Plus usan k2rtc.py + go2rtc. Si nunca entregaron el primer frame,
+  // esperar tres timeouts de 25 s dejaba la tarjeta negra durante demasiado
+  // tiempo. El primer fallo real dispara la recuperación física; el cooldown y
+  // _camRecovering impiden reinicios en bucle.
+  if(machineId&&(firstSnapshotFailure||n>=_CAM_AUTORECOVER_FAILS))_setCameraSignalState(machineId,'down');
+  if(machineId&&(firstSnapshotFailure||n>=_CAM_AUTORECOVER_FAILS))recoverPrinterCamera(machineId,true).catch(()=>{});
   const delay=Math.min(_CAM_RETRY_MAX_MS,1000*Math.pow(2,Math.min(n-1,5)));
   _cameraSchedule(im,delay);
 }
@@ -1359,7 +1370,7 @@ function _syncPrinterCam(id,camKey,force){
   if(!camU){slot.innerHTML='';slot.__camKey='';return;}
   slot.innerHTML=`<div style="margin-top:8px;border-radius:8px;overflow:hidden;background:#000;position:relative;min-height:56px">
     <img loading="eager" decoding="async" data-machine-id="${id}" data-cam-base="${camU}" data-cam-kind="${snap?'snapshot':'mjpeg'}" data-cam-interval="${camInterval}" data-cam-loading="1" ${snap?`data-snap="${camU}"`:''} src="${camU}" style="width:100%;display:block;max-height:160px;object-fit:cover" onload="_cameraLoadOk(this)" onerror="_cameraLoadError(this)">
-    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span style="font-size:10px;color:#666">reconectando automáticamente…</span><button type="button" onclick="event.stopPropagation();recoverPrinterCamera('${id}')" style="margin-top:3px;background:#151515;border:1px solid #333;border-radius:6px;color:#bbb;padding:4px 8px;font-size:9.5px;cursor:pointer">↻ Reiniciar cámara</button></div>
+    <div class="pcam-off" style="display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#8a8a8a;font-size:10.5px;background:#0b0b0b;text-align:center;padding:6px"><span style="font-size:15px">📷</span>Cámara sin señal<span class="pcam-off-status" style="font-size:10px;color:#666">reconectando automáticamente…</span><button type="button" onclick="event.stopPropagation();recoverPrinterCamera('${id}')" style="margin-top:3px;background:#151515;border:1px solid #333;border-radius:6px;color:#bbb;padding:4px 8px;font-size:9.5px;cursor:pointer">↻ Reiniciar cámara</button></div>
   </div>`;
   slot.__camKey=camKey;
   const im=slot.querySelector('img');
@@ -1367,7 +1378,10 @@ function _syncPrinterCam(id,camKey,force){
     const key=_cameraTimerKey(im);
     if(key)_camRetryTimers[key]=setTimeout(()=>{
       if(!im.isConnected){delete _camRetryTimers[key];return;}
-      if(im.dataset.camLoading==='1'){im.dataset.camLoading='0';_cameraRefreshNow(im);}
+      // El primer <img src> también puede quedar esperando indefinidamente
+      // cuando go2rtc está caído. Trátalo como fallo real para activar la
+      // recuperación de K2/K2 Plus, no como un simple refresh.
+      if(im.dataset.camLoading==='1'){im.dataset.camLoading='0';_cameraLoadError(im);}
     },_CAM_LOAD_TIMEOUT_MS);
   }
 }
