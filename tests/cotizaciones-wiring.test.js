@@ -148,6 +148,21 @@ test('aprobar sigue el orden lógico: guardar estado y luego crear o recuperar e
   assert.ok(order > save, 'El pedido debe crearse después de guardar la aprobación');
 });
 
+test('aprobar desde Editar también crea el pedido con los datos recién guardados', () => {
+  const body = extractFunction('saveEditCot');
+  const save = body.indexOf("await _saveCotFields('PATCH',cotId,fields)");
+  const local = body.indexOf('Object.assign(_cotRec.fields,fields)');
+  const order = body.indexOf('await crearPedidoDesdeCotizacion(cotId)');
+
+  assert.match(body, /fields\['Estado cotización'\]==='Aprobada'/, 'Editar debe detectar el estado Aprobada');
+  assert.match(body, /!_pedidoDeCot\(_cotRec\)/, 'Debe evitar duplicar un pedido ya vinculado');
+  assert.ok(save >= 0, 'Primero debe guardar la cotización');
+  assert.ok(local > save, 'Después debe actualizar la copia local con los valores editados');
+  assert.ok(order > local, 'El pedido debe crearse usando esos valores actualizados');
+  assert.match(body, /renderCotToOrderTray\(\)/, 'Si la creación falla debe quedar disponible la recuperación visible');
+  assert.match(body, /pedido quedó pendiente de creación/, 'El fallo parcial no debe presentarse como éxito completo');
+});
+
 test('la conversión a pedido es idempotente y evita pedidos duplicados', () => {
   const create = extractFunction('crearPedidoDesdeCotizacion');
   const convert = extractFunction('convertirCotAPedido');

@@ -43,6 +43,16 @@ test('el filtro por vencer excluye aprobadas y expiradas; el buscador se combina
   context.state.cotizaciones=rows;click('cot-filter','expiring');assert.deepEqual(Array.from(op.filterQuotes(rows),r=>r.id),['a']);op.quotes(op.filterQuotes(rows));assert.match(element('opQuotes').innerHTML,/ABC/);
   click('cot-filter','awaiting');assert.equal(op.filterQuotes(rows).length,2);
 });
+test('una aprobada sin pedido muestra la acción de recuperación correcta',()=>{
+  const missing=setup();missing.context._pedidoDeCot=()=>null;
+  const cot=record('c',{'Estado cotización':'Aprobada','Cliente':'ABC','Total final (CLP)':119000});
+  assert.equal(missing.op.quoteInfo(cot).next,'Crear pedido pendiente');
+  missing.op.quotes([cot]);assert.match(missing.element('opQuotes').innerHTML,/Crear pedido/);
+
+  const linked=setup();linked.context._pedidoDeCot=()=>record('p',{'N° Pedido':'PED-1'});
+  assert.equal(linked.op.quoteInfo(cot).next,'Revisar pedido vinculado');
+  linked.op.quotes([cot]);assert.match(linked.element('opQuotes').innerHTML,/Ver propuesta/);
+});
 test('inicio respeta los módulos del rol y excluye la cartera de otros vendedores',()=>{
   const prod=setup('produccion');prod.op.overview();assert.doesNotMatch(prod.element('opToday').innerHTML,/Gestiones comerciales|Facturas vencidas/);
   const sales=setup('comercial');sales.context.state.cotizaciones=[record('a',{'Estado cotización':'Solicitada',Vendedor:'propio'}),record('b',{'Estado cotización':'Solicitada',Vendedor:'otro'})];

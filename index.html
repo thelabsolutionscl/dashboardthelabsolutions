@@ -11138,7 +11138,19 @@ async function saveEditCot(){
     const _dateChanges=['Fecha límite cotización','Fecha vencimiento','Fecha de entrega'].filter(k=>(_cotRec?.fields?.[k]||'')!==(fields[k]||'')).map(k=>({field:k,to:fields[k]||''}));
     if(_dateChanges.length){let _reason='Fecha inicial';if(_dateChanges.some(x=>_cotRec?.fields?.[x.field])){_reason=(prompt('Motivo de la reprogramación de la cotización:','Cambio solicitado por cliente')||'').trim();if(!_reason)throw new Error('Debes indicar el motivo para cambiar una fecha comprometida');}fields['Historial fechas calendario']=calHistoryForChanges(_cotRec,_dateChanges,_reason);}
     await _saveCotFields('PATCH',cotId,fields);
-    toast('✓ Cotización actualizada','success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
+    // El modal Editar debe respetar la misma regla que el botón Aprobar:
+    // una cotización Aprobada siempre debe terminar con un pedido vinculado.
+    // Actualizamos primero el registro local para que el pedido use los valores,
+    // cliente, plazo e ítems que acaban de guardarse en el formulario.
+    if(_cotRec)Object.assign(_cotRec.fields,fields);
+    let _pedidoPendiente=false;
+    if(fields['Estado cotización']==='Aprobada'&&_cotRec&&!_pedidoDeCot(_cotRec)){
+      const _cid=Array.isArray(_cotRec.fields['Cliente'])?_cotRec.fields['Cliente'][0]:null;
+      await _advanceEtapaCliente(_cid,'Cliente activo',['','Lead nuevo','Contactado','Propuesta enviada','Negociación']);
+      const _pedidoCreado=await crearPedidoDesdeCotizacion(cotId);
+      _pedidoPendiente=!_pedidoCreado&&!_pedidoDeCot(_cotRec);
+    }
+    toast(_pedidoPendiente?'⚠ Cotización aprobada, pero el pedido quedó pendiente de creación':'✓ Cotización actualizada',_pedidoPendiente?'error':'success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderCotToOrderTray();renderOverview();
     syncCotizacionADrive(cotId);
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='💾 Guardar';
