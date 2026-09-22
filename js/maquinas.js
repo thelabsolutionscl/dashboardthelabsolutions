@@ -2178,9 +2178,9 @@ async function printerAutoBedCalibrate(id,presetKey='current'){
     run.phaseText='VERIFICANDO · comprobando malla nueva…';run.uiLabel='VERIFICANDO';_bedLevelSetState(id,'VERIFICANDO','#38bdf8');_bedLevelSetStatus(id,run.phaseText,'#38bdf8');
     let after=await waitPromise;if(!after){const current=await _bedLevelReadActive(id,9000);if(current.st&&(!beforeSig||_bedLevelSignature(current.st)!==beforeSig))after=current.st;}
     if(!after){await _bedLevelRefreshAfterFailure(id,'⚠ Terminó el comando, pero no se pudo demostrar que la malla visible sea nueva.');toast('Calibración terminada, pero la malla nueva no pudo verificarse','error');return;}
-    // Moonraker puede publicar la malla nueva antes de que idle_timeout abandone
-    // "Printing". Mantenemos CALIBRANDO durante ese cierre para no mostrar un
-    // falso estado intermedio "EJECUTANDO G-CODE".
+    /* Moonraker puede publicar la malla nueva antes de que idle_timeout abandone
+       "Printing". Mantenemos CALIBRANDO durante ese cierre para no mostrar un
+       falso estado intermedio "EJECUTANDO G-CODE". */
     const physicalIdle=await _bedLevelWaitForPhysicalIdle(id,run);
     if(!physicalIdle&&!run.cancelled){run.phaseText='CALIBRANDO · la malla ya existe, pero Klipper aún reporta G-code activo';_bedLevelSetStatus(id,run.phaseText,'#ffaa00');}
     const verifiedAt=Date.now(),tempEnd=await _bedLevelReadBedTemp(id),bedTemp=tempEnd.actual??run.bedTempStart,bedTarget=tempEnd.target??run.bedTargetStart,meta=_bedLevelMetaWrite(id,after,{calibratedAt:verifiedAt,bedTemp,bedTarget});
