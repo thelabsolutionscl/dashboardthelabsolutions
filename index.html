@@ -11910,7 +11910,12 @@ function openAbonoModal(id){
   document.getElementById('abonoModal').style.display='flex';
   setTimeout(()=>inp.select(),80);
 }
-function closeAbonoModal(){document.getElementById('abonoModal').style.display='none';}
+function closeAbonoModal(){
+  document.getElementById('abonoModal').style.display='none';
+  const volver=window._opReturnPaymentDrawer||'';
+  window._opReturnPaymentDrawer='';
+  if(volver&&window.OP&&typeof OP.openRecord==='function')setTimeout(()=>OP.openRecord('order',volver),0);
+}
 async function saveAbono(){
   const btn=document.getElementById('saveAbonoBtn');
   const id=document.getElementById('abonoModalPedidoId').value;
