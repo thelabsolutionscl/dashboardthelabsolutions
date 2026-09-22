@@ -158,6 +158,18 @@ test('K1 y Ender tienen sonda finita de cámara aunque el MJPEG quede colgado',(
   assert.match(MAQ,/setInterval\(_cameraHealthSweep,_CAM_HEALTH_INTERVAL_MS\)/,'la vigilancia debe continuar durante la sesión');
 });
 
+test('K2/K2 Plus recuperan go2rtc desde el primer frame fallido',()=>{
+  const err=fn(MAQ,'_cameraLoadError');
+  const sync=fn(MAQ,'_syncPrinterCam');
+  const recover=fn(MAQ,'recoverPrinterCamera');
+  assert.match(err,/firstSnapshotFailure/,'el primer fallo de una snapshot K2 debe escalar de inmediato');
+  assert.match(err,/snapshot&&!hadGood&&n===1/);
+  assert.match(err,/recoverPrinterCamera\(machineId,true\)/);
+  assert.match(sync,/_cameraLoadError\(im\)/,'el timeout del primer src debe contar como fallo real');
+  assert.match(recover,/pcam-off-status/,'la tarjeta debe indicar que está recuperando');
+  assert.match(recover,/_CAM_AUTORECOVER_COOLDOWN_MS/,'la recuperación sigue protegida por cooldown');
+});
+
 test('K2 evita doble consumidor y recupera su stack de cámara automáticamente',()=>{
   const open=fn(MAQ,'openWebcamModal');
   const close=fn(MAQ,'closeWebcamModal');
