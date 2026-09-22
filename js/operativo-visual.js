@@ -83,9 +83,10 @@
     const f=c.fields,e=f['Estado cotización']||'Sin estado';
     const expires=until(f['Fecha vencimiento']),age=until(f['Fecha cotización']);
     const awaiting=e==='Enviada',pending=e==='Solicitada';
-    let next=pending?'Preparar y enviar propuesta':awaiting?'Revisar seguimiento':e==='Aprobada'?'Revisar pedido vinculado':e==='Negociación'?'Revisar condiciones':'Revisar historial';
+    const linkedOrder=e==='Aprobada'&&typeof _pedidoDeCot==='function'?_pedidoDeCot(c):undefined;
+    let next=pending?'Preparar y enviar propuesta':awaiting?'Revisar seguimiento':e==='Aprobada'?(linkedOrder===null?'Crear pedido pendiente':'Revisar pedido vinculado'):e==='Negociación'?'Revisar condiciones':'Revisar historial';
     if(awaiting&&expires!==null&&expires<0)next='Revisar propuesta vencida';
-    return {e,expires,age,awaiting,pending,next};
+    return {e,expires,age,awaiting,pending,next,linkedOrder};
   }
   function filterQuotes(rows){
     return rows.filter(c=>{
@@ -121,7 +122,8 @@
     $('opQuoteSelection').textContent=({all:'Todas',open:'Gestiones comerciales',awaiting:'Sin respuesta',expiring:'Por vencer en 3 días',pending:'Pendientes de envío'})[ui.cot]+' · '+rows.length+' cotizaciones';
     el.innerHTML=rows.length?rows.slice(0,ui.limit).map(c=>{
       const f=c.fields,q=quoteInfo(c),m=getMargenCot(f);
-      return `<article class="op-record"><header><div><span class="op-eyebrow">${esc(f['N° Cotización']||'Cotización')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'Sin título')}</p></div>${pill(q.e)}</header><div class="op-facts"><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div><div><span>Margen</span><b>${m==null?'Sin dato':Number(m).toFixed(1)+'%'}</b></div></div><p class="op-caption">${q.awaiting&&q.age!==null?`${Math.max(0,-q.age)} días desde la fecha de cotización · `:''}Vigencia: ${esc(f['Fecha vencimiento']||'sin fecha')}</p><footer><span><small>Siguiente paso</small>${esc(q.next)}</span>${button('Ver propuesta','quote',c.id,'op-primary')}</footer></article>`;
+      const missingOrder=q.e==='Aprobada'&&q.linkedOrder===null;
+      return `<article class="op-record"><header><div><span class="op-eyebrow">${esc(f['N° Cotización']||'Cotización')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'Sin título')}</p></div>${pill(q.e)}</header><div class="op-facts"><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div><div><span>Margen</span><b>${m==null?'Sin dato':Number(m).toFixed(1)+'%'}</b></div></div><p class="op-caption">${q.awaiting&&q.age!==null?`${Math.max(0,-q.age)} días desde la fecha de cotización · `:''}Vigencia: ${esc(f['Fecha vencimiento']||'sin fecha')}</p><footer><span><small>Siguiente paso</small>${esc(q.next)}</span>${button(missingOrder?'Crear pedido':'Ver propuesta',missingOrder?'quote-order':'quote',c.id,'op-primary')}</footer></article>`;
     }).join(''):'<div class="op-empty">No hay cotizaciones en esta selección.</div>';
     $('opQuoteMore').innerHTML=rows.length>ui.limit?button(`Ver más · ${rows.length-ui.limit} pendientes`,'more-quotes'):'';
   }
@@ -208,6 +210,7 @@
     if(a==='cot-filter'){selectCot(arg);return;}
     if(a==='aging'){ui.aging=arg;ui.limit=24;collections();return;}
     if(a==='order'||a==='quote'){openRecord(a,arg);return;}
+    if(a==='quote-order'){convertirCotAPedido(arg,b);return;}
     if(a==='close-drawer'){$('opDrawer')?.close();return;}
     if(a==='today-orders'){if(!allowed('pedidos'))return;switchTab('pedidos');renderPedidos(arg==='soon'?'proximos':arg);return;}
     if(a==='today-quotes'){if(!allowed('cotizaciones'))return;switchTab('cotizaciones');selectCot(arg);return;}
