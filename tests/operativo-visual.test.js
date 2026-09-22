@@ -112,3 +112,16 @@ test('margen de cotización usa gradiente azul a rojo',()=>{
   assert.equal(op.marginColor(-20),low);
   assert.equal(op.marginColor(150),high);
 });
+
+
+test('el detalle de cotización expone acciones de estado equivalentes a la vista experta',()=>{
+  const {op}=setup();
+  let html=op.quoteStateActions(record('c',{'Estado cotización':'Enviada'}));
+  assert.match(html,/Aprobar cotización/);assert.match(html,/Rechazar cotización/);assert.match(html,/Pasar a negociación/);
+  assert.match(html,/quote-status/);
+  html=op.quoteStateActions(record('c',{'Estado cotización':'Solicitada'}));assert.match(html,/Marcar enviada/);
+  html=op.quoteStateActions(record('c',{'Estado cotización':'Rechazada'}));assert.match(html,/Reactivar como enviada/);
+  const linked=setup();linked.context._pedidoDeCot=()=>record('p',{'N° Pedido':'PED-1'});
+  html=linked.op.quoteStateActions(record('c',{'Estado cotización':'Aprobada'}));assert.match(html,/Ver pedido vinculado/);assert.match(html,/quote-linked-order/);
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');assert.match(src,/updateCotizacionEstado\(id,estado\)/,'las acciones deben reutilizar el flujo persistente existente');
+});
