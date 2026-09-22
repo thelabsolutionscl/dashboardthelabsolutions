@@ -97,8 +97,10 @@
     const n=Number(value);
     if(!Number.isFinite(n))return '';
     const p=Math.max(0,Math.min(100,n));
-    // Menor margen = azul; mayor margen = rojo.
-    const hue=Math.round(210*(1-p/100));
+    // Escala visual: 0–45% transiciona de azul a rojo.
+    // Desde 45% en adelante se mantiene rojo para destacar márgenes altos.
+    if(p>=45)return 'hsl(0 85% 65%)';
+    const hue=Math.round(210*(1-p/45));
     return `hsl(${hue} 85% 65%)`;
   }
   function quoteStateActions(c){
