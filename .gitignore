@@ -4,3 +4,5 @@ printer-bridge/maint-config.json
 # Secretos server-side de mail-api.php (Resend) — nunca versionar
 mail-api-config.php
 resend.key
+# Caché local de Wrangler (airtable-proxy, sii-worker, lead-worker)
+.wrangler/
