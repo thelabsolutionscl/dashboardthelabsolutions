@@ -77,12 +77,15 @@ test('cobranza vacía y con filtro sin coincidencias se limpia al volver a calcu
 
 
 test('el detalle de pedido permite avanzar por el ciclo operativo',()=>{
-  const {op}=setup();
+  const {op,element}=setup();
   assert.equal(op.nextOrderStage(record('p',{'Estado pedido':'Confirmado'})),'En producción');
+  assert.equal(op.nextOrderStage(record('p',{'Estado pedido':' Confirmado '})),'En producción');
   assert.equal(op.nextOrderStage(record('p',{'Estado pedido':'En producción'})),'Listo para despacho');
   assert.equal(op.nextOrderStage(record('p',{'Estado pedido':'Despachado'})),'Completado');
   assert.equal(op.nextOrderStage(record('p',{'Estado pedido':'Completado'})),null);
+  op.orders([record('p',{'N° Pedido':'PED-1','Estado pedido':'Confirmado','Cliente':'ABC'})],[]);
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  assert.match(src,/Pasar a producción/,'el detalle debe mostrar una acción visible para iniciar producción');
   assert.match(src,/['"]order-advance['"]/,'el drawer debe exponer la acción para avanzar');
   assert.match(src,/await\s+advancePedido\(arg,next\)/,'la acción debe usar el flujo persistente advancePedido');
 });

@@ -98,18 +98,20 @@
   }
   function stepper(e){const current=stages.indexOf(e);return `<ol class="op-stages" aria-label="Etapas de producción">${stages.map((s,i)=>`<li class="${current>=i?'is-done':''}"${i===current?' aria-current="step"':''}><span>${esc(s)}</span></li>`).join('')}</ol>`;}
   function nextOrderStage(p){
-    const e=p?.fields?.['Estado pedido']||'',i=stages.indexOf(e);
+    const raw=String(p?.fields?.['Estado pedido']||'').trim();
+    const i=stages.findIndex(s=>s.toLocaleLowerCase('es')===raw.toLocaleLowerCase('es'));
     return i>=0&&i<stages.length-1?stages[i+1]:null;
   }
   function orderCard(p,detail=false){
     const f=p.fields,e=f['Estado pedido']||'Sin estado',pay=payment(p),late=until(f['Fecha entrega'])<0&&until(f['Fecha entrega'])!==null&&!closed.includes(e);
+    const nextStage=detail?nextOrderStage(p):null;
     const cot=state.cotizacionesById?.[f['Cotizaciones']?.[0]];
     const title=f['Alias / Título']||cot?.fields?.['Alias / Título']||f['N° Pedido']||'Pedido';
     const next=e==='Listo para despacho'&&f['Resultado QA']!=='QA aprobado'?'Revisar control de calidad':e==='Confirmado'?'Preparar producción':e==='En producción'?'Revisar avance y entrega':e==='Despachado'?'Revisar entrega y pago':e==='Cancelado'?'Pedido cancelado':'Consultar detalle';
     return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${pill(late?'Entrega atrasada':e,late?'danger':'neutral')}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
       <div class="op-payment"><b>Pago</b> ${pill(pay.label,pay.tone)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
-      ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span>${detail?'':button('Ver pedido','order',p.id,'op-primary')}</footer></article>`;
+      ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span>${detail&&nextStage?button(nextStage==='En producción'?'Pasar a producción':nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',p.id,'op-primary'):detail?'':button('Ver pedido','order',p.id,'op-primary')}</footer></article>`;
   }
   function orders(rows,all){
     mount();const el=$('opOrders');if(!el)return;
@@ -201,9 +203,8 @@
     dlg.dataset.kind=kind;
     const f=r.fields,isOrder=kind==='order';
     const nextStage=isOrder?nextOrderStage(r):null;
-    const advanceButton=isOrder&&nextStage?button(nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',id,'op-primary'):'';
     const editTone=!isOrder||!nextStage?'op-primary':'';
-    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div><p>${esc(quoteInfo(r).next)}</p>`}<div class="op-drawer-actions">${advanceButton}${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,editTone)}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'El envío y los cambios de estado están disponibles al editar la cotización o en Experto.'}</p>`;
+    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div><p>${esc(quoteInfo(r).next)}</p>`}<div class="op-drawer-actions">${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,editTone)}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'El envío y los cambios de estado están disponibles al editar la cotización o en Experto.'}</p>`;
     if(!dlg.open)dlg.showModal();
   }
   function goFinance(tab){if(!allowed('finanzas'))return;switchTab('finanzas');finSwitchTab(tab);finance();}
