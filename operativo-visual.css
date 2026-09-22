@@ -36,6 +36,8 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-facts>div{padding-left:14px;min-width:0}
 .op-facts span,.op-facts small{display:block;color:var(--text2);font-size:12px;line-height:1.5}
 .op-facts b{display:block;font-size:17px;font-weight:600;line-height:1.6;overflow-wrap:anywhere}
+.op-margin-fact{border-left:4px solid var(--op-margin-color,var(--border2));padding-left:14px!important}
+.op-margin-fact b{color:var(--op-margin-color,var(--text))}
 .op-payment{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;font-size:12px;border-top:1px solid var(--border)}
 .op-payment>small{flex-basis:100%;color:var(--text2);font-size:12px;line-height:1.5}
 .op-payment-quick{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 0 14px;border-bottom:1px solid var(--border)}
