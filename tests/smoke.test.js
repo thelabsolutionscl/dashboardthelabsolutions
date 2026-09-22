@@ -231,6 +231,22 @@ const ok = msg => console.log('  ✓ ' + msg);
   else ok('styles.css presente y enlazada con cache-busting');
 }
 
+// ── 4b. SELECCIONES ACTIVAS: CYAN CONSISTENTE ───────────────────────────────
+{
+  const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
+  const required = [
+    '.btn-ghost.active-filter',
+    '[role="group"] > button[aria-pressed="true"]',
+    'button[role="tab"][aria-selected="true"]',
+    '.tab-btn.active',
+    '.cal-chip.on'
+  ];
+  const missing = required.filter(sel => !css.includes(sel));
+  if (missing.length) fail('Selectores activos sin regla cyan global: ' + missing.join(', '));
+  else if (!/background:var\(--accent\)!important/.test(css) || !/color:#061513!important/.test(css)) fail('La selección activa debe usar fondo cyan y texto oscuro');
+  else ok('Selecciones activas usan cyan de forma consistente');
+}
+
 // ── 5. WORKFLOWS DE GITHUB: YAML válido ────────────────────────────────────
 // Un ':' suelto en un nombre de step invalida el YAML y el deploy falla en
 // silencio hasta que miras Actions. Esto lo caza antes del push.

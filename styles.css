@@ -2595,3 +2595,49 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-service-trust-grid article time{grid-column:2;font-size:8.5px;color:var(--text3);opacity:.7}
 @media(max-width:1100px){.mops-service-trust-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.mops-service-trust-head{align-items:flex-start;flex-direction:column}.mops-service-trust-grid{grid-template-columns:1fr}}
+
+
+/* ── Estado seleccionado unificado ─────────────────────────────
+   Toda selección de vista/filtro/segmento debe verse CYAN, no negra.
+   Se fuerza al final de la hoja para ganar a estilos locales anteriores. */
+.btn-ghost.active-filter,
+[role="group"] > button[aria-pressed="true"],
+button[role="tab"][aria-selected="true"],
+.tab-btn.active,
+.cd-tab.active,
+.agent-view-switch button.active,
+.agent-card-view-switch button.active,
+.notif-filter-btn.active,
+.cal-chip.on,
+.cli-cat-chip.active,
+.cli-origen-chip.active,
+.of-vbtn.active,
+.avr-tabs button.active,
+#tab-maquinas .maq-workspace-nav button.active,
+#tab-maquinas .mops-plan-filters button.active{
+  background:var(--accent)!important;
+  color:#061513!important;
+  border-color:var(--accent)!important;
+  box-shadow:0 0 0 1px rgba(0,212,204,.22),0 0 14px rgba(0,212,204,.16)!important;
+}
+
+/* Evita que reglas de hover/focus vuelvan a oscurecer una selección activa. */
+.btn-ghost.active-filter:hover,
+[role="group"] > button[aria-pressed="true"]:hover,
+button[role="tab"][aria-selected="true"]:hover,
+.tab-btn.active:hover,
+.cd-tab.active:hover,
+.agent-view-switch button.active:hover,
+.agent-card-view-switch button.active:hover,
+.notif-filter-btn.active:hover,
+.cal-chip.on:hover,
+.cli-cat-chip.active:hover,
+.cli-origen-chip.active:hover,
+.of-vbtn.active:hover,
+.avr-tabs button.active:hover,
+#tab-maquinas .maq-workspace-nav button.active:hover,
+#tab-maquinas .mops-plan-filters button.active:hover{
+  background:#06ece2!important;
+  color:#061513!important;
+  border-color:#06ece2!important;
+}
