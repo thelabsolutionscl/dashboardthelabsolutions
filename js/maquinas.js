@@ -1706,6 +1706,8 @@ function preheatPrinter(id,mat){
 function cooldownPrinter(id){_sendGcode(id,'M104 S0\nM140 S0','❄️ Enfriando — calentadores apagados');}
 
 const _bedLevelRuns={};
+const _BED_LEVEL_TIMEOUT_MS=300000;
+function _bedLevelTimeoutMs(m){return /Giga/i.test(String(m?.modelo||''))?600000:_BED_LEVEL_TIMEOUT_MS;}
 function _bedLevelStats(mesh){
   const matrix=mesh?.probed_matrix||mesh?.mesh_matrix;
   if(!Array.isArray(matrix)||!matrix.length)return null;
@@ -1733,18 +1735,78 @@ function _bedLevelGrade(range){
   if(range<=0.40)return{label:'ATENCIÓN',color:'#ffaa00',hint:'Conviene revisar nivelación mecánica'};
   return{label:'DESNIVEL ALTO',color:'#ff5555',hint:'Revisa tornillos/cama antes de confiar solo en el mesh'};
 }
+function _bedLevelMetaKey(id){return'printer_bedmesh_verified_'+id;}
+function _bedLevelMetaRead(id,signature=''){
+  try{
+    const meta=JSON.parse(localStorage.getItem(_bedLevelMetaKey(id))||'null');
+    if(!meta||!meta.signature||!meta.calibratedAt)return null;
+    if(signature&&meta.signature!==signature)return null;
+    return meta;
+  }catch(_){return null;}
+}
+function _bedLevelMetaWrite(id,st){
+  const signature=_bedLevelSignature(st);if(!signature)return null;
+  const meta={signature,calibratedAt:Date.now(),range:st.range};
+  try{localStorage.setItem(_bedLevelMetaKey(id),JSON.stringify(meta));}catch(_){}
+  return meta;
+}
+function _bedLevelAge(ts){
+  const ms=Math.max(0,Date.now()-Number(ts||0)),min=Math.floor(ms/60000);
+  if(min<1)return'hace menos de 1 min';
+  if(min<60)return`hace ${min} min`;
+  const h=Math.floor(min/60);if(h<24)return`hace ${h} h`;
+  const d=Math.floor(h/24);return`hace ${d} día${d===1?'':'s'}`;
+}
+function _bedLevelSetState(id,label,color='var(--text3)'){
+  const el=document.getElementById('pcBedLevelState_'+id);
+  if(el){
+    el.textContent=label||'';
+    el.style.color=color;
+    el.style.borderColor=color;
+    el.style.background=color==='var(--text3)'?'var(--surface)':'color-mix(in srgb, '+color+' 10%, transparent)';
+  }
+}
 function _bedLevelSetStatus(id,text,color){
   const el=document.getElementById('pcBedLevelRun_'+id);
   if(el){el.textContent=text||'';el.style.color=color||'var(--text3)';}
+}
+function _bedLevelSetSource(id,st,opts={}){
+  const el=document.getElementById('pcBedLevelSource_'+id);if(!el||!st)return;
+  const sig=_bedLevelSignature(st),meta=opts.verifiedAt
+    ?{signature:sig,calibratedAt:opts.verifiedAt}
+    :_bedLevelMetaRead(id,sig);
+  if(meta){
+    const when=new Date(meta.calibratedAt).toLocaleString('es-CL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    el.innerHTML=`<b style="color:#00d4aa">✓ CALIBRACIÓN VERIFICADA</b> · ${when} · ${_bedLevelAge(meta.calibratedAt)}<br><span style="color:var(--text3)">Esta fecha corresponde a una calibración confirmada por este navegador con esta misma malla.</span>`;
+  }else{
+    el.innerHTML=`<b style="color:#ffaa00">⚠ EDAD DE LA MALLA DESCONOCIDA</b><br><span style="color:var(--text3)">Moonraker entrega la malla activa, pero no su fecha de calibración. Este valor puede provenir de una calibración anterior.</span>`;
+  }
 }
 function _bedLevelSetBusy(id,busy,label){
   const btn=document.getElementById('pcBedAuto_'+id);
   if(btn){
     btn.disabled=!!busy;
     btn.textContent=busy?(label||'⏳ CALIBRANDO…'):'⚙ CALIBRAR AUTOMÁTICAMENTE';
-    btn.style.opacity=busy?'.65':'1';
+    btn.style.opacity=busy?'.72':'1';
     btn.style.cursor=busy?'not-allowed':'pointer';
   }
+  ['pcBedRefresh_','pcBedMap_'].forEach(prefix=>{
+    const el=document.getElementById(prefix+id);if(!el)return;
+    el.disabled=!!busy;el.style.opacity=busy?'.45':'1';el.style.cursor=busy?'not-allowed':'pointer';
+  });
+}
+function _bedLevelMarkPrevious(id){
+  const src=document.getElementById('pcBedLevelSource_'+id);
+  if(src)src.innerHTML='<b style="color:#ffaa00">VALOR ANTERIOR</b><br><span style="color:var(--text3)">La cifra visible corresponde a la malla previa. Se reemplazará cuando termine y se verifique la nueva calibración.</span>';
+}
+function _bedLevelRestoreRunUi(id){
+  const run=_bedLevelRuns[id];if(!run?.active)return false;
+  const elapsed=Math.max(0,Math.floor((Date.now()-run.startedAt)/1000));
+  _bedLevelSetBusy(id,true,`⏳ CALIBRANDO · ${elapsed}s`);
+  _bedLevelSetState(id,'CALIBRANDO','#ffaa00');
+  _bedLevelSetStatus(id,run.phaseText||'Calibrando cama…','#ffaa00');
+  _bedLevelMarkPrevious(id);
+  return true;
 }
 function _bedLevelRenderStats(id,st,opts={}){
   const value=document.getElementById('pcBedLevelValue_'+id);
@@ -1761,7 +1823,10 @@ function _bedLevelRenderStats(id,st,opts={}){
   if(detail)detail.textContent=`mín ${st.min.toFixed(3)} mm (${lo}) · máx ${st.max.toFixed(3)} mm (${hi}) · prom ${st.avg.toFixed(3)} mm · ${st.points} puntos · ${g.hint}`;
   if(fill){fill.style.width=pct+'%';fill.style.background=g.color;}
   if(marker){marker.style.left=`calc(${pct}% - 5px)`;marker.style.background=g.color;}
-  if(opts.status!==false)_bedLevelSetStatus(id,opts.statusText||`Lectura actualizada · ${new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`,g.color);
+  _bedLevelSetSource(id,st,opts);
+  if(opts.verifiedAt)_bedLevelSetState(id,'CALIBRADA AHORA','#00d4aa');
+  else _bedLevelSetState(id,'MALLA ACTIVA',g.color);
+  if(opts.status!==false)_bedLevelSetStatus(id,opts.statusText||`Malla leída ahora · ${new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`,g.color);
 }
 async function printerBedLevelRefresh(id,opts={}){
   const value=document.getElementById('pcBedLevelValue_'+id);
@@ -1770,7 +1835,11 @@ async function printerBedLevelRefresh(id,opts={}){
   const fill=document.getElementById('pcBedLevelFill_'+id);
   const marker=document.getElementById('pcBedLevelMarker_'+id);
   if(!value&&!detail)return null;
-  if(!opts.quietStatus)_bedLevelSetStatus(id,'Leyendo bed mesh…','var(--text3)');
+  if(_bedLevelRuns[id]?.active&&!opts.forceDuringRun){_bedLevelRestoreRunUi(id);return null;}
+  if(!opts.quietStatus){
+    _bedLevelSetState(id,'LEYENDO','var(--text3)');
+    _bedLevelSetStatus(id,'Leyendo malla activa desde Moonraker…','var(--text3)');
+  }
   const data=await _moonrakerGet(id,'/printer/objects/query?bed_mesh',9000);
   if(!data?.result?.status){
     if(value)value.textContent='—';
@@ -1778,6 +1847,8 @@ async function printerBedLevelRefresh(id,opts={}){
     if(detail)detail.textContent='No se pudo leer la malla desde Moonraker. Revisa conexión/telemetría antes de calibrar.';
     if(fill)fill.style.width='0%';
     if(marker)marker.style.left='0%';
+    const src=document.getElementById('pcBedLevelSource_'+id);if(src)src.textContent='No hay una lectura confiable disponible.';
+    _bedLevelSetState(id,'SIN RESPUESTA','var(--danger)');
     _bedLevelSetStatus(id,'Moonraker no respondió','var(--danger)');
     return null;
   }
@@ -1786,40 +1857,52 @@ async function printerBedLevelRefresh(id,opts={}){
   if(!st){
     if(value)value.textContent='—';
     if(gradeEl){gradeEl.textContent='SIN MEDICIÓN';gradeEl.style.color='var(--text3)';}
-    if(detail)detail.textContent='Sin malla disponible. Ejecuta la calibración automática.';
+    if(detail)detail.textContent='Sin malla activa. Ejecuta la calibración automática para crear una.';
     if(fill)fill.style.width='0%';
     if(marker)marker.style.left='0%';
+    const src=document.getElementById('pcBedLevelSource_'+id);if(src)src.textContent='No existe una malla activa en Moonraker.';
+    _bedLevelSetState(id,'SIN MALLA','var(--text3)');
     _bedLevelSetStatus(id,'Sin bed mesh activo','var(--text3)');
     return null;
   }
-  _bedLevelRenderStats(id,st,{status:!opts.quietStatus,statusText:opts.statusText});
+  _bedLevelRenderStats(id,st,{status:!opts.quietStatus,statusText:opts.statusText,verifiedAt:opts.verifiedAt});
   if(opts.announce){
-    const g=_bedLevelGrade(st.range);
-    toast(`🛏 Desnivel de cama: ${(st.range*1000).toFixed(0)} µm · ${g.label}`,st.range<=0.25?'success':st.range<=0.40?'info':'error');
+    const g=_bedLevelGrade(st.range),known=!!_bedLevelMetaRead(id,_bedLevelSignature(st));
+    toast(`🛏 Malla activa: ${(st.range*1000).toFixed(0)} µm · ${g.label}${known?' · fecha verificada':' · antigüedad desconocida'}`,st.range<=0.25?'success':st.range<=0.40?'info':'error');
   }
   return st;
 }
 function _bedLevelSleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
-async function _bedLevelWaitForCompletion(id,beforeSig,timeoutMs=180000){
-  const started=Date.now();let sawCleared=false;
+async function _bedLevelWaitForCompletion(id,beforeSig,timeoutMs){
+  const started=Date.now();let sawCleared=false,sawDifferent=false;
   while(Date.now()-started<timeoutMs){
-    const elapsed=Math.max(1,Math.round((Date.now()-started)/1000));
+    const run=_bedLevelRuns[id];
+    if(!run?.active||run.cancelled)return null;
+    const elapsed=Math.max(1,Math.round((Date.now()-run.startedAt)/1000));
     _bedLevelSetBusy(id,true,`⏳ CALIBRANDO · ${elapsed}s`);
+    _bedLevelSetState(id,'CALIBRANDO','#ffaa00');
     const data=await _moonrakerGet(id,'/printer/objects/query?bed_mesh',9000);
     if(data?.result?.status){
       const st=_bedLevelStats(data.result.status.bed_mesh);
       if(!st){
         sawCleared=true;
-        _bedLevelSetStatus(id,'Midiendo la cama punto por punto…','#ffaa00');
+        run.phaseText='CALIBRANDO · malla anterior limpiada · midiendo puntos…';
+        _bedLevelSetStatus(id,run.phaseText,'#ffaa00');
       }else{
         const sig=_bedLevelSignature(st);
-        if(sawCleared||!beforeSig||sig!==beforeSig)return st;
-        _bedLevelSetStatus(id,'Comando aceptado · esperando una malla nueva…','#ffaa00');
+        if(beforeSig&&sig!==beforeSig)sawDifferent=true;
+        if(sawCleared||sawDifferent||!beforeSig){
+          run.observedFresh=true;
+          return st;
+        }
+        run.phaseText='CALIBRANDO · esperando la nueva malla…';
+        _bedLevelSetStatus(id,run.phaseText,'#ffaa00');
       }
     }else{
-      _bedLevelSetStatus(id,'Calibrando · esperando respuesta de Moonraker…','#ffaa00');
+      run.phaseText='CALIBRANDO · esperando respuesta de Moonraker…';
+      _bedLevelSetStatus(id,run.phaseText,'#ffaa00');
     }
-    await _bedLevelSleep(3500);
+    await _bedLevelSleep(1200);
   }
   return null;
 }
@@ -1828,45 +1911,68 @@ async function printerAutoBedCalibrate(id){
   if(_bedLevelRuns[id]?.active){toast('⏳ Esta impresora ya está calibrando la cama','info');return;}
   if(!_printerControlFresh(id)){toast('🔒 '+_printerControlReason(id)+' — no se puede calibrar','error');return;}
   if(_isPrinterBusy(_pcState(id))){toast('🔒 Está imprimiendo o pausada — la calibración de cama está bloqueada','error');return;}
-  if(!confirm(`🛏 Calibrar automáticamente la cama de ${m.nombre} #${m.numG}?\n\nLa impresora hará HOME y medirá la cama punto por punto.\n\nAsegúrate de que la cama esté completamente despejada.\n\nEsto genera compensación de malla; no reemplaza una corrección mecánica si el desnivel es alto.`))return;
+  if(!confirm(`🛏 Calibrar automáticamente la cama de ${m.nombre} #${m.numG}?\n\nLa impresora hará HOME, borrará temporalmente la malla activa y medirá la cama punto por punto.\n\nAsegúrate de que la cama esté completamente despejada.\n\nLa cifra actual se marcará como VALOR ANTERIOR hasta verificar la nueva malla.`))return;
 
   const beforeData=await _moonrakerGet(id,'/printer/objects/query?bed_mesh',9000);
   const before=_bedLevelStats(beforeData?.result?.status?.bed_mesh);
   const beforeSig=_bedLevelSignature(before);
-  _bedLevelRuns[id]={active:true,startedAt:Date.now(),beforeRange:before?.range??null};
-  _bedLevelSetBusy(id,true,'⏳ INICIANDO…');
-  _bedLevelSetStatus(id,'Preparando HOME y limpieza de malla…','#ffaa00');
+  const timeoutMs=_bedLevelTimeoutMs(m);
+  const run={active:true,cancelled:false,startedAt:Date.now(),beforeRange:before?.range??null,beforeSig,phaseText:'CALIBRANDO · iniciando HOME…',observedFresh:false};
+  _bedLevelRuns[id]=run;
+  _bedLevelSetBusy(id,true,'⏳ CALIBRANDO · 0s');
+  _bedLevelSetState(id,'CALIBRANDO','#ffaa00');
+  _bedLevelSetStatus(id,run.phaseText,'#ffaa00');
+  _bedLevelMarkPrevious(id);
 
+  // Empieza a observar la malla ANTES de enviar el G-code. Así podemos ver
+  // BED_MESH_CLEAR incluso cuando Moonraker mantiene abierto el POST hasta que
+  // termina la calibración, y una malla nueva idéntica a la anterior sigue
+  // siendo verificable porque vimos que la anterior desapareció.
+  const waitPromise=_bedLevelWaitForCompletion(id,beforeSig,timeoutMs);
   try{
-    const ok=await _sendGcode(id,'G28\nBED_MESH_CLEAR\nBED_MESH_CALIBRATE','🛏 Calibración automática iniciada',{timeout:300000});
+    const ok=await _sendGcode(id,'G28\nBED_MESH_CLEAR\nBED_MESH_CALIBRATE',null,{timeout:timeoutMs+30000});
     if(!ok){
-      _bedLevelSetStatus(id,'No se pudo confirmar el inicio de la calibración','var(--danger)');
-      toast('No se pudo iniciar o confirmar la calibración de cama','error');
+      run.cancelled=true;
+      _bedLevelSetState(id,'ERROR','var(--danger)');
+      _bedLevelSetStatus(id,'No se pudo iniciar o completar la calibración','var(--danger)');
+      toast('No se pudo iniciar o completar la calibración de cama','error');
       return;
     }
 
-    let after=await printerBedLevelRefresh(id,{quietStatus:true});
-    if(after&&beforeSig&&_bedLevelSignature(after)===beforeSig)after=null;
-    if(!after)after=await _bedLevelWaitForCompletion(id,beforeSig,180000);
+    run.phaseText='VERIFICANDO · comprobando malla nueva…';
+    _bedLevelSetState(id,'VERIFICANDO','#38bdf8');
+    _bedLevelSetStatus(id,run.phaseText,'#38bdf8');
+    let after=await waitPromise;
+
+    // Fallback final: si por latencia no vimos el CLEAR, aceptamos una matriz
+    // diferente. Si es idéntica y nunca vimos CLEAR no fingimos certeza.
+    if(!after){
+      const current=await printerBedLevelRefresh(id,{quietStatus:true,forceDuringRun:true,status:false});
+      if(current&&(!beforeSig||_bedLevelSignature(current)!==beforeSig))after=current;
+    }
 
     if(!after){
-      await printerBedLevelRefresh(id,{quietStatus:true});
-      _bedLevelSetStatus(id,'⚠ No se pudo confirmar una malla nueva. Revisa el mapa antes de imprimir.','#ffaa00');
-      toast('⚠ Calibración enviada, pero no pude verificar una malla nueva','error');
+      _bedLevelSetState(id,'NO VERIFICADA','#ffaa00');
+      _bedLevelSetStatus(id,'⚠ La calibración terminó, pero no pude demostrar que la malla visible sea nueva. Revisa el mapa antes de imprimir.','#ffaa00');
+      _bedLevelMarkPrevious(id);
+      toast('⚠ Calibración terminada, pero la malla nueva no pudo verificarse','error');
       return;
     }
 
+    const verifiedAt=Date.now(),meta=_bedLevelMetaWrite(id,after);
     const delta=before?after.range-before.range:null;
-    let resultText='Calibración verificada';
+    let resultText='Calibración nueva verificada';
     if(delta!==null&&Math.abs(delta)>=0.005){
       resultText+=delta<0?` · mejoró ${Math.abs(delta*1000).toFixed(0)} µm`:` · aumentó ${Math.abs(delta*1000).toFixed(0)} µm`;
+    }else if(delta!==null){
+      resultText+=' · cambio <5 µm';
     }
-    _bedLevelRenderStats(id,after,{statusText:resultText});
+    _bedLevelRenderStats(id,after,{statusText:resultText,verifiedAt:meta?.calibratedAt||verifiedAt});
     const g=_bedLevelGrade(after.range);
     toast(`🛏 ${resultText} · ${(after.range*1000).toFixed(0)} µm · ${g.label}`,after.range<=0.25?'success':after.range<=0.40?'info':'error');
     _audit3DRefreshBurst([1500,8000,30000]);
   }finally{
-    if(_bedLevelRuns[id])_bedLevelRuns[id].active=false;
+    run.active=false;
     _bedLevelSetBusy(id,false);
   }
 }
@@ -2019,7 +2125,7 @@ function openPrinterControl(id){
     <div id="pcBedLevel_${id}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:12px;margin-bottom:18px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-items:center">
         <div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Desnivel máximo de la cama</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px"><span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Desnivel máximo de la malla activa</span><span id="pcBedLevelState_${id}" style="font-size:9px;font-weight:900;letter-spacing:.6px;border:1px solid var(--text3);border-radius:999px;padding:3px 7px;color:var(--text3)">LEYENDO</span></div>
           <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
             <span id="pcBedLevelValue_${id}" style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:800;color:var(--text)">—</span>
             <span id="pcBedLevelGrade_${id}" style="font-size:11px;font-weight:900;color:var(--text3)">LEYENDO…</span>
@@ -2029,13 +2135,15 @@ function openPrinterControl(id){
             <span id="pcBedLevelMarker_${id}" style="position:absolute;top:-3px;left:0;width:10px;height:16px;border-radius:5px;background:var(--text3);box-shadow:0 0 0 2px var(--surface2)"></span>
           </div>
           <div style="position:relative;height:13px;font-size:9px;color:var(--text3)"><span style="position:absolute;left:0">0 µm</span><span style="position:absolute;left:25%;transform:translateX(-50%)">150</span><span style="position:absolute;left:41.67%;transform:translateX(-50%)">250</span><span style="position:absolute;left:66.67%;transform:translateX(-50%)">400</span><span style="position:absolute;right:0">600+ µm</span></div>
-          <div id="pcBedLevelDetail_${id}" style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.4">Leyendo bed mesh…</div><div id="pcBedLevelRun_${id}" style="font-size:9.5px;color:var(--text3);margin-top:5px;font-weight:700">Estado: leyendo…</div>
+          <div id="pcBedLevelDetail_${id}" style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.4">Leyendo bed mesh…</div>
+          <div id="pcBedLevelSource_${id}" style="font-size:9.5px;color:var(--text3);margin-top:7px;line-height:1.4;padding:7px 8px;border:1px solid var(--border2);border-radius:7px;background:var(--surface)">Identificando procedencia de la malla…</div>
+          <div id="pcBedLevelRun_${id}" style="font-size:10px;color:var(--text3);margin-top:7px;font-weight:800">Estado: leyendo…</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:7px">
           <button id="pcBedAuto_${id}" onclick="printerAutoBedCalibrate('${id}')" ${motionLocked?'disabled':''} style="background:${motionLocked?'var(--surface3)':'rgba(0,212,170,.12)'};border:1px solid ${motionLocked?'var(--border2)':'rgba(0,212,170,.4)'};color:${motionLocked?'var(--text3)':'var(--accent)'};border-radius:9px;padding:10px 12px;font-size:11px;font-weight:900;cursor:${motionLocked?'not-allowed':'pointer'}">⚙ CALIBRAR AUTOMÁTICAMENTE</button>
-          <button onclick="printerBedLevelRefresh('${id}',{announce:true})" style="background:var(--surface);border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer">↻ MEDIR DESNIVEL</button>
-          <button onclick="openBedMesh('${id}')" style="background:var(--surface);border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer">🗺 VER MAPA DE CAMA</button>
-          <div style="font-size:9.5px;color:var(--text3);line-height:1.35">La calibración ejecuta <b>HOME + BED_MESH_CALIBRATE</b>. Compensa electrónicamente pequeñas variaciones; si supera 400 µm conviene corregir la cama físicamente.</div>
+          <button id="pcBedRefresh_${id}" onclick="printerBedLevelRefresh('${id}',{announce:true})" style="background:var(--surface);border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer">↻ ACTUALIZAR LECTURA</button>
+          <button id="pcBedMap_${id}" onclick="openBedMesh('${id}')" style="background:var(--surface);border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer">🗺 VER MAPA DE CAMA</button>
+          <div style="font-size:9.5px;color:var(--text3);line-height:1.45"><b>ACTUALIZAR LECTURA</b> solo relee la malla que Moonraker tiene activa; no vuelve a medir físicamente la cama.<br><b>CALIBRAR</b> ejecuta HOME + BED_MESH_CLEAR + BED_MESH_CALIBRATE y crea una malla nueva. Si supera 400 µm conviene corregir la cama físicamente.</div>
         </div>
       </div>
     </div>
@@ -2060,7 +2168,9 @@ function openPrinterControl(id){
     <details class="op-expert-only" style="margin-bottom:12px"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📂 Archivos en la impresora</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterFiles('${id}')">↻ Cargar</button></div><div id="pcFiles" style="max-height:160px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px"><div style="color:var(--text3);font-size:12px;padding:8px">Pulsa “Cargar” para ver los G-code y reimprimir.</div></div></details>
     <details class="op-expert-only"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text2)">📊 Historial real (Moonraker)</summary><div style="display:flex;justify-content:flex-end;margin:8px 0"><button onclick="loadPrinterHistory('${id}')">↻ Cargar</button></div><div id="pcHistory" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px"><div style="color:var(--text3);font-size:12px;padding:8px">Tiempo y filamento reales de cada trabajo.</div></div></details>`;
   document.getElementById('printerControlModal').style.display='flex';
-  setTimeout(()=>printerBedLevelRefresh(id).catch(()=>{}),0);
+  setTimeout(()=>{
+    if(!_bedLevelRestoreRunUi(id))printerBedLevelRefresh(id).catch(()=>{});
+  },0);
 }
 function closePrinterControl(){const el=document.getElementById('printerControlModal');if(el)el.style.display='none';}
 
