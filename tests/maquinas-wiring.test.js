@@ -325,12 +325,20 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(control,/repeat\(auto-fit,minmax\(220px,1fr\)\)/);
   assert.match(control,/pcBedRecommendation_/);
   assert.match(control,/pcBedHistory_/);
-  assert.match(MAQ,/BED_LEVEL_HISTORY_V1/,'historial debe tener respaldo compartido');
+  assert.match(MAQ,/BED_LEVEL_HISTORY_V2/,'historial v2 debe tener respaldo compartido con firma de malla');
   assert.match(MAQ,/function _bedLevelDiagnose\(/);
+  assert.match(MAQ,/function _bedLevelPlaneFit\(/,'debe separar inclinación global de deformación local');
   assert.match(MAQ,/function _bedLevelHistoryTrendSvg\(/);
   assert.match(MAQ,/function _bedLevelRecommendation\(/);
+  assert.match(MAQ,/function getBedLevelPreflightFact\(/,'preflight debe poder consultar la malla activa en Moonraker');
+  assert.match(MAQ,/signature/,'el historial debe guardar firma de la malla');
   assert.match(MAQ,/bedTempStart/,'calibración debe registrar temperatura de cama');
-  assert.match(MAQ,/DIAGNÓSTICO FÍSICO GUIADO/);
+  assert.match(MAQ,/printerScrewsTiltGuide/);
+  assert.match(MAQ,/printerZTiltAdjust/);
+  assert.match(MAQ,/PLA 60°/);
+  assert.match(MAQ,/PETG 75°/);
+  assert.match(MAQ,/ABS 100°/);
+  assert.match(MAQ,/DIAGNÓSTICO GEOMÉTRICO/);
 });
 
 test('preflight, QA, postproducción e incidentes forman un flujo continuo',()=>{
