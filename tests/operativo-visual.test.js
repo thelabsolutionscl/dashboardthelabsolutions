@@ -103,16 +103,20 @@ test('el detalle de pedido expone controles rápidos de pago',()=>{
 });
 
 
-test('margen de cotización usa gradiente azul a rojo y queda rojo desde 45%',()=>{
+test('margen de cotización usa degradé azul verde naranjo rojo por rangos',()=>{
   const {op}=setup();
-  const low=op.marginColor(0),mid=op.marginColor(22.5),threshold=op.marginColor(45),high=op.marginColor(73);
-  assert.equal(low,'hsl(210 85% 65%)');
-  assert.equal(mid,'hsl(105 85% 65%)');
-  assert.equal(threshold,'hsl(0 85% 65%)');
-  assert.equal(high,'hsl(0 85% 65%)');
-  assert.equal(op.marginColor(100),'hsl(0 85% 65%)');
-  assert.equal(op.marginColor(-20),low);
-  assert.equal(op.marginColor(150),'hsl(0 85% 65%)');
+  assert.equal(op.marginColor(0),'hsl(215 88% 68%)');
+  assert.equal(op.marginColor(24.9),'hsl(200 88% 56%)');
+  assert.equal(op.marginColor(25),'hsl(145 78% 60%)');
+  assert.equal(op.marginColor(32.5),'hsl(130 78% 56%)');
+  assert.equal(op.marginColor(40),'hsl(38 95% 62%)');
+  assert.equal(op.marginColor(50),'hsl(27 95% 57%)');
+  assert.equal(op.marginColor(55),'hsl(22 95% 55%)');
+  assert.equal(op.marginColor(55.1),'hsl(4 90% 61%)');
+  assert.equal(op.marginColor(73),'hsl(2 90% 57%)');
+  assert.equal(op.marginColor(100),'hsl(0 90% 50%)');
+  assert.equal(op.marginColor(-20),op.marginColor(0));
+  assert.equal(op.marginColor(150),op.marginColor(100));
 });
 
 
