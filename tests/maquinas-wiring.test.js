@@ -294,6 +294,7 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   const render=functionSource(MAQ,'_bedLevelRenderStats');
   const source=functionSource(MAQ,'_bedLevelSetSource');
   const restore=functionSource(MAQ,'_bedLevelRestoreRunUi');
+  const mesh=functionSource(MAQ,'openBedMesh');
   const control=functionSource(MAQ,'openPrinterControl');
   const controlRefresh=functionSource(MAQ,'_printerControlRefreshActivity');
   const controlView=functionSource(MAQ,'_printerControlActivityView');
@@ -341,6 +342,10 @@ test('control de cama distingue malla activa, calibración nueva y estado en cur
   assert.match(control,/pcBedLevelState_/);
   assert.match(control,/pcBedLevelSource_/);
   assert.match(control,/ACTUALIZAR LECTURA/);
+  assert.match(mesh,/modal-overlay bed-mesh-modal/,'el mapa debe participar del sistema de modales y foco');
+  assert.match(mesh,/z-index:10120/,'el mapa debe abrir por encima del modal de CONTROL');
+  assert.match(mesh,/data-modal-close/,'Escape y el botón X deben cerrar únicamente el mapa superior');
+  assert.match(mesh,/querySelector\('\.bed-mesh-modal'\)\?\.remove\(\)/,'no deben acumularse mapas duplicados detrás de CONTROL');
   assert.doesNotMatch(control,/MEDIR DESNIVEL/,'el botón que solo relee Moonraker no debe presentarse como medición física');
   assert.match(control,/BED_MESH_CLEAR/);
   assert.match(control,/_bedLevelRestoreRunUi/);
