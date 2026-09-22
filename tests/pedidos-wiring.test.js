@@ -202,3 +202,15 @@ test('el menú de acciones se posiciona dentro de la pantalla y bajo el topbar',
   assert.doesNotMatch(pos, /Math\.max\(\s*\d{2,}\s*,/, 'no debe forzarse un alto mínimo mayor al espacio disponible');
   assert.match(pos, /overflowY\s*=\s*['"]auto['"]/, 'si no cabe, debe hacer scroll dentro del menú');
 });
+
+
+test('editar pedido no se bloquea si faltan campos opcionales de calendario o costos', () => {
+  const persist = extractFunction('_persistPedidoEdit');
+  const save = extractFunction('saveEditPedido');
+  for (const field of ['Fecha objetivo interna','Historial fechas calendario','Costo material real (CLP)','Horas máquina reales','Costo mano de obra (CLP)','Costo real total (CLP)']) {
+    assert.ok(persist.includes(field), 'debe tratar '+field+' como extensión opcional');
+  }
+  assert.match(persist, /Unknown field name/, 'debe reconocer el 422 de campo desconocido');
+  assert.ok(save.includes('_persistPedidoEdit(id,fields)'), 'Editar pedido debe usar guardado tolerante');
+  assert.ok(save.includes('Object.assign(p.fields,result.saved)'), 'solo debe reflejar localmente los campos realmente guardados');
+});
