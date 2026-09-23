@@ -100,7 +100,7 @@
     const d30=/^30 D[ÍI]AS DESDE OC$/i.test(String(form||'').trim());
     const monto=f['Monto abono (CLP)'];
     const abonoLabel=a&&monto?`✓ Abono ${money(monto)}`:a?'✓ Abono':'Abono';
-    return `<details class="op-payment-dropdown" onclick="event.stopPropagation()">
+    return `<details class="op-payment-dropdown">
       <summary class="op-payment-summary op-payment-${pay.tone==='good'?'good':pay.label==='Pago parcial'?'partial':'pending'}" title="Cambiar estado de pago">${esc(pay.label)}<span aria-hidden="true">▾</span></summary>
       <div class="op-payment-menu" role="menu" aria-label="Cambiar estado de pago">
         <button type="button" class="${a?'is-active':''}" data-op="card-pay-abono" data-arg="${p.id}">${abonoLabel}</button>
