@@ -987,7 +987,7 @@ body.kiosk #maquinaMonGrid .pbar{height:14px!important}
 
 
 /* ── MAIL CLIENT ──────────────────────────────────────────── */
-.mail-client{display:grid;grid-template-columns:200px 320px 1fr;height:calc(100vh - 190px);height:calc(100dvh - 190px);min-height:520px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;gap:0;}
+.mail-client{display:grid;grid-template-columns:220px 320px 1fr;height:calc(100vh - 190px);height:calc(100dvh - 190px);min-height:520px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;gap:0;}
 .mail-client.fullscreen{position:fixed;inset:0;z-index:420;height:100vh;height:100dvh;min-height:0;border-radius:0;border:none;}
 body.mail-fs-on{overflow:hidden;}
 /* La barra superior y el dock lateral pintan por encima del contenedor .main
@@ -998,8 +998,28 @@ body.mail-fs-on .topbar,body.mail-fs-on .icon-dock{display:none!important;}
    encima del panel a pantalla completa (420) para poder redactar en ese modo. */
 body.mail-fs-on .mail-compose-panel{z-index:460!important;}
 #mailFsExit{position:fixed;top:12px;right:14px;z-index:440;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:8px 12px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45);}
-.mail-acct-sel{background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:5px 8px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;max-width:220px;}
+.mail-acct-sel{display:none!important;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:5px 8px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;max-width:220px;}
 .mail-folders{background:var(--surface2);border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;}
+.mail-account-rail{display:flex;flex-direction:column;gap:7px;margin-bottom:10px;}
+.mail-account-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 4px 0;color:var(--text3);font-size:9px;font-weight:800;letter-spacing:.09em;}
+.mail-account-tools{display:flex;gap:4px;}
+.mail-account-tools button{width:23px;height:23px;border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,.025);color:var(--text3);cursor:pointer;font:800 13px/1 'DM Sans',sans-serif;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:.14s;}
+.mail-account-tools button:hover{border-color:rgba(0,212,204,.45);color:var(--accent);background:rgba(0,212,204,.07);}
+.mail-account-list{display:flex;flex-direction:column;gap:5px;}
+.mail-account-item{position:relative;width:100%;display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px 8px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text2);text-align:left;cursor:pointer;transition:background .14s,border-color .14s,color .14s;}
+.mail-account-item:hover{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.06);color:var(--text);}
+.mail-account-item.active{background:linear-gradient(135deg,rgba(0,212,204,.12),rgba(0,212,204,.035));border-color:rgba(0,212,204,.28);color:var(--text);box-shadow:inset 2px 0 0 var(--accent);}
+.mail-account-avatar{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,.055);border:1px solid var(--border);color:var(--text2);font:800 10px/1 'JetBrains Mono',monospace;}
+.mail-account-item.active .mail-account-avatar{background:rgba(0,212,204,.12);border-color:rgba(0,212,204,.28);color:var(--accent);}
+.mail-account-copy{min-width:0;display:flex;flex-direction:column;gap:2px;}
+.mail-account-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.15;color:inherit;}
+.mail-account-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;line-height:1.15;color:var(--text3);}
+.mail-account-unseen{min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:#041615;font:800 9px/1 'JetBrains Mono',monospace;}
+.mail-account-active-dot{position:absolute;right:8px;bottom:7px;width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px rgba(0,212,204,.7);}
+.mail-account-item:has(.mail-account-unseen) .mail-account-active-dot{display:none;}
+.mail-account-divider{display:flex;align-items:center;gap:7px;margin:3px 2px 1px;color:var(--text3);font-size:8px;font-weight:800;letter-spacing:.09em;}
+.mail-account-divider::after{content:'';height:1px;flex:1;background:var(--border);}
+.mail-compose-btn{margin-top:1px;}
 .mail-compose-btn{background:var(--accent);color:#000;border:none;border-radius:8px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:6px;justify-content:center;transition:opacity .15s;width:100%;}
 .mail-compose-btn:hover{opacity:.85;}
 .mail-folder-item{background:none;border:none;color:var(--text2);padding:7px 10px;border-radius:6px;cursor:pointer;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;text-align:left;width:100%;gap:6px;transition:background .12s;}
