@@ -11,7 +11,7 @@
 'use strict';
 
 const MODULES=new Set(['correo','pedidos','cotizaciones','clientes','proveedores','maquinas','finanzas','equipo','agentes','oficina','web','reporte','visual','remuneraciones']);
-let target=null,installed=false,timer=null,lastState=null;
+let target=null,installed=false,timer=null,lastState=null,lastLeadCount=null;
 
 function moduleForItem(item){
   if(!item||item.read)return'';
@@ -59,6 +59,20 @@ function buildState(items,farmAlerts,driftAlerts){
 function farmAlerts(){try{return target?.FarmHealth?.status?.().alerts||[];}catch(_){return[];}}
 function driftAlerts(){try{return target?.FarmDrift?.status?.().alerts||[];}catch(_){return[];}}
 function notifyItems(){try{return Array.isArray(target?.NOTIFY?.items)?target.NOTIFY.items:[];}catch(_){return[];}}
+function isLeadRecord(record){
+  try{if(typeof target?.esClienteValidado==='function')return !target.esClienteValidado(record);}catch(_){}
+  const f=record?.fields||{};
+  if(f['Validado']===true)return false;
+  if(f['Validado']===false)return true;
+  return !['Cliente activo','Cliente inactivo','Inactivo'].includes(String(f['Etapa venta']||''));
+}
+function leadQueueCount(){
+  try{
+    let rows=Array.isArray(target?.state?.clientes)?target.state.clientes:[];
+    if(typeof target?.isVendorMode==='function'&&target.isVendorMode()&&typeof target?.vendorOwnsRecord==='function')rows=rows.filter(r=>target.vendorOwnsRecord(r));
+    return rows.filter(isLeadRecord).length;
+  }catch(_){return 0;}
+}
 function bellHost(){
   const b=target?.document?.getElementById('notifBadge');if(!b)return null;
   const host=b.closest('button,a,[role="button"],.topbar-action,.topbar-icon-btn')||b.parentElement;
@@ -68,8 +82,8 @@ function bellHost(){
 function navTargets(module){
   const d=target?.document;if(!d)return[];
   const sels=[
-    `.dock-btn[data-tab="${module}"]`,`.mbd-btn[data-tab="${module}"]`,`.mg-item[data-tab="${module}"]`,
-    `.dock-btn[onclick*="switchTab('${module}')"]`,`.mbd-btn[onclick*="switchTab('${module}')"]`,`.mg-item[onclick*="switchTab('${module}')"]`,
+    `.dock-btn[data-tab="${module}"]`,`.mbd-btn[data-tab="${module}"]`,`.mg-item[data-tab="${module}"]`,`.mobile-tab-btn[data-tab="${module}"]`,
+    `.dock-btn[onclick*="switchTab('${module}')"]`,`.mbd-btn[onclick*="switchTab('${module}')"]`,`.mg-item[onclick*="switchTab('${module}')"]`,`.mobile-tab-btn[onclick*="('${module}')"]`,
     `.dock-btn[onclick*='switchTab("${module}")']`,`.mbd-btn[onclick*='switchTab("${module}")']`,`.mg-item[onclick*='switchTab("${module}")']`
   ];
   const set=new Set();
@@ -85,6 +99,9 @@ function ensureStyle(){
     .dashboard-context-badge.sev-critical{background:var(--danger,#ff4444)!important;color:#fff!important}
     .dashboard-context-badge.sev-warning{background:var(--warn,#ffaa00)!important;color:#111!important}
     .dashboard-context-badge.sev-info{background:var(--accent,#00d4cc)!important;color:#061716!important}
+    .dashboard-lead-queue-badge{position:absolute;top:-5px;right:-5px;z-index:14;pointer-events:none;min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#ff4655!important;color:#fff!important;font:800 10px/1 'JetBrains Mono',monospace;box-shadow:0 0 0 2px rgba(10,10,10,.96),0 4px 13px rgba(255,70,85,.35)}
+    .dashboard-lead-queue-badge.is-new{animation:leadQueuePop .7s cubic-bezier(.2,.8,.2,1)}
+    @keyframes leadQueuePop{0%{transform:scale(.72)}45%{transform:scale(1.28);box-shadow:0 0 0 3px rgba(10,10,10,.96),0 0 22px rgba(255,70,85,.72)}100%{transform:scale(1)}}
     @media(max-width:900px){.dashboard-context-badge{top:0;right:2px}}
   `;
   (d.head||d.documentElement).appendChild(s);
@@ -93,11 +110,27 @@ function render(){
   if(!target?.document)return{};
   ensureStyle();bellHost();
   const state=buildState(notifyItems(),farmAlerts(),driftAlerts());
+  const leads=leadQueueCount();
+  // CLIENTES usa una burbuja propia: su número representa exactamente los leads
+  // aún no validados, no una mezcla con otras notificaciones del módulo.
+  target.document.querySelectorAll?.('.dashboard-lead-queue-badge').forEach(b=>b.remove());
+  if(leads>0){
+    for(const host of navTargets('clientes')){
+      host.style.position='relative';host.style.overflow='visible';
+      const b=target.document.createElement('span');b.className='dock-badge dashboard-lead-queue-badge';
+      if(lastLeadCount!==null&&leads>lastLeadCount)b.classList.add('is-new');
+      b.dataset.leadQueue='1';b.textContent=leads>99?'99+':String(leads);
+      b.title=`${leads} lead${leads===1?'':'s'} en cola · pendiente${leads===1?'':'s'} de validar`;
+      b.setAttribute('aria-label',b.title);host.appendChild(b);
+    }
+  }
+  lastLeadCount=leads;
   target.document.querySelectorAll('.dashboard-context-badge[data-module]').forEach(b=>{
     const module=b.dataset.module;if(!state[module]||state[module].count<1)b.remove();
   });
   for(const[module,meta]of Object.entries(state)){
     if(!meta.count)continue;
+    if(module==='clientes'&&leads>0)continue;
     for(const host of navTargets(module)){
       host.style.position='relative';host.style.overflow='visible';
       let b=host.querySelector(`:scope > .dashboard-context-badge[data-module="${module}"]`);
@@ -122,6 +155,6 @@ function install(root){
   root.addEventListener?.('storage',e=>{if(!e||String(e.key||'').startsWith('thelab_'))tick();});root.addEventListener?.('focus',tick);
   timer=root.setInterval?.(()=>{if(!root.document.hidden)tick();},5000)||null;return true;
 }
-function status(){return{installed,lastState:lastState||{},hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth,hasFarmDrift:!!target?.FarmDrift};}
-return{install,render,status,_test:{moduleForItem,buildState,rank}};
+function status(){return{installed,lastState:lastState||{},leadQueue:leadQueueCount(),hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth,hasFarmDrift:!!target?.FarmDrift};}
+return{install,render,status,_test:{moduleForItem,buildState,rank,isLeadRecord}};
 });
