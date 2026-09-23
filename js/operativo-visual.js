@@ -93,6 +93,23 @@
       ${button(d30?'✓ Pago a 30 días':'Pago a 30 días','order-pay-30',p.id,d30?'op-pay-active':'')}
     </div>`;
   }
+  function orderPaymentDropdown(p){
+    const f=p.fields||{},pay=payment(p);
+    const a=!!f['Anticipo pagado (50%)'],s=!!f['Saldo pagado (50%)'],t=a&&s;
+    const form=typeof pedFormaPago==='function'?pedFormaPago(f):(f['Forma de pago']||'');
+    const d30=/^30 D[ÍI]AS DESDE OC$/i.test(String(form||'').trim());
+    const monto=f['Monto abono (CLP)'];
+    const abonoLabel=a&&monto?`✓ Abono ${money(monto)}`:a?'✓ Abono':'Abono';
+    return `<details class="op-payment-dropdown" onclick="event.stopPropagation()">
+      <summary class="op-payment-summary op-payment-${pay.tone==='good'?'good':pay.label==='Pago parcial'?'partial':'pending'}" title="Cambiar estado de pago">${esc(pay.label)}<span aria-hidden="true">▾</span></summary>
+      <div class="op-payment-menu" role="menu" aria-label="Cambiar estado de pago">
+        <button type="button" class="${a?'is-active':''}" data-op="card-pay-abono" data-arg="${p.id}">${abonoLabel}</button>
+        <button type="button" class="${s?'is-active':''}" data-op="card-pay-saldo" data-arg="${p.id}">${s?'✓ Saldo':'Saldo'}</button>
+        <button type="button" class="${t?'is-active':''}" data-op="card-pay-total" data-arg="${p.id}">${t?'✓ Total':'Total'}</button>
+        <button type="button" class="${d30?'is-active':''}" data-op="card-pay-30" data-arg="${p.id}">${d30?'✓ Pago a 30 días':'Pago a 30 días'}</button>
+      </div>
+    </details>`;
+  }
   function marginColor(value){
     const n=Number(value);
     if(!Number.isFinite(n))return '';
@@ -183,7 +200,7 @@
     const statusControl=detail||late?pill(late?'Entrega atrasada':e,late?'danger':'neutral'):orderStatusDropdown(p);
     return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${statusControl}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
-      <div class="op-payment"><b>Pago</b> ${pill(pay.label,pay.tone)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
+      <div class="op-payment"><b>Pago</b> ${detail?pill(pay.label,pay.tone):orderPaymentDropdown(p)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
       ${detail?paymentControls(p):orderTeamControls(p)}
       ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span><div class="op-card-footer-actions">${cardMenu}${mainAction}</div></footer></article>`;
   }
@@ -314,6 +331,18 @@
       return;
     }
     if(a==='quote-linked-order'){openRecord('order',arg);return;}
+    if(a==='card-pay-abono'||a==='card-pay-saldo'||a==='card-pay-total'||a==='card-pay-30'){
+      const p=own(state.pedidos).find(p=>p.id===arg);if(!p)return;
+      const f=p.fields||{};
+      if(a==='card-pay-abono'){
+        if(f['Anticipo pagado (50%)'])await toggleAnticipo(arg,true);
+        else openAbonoModal(arg);
+        return;
+      }
+      if(a==='card-pay-saldo'){await toggleSaldo(arg,!!f['Saldo pagado (50%)']);return;}
+      if(a==='card-pay-total'){await toggleTotal(arg,!!(f['Anticipo pagado (50%)']&&f['Saldo pagado (50%)']));return;}
+      if(a==='card-pay-30'){await marcarPago30Dias(arg);return;}
+    }
     if(a==='order-pay-abono'||a==='order-pay-saldo'||a==='order-pay-total'||a==='order-pay-30'){
       const p=own(state.pedidos).find(p=>p.id===arg);if(!p)return;
       const f=p.fields||{};
@@ -347,7 +376,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
