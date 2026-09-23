@@ -1,6 +1,6 @@
 [package]
 name = "thelab-crm"
-version = "1.0.0"
+version = "1.1.0"
 description = "Envoltorio de escritorio para el dashboard The Lab Solutions"
 authors = ["The Lab Solutions"]
 edition = "2021"
