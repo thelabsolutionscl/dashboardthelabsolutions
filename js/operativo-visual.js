@@ -213,9 +213,9 @@
       const numeric=raw!==''?Number(raw.replace(',','.')):NaN;
       const qty=Number.isFinite(numeric)?(Number.isInteger(numeric)?String(numeric):String(numeric).replace('.',',')):raw;
       const unitLabel=qty?`${qty} ${numeric===1?'unidad':'unidades'}`:'Cantidad sin registrar';
-      return `<div class='op-work-item'><div><span>${esc(it.desc)}</span></div><b>${esc(unitLabel)}</b></div>`;
+      return `<div class='op-work-item'><div class='op-work-desc'><small>Descripción</small><span>${esc(it.desc)}</span></div><div class='op-work-qty'><small>Cantidad</small><b>${esc(unitLabel)}</b></div></div>`;
     }).join(''):`<div class='op-work-empty'>Sin detalle de productos o unidades registrado en esta cotización.</div>`;
-    return `<section class='op-work-detail' aria-label='Detalle de la propuesta'><div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DE LA PROPUESTA</span><h4>Productos / servicios cotizados</h4></div><small>${esc(quoteNum?`Cotización ${quoteNum}`:'Cotización')}</small></div><div class='op-work-list'>${rows}</div></section>`;
+    return `<section class='op-work-detail op-quote-work-detail' aria-label='Detalle de la cotización'><div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DE LA COTIZACIÓN</span><h4>Descripción y cantidad de unidades</h4></div><small>${esc(quoteNum?`Cotización ${quoteNum}`:'Cotización')}</small></div><div class='op-work-list'>${rows}</div></section>`;
   }
   function orderWorkItems(p){
     const f=p?.fields||{};
