@@ -194,3 +194,26 @@ test('menu de pago se cierra al hacer click fuera y selector de estado queda cen
   assert.match(css,/appearance:none;-webkit-appearance:none/,'debe neutralizar la flecha nativa para centrar de forma consistente');
   assert.match(css,/text-align:center;text-align-last:center/,'el texto del estado debe quedar centrado en todas las opciones');
 });
+
+test('VER PEDIDO muestra detalle y unidades desde la cotización asociada sin exponer costos',()=>{
+  const {context,op}=setup();
+  context.state.cotizacionesById.q1=record('q1',{
+    'N° Cotización':'COT-2026-100',
+    'Detalle JSON':JSON.stringify([
+      {desc:'Neón TRIBE ELIXIR',und:2,costoUnit:45000,ventaUnit:120000},
+      {desc:'Base acrílica negra',und:1,costoUnit:12000,ventaUnit:30000}
+    ])
+  });
+  const pedido=record('p',{'Cotizaciones':['q1']});
+  const data=op.orderWorkItems(pedido);
+  assert.equal(data.quoteNum,'COT-2026-100');
+  assert.deepEqual(Array.from(data.items,it=>[it.desc,it.qty]),[['Neón TRIBE ELIXIR',2],['Base acrílica negra',1]]);
+  const html=op.orderWorkDetail(pedido);
+  assert.match(html,/DETALLE DEL TRABAJO/);assert.match(html,/Qué se está haciendo/);
+  assert.match(html,/2 unidades/);assert.match(html,/1 unidad/);assert.match(html,/COT-2026-100/);
+  assert.doesNotMatch(html,/45000|120000|costoUnit|ventaUnit/,'el drawer operativo no debe mostrar costos ni precios de la cotización');
+
+  context.state.cotizacionesById.q2=record('q2',{'Detalle productos':'Tótem acrílico | 3 und. | Costo: $480.000 | Venta: $1.037.451'});
+  const legacy=op.orderWorkItems(record('p2',{'Cotizaciones':['q2']}));
+  assert.deepEqual(Array.from(legacy.items,it=>[it.desc,it.qty]),[['Tótem acrílico','3']]);
+});
