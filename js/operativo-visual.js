@@ -240,14 +240,31 @@
     const pct=v=>v==null||!Number.isFinite(Number(v))?'—':Number(v).toFixed(1).replace('.0','')+'%';
     const rows=items.length?items.map(it=>{
       const qty=it.qty==null?'—':(Number.isInteger(it.qty)?String(it.qty):String(it.qty).replace('.',','));
-      const unitLabel=qty==='—'?'—':`${qty} ${Number(it.qty)===1?'unidad':'unidades'}`;
       const marginColorValue=it.margin==null?'':marginColor(it.margin);
-      return `<div class='op-quote-item'><div class='op-quote-item-desc'><small>Descripción</small><strong>${esc(it.desc)}</strong></div><div class='op-quote-item-values'><div><small>Cantidad</small><b>${esc(unitLabel)}</b></div><div><small>Costo unit.</small><b>${fmt(it.costUnit)}</b></div><div><small>Costo total</small><b>${fmt(it.costTotal)}</b></div><div><small>Venta unit.</small><b>${fmt(it.saleUnit)}</b></div><div><small>Venta total</small><b>${fmt(it.saleTotal)}</b></div><div class='op-quote-margin' style='${marginColorValue?`--op-quote-margin:${marginColorValue}`:''}'><small>Margen</small><b>${pct(it.margin)}</b></div></div></div>`;
-    }).join(''):`<div class='op-work-empty'>Sin detalle de productos o unidades registrado en esta cotización.</div>`;
+      return `<div class='op-quote-edit-row'><div class='op-q-desc' data-label='Descripción'>${esc(it.desc)}</div><div data-label='Und.'>${esc(qty)}</div><div data-label='Costo unit.'>${fmt(it.costUnit)}</div><div data-label='Venta unit.'>${fmt(it.saleUnit)}</div><div data-label='Costo total'>${fmt(it.costTotal)}</div><div data-label='Venta total'>${fmt(it.saleTotal)}</div><div class='op-q-margin' data-label='Margen' style='${marginColorValue?`--op-q-margin:${marginColorValue}`:''}'>${pct(it.margin)}</div></div>`;
+    }).join(''):`<div class='op-work-empty'>Sin detalle de productos registrado en esta cotización.</div>`;
     const plazo=f['Fecha de entrega']||((f['Tiempo de producción']||f['Tiempo de producción máx'])?[f['Tiempo de producción'],f['Tiempo de producción máx']].filter(Boolean).join('–')+' '+String(f['Tipo días producción']||'días').toLowerCase():'—');
-    const summary=`<div class='op-quote-summary'><div><small>Costo total</small><b>${fmt(costoTotal)}</b></div><div><small>Venta neta antes desc.</small><b>${fmt(ventaAntesDesc)}</b></div><div><small>Descuento</small><b>${descPct?pct(descPct):'Sin descuento'}${descMonto!=null&&descMonto>0?` · −${fmt(descMonto)}`:''}</b></div><div><small>Neto cotizado</small><b>${fmt(neto)}</b></div><div><small>IVA 19%</small><b>${fmt(iva)}</b></div><div class='op-quote-total'><small>Total con IVA</small><b>${fmt(totalIva)}</b></div><div class='op-quote-margin' style='${margenGlobal!=null?`--op-quote-margin:${marginColor(margenGlobal)}`:''}'><small>Margen global</small><b>${pct(margenGlobal)}</b></div></div>`;
-    const conditions=`<div class='op-quote-conditions'><div><small>Forma de pago</small><b>${esc(f['Forma de pago']||'—')}</b></div><div><small>Fecha cotización</small><b>${esc(f['Fecha cotización']||'—')}</b></div><div><small>Vencimiento</small><b>${esc(f['Fecha vencimiento']||'—')}</b></div><div><small>Entrega / plazo</small><b>${esc(plazo)}</b></div><div><small>Urgencia</small><b>${f['Urgencia (+25%)']?'Sí':'No'}</b></div></div>`;
-    return `<section class='op-work-detail op-quote-work-detail' aria-label='Detalle de la cotización'><div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DE LA COTIZACIÓN</span><h4>Descripción, cantidades y valores</h4></div><small>${esc(quoteNum?`Cotización ${quoteNum}`:'Cotización')}</small></div><div class='op-work-list'>${rows}</div><div class='op-quote-summary-title'>Resumen económico</div>${summary}<div class='op-quote-summary-title'>Condiciones</div>${conditions}</section>`;
+    const discountText=descPct?`${pct(descPct)}${descMonto!=null&&descMonto>0?` · −${fmt(descMonto)}`:''}`:'Sin descuento';
+    return `<section class='op-work-detail op-quote-work-detail op-quote-editlike' aria-label='Detalle de la cotización'>
+      <div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DE LA COTIZACIÓN</span><h4>Ítems cotizados</h4></div><small>${esc(quoteNum?`Cotización ${quoteNum}`:'Cotización')}</small></div>
+      <div class='op-quote-edit-table'><div class='op-quote-edit-row op-quote-edit-head'><div>Descripción</div><div>Und.</div><div>Costo unit.</div><div>Venta unit.</div><div>Costo total</div><div>Venta total</div><div>Margen</div></div>${rows}</div>
+      <div class='op-quote-edit-totals'>
+        <div><span>Costo total</span><b>${fmt(costoTotal)}</b></div>
+        <div><span>Venta neta</span><b>${fmt(ventaAntesDesc)}</b></div>
+        <div><span>Descuento</span><b>${discountText}</b></div>
+        <div><span>Neto</span><b>${fmt(neto)}</b></div>
+        <div><span>IVA 19%</span><b>${fmt(iva)}</b></div>
+        <div class='is-total'><span>Total con IVA</span><b>${fmt(totalIva)}</b></div>
+        <div class='op-q-global-margin' style='${margenGlobal!=null?`--op-q-margin:${marginColor(margenGlobal)}`:''}'><span>Margen</span><b>${pct(margenGlobal)}</b></div>
+      </div>
+      <div class='op-quote-edit-meta'>
+        <div><span>Forma de pago</span><b>${esc(f['Forma de pago']||'—')}</b></div>
+        <div><span>Fecha cotización</span><b>${esc(f['Fecha cotización']||'—')}</b></div>
+        <div><span>Vencimiento</span><b>${esc(f['Fecha vencimiento']||'—')}</b></div>
+        <div><span>Entrega / plazo</span><b>${esc(plazo)}</b></div>
+        <div><span>Urgencia</span><b>${f['Urgencia (+25%)']?'Sí':'No'}</b></div>
+      </div>
+    </section>`;
   }
   function orderWorkItems(p){
     const f=p?.fields||{};
