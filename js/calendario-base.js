@@ -671,11 +671,82 @@ function calBusinessDate(from,offset=0){
 function calInternalDate(delivery,buffer=2){return calBusinessDate(delivery,-Math.max(0,+buffer||0));}
 function calOpenEvent(id){const ev=_calEventById(id);if(!ev)return;if(ev.source==='crm')openCalCrmModal(ev.recordKind,ev.recordId,ev.field);else openCalEventoModal(null,id);}
 function calGoRecord(kind,id){closeCalCrmModal();const tab=kind==='pedido'?'pedidos':'cotizaciones';switchTab(tab);setTimeout(()=>{try{goToAlert(tab,id);}catch(e){}},180);}
+function _calCrmDetailItems(rec){
+  const f=rec?.fields||{};let items=[];
+  try{
+    const raw=f['Detalle JSON'];
+    const parsed=raw?(typeof raw==='string'?JSON.parse(raw):raw):null;
+    if(Array.isArray(parsed))items=parsed.map(it=>({
+      desc:String(it?.desc||it?.descripcion||it?.nombre||'').trim(),
+      qty:Number(it?.und??it?.cantidad??it?.qty??0)||0,
+      cost:Number(it?.costoUnit??it?.costo_unit??it?.costo??0)||0,
+      sale:Number(it?.ventaUnit??it?.venta_unit??it?.venta??0)||0
+    })).filter(it=>it.desc);
+  }catch(e){}
+  if(items.length)return items;
+  return String(f['Detalle productos']||'').split('\n').map(line=>{
+    const parts=line.split('|').map(x=>x.trim()),qtyMatch=(parts[1]||'').match(/-?\d+(?:[.,]\d+)?/);
+    const n=v=>Number(String(v||'').replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''))||0;
+    const qty=qtyMatch?n(qtyMatch[0]):0;
+    const costTotal=n((parts.find(x=>/^costo\s*:/i.test(x))||parts[2]||'').replace(/^costo\s*:/i,''));
+    const saleTotal=n((parts.find(x=>/^venta\s*:/i.test(x))||parts[3]||'').replace(/^venta\s*:/i,''));
+    return{desc:parts[0]||'',qty,cost:qty?costTotal/qty:0,sale:qty?saleTotal/qty:0};
+  }).filter(it=>it.desc);
+}
+function _calCrmFallbackDetail(kind,rec){
+  let source=rec;
+  if(kind==='pedido'){
+    const cotId=Array.isArray(rec?.fields?.Cotizaciones)?rec.fields.Cotizaciones[0]:rec?.fields?.Cotizaciones;
+    if(cotId&&state.cotizacionesById?.[cotId])source=state.cotizacionesById[cotId];
+  }
+  const items=_calCrmDetailItems(source),money=v=>_calMoney(Math.round(Number(v)||0));
+  if(!items.length)return `<div class="cal-crm-detail-empty">Sin detalle de productos registrado.</div>`;
+  if(kind==='pedido'){
+    return `<section class="cal-crm-fallback"><div class="cal-crm-detail-title">DETALLE DEL TRABAJO</div>${items.map(it=>`<div class="cal-crm-simple-row"><span>${escapeHtml(it.desc)}</span><b>${it.qty?escapeHtml(String(it.qty))+' '+(it.qty===1?'unidad':'unidades'):'Cantidad sin registrar'}</b></div>`).join('')}</section>`;
+  }
+  return `<section class="cal-crm-fallback"><div class="cal-crm-detail-title">DETALLE DE LA COTIZACIÓN</div><div class="cal-crm-quote-grid cal-crm-quote-head"><span>Descripción</span><span>Und.</span><span>Costo unit.</span><span>Venta unit.</span></div>${items.map(it=>`<div class="cal-crm-quote-grid"><strong>${escapeHtml(it.desc)}</strong><span>${it.qty||'—'}</span><span>${it.cost?money(it.cost):'—'}</span><span>${it.sale?money(it.sale):'—'}</span></div>`).join('')}</section>`;
+}
+function _calEnsureCrmDetail(modal){
+  let box=document.getElementById('calCrmDetail');
+  if(!box){
+    box=document.createElement('div');box.id='calCrmDetail';box.className='cal-crm-detail';
+    const sub=document.getElementById('calCrmSub');
+    if(sub?.parentElement)sub.insertAdjacentElement('afterend',box);
+    else modal?.querySelector?.('.modal-card')?.prepend(box);
+  }
+  if(!document.getElementById('calCrmDetailStyle')){
+    const st=document.createElement('style');st.id='calCrmDetailStyle';st.textContent=`
+      #calCrmDetail{margin:16px 0 18px;max-height:390px;overflow:auto;overscroll-behavior:contain;padding-right:2px}
+      #calCrmDetail>.op-work-detail{margin:0!important}
+      #calCrmDetail .op-quote-edit-table{overflow-x:auto}
+      #calCrmDetail .op-quote-edit-row{min-width:820px}
+      .cal-crm-fallback{border:1px solid rgba(0,212,204,.24);border-radius:12px;padding:14px;background:rgba(255,255,255,.018)}
+      .cal-crm-detail-title{font-size:10px;font-weight:800;letter-spacing:.1em;color:#00d4cc;margin-bottom:10px}
+      .cal-crm-simple-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;padding:9px 10px;border-top:1px solid rgba(255,255,255,.08)}
+      .cal-crm-simple-row:first-of-type{border-top:0}.cal-crm-simple-row span{color:#eee;font-size:12px}.cal-crm-simple-row b{color:#00d4cc;font-size:11px;white-space:nowrap}
+      .cal-crm-quote-grid{display:grid;grid-template-columns:minmax(240px,2fr) .55fr .9fr .9fr;gap:0;border-top:1px solid rgba(255,255,255,.08)}
+      .cal-crm-quote-grid>*{padding:9px 10px;font-size:11px;color:#eee}.cal-crm-quote-head>*{font-size:9px;text-transform:uppercase;color:#888;font-weight:800}
+      .cal-crm-detail-empty{padding:12px;border:1px dashed rgba(255,255,255,.15);border-radius:10px;color:#888;font-size:11px}
+      @media(max-width:760px){#calCrmDetail{max-height:330px}.cal-crm-simple-row{grid-template-columns:1fr}.cal-crm-quote-grid{grid-template-columns:1fr 1fr}.cal-crm-quote-head{display:none}.cal-crm-quote-grid strong{grid-column:1/-1}}
+    `;document.head.appendChild(st);
+  }
+  return box;
+}
+function _calRenderCrmDetail(kind,rec,modal){
+  const box=_calEnsureCrmDetail(modal);if(!box)return;
+  let html='';
+  try{
+    if(kind==='cotizacion'&&window.OP?.quoteWorkDetail)html=window.OP.quoteWorkDetail(rec);
+    else if(kind==='pedido'&&window.OP?.orderWorkDetail)html=window.OP.orderWorkDetail(rec);
+  }catch(e){console.warn('[Calendario] detalle CRM:',e);}
+  box.innerHTML=html||_calCrmFallbackDetail(kind,rec);
+}
 function openCalCrmModal(kind,id,focusField=''){
   const rec=_calRecord(kind,id),modal=document.getElementById('calCrmModal');if(!rec||!modal)return;const f=rec.fields||{};
   document.getElementById('calCrmKind').value=kind;document.getElementById('calCrmId').value=id;
   document.getElementById('calCrmTitle').textContent=(kind==='pedido'?'📦 ':'✍ ')+(f[kind==='pedido'?'N° Pedido':'N° Cotización']||'Compromiso');
   document.getElementById('calCrmSub').textContent=`${_calClient(f)} · ${f[kind==='pedido'?'Estado pedido':'Estado cotización']||'—'} · ${_calMoney(f[kind==='pedido'?'Monto total (CLP)':'Total final (CLP)']||0)}`;
+  _calRenderCrmDetail(kind,rec,modal);
   const q=document.getElementById('calCrmQuoteDates'),p=document.getElementById('calCrmOrderDates');q.style.display=kind==='cotizacion'?'grid':'none';p.style.display=kind==='pedido'?'grid':'none';
   document.getElementById('calCrmCotDue').value=f['Fecha límite cotización']||'';document.getElementById('calCrmCotExpiry').value=f['Fecha vencimiento']||'';
   document.getElementById('calCrmPedInternal').value=f['Fecha objetivo interna']||'';document.getElementById('calCrmPedDelivery').value=f['Fecha entrega']||'';
