@@ -1,6 +1,6 @@
 [package]
 name = "thelab-crm"
-version = "1.1.0"
+version = "1.2.0"
 description = "Envoltorio de escritorio para el dashboard The Lab Solutions"
 authors = ["The Lab Solutions"]
 edition = "2021"
@@ -12,7 +12,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = "1"\nrand = "0.8"\nsha2 = "0.10"\nbase64 = "0.22"\nurl = "2.5"\nreqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 [profile.release]
 panic = "abort"
