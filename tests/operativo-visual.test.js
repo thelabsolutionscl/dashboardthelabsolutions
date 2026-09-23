@@ -167,3 +167,18 @@ test('tarjetas de pedidos muestran equipo seleccionable y estado en desplegable 
   assert.match(html,/op-status-select/,'la tarjeta debe mostrar el selector en la cabecera');
   assert.doesNotMatch(html,/op-stage-picks/,'no debe duplicar los estados como botones dentro de la tarjeta');
 });
+
+
+test('tarjetas de pedidos muestran pago como desplegable con las mismas acciones de Tabla',()=>{
+  const {op,element}=setup();
+  const pedido=record('p',{'N° Pedido':'PED-1','Cliente':'ABC','Estado pedido':'En producción','Monto total (CLP)':119000,'Forma de pago':'30 DÍAS DESDE OC','Anticipo pagado (50%)':true,'Saldo pagado (50%)':true,'Monto abono (CLP)':50000});
+  const menu=op.orderPaymentDropdown(pedido);
+  assert.match(menu,/<details class="op-payment-dropdown"/);
+  assert.match(menu,/Pagado/);
+  assert.match(menu,/✓ Abono/);assert.match(menu,/✓ Saldo/);assert.match(menu,/✓ Total/);assert.match(menu,/✓ Pago a 30 días/);
+  assert.match(menu,/card-pay-abono/);assert.match(menu,/card-pay-saldo/);assert.match(menu,/card-pay-total/);assert.match(menu,/card-pay-30/);
+  op.orders([pedido],[pedido]);
+  const html=element('opOrders').innerHTML;
+  assert.match(html,/op-payment-dropdown/,'Vista Tarjetas debe usar el badge Pagado como desplegable');
+  assert.match(html,/card-pay-abono/,'el menú debe exponer las mismas acciones de pago que Tabla');
+});
