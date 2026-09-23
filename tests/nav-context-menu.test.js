@@ -40,3 +40,15 @@ test('la extensión contextual se carga desde el bootstrap visual global',()=>{
   const loader=fs.readFileSync('js/farm-health-adapter.js','utf8');
   assert.match(loader,/load\('js\/nav-context-menu\.js','personalización contextual del menú'\)/);
 });
+
+
+test('detecta la app de macOS y adapta las acciones de nueva ventana',()=>{
+  const {isDesktopApp}=nav._test;
+  assert.equal(isDesktopApp({location:{href:'https://dashboard.thelab.solutions/?desktop=macos'},navigator:{userAgent:'WebKit'}}),true);
+  assert.equal(isDesktopApp({location:{href:'https://dashboard.thelab.solutions/'},navigator:{userAgent:'Mozilla Tauri'}}),true);
+  assert.equal(isDesktopApp({location:{href:'https://dashboard.thelab.solutions/'},navigator:{userAgent:'Safari'}}),false);
+  const src=fs.readFileSync('js/nav-context-menu.js','utf8');
+  assert.match(src,/Abrir en otra ventana de la app/);
+  assert.match(src,/Abrir en ventana flotante/);
+  assert.match(src,/App macOS/);
+});
