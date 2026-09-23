@@ -222,11 +222,14 @@ dialog.op-drawer[data-kind="quote"]{inset:0;width:100vw;max-width:100vw;height:1
 .op-client-tool.quiet{margin-left:auto}.op-client-tool>span{font-size:12px}
 .op-client-list-heading{margin-top:4px}
 .op-client-records .op-record{position:relative;transition:border-color .16s,transform .16s,box-shadow .16s}
-.op-client-records .op-record:hover{border-color:rgba(0,212,204,.23);transform:translateY(-1px);box-shadow:0 12px 30px rgba(0,0,0,.15)}
+/* No transformar la tarjeta: un ancestro con transform convierte position:fixed del menú ⋯ en relativo a la tarjeta, provocando salto/parpadeo. */
+.op-client-records .op-record:hover{border-color:rgba(0,212,204,.23);box-shadow:0 12px 30px rgba(0,0,0,.15)}
 .op-client-card-actions{position:relative}
 .op-client-more{display:inline-flex;align-items:center;justify-content:center;min-width:39px;min-height:36px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text);font:800 13px/1 'DM Sans',sans-serif;cursor:pointer;letter-spacing:1px}
 .op-client-more:hover{border-color:var(--accent);color:var(--accent)}
-.op-client-menu{z-index:80;min-width:235px;right:0;left:auto}
+.op-client-menu{z-index:800;min-width:235px;right:0;left:auto;will-change:auto}
+/* El menú de Tarjetas debe aparecer instantáneo: el posicionador global ya calcula arriba/abajo y la animación añadía un segundo movimiento perceptible. */
+.op-client-menu.open{animation:none!important;transition:none!important}
 .op-client-menu .act-item{min-height:35px}
 @media(max-width:850px){.op-client-command-head{flex-direction:column}.op-client-queue{width:100%;box-sizing:border-box;text-align:left;display:grid;grid-template-columns:1fr auto;align-items:center}.op-client-queue small{grid-column:1/-1}.op-client-command-row{align-items:stretch;flex-direction:column}.op-client-search{margin-left:0;min-width:0;max-width:none;width:100%;box-sizing:border-box}.op-client-tool.quiet{margin-left:0}}
 @media(max-width:620px){.op-client-command{padding:13px}.op-client-segments{display:grid;grid-template-columns:repeat(3,1fr);width:100%}.op-client-seg{justify-content:center;padding:7px 6px}.op-client-command-actions{display:grid;grid-template-columns:1fr 1fr}.op-client-tool{justify-content:center}.op-client-records{grid-template-columns:1fr}.op-client-records .op-record{padding:16px}.op-card-footer-actions{gap:6px}.op-card-footer-actions>.op-button{padding-left:10px;padding-right:10px}}
