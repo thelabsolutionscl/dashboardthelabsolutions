@@ -218,27 +218,39 @@ test('VER PEDIDO muestra detalle y unidades desde la cotización asociada sin ex
   assert.deepEqual(Array.from(legacy.items,it=>[it.desc,it.qty]),[['Tótem acrílico','3']]);
 });
 
-test('VER PROPUESTA muestra detalle y unidades de la cotización sin exponer costos',()=>{
+test('VER PROPUESTA muestra descripción, cantidades, costos, ventas y resumen de la cotización',()=>{
   const {op}=setup();
   const cot=record('q1',{
     'N° Cotización':'COT-2026-200',
     'Detalle JSON':JSON.stringify([
       {desc:'Letrero neón morado',und:4,costoUnit:35000,ventaUnit:90000},
       {desc:'Fuente 12V',und:1,costoUnit:8000,ventaUnit:18000}
-    ])
+    ]),
+    'Total final (CLP)':449820,
+    'Descuento (%)':5,
+    'Forma de pago':'50% ABONO Y 50% 30 DÍAS',
+    'Fecha cotización':'2026-09-20',
+    'Fecha vencimiento':'2026-09-30',
+    'Tiempo de producción':10,
+    'Tiempo de producción máx':15,
+    'Tipo días producción':'DÍAS HÁBILES'
   });
   const items=op.quoteWorkItems(cot);
-  assert.deepEqual(Array.from(items,it=>[it.desc,it.qty]),[['Letrero neón morado',4],['Fuente 12V',1]]);
+  assert.deepEqual(Array.from(items,it=>[it.desc,it.qty,it.costUnit,it.costTotal,it.saleUnit,it.saleTotal]),[
+    ['Letrero neón morado',4,35000,140000,90000,360000],
+    ['Fuente 12V',1,8000,8000,18000,18000]
+  ]);
   const html=op.quoteWorkDetail(cot);
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
   assert.match(src,/quoteWorkDetail\(r\)/,'VER PROPUESTA debe insertar el detalle de la cotización en el drawer');
-  assert.match(html,/DETALLE DE LA COTIZACIÓN/);assert.match(html,/Descripción y cantidad de unidades/);assert.match(html,/>Descripción</);assert.match(html,/>Cantidad</);
+  for(const label of ['DETALLE DE LA COTIZACIÓN','Descripción, cantidades y valores','Cantidad','Costo unit.','Costo total','Venta unit.','Venta total','Margen','Resumen económico','Neto cotizado','IVA 19%','Total con IVA','Margen global','Forma de pago','Vencimiento','Entrega / plazo'])assert.match(html,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(html,/4 unidades/);assert.match(html,/1 unidad/);assert.match(html,/COT-2026-200/);
-  assert.doesNotMatch(html,/35000|90000|costoUnit|ventaUnit/,'VER PROPUESTA no debe exponer costos ni precios internos');
+  assert.match(html,/\$35000/);assert.match(html,/\$140000/);assert.match(html,/\$90000/);assert.match(html,/\$360000/);
+  assert.match(html,/50% ABONO Y 50% 30 DÍAS/);assert.match(html,/2026-09-30/);assert.match(html,/10–15 días hábiles/);
 
   const legacy=record('q2',{
     'Detalle productos':'Tótem acrílico | 3 und. | Costo: $480.000 | Venta: $1.037.451'
   });
   const legacyItems=op.quoteWorkItems(legacy);
-  assert.deepEqual(Array.from(legacyItems,it=>[it.desc,it.qty]),[['Tótem acrílico','3']]);
+  assert.deepEqual(Array.from(legacyItems,it=>[it.desc,it.qty,Math.round(it.costUnit),it.costTotal,Math.round(it.saleUnit),it.saleTotal]),[['Tótem acrílico',3,160000,480000,345817,1037451]]);
 });
