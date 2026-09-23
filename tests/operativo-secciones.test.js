@@ -137,3 +137,29 @@ test('administrar pagos vuelve al formato anterior al cerrar el detalle',()=>{
   assert.equal(panel.dataset.opLayout,'tarjetas');assert.equal(panel.dataset.opView,'simple');
   assert.equal(writes.length,before);
 });
+
+
+test('modo Tarjetas de Clientes conserva filtros y menú completo del modo Experto',()=>{
+  const {ctx,sections,node}=setup();
+  node('cliCatN-lead').textContent='4';node('cliCatN-cliente').textContent='12';node('cliCatN-todos').textContent='16';
+  const cli=rec('lead-1',{Empresa:'Lead nuevo',Contacto:'Ana','Validado':false,'Facturas vencidas':1});
+  ctx.state.clientes=[cli];
+  sections.clients([cli]);
+  const html=node('opClients').innerHTML;
+  for(const label of ['BASE CRM','Clientes y leads','LEADS EN COLA','4','Nuevo lead','Prospección IA','Ranking IA','Por score','Inactivos','CSV','VISTA TARJETAS']){
+    assert.ok(html.includes(label),`falta ${label}`);
+  }
+  for(const action of ['Ver detalle','Editar (guiado)','Validar como cliente','Ver cotizaciones','Nueva cotización','Cotizar con KAI (guiado)','Portal cliente','Revocar links del portal','Estrategia venta IA','Bienvenida IA','Recordatorio pago IA']){
+    assert.ok(html.includes(action),`falta acción ${action}`);
+  }
+  assert.match(html,/op-client-more/);
+  assert.match(html,/data-ops-input="client-search"/);
+});
+
+test('tarjetas de Clientes cambian Validar por Volver a lead para clientes ya validados',()=>{
+  const {sections,node}=setup();
+  sections.clients([rec('c1',{Empresa:'Cliente',Validado:true,'Etapa venta':'Cliente activo'})]);
+  const html=node('opClients').innerHTML;
+  assert.match(html,/Volver a lead/);
+  assert.doesNotMatch(html,/Validar como cliente/);
+});
