@@ -2,7 +2,7 @@
 (function(global){
   'use strict';
   const views=['overview','pedidos','cotizaciones','finanzas','clientes','maquinas','web','calendario','redes','reporte','equipo','newsletter'];
-  const simpleOnlyViews=new Set(['overview','calendario']);
+  const simpleOnlyViews=new Set(['overview','calendario','clientes']);
   const closed=['Despachado','Completado','Cancelado'];
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
   const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null};
@@ -24,8 +24,8 @@
   function dateText(value){const n=until(value);return n===null?'Sin fecha':n<0?`${Math.abs(n)} días de atraso`:n===0?'Hoy':n===1?'Mañana':`En ${n} días`;}
   function mode(page,value){
     const el=$('tab-'+page);if(!el)return;
-    // OVERVIEW y CALENDARIO tienen una sola presentación canónica: Simple.
-    // En ambas, Experto duplicaba la misma interfaz sin aportar información útil.
+    // OVERVIEW, CALENDARIO y CLIENTES tienen una sola presentación canónica: Simple.
+    // En estas secciones, Experto duplicaba la información y empeoraba la lectura visual.
     value=simpleOnlyViews.has(page)?'simple':(value==='expert'?'expert':'simple');el.dataset.opView=value;
     el.querySelectorAll('.op-revealed').forEach(n=>closeDetail(n.id,false));
     el.querySelectorAll('.op-detail-close').forEach(n=>n.remove());
