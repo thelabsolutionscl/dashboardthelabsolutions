@@ -259,12 +259,13 @@ test('VER PROPUESTA muestra descripción, cantidades, costos, ventas y resumen d
 });
 
 
-test('OVERVIEW, CALENDARIO, CLIENTES y COTIZACIONES quedan fijos en Simple y no renderizan selector Experto',()=>{
+test('OVERVIEW, CALENDARIO, CLIENTES, COTIZACIONES, PEDIDOS y MÁQUINAS quedan fijos en Simple',()=>{
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
-  assert.match(src,/const simpleOnlyViews=new Set\(\['overview','calendario','clientes','cotizaciones'\]\)/);
+  assert.match(src,/const simpleOnlyViews=new Set\(\['overview','calendario','clientes','cotizaciones','pedidos','maquinas'\]\)/);
   assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple':\(value==='expert'\?'expert':'simple'\)/);
   assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?mode\(page,'simple'\);[\s\S]*?\}else\{/);
   const branch=/if\(simpleOnlyViews\.has\(page\)\)\{([\s\S]*?)\}else\{/.exec(src);
   assert.ok(branch,'debe existir una rama dedicada para vistas solo Simple');
-  assert.doesNotMatch(branch[1],/Experto|page\+':expert'/,'Overview, Calendario, Clientes y Cotizaciones no deben crear botón Experto');
+  assert.doesNotMatch(branch[1],/Experto|page\+':expert'/,'las vistas simple-only no deben crear botón Experto');
+  assert.match(src,/let layout='tarjetas';[\s\S]*?op_layout_pedidos/,'Tabla/Tarjetas debe quedar independiente de Simple/Experto en Pedidos');
 });
