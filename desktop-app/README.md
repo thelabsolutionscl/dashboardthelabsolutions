@@ -98,3 +98,33 @@ cáscara de escritorio y adapte sus etiquetas. El contenido web sigue
 actualizándose con cada deploy, pero para recibir este soporte nativo de
 multi-ventana hay que recompilar/reinstalar la app **una vez** al pasar desde
 1.0.0 a 1.1.0.
+
+
+## Google Calendar en macOS (v1.2.0)
+
+Google bloquea los flujos OAuth ejecutados dentro de `WKWebView`. Por eso
+**The Lab CRM 1.2.0** ya no intenta mostrar la autorización de Google dentro de
+la ventana Tauri.
+
+El botón **Conectar Google Calendar** usa ahora este flujo:
+
+1. El dashboard detecta que está dentro de la app macOS.
+2. Tauri abre la autorización en Safari/Chrome mediante el navegador del sistema.
+3. La app escucha temporalmente en `127.0.0.1` y valida el retorno con
+   **OAuth 2.0 + PKCE**.
+4. Solo el access token temporal vuelve al dashboard; no se guarda en disco.
+
+### Configuración de Google Cloud
+
+En el mismo proyecto de Google Cloud crea un OAuth Client ID adicional de tipo
+**Aplicación de escritorio** y habilita Google Calendar API. La primera vez que
+se pulse **Conectar Google Calendar** en la app, se pedirá ese Client ID y se
+guardará localmente en ese Mac.
+
+El Client ID web usado por Drive/navegador sigue existiendo; la app nativa usa
+el Client ID de escritorio porque Google no admite autenticación OAuth dentro de
+un webview embebido.
+
+> Si tienes una versión anterior instalada, el dashboard evita abrir el OAuth
+> embebido y muestra un aviso para actualizar. Para habilitar este flujo nativo
+> debes recompilar/reinstalar la app una vez al pasar a **1.2.0**.
