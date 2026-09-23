@@ -183,3 +183,14 @@ test('tarjetas de pedidos muestran pago como desplegable con las mismas acciones
   assert.match(html,/op-payment-dropdown/,'Vista Tarjetas debe usar el badge Pagado como desplegable');
   assert.match(html,/card-pay-abono/,'el menú debe exponer las mismas acciones de pago que Tabla');
 });
+
+
+test('menu de pago se cierra al hacer click fuera y selector de estado queda centrado',()=>{
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  const css=fs.readFileSync('operativo-visual.css','utf8');
+  assert.match(src,/op-payment-dropdown\[open\]/,'debe buscar los menús de pago abiertos');
+  assert.match(src,/dropdown!==activePaymentDropdown\)dropdown\.open=false/,'debe cerrar el menú al hacer click fuera');
+  assert.match(css,/\.op-status-select-wrap::after\{/,'la flecha del selector debe estar controlada por CSS');
+  assert.match(css,/appearance:none;-webkit-appearance:none/,'debe neutralizar la flecha nativa para centrar de forma consistente');
+  assert.match(css,/text-align:center;text-align-last:center/,'el texto del estado debe quedar centrado en todas las opciones');
+});
