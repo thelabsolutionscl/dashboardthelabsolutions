@@ -180,6 +180,43 @@
   function orderStateTone(state){
     return state==='Confirmado'?'confirmed':state==='En producción'?'production':state==='Listo para despacho'?'ready':state==='Despachado'?'dispatched':state==='Completado'?'completed':'neutral';
   }
+  function quoteWorkItems(c){
+    const f=c?.fields||{};
+    let items=[];
+    const rawJson=f['Detalle JSON'];
+    if(rawJson){
+      try{
+        const parsed=typeof rawJson==='string'?JSON.parse(rawJson):rawJson;
+        if(Array.isArray(parsed))items=parsed.map(it=>({
+          desc:String(it?.desc||it?.descripcion||it?.nombre||'').trim(),
+          qty:it?.und??it?.cantidad??it?.qty??''
+        })).filter(it=>it.desc);
+      }catch(e){}
+    }
+    if(!items.length){
+      const detalle=String(f['Detalle productos']||'');
+      items=detalle.split('\n').map(line=>{
+        const parts=line.split('|').map(s=>s.trim());
+        const desc=parts[0]||'';
+        const qtyRaw=parts[1]||'';
+        const qtyMatch=qtyRaw.match(/-?\d+(?:[.,]\d+)?/);
+        return {desc,qty:qtyMatch?qtyMatch[0].replace(',','.'):(qtyRaw||'')};
+      }).filter(it=>it.desc);
+    }
+    return items;
+  }
+  function quoteWorkDetail(c){
+    const items=quoteWorkItems(c);
+    const quoteNum=c?.fields?.['N° Cotización']||'';
+    const rows=items.length?items.map(it=>{
+      const raw=String(it.qty??'').trim();
+      const numeric=raw!==''?Number(raw.replace(',','.')):NaN;
+      const qty=Number.isFinite(numeric)?(Number.isInteger(numeric)?String(numeric):String(numeric).replace('.',',')):raw;
+      const unitLabel=qty?`${qty} ${numeric===1?'unidad':'unidades'}`:'Cantidad sin registrar';
+      return `<div class='op-work-item'><div><span>${esc(it.desc)}</span></div><b>${esc(unitLabel)}</b></div>`;
+    }).join(''):`<div class='op-work-empty'>Sin detalle de productos o unidades registrado en esta cotización.</div>`;
+    return `<section class='op-work-detail' aria-label='Detalle de la propuesta'><div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DE LA PROPUESTA</span><h4>Productos / servicios cotizados</h4></div><small>${esc(quoteNum?`Cotización ${quoteNum}`:'Cotización')}</small></div><div class='op-work-list'>${rows}</div></section>`;
+  }
   function orderWorkItems(p){
     const f=p?.fields||{};
     const cotId=Array.isArray(f['Cotizaciones'])?f['Cotizaciones'][0]:f['Cotizaciones'];
@@ -337,7 +374,7 @@
     const f=r.fields,isOrder=kind==='order';
     const nextStage=isOrder?nextOrderStage(r):null;
     const editTone=!isOrder||!nextStage?'op-primary':'';
-    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div><p>${esc(quoteInfo(r).next)}</p>${quoteStateActions(r)}`}<div class="op-drawer-actions">${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,editTone)}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'Las acciones de estado disponibles aparecen arriba; Editar conserva el control completo de la cotización.'}</p>`;
+    dlg.innerHTML=`<div class="op-drawer-head"><span class="op-eyebrow">${isOrder?'PEDIDO':'COTIZACIÓN'}</span>${button('Cerrar ×','close-drawer')}</div><h2>${esc(f[isOrder?'N° Pedido':'N° Cotización']||'Detalle')}</h2>${isOrder?orderCard(r,true):`<h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'')}</p><div class="op-facts"><div><span>Estado</span><b>${esc(f['Estado cotización']||'Sin estado')}</b></div><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div></div>${quoteWorkDetail(r)}<p>${esc(quoteInfo(r).next)}</p>${quoteStateActions(r)}`}<div class="op-drawer-actions">${button(isOrder?'Editar pedido':'Editar cotización',isOrder?'edit-order':'edit-quote',id,editTone)}${isOrder?button('Control de calidad','qa',id)+button('Ficha técnica','ficha',id)+button('Administrar pagos','order-payments',id):button('Ver PDF','quote-pdf',id)+button('Notas','quote-notes',id)}</div><p class="op-caption">${isOrder?'Producción y pago se gestionan por separado.':'Las acciones de estado disponibles aparecen arriba; Editar conserva el control completo de la cotización.'}</p>`;
     if(!dlg.open)dlg.showModal();
   }
   function goFinance(tab){if(!allowed('finanzas'))return;switchTab('finanzas');finSwitchTab(tab);finance();}
@@ -424,7 +461,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,quoteWorkItems,quoteWorkDetail,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
