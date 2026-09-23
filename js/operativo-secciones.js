@@ -75,6 +75,62 @@
     if(days!==null&&days>=60)return {rank:3,reason:`${days} días desde la última cotización o pedido`,next:'Revisar oportunidad de reactivación'};
     return {rank:4,reason:days===null?'Sin cotizaciones ni pedidos registrados':'Con actividad comercial registrada',next:'Consultar ficha y próxima gestión'};
   }
+  function clientCategoryState(){
+    const active=$('cliCatBar')?.querySelector?.('.cli-cat-chip.active')?.dataset?.cat||'todos';
+    const n=k=>String($('cliCatN-'+k)?.textContent||'0').trim();
+    return {active,leads:n('lead'),clientes:n('cliente'),todos:n('todos')};
+  }
+  function clientToolbar(){
+    const s=clientCategoryState(),search=String($('clienteSearch')?.value||'');
+    const originHtml=s.active==='lead'?String($('cliOrigenBar')?.innerHTML||''):'';
+    const seg=(cat,icon,label,n)=>`<button type="button" class="op-client-seg ${s.active===cat?'active':''}" data-ops="client-cat" data-cat="${cat}"><span>${icon}</span><b>${label}</b><em>${esc(n)}</em></button>`;
+    return `<section class="op-client-command">
+      <div class="op-client-command-head">
+        <div><span class="op-eyebrow">BASE CRM</span><h2>Clientes y leads</h2><p>Filtra, prioriza y ejecuta las mismas acciones del modo Experto sin salir de Tarjetas.</p></div>
+        <div class="op-client-queue ${Number(s.leads)>0?'has-leads':''}"><span>LEADS EN COLA</span><strong>${esc(s.leads)}</strong><small>pendientes de validar</small></div>
+      </div>
+      <div class="op-client-command-row">
+        <div class="op-client-segments">${seg('lead','🎯','Leads',s.leads)}${seg('cliente','✓','Clientes',s.clientes)}${seg('todos','◎','Todos',s.todos)}</div>
+        <label class="op-client-search"><span>⌕</span><input type="search" data-ops-input="client-search" value="${esc(search)}" placeholder="Buscar empresa, contacto, email…"></label>
+      </div>
+      ${originHtml?`<div class="op-client-origins">${originHtml}</div>`:''}
+      <div class="op-client-command-actions">
+        <button type="button" class="op-client-tool primary" data-ops="client-new"><span>＋</span><b>Nuevo lead</b></button>
+        <button type="button" class="op-client-tool" data-ops="client-prospect"><span>🎯</span><b>Prospección IA</b></button>
+        <button type="button" class="op-client-tool" data-ops="client-ranking"><span>✦</span><b>Ranking IA</b></button>
+        <button type="button" class="op-client-tool" data-ops="client-sort" data-sort="score"><span>🔥</span><b>Por score</b></button>
+        <button type="button" class="op-client-tool" data-ops="client-sort" data-sort="silencio"><span>◷</span><b>Inactivos</b></button>
+        <button type="button" class="op-client-tool quiet" data-ops="client-export"><span>↓</span><b>CSV</b></button>
+      </div>
+    </section>`;
+  }
+  function clientCardMenu(c){
+    const f=c?.fields||{},id=esc(c?.id||''),company=esc(f.Empresa||''),name=esc(f.Empresa||f.Contacto||'este cliente');
+    const isLead=typeof esLeadCat==='function'?esLeadCat(c):!(f['Validado']===true);
+    const debt=(Number(f['Facturas vencidas'])||0)>=1;
+    const info=typeof _cliUltInteraccion==='function'?_cliUltInteraccion(c):null;
+    const inactive=['Cliente inactivo','Inactivo','Perdido'].includes(f['Etapa venta']||'');
+    const reactivable=inactive||(info&&Number(info.dias)>=30);
+    return `<div class="op-card-footer-actions">
+      ${action('Ver cliente','client',c.id)}
+      <div class="act-drop op-client-card-actions">
+        <button type="button" class="act-toggle op-client-more" onclick="toggleActMenu(event,'op-actmenu-cli-${id}')" title="Más acciones" aria-label="Más acciones">•••</button>
+        <div class="act-menu op-client-menu" id="op-actmenu-cli-${id}">
+          <button class="act-item" data-ops="client-view" data-id="${id}">👁 &nbsp;Ver detalle</button>
+          <button class="act-item" data-ops="client-edit" data-id="${id}">✏️ &nbsp;Editar (guiado)</button>
+          ${isLead?`<button class="act-item act-item-green" data-ops="client-validate" data-id="${id}">✅ &nbsp;Validar como cliente</button>`:`<button class="act-item" data-ops="client-revert" data-id="${id}">↩ &nbsp;Volver a lead</button>`}
+          <button class="act-item act-item-yellow" data-ops="client-quotes" data-id="${id}" data-company="${company}">▤ &nbsp;Ver cotizaciones</button>
+          <button class="act-item act-item-green" data-ops="client-new-quote" data-id="${id}">＋ &nbsp;Nueva cotización</button>
+          <button class="act-item act-item-green" data-ops="client-kai-quote" data-id="${id}" data-company="${company}">💰 &nbsp;Cotizar con KAI (guiado)</button>
+          <button class="act-item" data-ops="client-portal" data-id="${id}">🔗 &nbsp;Portal cliente</button>
+          <button class="act-item act-item-red" data-ops="client-revoke" data-id="${id}" data-name="${name}">⊘ &nbsp;Revocar links del portal</button>
+          ${isLead?`<button class="act-item act-item-cyan" data-ops="client-sales-ai" data-id="${id}">💬 &nbsp;Estrategia venta IA</button><button class="act-item act-item-cyan" data-ops="client-onboarding-ai" data-id="${id}">📨 &nbsp;Bienvenida IA</button>`:''}
+          ${debt?`<button class="act-item act-item-cyan" data-ops="client-finance-ai" data-id="${id}">💰 &nbsp;Recordatorio pago IA</button>`:''}
+          ${reactivable?`<div class="act-sep"></div><button class="act-item act-item-cyan" data-ops="client-reactivate" data-id="${id}">♻ &nbsp;Reactivar IA</button><button class="act-item act-item-green" data-ops="client-reactivate-done" data-id="${id}">✓ &nbsp;Marcar gestionado (listo)</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }
   function clients(rows){
     if(!permitted('clientes'))return;
     if(rows!==undefined){clientRows=Array.isArray(rows)?rows:[];clientLimit=24;clientsInitialized=true;}
@@ -92,12 +148,13 @@
       (Array.isArray(p.fields.Cliente)?p.fields.Cliente:[]).forEach(id=>{const n=index.get(id)||{sent:0,pending:0,open:0,purchases:0};n.purchases++;index.set(id,n);});
     });
     const ranked=visible.map(c=>({c,info:clientInfo(c,index)})).sort((a,b)=>a.info.rank-b.info.rank);
-    el.innerHTML=`<div class="op-section-heading"><div><h2>Próximas gestiones</h2><p>${ranked.length} clientes en la selección · prioridades según registros del CRM.</p></div></div><div class="op-records">${ranked.slice(0,clientLimit).map(({c,info})=>{
+    try{global.DashboardNotificationBadges?.render?.();}catch(e){}
+    el.innerHTML=`${clientToolbar()}<div class="op-section-heading op-client-list-heading"><div><span class="op-eyebrow">VISTA TARJETAS</span><h2>Próximas gestiones</h2><p>${ranked.length} registros en la selección · prioridades según actividad real del CRM.</p></div></div><div class="op-records op-client-records">${ranked.slice(0,clientLimit).map(({c,info})=>{
       const f=c.fields||{},activity=typeof _cliUltInteraccion==='function'?_cliUltInteraccion(c):null;
       const last=activity&&Number.isFinite(activity.ts)?new Date(activity.ts).toLocaleDateString('es-CL'):'Sin registro';
       const activityLabel=activity?.src==='ingreso'?'Ingreso al CRM':'Última cotización o pedido';
       const count=index.get(c.id)||{sent:0,pending:0,open:0,purchases:0};
-      return `<article class="op-record"><header><div><h3>${esc(f.Empresa||f.Contacto||'Sin nombre')}</h3><p>${esc(f.Contacto||'Contacto sin registrar')}</p></div><span class="op-pill">${esc(f['Etapa venta']||'Sin etapa')}</span></header><p class="op-caption">${esc(info.reason)}</p><div class="op-facts"><div><span>${esc(activityLabel)}</span><b>${esc(last)}</b><small>${activity&&Number.isFinite(activity.dias)?esc(activity.dias===0?'Hoy':'Hace '+activity.dias+' días'):'Sin actividad registrada'}</small></div><div><span>Actividad comercial</span><b>${count.open} cotizaciones abiertas</b><small>${count.purchases} pedidos despachados o completados</small></div></div><footer><span><small>Siguiente paso</small>${esc(info.next)}</span>${action('Ver cliente','client',c.id)}</footer></article>`;
+      return `<article class="op-record"><header><div><h3>${esc(f.Empresa||f.Contacto||'Sin nombre')}</h3><p>${esc(f.Contacto||'Contacto sin registrar')}</p></div><span class="op-pill">${esc(f['Etapa venta']||'Sin etapa')}</span></header><p class="op-caption">${esc(info.reason)}</p><div class="op-facts"><div><span>${esc(activityLabel)}</span><b>${esc(last)}</b><small>${activity&&Number.isFinite(activity.dias)?esc(activity.dias===0?'Hoy':'Hace '+activity.dias+' días'):'Sin actividad registrada'}</small></div><div><span>Actividad comercial</span><b>${count.open} cotizaciones abiertas</b><small>${count.purchases} pedidos despachados o completados</small></div></div><footer><span><small>Siguiente paso</small>${esc(info.next)}</span>${clientCardMenu(c)}</footer></article>`;
     }).join('')||'<p class="op-empty">No hay clientes en esta selección. Revisa la búsqueda y los filtros.</p>'}</div>${ranked.length>clientLimit?action('Ver más clientes','more-clients'):''}`;
   }
   function reportSummary(raw){
@@ -125,9 +182,37 @@
     el.innerHTML=`<div class="op-section-heading"><div><span class="op-eyebrow">ÚLTIMO REPORTE REGISTRADO</span><h2>${esc(f.Semana||'Semana sin registrar')}</h2><p>${esc(f['Estado reporte']||'Estado sin registrar')}</p></div></div><div class="op-metrics"><div class="op-metric"><span>Revenue neto</span><strong>${esc(cash(f['Revenue semana (CLP)']))}</strong><small>${esc(reportDelta(f,prev,'Revenue semana (CLP)','cash'))}</small></div><div class="op-metric"><span>Pedidos despachados</span><strong>${esc(f['Pedidos despachados']??'Sin dato')}</strong><small>${esc(reportDelta(f,prev,'Pedidos despachados','count'))}</small></div><div class="op-metric"><span>Margen semanal</span><strong>${esc(margin)}</strong><small>${esc(reportDelta(f,prev,'Margen promedio semana (%)','margin'))}</small></div></div>${f['Resumen ejecutivo']?reportSummary(f['Resumen ejecutivo']):'<p class="op-caption">Este reporte no tiene conclusiones registradas.</p>'}`;
   }
   document.addEventListener('click',e=>{
-    const b=e.target.closest('[data-ops]');if(!b)return;
-    if(b.dataset.ops==='client'&&permitted('clientes')&&clientRows.some(c=>c.id===b.dataset.id&&(typeof isVendorMode!=='function'||!isVendorMode()||vendorOwnsRecord(c))))openClienteDetalle(b.dataset.id);
-    if(b.dataset.ops==='more-clients'){clientLimit+=24;clients();}
+    const b=e.target.closest?.('[data-ops]');if(!b)return;
+    const op=b.dataset.ops,id=b.dataset.id||'';
+    if(op==='client'&&permitted('clientes')&&clientRows.some(c=>c.id===id&&(typeof isVendorMode!=='function'||!isVendorMode()||vendorOwnsRecord(c))))openClienteDetalle(id);
+    if(op==='more-clients'){clientLimit+=24;clients();}
+    if(op==='client-cat'&&typeof setCliCat==='function')setCliCat(b.dataset.cat||'todos');
+    if(op==='client-new'){if(typeof switchTab==='function')switchTab('nuevo-lead');}
+    if(op==='client-prospect'&&typeof runLeadGenAgent==='function')runLeadGenAgent();
+    if(op==='client-ranking'&&typeof runLeadRankingAgent==='function')runLeadRankingAgent();
+    if(op==='client-sort'){
+      try{if(typeof clientesSort!=='undefined'){clientesSort.key=b.dataset.sort||'score';clientesSort.dir=-1;}if(typeof renderClientes==='function')renderClientes();if(typeof _saveUIState==='function')_saveUIState();}catch(_){}
+    }
+    if(op==='client-export'&&typeof exportToCSV==='function')exportToCSV('clientes');
+    if(op==='client-view'&&typeof openClienteDetalle==='function')openClienteDetalle(id);
+    if(op==='client-edit'&&typeof startEditClientFlow==='function')startEditClientFlow(id);
+    if(op==='client-validate'&&typeof validarCliente==='function')validarCliente(id);
+    if(op==='client-revert'&&typeof revertirALead==='function')revertirALead(id);
+    if(op==='client-quotes'&&typeof verCotizacionesCliente==='function')verCotizacionesCliente(id,b.dataset.company||'');
+    if(op==='client-new-quote'&&typeof cotizarParaCliente==='function')cotizarParaCliente(id);
+    if(op==='client-kai-quote'&&typeof startQuoteFlow==='function')startQuoteFlow(id,b.dataset.company||'');
+    if(op==='client-portal'&&typeof compartirPortalCliente==='function')compartirPortalCliente(id);
+    if(op==='client-revoke'&&typeof revocarPortalCliente==='function')revocarPortalCliente(id,b.dataset.name||'este cliente');
+    if(op==='client-sales-ai'&&typeof runSalesAgent==='function')runSalesAgent(id);
+    if(op==='client-onboarding-ai'&&typeof runOnboardingAgent==='function')runOnboardingAgent(id);
+    if(op==='client-finance-ai'&&typeof runFinanceAgent==='function')runFinanceAgent(id);
+    if(op==='client-reactivate'&&typeof wbReactivar==='function')wbReactivar(id);
+    if(op==='client-reactivate-done'&&typeof wbMarkDone==='function')wbMarkDone(id);
+  });
+  document.addEventListener('input',e=>{
+    const input=e.target.closest?.('[data-ops-input="client-search"]');if(!input)return;
+    const canonical=$('clienteSearch');if(canonical)canonical.value=input.value;
+    if(typeof debInput==='function')debInput('cli',filterClientes);else if(typeof filterClientes==='function')filterClientes();
   });
   global.OPSections={mount,clients,reports,clientInfo};
   document.addEventListener('DOMContentLoaded',mount);
