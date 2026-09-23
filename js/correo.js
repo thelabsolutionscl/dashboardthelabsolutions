@@ -45,6 +45,18 @@ const MAIL={
     return this.accounts().find(x=>x.email===a)||{email:a,name:(AUTH.getUser()?.name||'')};
   },
 
+  unseenTotal(){
+    return Object.values(this._accountUnseen||{}).reduce((sum,n)=>sum+Math.max(0,Number(n)||0),0);
+  },
+  setAccountUnseen(value,email){
+    const account=email||this.activeAccount();if(!account)return 0;
+    this._accountUnseen=this._accountUnseen||{};
+    this._accountUnseen[account]=Math.max(0,Number(value)||0);
+    try{this.renderAccounts();}catch(e){}
+    try{window.DashboardNotificationBadges?.render?.();}catch(e){}
+    return this.unseenTotal();
+  },
+
   _mailPassKey(){const a=this.activeAccount();return a?'thelab_mail_pass_'+a:null;},
   getMailPass(){const k=this._mailPassKey();return k?localStorage.getItem(k)||'':null;},
   setMailPass(p){const k=this._mailPassKey();if(k) localStorage.setItem(k,p);},
@@ -255,8 +267,8 @@ const MAIL={
     document.getElementById('mailFolderList').innerHTML=html||'<div style="padding:8px;font-size:11px;color:var(--text3)">Sin carpetas</div>';
     this._folders=data.folders||[];
     const inbox=this._folders.find(f=>/^INBOX$/i.test(String(f.name||'')))||this._folders[0];
-    if(this.activeAccount())this._accountUnseen[this.activeAccount()]=Number(inbox?.unseen||0);
-    this.renderAccounts();   // reutilizable: preloadSentAddrs ya no las vuelve a pedir
+    this.setAccountUnseen(Number(inbox?.unseen||0));   // actualiza lateral + badge del dock
+    // reutilizable: preloadSentAddrs ya no las vuelve a pedir
     return true;
   },
 
@@ -412,11 +424,15 @@ const MAIL={
     }else{attsDiv.style.display='none';attsDiv.innerHTML='';}
     // Estado del botón destacar
     const listItem=this.msgs.find(x=>x.uid===uid);
+    const wasUnread=!!(listItem&&!listItem.seen);
     this._updateFlagBtn(listItem?!!listItem.flagged:false);
     // El servidor ya lo marcó leído al abrirlo; si la copia local no se entera,
     // cualquier re-pintado de la lista (destacar, eliminar en lote) lo devuelve
     // a negrita como si estuviera sin leer.
     if(listItem) listItem.seen=1;
+    if(wasUnread&&/^INBOX$/i.test(String(this.folder||''))){
+      this.setAccountUnseen(Math.max(0,(this._accountUnseen?.[this.activeAccount()]||0)-1));
+    }
     // Mark read in list
     const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
     if(item) item.classList.remove('unread');
@@ -473,7 +489,11 @@ const MAIL={
     const data=await this.post({action:'mark',folder:this.folder,uid:this.selUid,seen:0});
     if(data.error){toast(data.error,'error');return;}
     const m=this.msgs.find(x=>x.uid===this.selUid);
+    const wasSeen=!!(m&&m.seen);
     if(m) m.seen=0;
+    if(wasSeen&&/^INBOX$/i.test(String(this.folder||''))){
+      this.setAccountUnseen((this._accountUnseen?.[this.activeAccount()]||0)+1);
+    }
     this.selUid=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
     document.getElementById('mailReaderContent').style.display='none';
