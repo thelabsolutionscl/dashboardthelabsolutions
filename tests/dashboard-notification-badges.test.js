@@ -2,7 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const badges=require('../js/dashboard-notification-badges.js');
-const {moduleForItem,buildState,isLeadRecord}=badges._test;
+const {moduleForItem,buildState,isLeadRecord,mailUnreadCount}=badges._test;
 
 test('correo entrante no leído se asigna a CORREO',()=>{
   assert.equal(moduleForItem({id:1,type:'mail',read:false,action:'correo'}),'correo');
@@ -73,4 +73,16 @@ test('badge de Clientes se presenta como contador propio de leads y cubre navega
   assert.match(src,/pendiente\$\{leads===1\?'':'s'\} de validar/);
   assert.match(src,/mobile-tab-btn\[data-tab=/);
   assert.match(src,/module==='clientes'&&leads>0/,'el badge debe mostrar el número de leads, no mezclarlo con alertas genéricas');
+});
+
+
+test('icono CORREO usa el contador real de no leídos y no el historial de avisos',()=>{
+  const fs=require('node:fs');
+  const src=fs.readFileSync('js/dashboard-notification-badges.js','utf8');
+  assert.equal(typeof mailUnreadCount,'function');
+  assert.match(src,/dashboard-mail-unread-badge/);
+  assert.match(src,/const mailUnread=mailUnreadCount\(\)/);
+  assert.match(src,/navTargets\('correo'\)/);
+  assert.match(src,/if\(module==='correo'\)continue/,'Correo no debe duplicar badge genérico de NOTIFY');
+  assert.match(src,/correo\$\{mailUnread===1\?'':'s'\} sin leer/);
 });
