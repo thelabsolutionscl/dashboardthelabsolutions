@@ -25,6 +25,8 @@
     OP.mount();
     const table=$('clientesTableBody')?.closest('.table-wrap');
     if(table){
+      const legacyCrm=table.closest('.card');
+      if(legacyCrm)legacyCrm.classList.add('op-client-legacy-crm');
       const list=document.createElement('section');list.id='opClients';list.className='op-simple op-client-list';table.before(list);
       fold([table],'Tabla completa y selección múltiple');
     }
