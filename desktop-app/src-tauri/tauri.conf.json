@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "The Lab CRM",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "solutions.thelab.dashboard",
   "build": {
     "frontendDist": "../dist"
@@ -11,14 +11,16 @@
       {
         "label": "main",
         "title": "The Lab CRM — Centro de Comando",
-        "url": "https://dashboard.thelab.solutions",
+        "url": "https://dashboard.thelab.solutions/?desktop=macos",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
         "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "create": false,
+        "tabbingIdentifier": "thelab-crm"
       }
     ],
     "security": {
@@ -27,7 +29,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app"],
+    "targets": [
+      "dmg",
+      "app"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
