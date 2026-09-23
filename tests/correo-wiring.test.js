@@ -252,3 +252,20 @@ test('cada cuenta visitada conserva su contador de no leídos en el lateral',()=
   assert.match(folders,/this\.renderAccounts\(\)/);
   assert.match(MAIL,/mail-account-unseen/);
 });
+
+
+test('contador del icono CORREO sigue los no leídos de las cuentas',()=>{
+  assert.match(MAIL,/unseenTotal\(\)/);
+  assert.match(MAIL,/setAccountUnseen\(value,email\)/);
+  assert.match(MAIL,/DashboardNotificationBadges\?\.render/);
+  const folders=methodBlock('loadFolders');
+  assert.match(folders,/this\.setAccountUnseen\(Number\(inbox\?\.unseen\|\|0\)\)/);
+  const read=methodBlock('readMsg');
+  assert.match(read,/const wasUnread=/);
+  assert.match(read,/this\.setAccountUnseen\(Math\.max\(0,/);
+  const unread=methodBlock('markUnread');
+  assert.match(unread,/const wasSeen=/);
+  assert.match(unread,/this\.setAccountUnseen\(\(this\._accountUnseen/);
+  assert.match(NOTIFY,/MAIL\.setAccountUnseen\(total\)/);
+  assert.match(NOTIFY,/DashboardNotificationBadges\?\.render/);
+});
