@@ -246,8 +246,8 @@ test('VER PROPUESTA muestra descripción, cantidades, costos, ventas y resumen d
   const css=fs.readFileSync('operativo-visual.css','utf8');
   assert.match(html,/op-quote-edit-table/,'el detalle debe usar una tabla compacta similar al editor');
   assert.match(css,/\.op-quote-edit-row\{[^}]*grid-template-columns:/,'el formato debe conservar columnas tipo Editar cotización');
-  for(const label of ['DETALLE DE LA COTIZACIÓN','Ítems cotizados','Descripción','Und.','Costo unit.','Costo total','Venta unit.','Venta total','Margen','Venta neta','Neto','IVA 19%','Total con IVA','Forma de pago','Vencimiento','Entrega / plazo'])assert.match(html,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\  for(const label of ['DETALLE DE LA COTIZACIÓN','Descripción, cantidades y valores','Cantidad','Costo unit.','Costo total','Venta unit.','Venta total','Margen','Resumen económico','Neto cotizado','IVA 19%','Total con IVA','Margen global','Forma de pago','Vencimiento','Entrega / plazo'])assert.match(html,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));')));
-  assert.match(html,/4 unidades/);assert.match(html,/1 unidad/);assert.match(html,/COT-2026-200/);
+  for(const label of ['DETALLE DE LA COTIZACIÓN','Ítems cotizados','Descripción','Und.','Costo unit.','Costo total','Venta unit.','Venta total','Margen','Venta neta','Neto','IVA 19%','Total con IVA','Forma de pago','Vencimiento','Entrega / plazo'])assert.ok(html.includes(label),`falta ${label}`);
+  assert.match(html,/data-label='Und\.'/);assert.match(html,/>4<\/div>/);assert.match(html,/>1<\/div>/);assert.match(html,/COT-2026-200/);
   assert.match(html,/\$35000/);assert.match(html,/\$140000/);assert.match(html,/\$90000/);assert.match(html,/\$360000/);
   assert.match(html,/50% ABONO Y 50% 30 DÍAS/);assert.match(html,/2026-09-30/);assert.match(html,/10–15 días hábiles/);
 
