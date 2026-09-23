@@ -248,8 +248,8 @@ test('las cuentas de correo quedan visibles y ordenadas en la columna izquierda'
 test('cada cuenta visitada conserva su contador de no leídos en el lateral',()=>{
   assert.match(MAIL,/_accountUnseen:\{\}/);
   const folders=methodBlock('loadFolders');
-  assert.match(folders,/this\._accountUnseen\[this\.activeAccount\(\)\]/);
-  assert.match(folders,/this\.renderAccounts\(\)/);
+  assert.match(folders,/this\.setAccountUnseen\(Number\(inbox\?\.unseen\|\|0\)\)/);
+  assert.match(MAIL,/setAccountUnseen\(value,email\)/);
   assert.match(MAIL,/mail-account-unseen/);
 });
 
