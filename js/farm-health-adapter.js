@@ -81,6 +81,7 @@ return{install,refresh,probe,ack,status,_test:{}};
     document.head.appendChild(s);
   };
   load('js/dashboard-notification-badges.js','badges de notificaciones');
+  load('js/nav-context-menu.js','personalización contextual del menú');
   load('js/correo-input-compat.js','compatibilidad de teclado de correo');
   load('js/correo-shared-features.js','CC/CCO multiples y plantillas compartidas');
   load('js/correo-to-multi-recipient-fix.js','multiples destinatarios en Para');
