@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-google-calendar-oauth"
+description = "Permite al dashboard oficial iniciar el flujo OAuth nativo de Google Calendar."
+commands.allow = ["google_calendar_oauth"]
