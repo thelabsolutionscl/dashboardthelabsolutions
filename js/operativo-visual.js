@@ -180,6 +180,12 @@
   function orderStateTone(state){
     return state==='Confirmado'?'confirmed':state==='En producción'?'production':state==='Listo para despacho'?'ready':state==='Despachado'?'dispatched':state==='Completado'?'completed':'neutral';
   }
+  function quoteMoneyRaw(v){
+    if(v==null||v==='')return null;
+    if(typeof v==='number')return Number.isFinite(v)?v:null;
+    const s=String(v).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.-]/g,'');
+    const n=Number(s);return Number.isFinite(n)?n:null;
+  }
   function quoteWorkItems(c){
     const f=c?.fields||{};
     let items=[];
@@ -187,10 +193,15 @@
     if(rawJson){
       try{
         const parsed=typeof rawJson==='string'?JSON.parse(rawJson):rawJson;
-        if(Array.isArray(parsed))items=parsed.map(it=>({
-          desc:String(it?.desc||it?.descripcion||it?.nombre||'').trim(),
-          qty:it?.und??it?.cantidad??it?.qty??''
-        })).filter(it=>it.desc);
+        if(Array.isArray(parsed))items=parsed.map(it=>{
+          const qty=quoteMoneyRaw(it?.und??it?.cantidad??it?.qty??'');
+          const costUnit=quoteMoneyRaw(it?.costoUnit??it?.costo_unit??it?.costo??null);
+          const saleUnit=quoteMoneyRaw(it?.ventaUnit??it?.venta_unit??it?.venta??null);
+          const costTotal=quoteMoneyRaw(it?.costoTotal??it?.costo_total??null)??(qty!=null&&costUnit!=null?qty*costUnit:null);
+          const saleTotal=quoteMoneyRaw(it?.ventaTotal??it?.venta_total??null)??(qty!=null&&saleUnit!=null?qty*saleUnit:null);
+          const margin=saleTotal!=null&&saleTotal>0&&costTotal!=null?(saleTotal-costTotal)/saleTotal*100:null;
+          return {desc:String(it?.desc||it?.descripcion||it?.nombre||'').trim(),qty,costUnit,saleUnit,costTotal,saleTotal,margin};
+        }).filter(it=>it.desc);
       }catch(e){}
     }
     if(!items.length){
@@ -198,24 +209,45 @@
       items=detalle.split('\n').map(line=>{
         const parts=line.split('|').map(s=>s.trim());
         const desc=parts[0]||'';
-        const qtyRaw=parts[1]||'';
-        const qtyMatch=qtyRaw.match(/-?\d+(?:[.,]\d+)?/);
-        return {desc,qty:qtyMatch?qtyMatch[0].replace(',','.'):(qtyRaw||'')};
+        const qtyMatch=(parts[1]||'').match(/-?\d+(?:[.,]\d+)?/);
+        const qty=qtyMatch?quoteMoneyRaw(qtyMatch[0]):null;
+        const costPart=parts.find(p=>/^costo\s*:/i.test(p))||parts[2]||'';
+        const salePart=parts.find(p=>/^venta\s*:/i.test(p))||parts[3]||'';
+        const costTotal=quoteMoneyRaw(costPart.replace(/^costo\s*:/i,''));
+        const saleTotal=quoteMoneyRaw(salePart.replace(/^venta\s*:/i,''));
+        const costUnit=qty&&costTotal!=null?costTotal/qty:null;
+        const saleUnit=qty&&saleTotal!=null?saleTotal/qty:null;
+        const margin=saleTotal!=null&&saleTotal>0&&costTotal!=null?(saleTotal-costTotal)/saleTotal*100:null;
+        return {desc,qty,costUnit,saleUnit,costTotal,saleTotal,margin};
       }).filter(it=>it.desc);
     }
     return items;
   }
   function quoteWorkDetail(c){
-    const items=quoteWorkItems(c);
-    const quoteNum=c?.fields?.['N° Cotización']||'';
+    const f=c?.fields||{},items=quoteWorkItems(c);
+    const quoteNum=f['N° Cotización']||'';
+    const totalIva=quoteMoneyRaw(f['Total final (CLP)']);
+    const neto=totalIva!=null?Math.round(totalIva/1.19):null;
+    const iva=totalIva!=null&&neto!=null?totalIva-neto:null;
+    const itemsCost=items.reduce((s,it)=>s+(it.costTotal||0),0);
+    const itemsSale=items.reduce((s,it)=>s+(it.saleTotal||0),0);
+    const costoTotal=items.some(it=>it.costTotal!=null)?itemsCost:quoteMoneyRaw(f['Subtotal (CLP)']);
+    const ventaAntesDesc=items.some(it=>it.saleTotal!=null)?itemsSale:null;
+    const descPct=quoteMoneyRaw(f['Descuento (%)'])||0;
+    const descMonto=ventaAntesDesc!=null&&neto!=null?Math.max(0,ventaAntesDesc-neto):null;
+    let margenGlobal=null;try{margenGlobal=typeof getMargenCot==='function'?getMargenCot(f):null;}catch(e){}
+    const fmt=v=>v==null?'—':money(v);
+    const pct=v=>v==null||!Number.isFinite(Number(v))?'—':Number(v).toFixed(1).replace('.0','')+'%';
     const rows=items.length?items.map(it=>{
-      const raw=String(it.qty??'').trim();
-      const numeric=raw!==''?Number(raw.replace(',','.')):NaN;
-      const qty=Number.isFinite(numeric)?(Number.isInteger(numeric)?String(numeric):String(numeric).replace('.',',')):raw;
-      const unitLabel=qty?`${qty} ${numeric===1?'unidad':'unidades'}`:'Cantidad sin registrar';
-      return `<div class='op-work-item'><div class='op-work-desc'><small>Descripción</small><span>${esc(it.desc)}</span></div><div class='op-work-qty'><small>Cantidad</small><b>${esc(unitLabel)}</b></div></div>`;
+      const qty=it.qty==null?'—':(Number.isInteger(it.qty)?String(it.qty):String(it.qty).replace('.',','));
+      const unitLabel=qty==='—'?'—':`${qty} ${Number(it.qty)===1?'unidad':'unidades'}`;
+      const marginColorValue=it.margin==null?'':marginColor(it.margin);
+      return `<div class='op-quote-item'><div class='op-quote-item-desc'><small>Descripción</small><strong>${esc(it.desc)}</strong></div><div class='op-quote-item-values'><div><small>Cantidad</small><b>${esc(unitLabel)}</b></div><div><small>Costo unit.</small><b>${fmt(it.costUnit)}</b></div><div><small>Costo total</small><b>${fmt(it.costTotal)}</b></div><div><small>Venta unit.</small><b>${fmt(it.saleUnit)}</b></div><div><small>Venta total</small><b>${fmt(it.saleTotal)}</b></div><div class='op-quote-margin' style='${marginColorValue?`--op-quote-margin:${marginColorValue}`:''}'><small>Margen</small><b>${pct(it.margin)}</b></div></div></div>`;
     }).join(''):`<div class='op-work-empty'>Sin detalle de productos o unidades registrado en esta cotización.</div>`;
-    return `<section class='op-work-detail op-quote-work-detail' aria-label='Detalle de la cotización'><div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DE LA COTIZACIÓN</span><h4>Descripción y cantidad de unidades</h4></div><small>${esc(quoteNum?`Cotización ${quoteNum}`:'Cotización')}</small></div><div class='op-work-list'>${rows}</div></section>`;
+    const plazo=f['Fecha de entrega']||((f['Tiempo de producción']||f['Tiempo de producción máx'])?[f['Tiempo de producción'],f['Tiempo de producción máx']].filter(Boolean).join('–')+' '+String(f['Tipo días producción']||'días').toLowerCase():'—');
+    const summary=`<div class='op-quote-summary'><div><small>Costo total</small><b>${fmt(costoTotal)}</b></div><div><small>Venta neta antes desc.</small><b>${fmt(ventaAntesDesc)}</b></div><div><small>Descuento</small><b>${descPct?pct(descPct):'Sin descuento'}${descMonto!=null&&descMonto>0?` · −${fmt(descMonto)}`:''}</b></div><div><small>Neto cotizado</small><b>${fmt(neto)}</b></div><div><small>IVA 19%</small><b>${fmt(iva)}</b></div><div class='op-quote-total'><small>Total con IVA</small><b>${fmt(totalIva)}</b></div><div class='op-quote-margin' style='${margenGlobal!=null?`--op-quote-margin:${marginColor(margenGlobal)}`:''}'><small>Margen global</small><b>${pct(margenGlobal)}</b></div></div>`;
+    const conditions=`<div class='op-quote-conditions'><div><small>Forma de pago</small><b>${esc(f['Forma de pago']||'—')}</b></div><div><small>Fecha cotización</small><b>${esc(f['Fecha cotización']||'—')}</b></div><div><small>Vencimiento</small><b>${esc(f['Fecha vencimiento']||'—')}</b></div><div><small>Entrega / plazo</small><b>${esc(plazo)}</b></div><div><small>Urgencia</small><b>${f['Urgencia (+25%)']?'Sí':'No'}</b></div></div>`;
+    return `<section class='op-work-detail op-quote-work-detail' aria-label='Detalle de la cotización'><div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DE LA COTIZACIÓN</span><h4>Descripción, cantidades y valores</h4></div><small>${esc(quoteNum?`Cotización ${quoteNum}`:'Cotización')}</small></div><div class='op-work-list'>${rows}</div><div class='op-quote-summary-title'>Resumen económico</div>${summary}<div class='op-quote-summary-title'>Condiciones</div>${conditions}</section>`;
   }
   function orderWorkItems(p){
     const f=p?.fields||{};
