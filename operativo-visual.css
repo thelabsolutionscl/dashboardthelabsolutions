@@ -40,6 +40,20 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-margin-fact b{color:var(--op-margin-color,var(--text))!important}
 .op-payment{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;font-size:12px;border-top:1px solid var(--border)}
 .op-payment>small{flex-basis:100%;color:var(--text2);font-size:12px;line-height:1.5}
+.op-payment-dropdown{position:relative;display:inline-block}
+.op-payment-dropdown>summary{list-style:none}
+.op-payment-dropdown>summary::-webkit-details-marker{display:none}
+.op-payment-summary{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:5px 10px;border-radius:8px;border:1px solid var(--border2);font-size:11px;font-weight:800;cursor:pointer;user-select:none}
+.op-payment-summary span{font-size:9px;opacity:.75}
+.op-payment-good{color:var(--accent3);background:rgba(0,212,170,.10);border-color:rgba(0,212,170,.35)}
+.op-payment-partial{color:var(--warn);background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.35)}
+.op-payment-pending{color:var(--text2);background:var(--surface2)}
+.op-payment-dropdown[open] .op-payment-summary{box-shadow:0 0 0 2px rgba(0,212,204,.14)}
+.op-payment-menu{position:absolute;z-index:60;top:calc(100% + 7px);left:0;min-width:180px;padding:7px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.36);display:grid;gap:5px}
+.op-payment-menu button{appearance:none;border:1px solid transparent;background:transparent;color:var(--text);border-radius:7px;padding:8px 10px;text-align:left;font:700 11px/1.25 'DM Sans',sans-serif;cursor:pointer}
+.op-payment-menu button:hover{background:var(--surface2);border-color:var(--border2)}
+.op-payment-menu button.is-active{background:rgba(0,212,204,.12);border-color:rgba(0,212,204,.35);color:var(--accent)}
+@media(max-width:720px){.op-payment-menu{min-width:170px}.op-payment-summary{min-height:34px}}
 .op-payment-quick{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 0 14px;border-bottom:1px solid var(--border)}
 .op-payment-quick-label{font-size:11px;font-weight:700;color:var(--text2);margin-right:2px}
 .op-payment-quick .op-button{min-height:32px;padding:6px 10px;font-size:11px}
