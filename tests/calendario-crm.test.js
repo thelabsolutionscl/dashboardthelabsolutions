@@ -181,3 +181,24 @@ test('UI y persistencia incluyen fechas, historial, vistas y sincronización sel
   assert.match(MOPS, /function deadlineCapacityRisk/);
   assert.match(MOPS, /deadlineCapacityRisk,/);
 });
+
+
+test('modal de vencimientos reutiliza el detalle completo de cotizaciones y pedidos', () => {
+  assert.match(CAL_SRC, /function _calRenderCrmDetail\(kind,rec,modal\)/);
+  assert.match(CAL_SRC, /window\.OP\?\.quoteWorkDetail/,'cotizaciones deben reutilizar el mismo detalle de VER PROPUESTA');
+  assert.match(CAL_SRC, /window\.OP\?\.orderWorkDetail/,'pedidos deben reutilizar el mismo detalle de VER PEDIDO');
+  assert.match(CAL_SRC, /_calRenderCrmDetail\(kind,rec,modal\);/,'el detalle debe renderizarse cada vez que se abre un compromiso');
+  assert.match(CAL_SRC, /id='calCrmDetail'|box\.id='calCrmDetail'/);
+  assert.match(CAL_SRC, /DETALLE DE LA COTIZACIÓN/);
+  assert.match(CAL_SRC, /DETALLE DEL TRABAJO/);
+  assert.match(CAL_SRC, /Cotizaciones/,'el fallback de pedidos debe recuperar la cotización vinculada');
+  assert.match(CAL_SRC, /max-height:390px/,'el detalle debe poder crecer sin sacar las acciones del modal');
+});
+
+test('el detalle del calendario tiene fallback para registros antiguos', () => {
+  assert.match(CAL_SRC, /Detalle JSON/);
+  assert.match(CAL_SRC, /Detalle productos/);
+  assert.match(CAL_SRC, /Costo unit\./);
+  assert.match(CAL_SRC, /Venta unit\./);
+  assert.match(CAL_SRC, /Cantidad sin registrar/);
+});
