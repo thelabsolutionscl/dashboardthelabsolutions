@@ -37,14 +37,14 @@ function functionSource(source,name){
   throw new Error(`no se pudo aislar ${name}`);
 }
 
-test('Máquinas participa del selector Simple/Experto persistente',()=>{
+test('Máquinas queda en vista Simple única y mantiene la telemetría operativa',()=>{
   assert.match(UI,/views=\[[^\]]*'maquinas'/);
+  assert.match(UI,/simpleOnlyViews=new Set\([^)]*'maquinas'/);
   const mode=functionSource(UI,'mode');
   assert.match(mode,/el\.dataset\.opView=value/);
-  assert.match(mode,/localStorage\.setItem\('op_view_'\+page,value\)/);
   assert.match(mode,/details\.op-disclosure,details\.op-post-actions/);
   assert.match(mode,/details\.op-telemetry/);
-  assert.match(mode,/n\.open=true/,'telemetría debe permanecer desplegada en Simple y Experto');
+  assert.match(mode,/n\.open=true/,'telemetría debe permanecer desplegada en la vista única');
   assert.match(CSS,/\[data-op-view=simple\] \.op-expert-only\{display:none!important\}/);
 });
 
