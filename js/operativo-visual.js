@@ -160,12 +160,17 @@
     }).join('');
     return `<div class="op-card-control"><div class="op-card-control-head"><span>Equipo</span><small>clic para asignar</small></div><div class="op-team-chips">${chips}</div></div>`;
   }
-  function orderStageControls(p){
+  function orderStateTone(state){
+    return state==='Confirmado'?'confirmed':state==='En producción'?'production':state==='Listo para despacho'?'ready':state==='Despachado'?'dispatched':state==='Completado'?'completed':'neutral';
+  }
+  function orderStatusDropdown(p){
     const current=String(p?.fields?.['Estado pedido']||'').trim();
-    return `<div class="op-card-control"><div class="op-card-control-head"><span>Estado</span><small>clic para cambiar</small></div><div class="op-stage-picks">${stages.map(s=>{
-      const active=s===current,label=s==='Listo para despacho'?'Listo':s;
-      return `<button type="button" class="op-stage-pick${active?' is-selected':''}" aria-pressed="${active?'true':'false'}" title="${esc(s)}" ${active?'disabled':''} onclick="event.stopPropagation();advancePedido('${p.id}','${s}')">${esc(label)}</button>`;
-    }).join('')}</div></div>`;
+    const tone=orderStateTone(current);
+    return `<div class="op-status-select-wrap op-status-${tone}" title="Cambiar estado del pedido">
+      <select class="op-status-select" aria-label="Estado del pedido ${esc(p?.fields?.['N° Pedido']||'')}" onchange="event.stopPropagation();if(this.value!==this.dataset.current){advancePedido('${p.id}',this.value)}" onclick="event.stopPropagation()" data-current="${esc(current)}">
+        ${stages.map(s=>`<option value="${esc(s)}" ${s===current?'selected':''}>${esc(s)}</option>`).join('')}
+      </select>
+    </div>`;
   }
   function orderCard(p,detail=false){
     const f=p.fields,e=f['Estado pedido']||'Sin estado',pay=payment(p),late=until(f['Fecha entrega'])<0&&until(f['Fecha entrega'])!==null&&!closed.includes(e);
@@ -175,11 +180,12 @@
     const next=e==='Listo para despacho'&&f['Resultado QA']!=='QA aprobado'?'Revisar control de calidad':e==='Confirmado'?'Preparar producción':e==='En producción'?'Revisar avance y entrega':e==='Despachado'?'Revisar entrega y pago':e==='Cancelado'?'Pedido cancelado':'Consultar detalle';
     const cardMenu=!detail&&typeof pedidoActMenuHtml==='function'?pedidoActMenuHtml(p,`actmenu-ped-card-${p.id}`):'';
     const mainAction=detail&&nextStage?button(nextStage==='En producción'?'Pasar a producción':nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',p.id,'op-primary'):detail?'':button('Ver pedido','order',p.id,'op-primary');
-    return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${pill(late?'Entrega atrasada':e,late?'danger':'neutral')}</header>
+    const statusControl=detail||late?pill(late?'Entrega atrasada':e,late?'danger':'neutral'):orderStatusDropdown(p);
+    return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${statusControl}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
       <div class="op-payment"><b>Pago</b> ${pill(pay.label,pay.tone)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
       ${detail?paymentControls(p):orderTeamControls(p)}
-      ${detail?stepper(e):orderStageControls(p)}<footer><span><small>Siguiente paso</small>${esc(next)}</span><div class="op-card-footer-actions">${cardMenu}${mainAction}</div></footer></article>`;
+      ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span><div class="op-card-footer-actions">${cardMenu}${mainAction}</div></footer></article>`;
   }
   function orders(rows,all){
     mount();const el=$('opOrders');if(!el)return;
@@ -341,7 +347,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStageControls,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);

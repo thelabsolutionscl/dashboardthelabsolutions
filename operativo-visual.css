@@ -183,21 +183,31 @@ dialog.op-drawer[data-kind="quote"]{inset:0;width:100vw;max-width:100vw;height:1
 .op-card-control-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .op-card-control-head>span{font-size:11px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.45px}
 .op-card-control-head>small{font-size:9.5px;color:var(--text3)}
-.op-team-chips,.op-stage-picks{display:flex;gap:6px;flex-wrap:wrap}
-.op-team-chip,.op-stage-pick{
+.op-team-chips{display:flex;gap:6px;flex-wrap:wrap}
+.op-team-chip{
   appearance:none;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);
   border-radius:999px;min-height:29px;padding:5px 9px;font:700 10px/1 'DM Sans',sans-serif;
   cursor:pointer;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease
 }
-.op-team-chip:hover,.op-stage-pick:hover{border-color:var(--accent);color:var(--text);transform:translateY(-1px)}
-.op-team-chip.is-selected,.op-stage-pick.is-selected{
+.op-team-chip:hover{border-color:var(--accent);color:var(--text);transform:translateY(-1px)}
+.op-team-chip.is-selected{
   background:var(--accent)!important;color:#061513!important;border-color:var(--accent)!important;
   box-shadow:0 0 0 1px rgba(0,212,204,.18)
 }
-.op-stage-pick:disabled{opacity:1;cursor:default;transform:none}
-.op-stage-picks{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
-.op-stage-pick{border-radius:8px;padding:6px 4px;white-space:normal;line-height:1.15;text-align:center}
+.op-status-select-wrap{position:relative;flex:0 0 auto;border-radius:10px}
+.op-status-select{
+  appearance:auto;min-height:38px;max-width:190px;padding:7px 10px;
+  border-radius:10px;border:1px solid currentColor;background:var(--surface2);color:inherit;
+  font:800 11px/1.2 'DM Sans',sans-serif;cursor:pointer;outline:none
+}
+.op-status-confirmed{color:var(--accent)}
+.op-status-production{color:#ff6b35}
+.op-status-ready{color:#f59e0b}
+.op-status-dispatched{color:var(--accent3)}
+.op-status-completed{color:#94a3b8}
+.op-status-neutral{color:var(--text2)}
+.op-status-select-wrap:focus-within{box-shadow:0 0 0 2px rgba(0,212,204,.18)}
 @media(max-width:720px){
-  .op-stage-picks{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .op-team-chip,.op-stage-pick{min-height:34px}
+  .op-team-chip{min-height:34px}
+  .op-status-select{max-width:154px;min-height:36px;font-size:10px}
 }
