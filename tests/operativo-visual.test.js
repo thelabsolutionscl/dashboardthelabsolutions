@@ -142,23 +142,28 @@ test('el margen dinámico no puede ser sobrescrito por el color semántico púrp
 });
 
 
-test('tarjetas de pedidos muestran equipo seleccionable y todos los estados editables',()=>{
-  const {context,op}=setup();
+test('tarjetas de pedidos muestran equipo seleccionable y estado en desplegable de cabecera',()=>{
+  const {context,op,element}=setup();
   context.PERSONAS=[
     {id:'gustavo',nombre:'Gustavo Kaiser'},
     {id:'nicanor',nombre:'Nicanor Marambio'},
     {id:'florencia',nombre:'Florencia Cancino'}
   ];
-  const pedido=record('p',{'Estado pedido':'En producción','Equipo asignado':'Gustavo Kaiser, Florencia Cancino'});
+  const pedido=record('p',{'N° Pedido':'PED-1','Cliente':'ABC','Estado pedido':'En producción','Equipo asignado':'Gustavo Kaiser, Florencia Cancino'});
   const team=op.orderTeamControls(pedido);
   assert.match(team,/Equipo/);
   assert.match(team,/Gustavo/);assert.match(team,/Nicanor/);assert.match(team,/Florencia/);
   assert.equal((team.match(/is-selected/g)||[]).length,2,'debe marcar exactamente a las personas asignadas');
   assert.match(team,/toggleEquipoPedidoCard/,'cada etiqueta de equipo debe ser seleccionable desde la tarjeta');
 
-  const states=op.orderStageControls(pedido);
-  for(const label of ['Confirmado','En producción','Listo','Despachado','Completado'])assert.match(states,new RegExp(label));
-  assert.match(states,/advancePedido\('p','Confirmado'\)/);
-  assert.match(states,/advancePedido\('p','Despachado'\)/);
-  assert.match(states,/aria-pressed="true"/,'el estado actual debe quedar visualmente seleccionado');
+  const states=op.orderStatusDropdown(pedido);
+  assert.match(states,/<select class="op-status-select"/,'el botón de estado debe ser un desplegable');
+  for(const label of ['Confirmado','En producción','Listo para despacho','Despachado','Completado'])assert.match(states,new RegExp(label));
+  assert.match(states,/advancePedido\('p',this\.value\)/,'cambiar una opción debe reutilizar advancePedido');
+  assert.match(states,/data-current="En producción"/);
+
+  op.orders([pedido],[pedido]);
+  const html=element('opOrders').innerHTML;
+  assert.match(html,/op-status-select/,'la tarjeta debe mostrar el selector en la cabecera');
+  assert.doesNotMatch(html,/op-stage-picks/,'no debe duplicar los estados como botones dentro de la tarjeta');
 });
