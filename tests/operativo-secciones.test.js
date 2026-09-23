@@ -163,3 +163,13 @@ test('tarjetas de Clientes cambian Validar por Volver a lead para clientes ya va
   assert.match(html,/Volver a lead/);
   assert.doesNotMatch(html,/Validar como cliente/);
 });
+
+
+test('menú de acciones de tarjetas no usa un ancestro transformado ni animación que provoque parpadeo',()=>{
+  const css=fs.readFileSync('operativo-visual.css','utf8');
+  const hover=/\.op-client-records \.op-record:hover\{([^}]*)\}/.exec(css);
+  assert.ok(hover,'debe existir el hover de tarjetas de Clientes');
+  assert.doesNotMatch(hover[1],/transform\s*:/,'la tarjeta no puede transformar el containing block del menú fixed');
+  assert.match(css,/\.op-client-menu\.open\{animation:none!important;transition:none!important\}/);
+  assert.match(css,/\.op-client-menu\{[^}]*z-index:800/);
+});
