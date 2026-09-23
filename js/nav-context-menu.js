@@ -43,6 +43,14 @@ function tabUrl(href,tab){
   u.searchParams.set(TAB_PARAM,String(tab||''));
   return u.toString();
 }
+function isDesktopApp(win){
+  try{
+    const u=new URL(win.location.href);
+    if(u.searchParams.get('desktop')==='macos')return true;
+  }catch(_){}
+  try{if(/tauri|the lab crm/i.test(String(win.navigator?.userAgent||'')))return true;}catch(_){}
+  return false;
+}
 function labelFor(el){
   if(!el)return'';
   const label=el.querySelector?.('.dock-label,.mbd-label,.mg-label')?.textContent?.trim();
@@ -148,10 +156,11 @@ function install(win){
   }
   function showItemMenu(el,x,y){
     const tab=el.dataset.tab,label=labelFor(el),state=read(),order=effectiveOrder(state),idx=order.indexOf(tab);
-    const box=menuBase();title(box,label);
+    const desktop=isDesktopApp(win);
+    const box=menuBase();title(box,label+(desktop?' · App macOS':''));
     addItem(box,'Abrir',()=>openTab(tab),{icon:'↗'});
-    addItem(box,'Abrir en pestaña nueva',()=>newTab(tab),{icon:'＋'});
-    addItem(box,'Abrir en ventana nueva',()=>newWindow(tab),{icon:'▣'});
+    addItem(box,desktop?'Abrir en otra ventana de la app':'Abrir en pestaña nueva',()=>newTab(tab),{icon:'＋'});
+    addItem(box,desktop?'Abrir en ventana flotante':'Abrir en ventana nueva',()=>newWindow(tab),{icon:'▣'});
     sep(box);
     addItem(box,'Mover arriba',()=>move(tab,-1),{icon:'↑',disabled:idx<=0});
     addItem(box,'Mover abajo',()=>move(tab,1),{icon:'↓',disabled:idx<0||idx>=order.length-1});
@@ -235,5 +244,5 @@ function install(win){
   return true;
 }
 
-return{install,_test:{uniq,normalizeState,mergeOrder,moveTab,tabUrl,labelFor,STATE_KEY,TAB_PARAM}};
+return{install,_test:{uniq,normalizeState,mergeOrder,moveTab,tabUrl,labelFor,isDesktopApp,STATE_KEY,TAB_PARAM}};
 });
