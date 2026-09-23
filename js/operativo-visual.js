@@ -301,6 +301,12 @@
   function goFinance(tab){if(!allowed('finanzas'))return;switchTab('finanzas');finSwitchTab(tab);finance();}
   function selectCot(filter){ui.cot=filter;ui.limit=24;renderCotizaciones();}
   async function events(e){
+    // Los <details> no se cierran solos al hacer click fuera. Mantén abierto solo
+    // el menú de pago que contiene el click actual y cierra cualquier otro.
+    const activePaymentDropdown=e.target.closest?.('.op-payment-dropdown');
+    document.querySelectorAll?.('.op-payment-dropdown[open]').forEach(dropdown=>{
+      if(dropdown!==activePaymentDropdown)dropdown.open=false;
+    });
     const b=e.target.closest('[data-op]');if(!b)return;
     const a=b.dataset.op,arg=b.dataset.arg||'';
     if(a==='mode'){const [page,value]=arg.split(':');mode(page,value);return;}
