@@ -421,10 +421,17 @@ function showOsNotif(title, body, onClick){
 
 // Actualiza el título de la pestaña con el contador de no leídos
 function updateTabTitle(unseen){
-  document.title = unseen>0 ? `(${unseen}) ${_BASE_TITLE}` : _BASE_TITLE;
+  let total=Math.max(0,Number(unseen)||0);
+  try{
+    if(typeof MAIL!=='undefined'&&typeof MAIL.setAccountUnseen==='function'){
+      total=MAIL.setAccountUnseen(total);
+    }
+  }catch(e){}
+  document.title = total>0 ? `(${total}) ${_BASE_TITLE}` : _BASE_TITLE;
   try{
     const b=document.getElementById('mailBadge');
-    if(b){ b.textContent = unseen>99?'99+':unseen; b.style.display = unseen>0?'flex':'none'; }
+    if(b){ b.textContent = total>99?'99+':total; b.style.display = total>0?'flex':'none'; }
+    window.DashboardNotificationBadges?.render?.();
   }catch(e){}
 }
 
