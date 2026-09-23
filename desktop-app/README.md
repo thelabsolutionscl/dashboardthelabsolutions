@@ -83,3 +83,18 @@ src-tauri/target/release/bundle/
   así que la página corre como en un navegador normal, solo que en su ventana.
 - **Versión:** sube `version` en `package.json` y `src-tauri/tauri.conf.json`
   cuando quieras numerar un instalador nuevo.
+
+
+## Ventanas múltiples (v1.1.0)
+
+Desde la versión **1.1.0**, los enlaces internos que el dashboard abre con
+`window.open()` se convierten en ventanas nativas de **The Lab CRM** en macOS.
+Esto permite que el menú contextual del dock use **Abrir en otra ventana de la
+app** y **Abrir en ventana flotante** sin salir del CRM. Los enlaces externos
+(Drive, WhatsApp, etc.) conservan su comportamiento normal.
+
+La URL principal incluye `?desktop=macos` para que la interfaz web detecte la
+cáscara de escritorio y adapte sus etiquetas. El contenido web sigue
+actualizándose con cada deploy, pero para recibir este soporte nativo de
+multi-ventana hay que recompilar/reinstalar la app **una vez** al pasar desde
+1.0.0 a 1.1.0.
