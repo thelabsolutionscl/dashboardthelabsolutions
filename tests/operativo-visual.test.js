@@ -259,11 +259,12 @@ test('VER PROPUESTA muestra descripción, cantidades, costos, ventas y resumen d
 });
 
 
-test('OVERVIEW queda fijo en Simple y no renderiza selector Experto',()=>{
+test('OVERVIEW y CALENDARIO quedan fijos en Simple y no renderizan selector Experto',()=>{
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
-  assert.match(src,/value=page==='overview'\?'simple':\(value==='expert'\?'expert':'simple'\)/);
-  assert.match(src,/if\(page==='overview'\)\{[\s\S]*?mode\(page,'simple'\);[\s\S]*?\}else\{/);
-  const branch=/if\(page==='overview'\)\{([\s\S]*?)\}else\{/.exec(src);
-  assert.ok(branch,'debe existir rama dedicada para Overview');
-  assert.doesNotMatch(branch[1],/Experto|page\+':expert'/,'Overview no debe crear botón Experto');
+  assert.match(src,/const simpleOnlyViews=new Set\(\['overview','calendario'\]\)/);
+  assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple':\(value==='expert'\?'expert':'simple'\)/);
+  assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?mode\(page,'simple'\);[\s\S]*?\}else\{/);
+  const branch=/if\(simpleOnlyViews\.has\(page\)\)\{([\s\S]*?)\}else\{/.exec(src);
+  assert.ok(branch,'debe existir una rama dedicada para vistas solo Simple');
+  assert.doesNotMatch(branch[1],/Experto|page\+':expert'/,'Overview y Calendario no deben crear botón Experto');
 });
