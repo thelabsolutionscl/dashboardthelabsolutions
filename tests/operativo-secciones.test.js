@@ -78,18 +78,19 @@ test('reportes compara registros reales, normaliza margen y limita acciones',()=
   sections.reports();assert.doesNotMatch(node('opReports').innerHTML,/NaN|puntos porcentuales/);
   assert.match(node('opReports').innerHTML,/Sin comparación disponible/);
 });
-test('todos los formatos de pedidos conservan el nivel de detalle',()=>{
+test('todos los formatos de pedidos se conservan dentro de la vista Simple única',()=>{
   const {ctx,op,node,writes}=setup();
-  for(const view of ['simple','expert']){
-    op.mode('pedidos',view);
+  for(const requestedView of ['simple','expert']){
+    op.mode('pedidos',requestedView);
+    assert.equal(node('tab-pedidos').dataset.opView,'simple','Pedidos debe ignorar cualquier modo Experto legado');
     for(const layout of ['tarjetas','tabla','kanban','calendario','planificacion']){
       ctx.setPedidosView(layout);
-      assert.equal(node('tab-pedidos').dataset.opView,view);
+      assert.equal(node('tab-pedidos').dataset.opView,'simple');
       assert.equal(node('tab-pedidos').dataset.opLayout,layout);
       assert.equal(node('pedidosTableWrap').style.display,layout==='tabla'?'':'none');
-      op.mode('pedidos',view==='simple'?'expert':'simple');
+      op.mode('pedidos','expert');
+      assert.equal(node('tab-pedidos').dataset.opView,'simple');
       assert.equal(node('tab-pedidos').dataset.opLayout,layout);
-      op.mode('pedidos',view);
     }
   }
   const count=writes.length;ctx.setPedidosView('tabla',{persist:false});
