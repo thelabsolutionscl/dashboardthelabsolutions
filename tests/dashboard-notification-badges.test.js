@@ -2,7 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const badges=require('../js/dashboard-notification-badges.js');
-const {moduleForItem,buildState}=badges._test;
+const {moduleForItem,buildState,isLeadRecord}=badges._test;
 
 test('correo entrante no leído se asigna a CORREO',()=>{
   assert.equal(moduleForItem({id:1,type:'mail',read:false,action:'correo'}),'correo');
@@ -54,4 +54,23 @@ test('salud y drift se deduplican por sus namespaces separados',()=>{
 test('acciones internas o módulos desconocidos no generan globos',()=>{
   assert.equal(moduleForItem({type:'warning',read:false,action:'@hacerAlgo'}),'');
   assert.equal(moduleForItem({type:'warning',read:false,action:'inventado'}),'');
+});
+
+
+test('cola de Clientes cuenta registros no validados como leads',()=>{
+  assert.equal(isLeadRecord({fields:{Validado:false,'Etapa venta':'Contactado'}}),true);
+  assert.equal(isLeadRecord({fields:{Validado:true,'Etapa venta':'Cliente activo'}}),false);
+  assert.equal(isLeadRecord({fields:{'Etapa venta':'Cliente activo'}}),false);
+  assert.equal(isLeadRecord({fields:{'Etapa venta':'Propuesta enviada'}}),true);
+});
+
+test('badge de Clientes se presenta como contador propio de leads y cubre navegación escritorio/móvil',()=>{
+  const fs=require('node:fs');
+  const src=fs.readFileSync('js/dashboard-notification-badges.js','utf8');
+  assert.match(src,/leadQueueCount\(\)/);
+  assert.match(src,/dashboard-lead-queue-badge/);
+  assert.match(src,/leads===1\?'':'s'/);
+  assert.match(src,/pendiente\$\{leads===1\?'':'s'\} de validar/);
+  assert.match(src,/mobile-tab-btn\[data-tab=/);
+  assert.match(src,/module==='clientes'&&leads>0/,'el badge debe mostrar el número de leads, no mezclarlo con alertas genéricas');
 });
