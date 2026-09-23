@@ -173,3 +173,14 @@ test('menú de acciones de tarjetas no usa un ancestro transformado ni animació
   assert.match(css,/\.op-client-menu\.open\{animation:none!important;transition:none!important\}/);
   assert.match(css,/\.op-client-menu\{[^}]*z-index:800/);
 });
+
+
+test('BASE CRM legacy queda oculto solo en Simple y el command center visual permanece',()=>{
+  const src=fs.readFileSync('js/operativo-secciones.js','utf8');
+  const css=fs.readFileSync('operativo-visual.css','utf8');
+  assert.match(src,/legacyCrm\.classList\.add\('op-client-legacy-crm'\)/);
+  assert.match(css,/#tab-clientes\[data-op-view=simple\] \.op-client-legacy-crm>\.card-header\{display:none!important\}/);
+  assert.match(css,/#tab-clientes\[data-op-view=simple\] \.op-client-legacy-crm>#cliCatBar/);
+  assert.doesNotMatch(css,/#tab-clientes\[data-op-view=expert\][^{]*op-client-legacy-crm/,'Experto debe conservar BASE CRM original');
+  assert.match(src,/function clientToolbar\(\)/,'Simple conserva el command center visual inferior');
+});
