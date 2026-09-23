@@ -217,10 +217,58 @@ function _calClientId(){
   try{if(typeof _driveGetClientId==='function')return _driveGetClientId();}catch(e){}
   try{return localStorage.getItem('google_drive_client_id')||'';}catch(e){return'';}
 }
+function _calIsDesktopMac(){
+  try{if(new URL(location.href).searchParams.get('desktop')==='macos')return true;}catch(e){}
+  try{if(window.__TAURI__?.core?.invoke||window.__TAURI_INTERNALS__)return true;}catch(e){}
+  try{
+    const ua=String(navigator.userAgent||'');
+    // WKWebView en macOS normalmente no anuncia Safari/Chrome aunque sí AppleWebKit.
+    if(/Macintosh/i.test(ua)&&/AppleWebKit/i.test(ua)&&!/(Safari\/|Chrome\/|Chromium\/|Edg\/)/i.test(ua))return true;
+  }catch(e){}
+  return false;
+}
+function _calDesktopClientId(){
+  let saved='';try{saved=(localStorage.getItem('google_desktop_client_id')||'').trim();}catch(e){}
+  if(saved)return saved;
+  if(!_calIsDesktopMac())return '';
+  const msg='La app de macOS necesita un Google OAuth Client ID de tipo “Aplicación de escritorio” para abrir la autorización en Safari/Chrome en vez de dentro de la app.\n\nPégalo aquí (se guarda solo en este Mac):';
+  const value=String(prompt(msg,'')||'').trim();
+  if(value){try{localStorage.setItem('google_desktop_client_id',value);}catch(e){}}
+  return value;
+}
 function _calTokenVigente(){return !!(_calAccessToken&&Date.now()<_calTokenExp-60000);}
+async function _calGetDesktopToken(){
+  const invoke=window.__TAURI__?.core?.invoke;
+  if(typeof invoke!=='function'){
+    throw new Error('La versión instalada de The Lab CRM no tiene OAuth nativo. Actualiza/reinstala la app macOS 1.2.0 para conectar Google Calendar sin pantalla negra.');
+  }
+  const cid=_calDesktopClientId();
+  if(!cid)throw new Error('Falta el Google OAuth Client ID de escritorio. Créalo en Google Cloud como “Aplicación de escritorio” y vuelve a conectar.');
+  if(!/^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/.test(cid)){
+    try{localStorage.removeItem('google_desktop_client_id');}catch(e){}
+    throw new Error('El Google OAuth Client ID de escritorio no tiene un formato válido.');
+  }
+  let resp;
+  try{resp=await invoke('google_calendar_oauth',{clientId:cid});}
+  catch(e){
+    const msg=String(e?.message||e||'No se pudo completar OAuth nativo');
+    if(/invalid_client|cliente|client id/i.test(msg)){try{localStorage.removeItem('google_desktop_client_id');}catch(_){}}
+    throw new Error(msg);
+  }
+  const token=resp?.access_token||resp?.accessToken;
+  const expires=Number(resp?.expires_in??resp?.expiresIn??3600)||3600;
+  if(!token)throw new Error('Google no devolvió un access token para Calendar.');
+  _calAccessToken=token;
+  _calTokenExp=Date.now()+expires*1000;
+  try{_calRenderSyncStatus();}catch(e){}
+  return _calAccessToken;
+}
 function _calGetToken(){
+  if(_calTokenVigente())return Promise.resolve(_calAccessToken);
+  // Google prohíbe OAuth dentro de WKWebView. En Tauri usamos browser del sistema
+  // + loopback/PKCE en Rust; nunca lanzamos GIS dentro de la app de macOS.
+  if(_calIsDesktopMac())return _calGetDesktopToken();
   return new Promise((resolve,reject)=>{
-    if(_calTokenVigente()){resolve(_calAccessToken);return;}
     const cid=_calClientId();
     if(!cid||String(cid).startsWith('%%')){reject(new Error('Configura el Google Client ID en ⚙️ Mi cuenta (el mismo de Drive)'));return;}
     if(typeof google==='undefined'||!google.accounts){reject(new Error('SDK de Google aún no carga — reintenta en unos segundos'));return;}
@@ -536,7 +584,7 @@ function _calRenderSyncControls(pend,gOK){
   const connect=document.getElementById('calGoogleBtn');
   if(connect){
     connect.textContent=gOK?'🟢 Google Calendar conectado':'🔗 Conectar Google Calendar';
-    connect.title=gOK?'Google Calendar conectado. Haz clic para renovar la autorización o cambiar de cuenta.':'Autorizar Google Calendar en este navegador';
+    connect.title=gOK?'Google Calendar conectado. Haz clic para renovar la autorización o cambiar de cuenta.':(_calIsDesktopMac()?'Autorizar Google Calendar en el navegador del sistema (modo seguro macOS)':'Autorizar Google Calendar en este navegador');
     connect.style.color=gOK?'var(--accent3)':'';
     connect.style.borderColor=gOK?'rgba(0,212,170,.4)':'';
     connect.style.background=gOK?'rgba(0,212,170,.08)':'';
