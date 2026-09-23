@@ -17,16 +17,17 @@ alarmas/notificaciones y sincronización al **Google Calendar personal** de cada
 
 ## Configuración (una vez)
 
-1. **Google Cloud** (mismo proyecto del Client ID de Drive que ya usa el panel):
-   - **Drive y Calendar comparten el Client ID, pero son permisos distintos**: conectar Drive no autoriza Google Calendar.
+1. **Google Cloud**:
    - Habilitar **Google Calendar API**.
    - En la pantalla de consentimiento OAuth, agregar el scope
      `https://www.googleapis.com/auth/calendar.events`.
-   - El origen JavaScript autorizado debe incluir el dominio del panel.
+   - **Navegador web:** puede seguir usando el Client ID web que comparte el panel con Drive; el origen JavaScript autorizado debe incluir `https://dashboard.thelab.solutions`.
+   - **The Lab CRM para macOS (Tauri 1.2.0+):** crear además un OAuth Client ID de tipo **Aplicación de escritorio** en el mismo proyecto. Google no permite OAuth dentro de un `WKWebView`, por lo que la app abre Safari/Chrome y recibe el retorno por `127.0.0.1` usando PKCE. El Client ID de escritorio no es un secreto y se guarda localmente en ese Mac cuando se pega por primera vez.
 2. En la sección **Calendario → ⚙ Calendarios de cada uno**: poner el correo de
    Google de Nicanor, Gustavo y Florencia (se guarda compartido para todos).
-3. Cada usuario pulsa **🔗 Conectar Google Calendar** una vez por navegador y
+3. Cada usuario pulsa **🔗 Conectar Google Calendar** una vez por navegador/app y
    **🔔 Avisos** para permitir notificaciones del navegador.
+   - En macOS/Tauri, la primera conexión pide pegar el **Client ID de Aplicación de escritorio**. Luego Google se abre en el navegador del sistema; al terminar, se vuelve a The Lab CRM sin recargar ni dejar la ventana negra.
 
 ## Cómo sincroniza con Google
 
@@ -52,5 +53,6 @@ alarmas/notificaciones y sincronización al **Google Calendar personal** de cada
 - El respaldo cabe en el campo `Notes` (~95 k): `_calFitBudget` poda primero los
   eventos pasados más antiguos; las lápidas se conservan 60 días (o mientras
   tengan copia en Google pendiente de borrar).
-- Token OAuth: solo en memoria (nunca en localStorage ni en el respaldo).
+- Access token OAuth: solo en memoria (nunca en localStorage ni en el respaldo).
+- En macOS/Tauri, solo se persiste el **Client ID de escritorio** en `localStorage`; el flujo usa navegador del sistema + loopback `127.0.0.1` + PKCE.
 - Zona horaria de los eventos: `America/Santiago`.
