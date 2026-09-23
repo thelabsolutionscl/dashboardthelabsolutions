@@ -230,6 +230,8 @@ test('VER PROPUESTA muestra detalle y unidades de la cotización sin exponer cos
   const items=op.quoteWorkItems(cot);
   assert.deepEqual(Array.from(items,it=>[it.desc,it.qty]),[['Letrero neón morado',4],['Fuente 12V',1]]);
   const html=op.quoteWorkDetail(cot);
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  assert.match(src,/quoteWorkDetail\(r\)/,'VER PROPUESTA debe insertar el detalle de la cotización en el drawer');
   assert.match(html,/DETALLE DE LA PROPUESTA/);assert.match(html,/Productos \/ servicios cotizados/);
   assert.match(html,/4 unidades/);assert.match(html,/1 unidad/);assert.match(html,/COT-2026-200/);
   assert.doesNotMatch(html,/35000|90000|costoUnit|ventaUnit/,'VER PROPUESTA no debe exponer costos ni precios internos');
