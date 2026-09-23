@@ -11,6 +11,7 @@ const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const MAIL = fs.readFileSync(path.join(ROOT, 'js', 'correo.js'), 'utf8');
 const NOTIFY = fs.readFileSync(path.join(ROOT, 'js', 'notify.js'), 'utf8');
 const PHP = fs.readFileSync(path.join(ROOT, 'mail-api.php'), 'utf8');
+const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 const SOURCE = `${INDEX}\n${MAIL}\n${NOTIFY}`;
 
 function esc(value) {
@@ -228,3 +229,26 @@ test.todo('descargas de adjuntos deben tener límite de tamaño y advertencia/al
 test.todo('las cuentas compartidas deben asignarse por RBAC; no deben aparecer automáticamente para cualquier usuario con acceso a Correo');
 test.todo('postAs no debe caer silenciosamente a otra casilla cuando falta la credencial del remitente solicitado');
 test.todo('plantillas, firmas y borradores deben tener respaldo versionado, sanitizado y permisos por cuenta');
+
+
+test('las cuentas de correo quedan visibles y ordenadas en la columna izquierda',()=>{
+  const render=methodBlock('renderAccounts');
+  assert.match(render,/mailAccountRail/);
+  assert.match(render,/mail-account-list/);
+  assert.match(render,/MAIL\.switchAccount\(this\.dataset\.email\)/);
+  assert.match(render,/CUENTAS/);
+  assert.match(render,/CARPETAS/);
+  assert.match(render,/MAIL\.addAccount\(\)/);
+  assert.match(render,/MAIL\.editAccountName\(\)/);
+  assert.match(CSS,/\.mail-acct-sel\{display:none!important/,'el selector superior antiguo debe quedar oculto');
+  assert.match(CSS,/\.mail-account-item\.active/,'la cuenta activa debe distinguirse visualmente');
+  assert.match(CSS,/grid-template-columns:220px 320px 1fr/,'la columna izquierda debe tener espacio suficiente para nombre y correo');
+});
+
+test('cada cuenta visitada conserva su contador de no leídos en el lateral',()=>{
+  assert.match(MAIL,/_accountUnseen:\{\}/);
+  const folders=methodBlock('loadFolders');
+  assert.match(folders,/this\._accountUnseen\[this\.activeAccount\(\)\]/);
+  assert.match(folders,/this\.renderAccounts\(\)/);
+  assert.match(MAIL,/mail-account-unseen/);
+});
