@@ -180,6 +180,47 @@
   function orderStateTone(state){
     return state==='Confirmado'?'confirmed':state==='En producción'?'production':state==='Listo para despacho'?'ready':state==='Despachado'?'dispatched':state==='Completado'?'completed':'neutral';
   }
+  function orderWorkItems(p){
+    const f=p?.fields||{};
+    const cotId=Array.isArray(f['Cotizaciones'])?f['Cotizaciones'][0]:f['Cotizaciones'];
+    const cot=cotId?state.cotizacionesById?.[cotId]:null;
+    const source=cot?.fields||f;
+    const quoteNum=cot?.fields?.['N° Cotización']||'';
+    let items=[];
+    const rawJson=source['Detalle JSON'];
+    if(rawJson){
+      try{
+        const parsed=typeof rawJson==='string'?JSON.parse(rawJson):rawJson;
+        if(Array.isArray(parsed))items=parsed.map(it=>({
+          desc:String(it?.desc||it?.descripcion||it?.nombre||'').trim(),
+          qty:it?.und??it?.cantidad??it?.qty??''
+        })).filter(it=>it.desc);
+      }catch(e){}
+    }
+    if(!items.length){
+      const detalle=String(source['Detalle productos']||'');
+      items=detalle.split('\n').map(line=>{
+        const parts=line.split('|').map(s=>s.trim());
+        const desc=parts[0]||'';
+        const qtyRaw=parts[1]||'';
+        const qtyMatch=qtyRaw.match(/-?\d+(?:[.,]\d+)?/);
+        return {desc,qty:qtyMatch?qtyMatch[0].replace(',','.'):(qtyRaw||'')};
+      }).filter(it=>it.desc);
+    }
+    return {items,quoteNum,linked:!!cot};
+  }
+  function orderWorkDetail(p){
+    const data=orderWorkItems(p);
+    const sourceLabel=data.quoteNum?`Cotización ${data.quoteNum}`:(data.linked?'Cotización asociada':'Pedido');
+    const rows=data.items.length?data.items.map(it=>{
+      const raw=String(it.qty??'').trim();
+      const numeric=raw!==''?Number(raw.replace(',','.')):NaN;
+      const qty=Number.isFinite(numeric)?(Number.isInteger(numeric)?String(numeric):String(numeric).replace('.',',')):raw;
+      const unitLabel=qty?`${qty} ${numeric===1?'unidad':'unidades'}`:'Cantidad sin registrar';
+      return `<div class='op-work-item'><div><span>${esc(it.desc)}</span></div><b>${esc(unitLabel)}</b></div>`;
+    }).join(''):`<div class='op-work-empty'>Sin detalle de productos o unidades en la cotización asociada.</div>`;
+    return `<section class='op-work-detail' aria-label='Detalle del trabajo'><div class='op-work-head'><div><span class='op-eyebrow'>DETALLE DEL TRABAJO</span><h4>Qué se está haciendo</h4></div><small>${esc(sourceLabel)}</small></div><div class='op-work-list'>${rows}</div></section>`;
+  }
   function orderStatusDropdown(p){
     const current=String(p?.fields?.['Estado pedido']||'').trim();
     const tone=orderStateTone(current);
@@ -200,6 +241,7 @@
     const statusControl=detail||late?pill(late?'Entrega atrasada':e,late?'danger':'neutral'):orderStatusDropdown(p);
     return `<article class="op-record ${late?'op-record-alert':''}"><header><div><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${statusControl}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
+      ${detail?orderWorkDetail(p):''}
       <div class="op-payment"><b>Pago</b> ${detail?pill(pay.label,pay.tone):orderPaymentDropdown(p)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
       ${detail?paymentControls(p):orderTeamControls(p)}
       ${stepper(e)}<footer><span><small>Siguiente paso</small>${esc(next)}</span><div class="op-card-footer-actions">${cardMenu}${mainAction}</div></footer></article>`;
@@ -382,7 +424,7 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
