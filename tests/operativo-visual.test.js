@@ -217,3 +217,26 @@ test('VER PEDIDO muestra detalle y unidades desde la cotización asociada sin ex
   const legacy=op.orderWorkItems(record('p2',{'Cotizaciones':['q2']}));
   assert.deepEqual(Array.from(legacy.items,it=>[it.desc,it.qty]),[['Tótem acrílico','3']]);
 });
+
+test('VER PROPUESTA muestra detalle y unidades de la cotización sin exponer costos',()=>{
+  const {op}=setup();
+  const cot=record('q1',{
+    'N° Cotización':'COT-2026-200',
+    'Detalle JSON':JSON.stringify([
+      {desc:'Letrero neón morado',und:4,costoUnit:35000,ventaUnit:90000},
+      {desc:'Fuente 12V',und:1,costoUnit:8000,ventaUnit:18000}
+    ])
+  });
+  const items=op.quoteWorkItems(cot);
+  assert.deepEqual(Array.from(items,it=>[it.desc,it.qty]),[['Letrero neón morado',4],['Fuente 12V',1]]);
+  const html=op.quoteWorkDetail(cot);
+  assert.match(html,/DETALLE DE LA PROPUESTA/);assert.match(html,/Productos \/ servicios cotizados/);
+  assert.match(html,/4 unidades/);assert.match(html,/1 unidad/);assert.match(html,/COT-2026-200/);
+  assert.doesNotMatch(html,/35000|90000|costoUnit|ventaUnit/,'VER PROPUESTA no debe exponer costos ni precios internos');
+
+  const legacy=record('q2',{
+    'Detalle productos':'Tótem acrílico | 3 und. | Costo: $480.000 | Venta: $1.037.451'
+  });
+  const legacyItems=op.quoteWorkItems(legacy);
+  assert.deepEqual(Array.from(legacyItems,it=>[it.desc,it.qty]),[['Tótem acrílico','3']]);
+});
