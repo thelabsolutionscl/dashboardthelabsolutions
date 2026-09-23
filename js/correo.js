@@ -13,6 +13,7 @@ const MAIL={
   _currentMsg:null,
   _readSeq:0,
   _sending:false,
+  _accountUnseen:{},
 
   // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
   // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
@@ -252,7 +253,10 @@ const MAIL={
       </button>`;
     }).join('');
     document.getElementById('mailFolderList').innerHTML=html||'<div style="padding:8px;font-size:11px;color:var(--text3)">Sin carpetas</div>';
-    this._folders=data.folders||[];   // reutilizable: preloadSentAddrs ya no las vuelve a pedir
+    this._folders=data.folders||[];
+    const inbox=this._folders.find(f=>/^INBOX$/i.test(String(f.name||'')))||this._folders[0];
+    if(this.activeAccount())this._accountUnseen[this.activeAccount()]=Number(inbox?.unseen||0);
+    this.renderAccounts();   // reutilizable: preloadSentAddrs ya no las vuelve a pedir
     return true;
   },
 
@@ -534,17 +538,55 @@ const MAIL={
 
   // ── Selector de cuentas ──────────────────────────────────────────
   renderAccounts(){
-    const sel=document.getElementById('mailAcctSel'); if(!sel) return;
-    const list=this.accounts(), active=this.activeAccount();
-    // Se muestra "Nombre · correo" para que el remitente activo quede a la vista.
-    let html=list.map(a=>{
-      const label=a.name?`${this.esc(a.name)} · ${this.esc(a.email)}`:this.esc(a.email);
-      return `<option value="${this.esc(a.email)}"${a.email===active?' selected':''}>${label}</option>`;
+    const list=this.accounts(),active=this.activeAccount();
+    // Conservamos el <select> oculto como compatibilidad con código antiguo,
+    // pero la navegación real vive ahora en la columna izquierda.
+    const sel=document.getElementById('mailAcctSel');
+    if(sel){
+      let html=list.map(a=>{
+        const label=a.name?`${this.esc(a.name)} · ${this.esc(a.email)}`:this.esc(a.email);
+        return `<option value="${this.esc(a.email)}"${a.email===active?' selected':''}>${label}</option>`;
+      }).join('');
+      html+=`<option value="__editname__">✎ Editar nombre del remitente…</option>`;
+      html+=`<option value="__add__">＋ Agregar cuenta…</option>`;
+      if(list.length>1)html+=`<option value="__remove__">✕ Quitar cuenta actual…</option>`;
+      sel.innerHTML=html;
+    }
+
+    const folders=document.getElementById('mailFolders');if(!folders)return;
+    let rail=document.getElementById('mailAccountRail');
+    if(!rail){
+      rail=document.createElement('section');
+      rail.id='mailAccountRail';
+      rail.className='mail-account-rail';
+      const compose=folders.querySelector('.mail-compose-btn');
+      if(compose)folders.insertBefore(rail,compose);
+      else folders.prepend(rail);
+    }
+
+    const rows=list.map((a,idx)=>{
+      const isActive=a.email===active;
+      const name=(a.name||a.email.split('@')[0]||'Cuenta').trim();
+      const initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'@';
+      const unseen=Number(this._accountUnseen?.[a.email]||0);
+      return `<button type="button" class="mail-account-item${isActive?' active':''}" data-email="${this.esc(a.email)}" onclick="MAIL.switchAccount(this.dataset.email)" title="${this.esc(a.email)}">
+        <span class="mail-account-avatar">${this.esc(initials)}</span>
+        <span class="mail-account-copy"><strong>${this.esc(name)}</strong><small>${this.esc(a.email)}</small></span>
+        ${unseen>0?`<span class="mail-account-unseen">${unseen>99?'99+':unseen}</span>`:''}
+        ${isActive?'<span class="mail-account-active-dot" aria-label="Cuenta activa"></span>':''}
+      </button>`;
     }).join('');
-    html+=`<option value="__editname__">✎ Editar nombre del remitente…</option>`;
-    html+=`<option value="__add__">＋ Agregar cuenta…</option>`;
-    if(list.length>1) html+=`<option value="__remove__">✕ Quitar cuenta actual…</option>`;
-    sel.innerHTML=html;
+
+    rail.innerHTML=`<div class="mail-account-head">
+      <span>CUENTAS</span>
+      <div class="mail-account-tools">
+        <button type="button" onclick="event.stopPropagation();MAIL.addAccount()" title="Agregar cuenta">＋</button>
+        <button type="button" onclick="event.stopPropagation();MAIL.editAccountName()" title="Editar nombre del remitente">✎</button>
+        ${list.length>1?'<button type="button" onclick="event.stopPropagation();MAIL.removeAccount()" title="Quitar cuenta activa">−</button>':''}
+      </div>
+    </div>
+    <div class="mail-account-list">${rows}</div>
+    <div class="mail-account-divider"><span>CARPETAS</span></div>`;
   },
   onAcctChange(v){
     if(v==='__add__'){ this.renderAccounts(); this.addAccount(); return; }
