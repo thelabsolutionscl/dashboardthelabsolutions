@@ -48,6 +48,21 @@ button.op-metric,button.op-priority{cursor:pointer;transition:border-color .15s}
 .op-work-desc small,.op-work-qty small{display:block;margin-bottom:4px;font-size:9px;line-height:1;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .op-work-qty{text-align:right}
 .op-quote-work-detail{margin-top:18px;margin-bottom:16px;border-color:rgba(0,212,204,.24)}
+.op-quote-item{padding:12px 13px;border:1px solid var(--border);border-radius:9px;background:var(--surface2)}
+.op-quote-item-desc{margin-bottom:10px}
+.op-quote-item-desc small,.op-quote-item-values small,.op-quote-summary small,.op-quote-conditions small{display:block;margin-bottom:4px;font-size:9px;line-height:1;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.op-quote-item-desc strong{display:block;font-size:12px;line-height:1.45;color:var(--text);overflow-wrap:anywhere}
+.op-quote-item-values{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}
+.op-quote-item-values>div,.op-quote-summary>div,.op-quote-conditions>div{min-width:0;padding:8px 9px;border:1px solid var(--border);border-radius:7px;background:rgba(255,255,255,.018)}
+.op-quote-item-values b,.op-quote-summary b,.op-quote-conditions b{display:block;font-size:11px;line-height:1.3;color:var(--text);overflow-wrap:anywhere}
+.op-quote-item-values .op-quote-margin b,.op-quote-summary .op-quote-margin b{color:var(--op-quote-margin,var(--text))}
+.op-quote-summary-title{margin:14px 0 7px;font-size:10px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.08em}
+.op-quote-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.op-quote-summary .op-quote-total{border-color:rgba(0,212,204,.35);background:rgba(0,212,204,.07)}
+.op-quote-summary .op-quote-total b{color:var(--accent);font-size:13px}
+.op-quote-conditions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+@media(max-width:980px){.op-quote-item-values{grid-template-columns:repeat(3,minmax(0,1fr))}.op-quote-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.op-quote-conditions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.op-quote-item-values,.op-quote-summary,.op-quote-conditions{grid-template-columns:1fr 1fr}.op-quote-item{padding:10px}.op-quote-item-values b,.op-quote-summary b,.op-quote-conditions b{font-size:10.5px}}
 @media(max-width:720px){.op-work-qty{text-align:left}}
 .op-work-item b{white-space:nowrap;font-size:11px;line-height:1;color:var(--accent);padding:6px 9px;border-radius:999px;background:rgba(0,212,204,.09);border:1px solid rgba(0,212,204,.25)}
 .op-work-empty{padding:9px 10px;border-radius:8px;background:var(--surface2);color:var(--text2);font-size:11px;line-height:1.45}
