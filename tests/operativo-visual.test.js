@@ -257,3 +257,13 @@ test('VER PROPUESTA muestra descripción, cantidades, costos, ventas y resumen d
   const legacyItems=op.quoteWorkItems(legacy);
   assert.deepEqual(Array.from(legacyItems,it=>[it.desc,it.qty,Math.round(it.costUnit),it.costTotal,Math.round(it.saleUnit),it.saleTotal]),[['Tótem acrílico',3,160000,480000,345817,1037451]]);
 });
+
+
+test('OVERVIEW queda fijo en Simple y no renderiza selector Experto',()=>{
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  assert.match(src,/value=page==='overview'\?'simple':\(value==='expert'\?'expert':'simple'\)/);
+  assert.match(src,/if\(page==='overview'\)\{[\s\S]*?mode\(page,'simple'\);[\s\S]*?\}else\{/);
+  const branch=/if\(page==='overview'\)\{([\s\S]*?)\}else\{/.exec(src);
+  assert.ok(branch,'debe existir rama dedicada para Overview');
+  assert.doesNotMatch(branch[1],/Experto|page\+':expert'/,'Overview no debe crear botón Experto');
+});
