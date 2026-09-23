@@ -26,3 +26,23 @@ test('sincronización muestra pendientes y estado al día sin perder estado busy
   assert.match(CAL,/btn\.dataset\.syncBusy='1'/);
   assert.match(CAL,/btn\.dataset\.syncBusy='0'/);
 });
+
+
+test('Tauri evita OAuth GIS embebido y usa el comando nativo',()=>{
+  assert.match(CAL,/function _calIsDesktopMac\(\)/);
+  assert.match(CAL,/if\(_calIsDesktopMac\(\)\)return _calGetDesktopToken\(\)/);
+  assert.match(CAL,/window\.__TAURI__\?\.core\?\.invoke/);
+  assert.match(CAL,/invoke\('google_calendar_oauth',\{clientId:cid\}\)/);
+  assert.match(CAL,/google_desktop_client_id/);
+  assert.match(CAL,/Actualiza\/reinstala la app macOS 1\.2\.0/);
+  const nativeBranch=CAL.indexOf("if(_calIsDesktopMac())return _calGetDesktopToken()");
+  const gisBranch=CAL.indexOf("google.accounts.oauth2.initTokenClient");
+  assert.ok(nativeBranch>=0&&gisBranch>nativeBranch,'el flujo nativo debe cortar antes de abrir GIS dentro de WKWebView');
+});
+
+test('el navegador web conserva GIS y la app explica que autoriza en el navegador del sistema',()=>{
+  assert.match(CAL,/google\.accounts\.oauth2\.initTokenClient/);
+  assert.match(CAL,/navegador del sistema \(modo seguro macOS\)/);
+  assert.match(CAL,/Macintosh/);
+  assert.match(CAL,/AppleWebKit/);
+});
