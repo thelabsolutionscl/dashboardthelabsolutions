@@ -11,7 +11,7 @@
 'use strict';
 
 const MODULES=new Set(['correo','pedidos','cotizaciones','clientes','proveedores','maquinas','finanzas','equipo','agentes','oficina','web','reporte','visual','remuneraciones']);
-let target=null,installed=false,timer=null,lastState=null,lastLeadCount=null;
+let target=null,installed=false,timer=null,lastState=null,lastLeadCount=null,lastMailCount=null;
 
 function moduleForItem(item){
   if(!item||item.read)return'';
@@ -73,6 +73,13 @@ function leadQueueCount(){
     return rows.filter(isLeadRecord).length;
   }catch(_){return 0;}
 }
+function mailUnreadCount(){
+  try{
+    if(typeof target?.MAIL?.unseenTotal==='function')return Math.max(0,Number(target.MAIL.unseenTotal())||0);
+    const map=target?.MAIL?._accountUnseen||{};
+    return Object.values(map).reduce((sum,n)=>sum+Math.max(0,Number(n)||0),0);
+  }catch(_){return 0;}
+}
 function bellHost(){
   const b=target?.document?.getElementById('notifBadge');if(!b)return null;
   const host=b.closest('button,a,[role="button"],.topbar-action,.topbar-icon-btn')||b.parentElement;
@@ -101,6 +108,9 @@ function ensureStyle(){
     .dashboard-context-badge.sev-info{background:var(--accent,#00d4cc)!important;color:#061716!important}
     .dashboard-lead-queue-badge{position:absolute;top:-5px;right:-5px;z-index:14;pointer-events:none;min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#ff4655!important;color:#fff!important;font:800 10px/1 'JetBrains Mono',monospace;box-shadow:0 0 0 2px rgba(10,10,10,.96),0 4px 13px rgba(255,70,85,.35)}
     .dashboard-lead-queue-badge.is-new{animation:leadQueuePop .7s cubic-bezier(.2,.8,.2,1)}
+    .dashboard-mail-unread-badge{position:absolute;top:-5px;right:-5px;z-index:15;pointer-events:none;min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#ff4655!important;color:#fff!important;font:800 10px/1 'JetBrains Mono',monospace;box-shadow:0 0 0 2px rgba(10,10,10,.96),0 4px 13px rgba(255,70,85,.38)}
+    .dashboard-mail-unread-badge.is-new{animation:mailUnreadPop .72s cubic-bezier(.2,.8,.2,1)}
+    @keyframes mailUnreadPop{0%{transform:scale(.72)}45%{transform:scale(1.28);box-shadow:0 0 0 3px rgba(10,10,10,.96),0 0 22px rgba(255,70,85,.75)}100%{transform:scale(1)}}
     @keyframes leadQueuePop{0%{transform:scale(.72)}45%{transform:scale(1.28);box-shadow:0 0 0 3px rgba(10,10,10,.96),0 0 22px rgba(255,70,85,.72)}100%{transform:scale(1)}}
     @media(max-width:900px){.dashboard-context-badge{top:0;right:2px}}
   `;
@@ -125,12 +135,30 @@ function render(){
     }
   }
   lastLeadCount=leads;
+
+  // CORREO muestra correos realmente no leídos (sumados entre las cuentas
+  // conocidas), no el número de avisos históricos de la campana.
+  const mailUnread=mailUnreadCount();
+  target.document.querySelectorAll?.('.dashboard-mail-unread-badge').forEach(b=>b.remove());
+  if(mailUnread>0){
+    for(const host of navTargets('correo')){
+      host.style.position='relative';host.style.overflow='visible';
+      const b=target.document.createElement('span');b.className='dock-badge dashboard-mail-unread-badge';
+      if(lastMailCount!==null&&mailUnread>lastMailCount)b.classList.add('is-new');
+      b.dataset.mailUnread='1';b.textContent=mailUnread>99?'99+':String(mailUnread);
+      b.title=`${mailUnread} correo${mailUnread===1?'':'s'} sin leer`;
+      b.setAttribute('aria-label',b.title);host.appendChild(b);
+    }
+  }
+  lastMailCount=mailUnread;
+
   target.document.querySelectorAll('.dashboard-context-badge[data-module]').forEach(b=>{
     const module=b.dataset.module;if(!state[module]||state[module].count<1)b.remove();
   });
   for(const[module,meta]of Object.entries(state)){
     if(!meta.count)continue;
     if(module==='clientes'&&leads>0)continue;
+    if(module==='correo')continue;
     for(const host of navTargets(module)){
       host.style.position='relative';host.style.overflow='visible';
       let b=host.querySelector(`:scope > .dashboard-context-badge[data-module="${module}"]`);
@@ -155,6 +183,6 @@ function install(root){
   root.addEventListener?.('storage',e=>{if(!e||String(e.key||'').startsWith('thelab_'))tick();});root.addEventListener?.('focus',tick);
   timer=root.setInterval?.(()=>{if(!root.document.hidden)tick();},5000)||null;return true;
 }
-function status(){return{installed,lastState:lastState||{},leadQueue:leadQueueCount(),hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth,hasFarmDrift:!!target?.FarmDrift};}
-return{install,render,status,_test:{moduleForItem,buildState,rank,isLeadRecord}};
+function status(){return{installed,lastState:lastState||{},leadQueue:leadQueueCount(),mailUnread:mailUnreadCount(),hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth,hasFarmDrift:!!target?.FarmDrift};}
+return{install,render,status,_test:{moduleForItem,buildState,rank,isLeadRecord,mailUnreadCount}};
 });
