@@ -32,21 +32,31 @@ function cargarWorker() {
 }
 const worker = cargarWorker();
 
+const _kv = new Map();
+const MEM_KV = {
+  async get(k){ return _kv.has(k)?_kv.get(k):null; },
+  async put(k,v){ _kv.set(k,String(v)); },
+  async delete(k){ _kv.delete(k); },
+};
 const ENV = {
   APP_KEY: 'passphrase-larga-y-secreta-1234',
   AIRTABLE_TOKEN: 'patTEST123',
   ANTHROPIC_TOKEN: 'sk-ant-test',
   OPENAI_TOKEN: 'sk-openai-test',
+  AI_BUDGET: MEM_KV,
+  ANTHROPIC_DAILY_BUDGET_USD: '1.00',
+  ANTHROPIC_REQUEST_BUDGET_USD: '0.20',
 };
 const OK_ORIGIN = 'https://dashboard.thelab.solutions';
 const HAIKU_BODY = JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 800, messages: [{ role: 'user', content: 'hola' }] });
 
 // Request mínimo: el worker solo usa method, url, headers.get() y body.
-function req(pathname, { method = 'GET', origin, key, contentType, body } = {}) {
+function req(pathname, { method = 'GET', origin, key, contentType, body, aiAgent } = {}) {
   const h = {};
   if (origin !== undefined) h['origin'] = origin;
   if (key !== undefined) h['x-app-key'] = key;
   if (contentType) h['content-type'] = contentType;
+  if (aiAgent) h['x-ai-agent'] = aiAgent;
   return {
     method,
     url: 'https://airtable-proxy.example.workers.dev' + pathname,
@@ -194,4 +204,49 @@ test('el chequeo ya no depende de que el Origin exista', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'airtable-proxy', 'src', 'worker.js'), 'utf8');
   assert.match(src, /if \(!ALLOWED_ORIGINS\.includes\(origin\)\) \{/, 'exige Origin en la lista');
   assert.doesNotMatch(src, /if \(origin && !ALLOWED_ORIGINS\.includes\(origin\)\)/, 'ya no está el guard con agujero');
+});
+
+
+test('el proxy expone el presupuesto diario sin ejecutar ningún modelo', async () => {
+  const spy = espiarFetch();
+  try {
+    const r = await worker.fetch(req('/anthropic/usage', { origin: OK_ORIGIN, key: ENV.APP_KEY }), ENV, undefined);
+    assert.equal(r.status, 200);
+    assert.equal(spy.calls.length, 0);
+    const j = await r.json();
+    assert.equal(j.configured, true);
+    assert.equal(j.budget_usd, 1);
+    assert.ok(j.remaining_usd >= 0);
+  } finally { spy.restore(); }
+});
+
+test('el proxy reserva costo por agente y bloquea cuando el presupuesto diario ya está consumido', async () => {
+  _kv.clear();
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
+  await MEM_KV.put('anthropic-budget:'+date, JSON.stringify({spent_usd:.999,reserved_usd:0,requests:3,by_source:{}}));
+  const spy = espiarFetch(200, JSON.stringify({model:'claude-haiku-4-5',content:[],usage:{input_tokens:1,output_tokens:1}}));
+  try {
+    const r = await worker.fetch(req('/anthropic/v1/messages', {
+      method:'POST', origin:OK_ORIGIN, key:ENV.APP_KEY, body:HAIKU_BODY, aiAgent:'followup'
+    }), ENV, undefined);
+    assert.equal(r.status,429);
+    assert.equal(spy.calls.length,0,'no debe tocar Anthropic si el presupuesto está agotado');
+    const j=await r.json();
+    assert.equal(j.code,'AI_BUDGET_LIMIT');
+  } finally { spy.restore(); _kv.clear(); }
+});
+
+test('la fuente del agente se guarda para atribuir gasto', async () => {
+  _kv.clear();
+  const spy = espiarFetch(200, JSON.stringify({model:'claude-haiku-4-5',content:[],usage:{input_tokens:8,output_tokens:2}}));
+  try {
+    const ctx={waitUntil(){}};
+    const r=await worker.fetch(req('/anthropic/v1/messages', {
+      method:'POST',origin:OK_ORIGIN,key:ENV.APP_KEY,body:HAIKU_BODY,aiAgent:'sales'
+    }),ENV,ctx);
+    assert.equal(r.status,200);
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
+    const row=JSON.parse(await MEM_KV.get('anthropic-budget:'+date));
+    assert.equal(row.by_source.sales.requests,1);
+  } finally { spy.restore(); _kv.clear(); }
 });
