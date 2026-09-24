@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-08-09-cabeceras');
+define('MAIL_API_BUILD', '2026-09-24-utf8-singlepart');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -208,6 +208,26 @@ function to_utf8($s, $charset) {
     return $s;
 }
 
+function repair_mojibake_utf8($s) {
+    if (!is_string($s) || $s === '') return $s;
+    $score = function ($v) {
+        $n = 0;
+        if (@preg_match_all('/(?:Ã.|Â.|â.|ðŸ|ï¿½|�)/u', $v, $m)) $n = count($m[0]);
+        return $n;
+    };
+    for ($i = 0; $i < 2; $i++) {
+        $before = $score($s);
+        if ($before < 1) break;
+        // El texto "FabricaciÃ³n" son bytes UTF-8 interpretados como CP1252.
+        // Volver a bytes CP1252 y reinterpretarlos como UTF-8 recupera "Fabricación".
+        $candidate = @mb_convert_encoding($s, 'Windows-1252', 'UTF-8');
+        if ($candidate === false || $candidate === '' || !mb_check_encoding($candidate, 'UTF-8')) break;
+        if ($score($candidate) >= $before) break;
+        $s = $candidate;
+    }
+    return $s;
+}
+
 // Wrapper compatible: transfer-encoding + descompresión + charset a UTF-8.
 function decode_body($raw, $encoding, $charset) {
     return to_utf8(decode_transfer($raw, $encoding), $charset);
@@ -273,13 +293,15 @@ function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) 
     $subtype = strtolower($structure->subtype ?? '');
 
     if ($type === 0) { // text
-        $raw   = imap_fetchbody($conn, $msgno, $partno);
+        $raw   = $partno === ''
+            ? imap_body($conn, $msgno, FT_PEEK)
+            : imap_fetchbody($conn, $msgno, $partno, FT_PEEK);
         $bytes = decode_transfer($raw, $structure->encoding); // base64/qp + descompresión
         // El binario se decide sobre los bytes crudos: si luego se convierte el
         // charset, la basura pasaría a "UTF-8 válido" y se colaría al cuerpo.
         if (looks_binary($bytes)) { /* parte "de texto" que en realidad es binaria: se omite */ }
         else {
-            $decoded = to_utf8($bytes, get_charset($structure->parameters ?? []));
+            $decoded = repair_mojibake_utf8(to_utf8($bytes, get_charset($structure->parameters ?? [])));
             if ($subtype === 'html') $html .= $decoded;
             else                     $text .= $decoded;
         }
@@ -713,7 +735,7 @@ case 'read':
         if (looks_binary($bytes)) {
             $text = '(Este mensaje no tiene una parte de texto legible.)';
         } else {
-            $decoded = to_utf8($bytes, get_charset($structure->parameters ?? []));
+            $decoded = repair_mojibake_utf8(to_utf8($bytes, get_charset($structure->parameters ?? [])));
             if (strtolower($structure->subtype ?? '') === 'html') $html = $decoded;
             else $text = $decoded;
         }
@@ -751,9 +773,9 @@ case 'send':
     $to        = trim($_POST['to']        ?? '');
     $cc        = trim($_POST['cc']        ?? '');
     $bcc       = trim($_POST['bcc']       ?? '');
-    $subject   = trim($_POST['subject']   ?? '');
-    $body_html = $_POST['body']           ?? '';
-    $from_name = trim($_POST['from_name'] ?? '');
+    $subject   = repair_mojibake_utf8(trim($_POST['subject']   ?? ''));
+    $body_html = repair_mojibake_utf8($_POST['body'] ?? '');
+    $from_name = repair_mojibake_utf8(trim($_POST['from_name'] ?? ''));
 
     if (!$to)      { echo json_out(['error' => 'Destinatario requerido']); exit; }
     if (!$subject) { echo json_out(['error' => 'Asunto requerido']); exit; }
