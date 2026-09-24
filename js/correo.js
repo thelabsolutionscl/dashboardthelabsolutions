@@ -321,31 +321,173 @@ const MAIL={
     },150);
   },
 
+  _threadSubject(raw){
+    return this._repairMojibake(String(raw||'(Sin asunto)'))
+      .replace(/^(?:\s*(?:re|fw|fwd|rv|enc|respuesta)\s*:\s*)+/i,'')
+      .replace(/\s+/g,' ').trim();
+  },
+
+  _threadSubjectKey(raw){
+    return this._threadSubject(raw)
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLocaleLowerCase('es-CL');
+  },
+
+  _threadLooksReply(raw){
+    return /^(?:\s*(?:re|fw|fwd|rv|enc|respuesta)\s*:)/i.test(String(raw||''));
+  },
+
+  _threadHeaderIds(raw){
+    const ids=[];String(raw||'').replace(/<([^>]+)>/g,(_,id)=>{ids.push(String(id||'').trim().toLowerCase());return _;});
+    if(!ids.length){
+      const bare=String(raw||'').trim().replace(/^<|>$/g,'').toLowerCase();
+      if(bare&&bare.includes('@'))ids.push(bare);
+    }
+    return ids;
+  },
+
+  // Agrupa por cabeceras RFC (Message-ID / References / In-Reply-To) cuando
+  // el servidor las entrega. Si el host aún no expone esas cabeceras, usa el
+  // asunto sin Re:/Fwd: como fallback, pero solo cuando hay señales de respuesta.
+  _threadGroups(msgs){
+    const rows=(msgs||[]).filter(Boolean);
+    const n=rows.length,parent=Array.from({length:n},(_,i)=>i);
+    const find=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;};
+    const union=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[b]=a;};
+    const byMid=new Map(),externalRoot=new Map();
+
+    rows.forEach((m,i)=>{
+      const mid=this._threadHeaderIds(m.message_id||m.messageId)[0];
+      if(mid)byMid.set(mid,i);
+    });
+    rows.forEach((m,i)=>{
+      const refs=this._threadHeaderIds(m.references);
+      const irt=this._threadHeaderIds(m.in_reply_to||m.inReplyTo);
+      [...refs,...irt].forEach(id=>{if(byMid.has(id))union(i,byMid.get(id));});
+      const root=refs[0]||irt[0]||'';
+      if(root){
+        if(externalRoot.has(root))union(i,externalRoot.get(root));
+        else externalRoot.set(root,i);
+      }
+    });
+
+    // Fallback compatible con el mail-api anterior: una conversación sin
+    // metadata RFC se reconoce por asunto base si al menos una fila es respuesta.
+    const subj=new Map();
+    rows.forEach((m,i)=>{
+      const key=this._threadSubjectKey(m.subject);
+      if(!key)return;
+      const arr=subj.get(key)||[];arr.push(i);subj.set(key,arr);
+    });
+    subj.forEach(indices=>{
+      if(indices.length<2||!indices.some(i=>this._threadLooksReply(rows[i].subject)))return;
+      const noHeader=indices.filter(i=>{
+        const m=rows[i];
+        return !this._threadHeaderIds(m.references).length&&!this._threadHeaderIds(m.in_reply_to||m.inReplyTo).length;
+      });
+      if(noHeader.length===indices.length){
+        for(let j=1;j<indices.length;j++)union(indices[0],indices[j]);
+      }else{
+        const anchored=indices.find(i=>find(i)!==i||this._threadHeaderIds(rows[i].references).length||this._threadHeaderIds(rows[i].in_reply_to||rows[i].inReplyTo).length);
+        if(anchored!=null)noHeader.forEach(i=>union(anchored,i));
+      }
+    });
+
+    const groups=new Map();
+    rows.forEach((m,i)=>{
+      const root=find(i),arr=groups.get(root)||[];arr.push(m);groups.set(root,arr);
+    });
+    const out=[...groups.values()].map(members=>{
+      const latest=members[0];
+      return{
+        id:String(latest.uid),
+        key:this._threadSubjectKey(latest.subject)||('uid-'+latest.uid),
+        subject:this._threadSubject(latest.subject)||latest.subject||'(Sin asunto)',
+        members,
+        latest,
+        unread:members.filter(m=>!m.seen).length
+      };
+    });
+    // Mantiene exactamente el orden original de la bandeja: la conversación se
+    // ubica donde aparece su mensaje más reciente.
+    const pos=new Map(rows.map((m,i)=>[String(m.uid),i]));
+    out.sort((a,b)=>(pos.get(String(a.latest.uid))??9999)-(pos.get(String(b.latest.uid))??9999));
+    return out;
+  },
+
+  _mailItemHtml(m,opts={}){
+    const cmap=opts.cmap||this._cliEmailMap();
+    const from=this.parseFrom(m.from);
+    const date=this.fmtDate(m.date);
+    const unread=!m.seen?'unread':'';
+    const sel=m.uid===this.selUid?'selected':'';
+    const checked=this._sel.has(m.uid);
+    const cli=cmap[this._fromEmail(m.from)];
+    const cliChip=cli?`<span title="Cliente en CRM: ${this.esc(cli.fields['Empresa']||cli.fields['Contacto']||'')} — clic para abrir la ficha" onclick="event.stopPropagation();openClienteDetalle('${cli.id}')" style="flex-shrink:0;font-size:11px;cursor:pointer;line-height:1">👤</span> `:'';
+    const child=opts.child?' mail-thread-child':'';
+    return `<div class="mail-item ${unread} ${sel} ${checked?'sel-checked':''}${child}" data-uid="${m.uid}" onclick="MAIL.readMsg(${m.uid})">
+      <input type="checkbox" class="mail-item-chk" ${checked?'checked':''} onclick="event.stopPropagation();MAIL.toggleSelect(${m.uid},this.checked)" title="Seleccionar">
+      <div class="mail-item-main">
+        <div class="mail-item-row1">
+          <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${cliChip}${this.esc(from)}</span>
+          <span class="mail-item-date">${date}</span>
+        </div>
+        <div class="mail-item-subject">${this.esc(m.subject)}</div>
+        <div class="mail-item-snippet${m.snippet?'':' is-empty'}" data-snippet-uid="${m.uid}">${m.snippet?this.esc(m.snippet):''}</div>
+      </div>
+    </div>`;
+  },
+
+  toggleThread(id){
+    this._threadOpen=this._threadOpen||new Set();
+    const k=String(id);
+    if(this._threadOpen.has(k))this._threadOpen.delete(k);else this._threadOpen.add(k);
+    const wrap=document.querySelector(`.mail-thread[data-thread-id="${CSS.escape(k)}"]`);
+    if(wrap)wrap.classList.toggle('open',this._threadOpen.has(k));
+  },
+
+  toggleThreadSelect(id,on){
+    this._sel=this._sel||new Set();
+    const group=this._renderThreads?.get(String(id))||[];
+    group.forEach(m=>{if(on)this._sel.add(m.uid);else this._sel.delete(m.uid);});
+    this.renderMsgList(this.msgs||[]);
+  },
+
   renderMsgList(msgs){
     const list=document.getElementById('mailList');
     if(!msgs.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">Sin mensajes</div>';this._updateSelBar();return;}
     this._sel=this._sel||new Set();
-    const cmap=this._cliEmailMap();
-    list.innerHTML=msgs.map(m=>{
-      const from=this.parseFrom(m.from);
-      const date=this.fmtDate(m.date);
-      const unread=!m.seen?'unread':'';
-      const sel=m.uid===this.selUid?'selected':'';
-      const checked=this._sel.has(m.uid);
-      const cli=cmap[this._fromEmail(m.from)];
-      const cliChip=cli?`<span title="Cliente en CRM: ${this.esc(cli.fields['Empresa']||cli.fields['Contacto']||'')} — clic para abrir la ficha" onclick="event.stopPropagation();openClienteDetalle('${cli.id}')" style="flex-shrink:0;font-size:11px;cursor:pointer;line-height:1">👤</span> `:'';
-      return `<div class="mail-item ${unread} ${sel} ${checked?'sel-checked':''}" data-uid="${m.uid}" onclick="MAIL.readMsg(${m.uid})">
-        <input type="checkbox" class="mail-item-chk" ${checked?'checked':''} onclick="event.stopPropagation();MAIL.toggleSelect(${m.uid},this.checked)" title="Seleccionar">
-        <div class="mail-item-main">
-          <div class="mail-item-row1">
-            <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${cliChip}${this.esc(from)}</span>
-            <span class="mail-item-date">${date}</span>
+    this._threadOpen=this._threadOpen||new Set();
+    const cmap=this._cliEmailMap(),groups=this._threadGroups(msgs);
+    this._renderThreads=new Map(groups.map(g=>[String(g.id),g.members]));
+    list.innerHTML=groups.map(g=>{
+      if(g.members.length===1)return this._mailItemHtml(g.latest,{cmap});
+      const open=this._threadOpen.has(String(g.id));
+      const checked=g.members.every(m=>this._sel.has(m.uid));
+      const partial=!checked&&g.members.some(m=>this._sel.has(m.uid));
+      const selected=g.members.some(m=>m.uid===this.selUid);
+      const senders=[...new Set(g.members.map(m=>this.parseFrom(m.from)).filter(Boolean))];
+      const who=senders.slice(0,2).join(', ')+(senders.length>2?` +${senders.length-2}`:'');
+      const date=this.fmtDate(g.latest.date);
+      const latestCli=cmap[this._fromEmail(g.latest.from)];
+      const cliChip=latestCli?`<span title="Cliente en CRM: ${this.esc(latestCli.fields['Empresa']||latestCli.fields['Contacto']||'')} — clic para abrir la ficha" onclick="event.stopPropagation();openClienteDetalle('${latestCli.id}')" style="flex-shrink:0;font-size:11px;cursor:pointer;line-height:1">👤</span> `:'';
+      return `<div class="mail-thread${open?' open':''}" data-thread-id="${this.esc(g.id)}">
+        <div class="mail-item mail-thread-head ${g.unread?'unread':''} ${selected?'selected':''} ${checked?'sel-checked':''}" onclick="MAIL.toggleThread('${this.esc(g.id)}')" title="Abrir/cerrar cadena de ${g.members.length} correos">
+          <input type="checkbox" class="mail-item-chk" ${checked?'checked':''} data-partial="${partial?'1':'0'}" onclick="event.stopPropagation();MAIL.toggleThreadSelect('${this.esc(g.id)}',this.checked)" title="Seleccionar cadena completa">
+          <span class="mail-thread-chevron" aria-hidden="true">›</span>
+          <div class="mail-item-main">
+            <div class="mail-item-row1">
+              <span class="mail-item-from">${g.members.some(m=>m.flagged)?'<span class="mail-item-star">★</span> ':''}${cliChip}${this.esc(who||this.parseFrom(g.latest.from))}</span>
+              <span class="mail-item-date">${date}</span>
+            </div>
+            <div class="mail-thread-subject-row"><div class="mail-item-subject">${this.esc(g.subject)}</div><span class="mail-thread-count">${g.members.length}${g.unread?` · ${g.unread} nuevo${g.unread===1?'':'s'}`:''}</span></div>
+            <div class="mail-item-snippet${g.latest.snippet?'':' is-empty'}" data-snippet-uid="${g.latest.uid}">${g.latest.snippet?this.esc(g.latest.snippet):''}</div>
           </div>
-          <div class="mail-item-subject">${this.esc(m.subject)}</div>
-          ${m.snippet?`<div class="mail-item-snippet">${this.esc(m.snippet)}</div>`:''}
         </div>
+        <div class="mail-thread-children">${g.members.map(m=>this._mailItemHtml(m,{cmap,child:true})).join('')}</div>
       </div>`;
     }).join('');
+    document.querySelectorAll('.mail-thread-head .mail-item-chk[data-partial="1"]').forEach(chk=>{chk.indeterminate=true;});
     this._updateSelBar();
     this.loadSnippets(msgs);
   },
@@ -370,12 +512,9 @@ const MAIL={
         if(!s) continue;
         const m=(this.msgs||[]).find(x=>x&&String(x.uid)===String(uid));
         if(m) m.snippet=s; // cachea para re-renders (no se vuelve a pedir)
-        const main=document.querySelector(`.mail-item[data-uid="${uid}"] .mail-item-main`);
-        if(main){
-          let el=main.querySelector('.mail-item-snippet');
-          if(!el){ el=document.createElement('div'); el.className='mail-item-snippet'; main.appendChild(el); }
-          el.textContent=s;
-        }
+        document.querySelectorAll(`[data-snippet-uid="${uid}"]`).forEach(el=>{
+          el.textContent=s;el.classList.remove('is-empty');
+        });
       }
     }
   },
@@ -386,6 +525,14 @@ const MAIL={
     this.mobGo('reader');
     document.querySelectorAll('.mail-item').forEach(el=>{el.classList.remove('selected');});
     document.querySelector(`.mail-item[data-uid="${uid}"]`)?.classList.add('selected');
+    if(this._renderThreads){
+      for(const [tid,members] of this._renderThreads){
+        if(members.some(m=>String(m.uid)===String(uid))){
+          document.querySelector(`.mail-thread[data-thread-id="${CSS.escape(String(tid))}"]>.mail-thread-head`)?.classList.add('selected');
+          break;
+        }
+      }
+    }
     document.getElementById('mailReaderEmpty').style.display='none';
     const rc=document.getElementById('mailReaderContent');
     rc.style.display='flex';
@@ -713,7 +860,9 @@ const MAIL={
     document.getElementById('mailListFooter').style.display='none';
     const data=await this.post({action:'search',folder:this.folder,query:q});
     if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
-    this.renderMsgList(data.messages);
+    this._sel=new Set();
+    this.msgs=data.messages||[];
+    this.renderMsgList(this.msgs);
   },
 
   _cmpAtts:[],
@@ -1279,6 +1428,18 @@ const MAIL={
     if(on) this._sel.add(uid); else this._sel.delete(uid);
     const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
     if(item) item.classList.toggle('sel-checked',on);
+    if(this._renderThreads){
+      for(const [tid,members] of this._renderThreads){
+        if(!members.some(m=>String(m.uid)===String(uid))||members.length<2)continue;
+        const all=members.every(m=>this._sel.has(m.uid)),some=members.some(m=>this._sel.has(m.uid));
+        const head=document.querySelector(`.mail-thread[data-thread-id="${CSS.escape(String(tid))}"]>.mail-thread-head`);
+        if(head){
+          head.classList.toggle('sel-checked',all);
+          const chk=head.querySelector('.mail-item-chk');if(chk){chk.checked=all;chk.indeterminate=!all&&some;}
+        }
+        break;
+      }
+    }
     this._updateSelBar();
   },
   toggleSelectAll(on){

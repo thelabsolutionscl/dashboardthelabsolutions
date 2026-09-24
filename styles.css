@@ -1085,6 +1085,30 @@ body.mail-fs-on .mail-compose-panel{z-index:460!important;}
 .mail-sig-editor img{max-width:100%;height:auto;max-height:100px;vertical-align:middle;}
 .mail-sig-editor table,.mail-compose-body-area table{width:auto;max-width:100%;}
 .mail-item-snippet{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;}
+.mail-item-snippet.is-empty{display:none;}
+/* Conversaciones: los mensajes con el mismo hilo se muestran como una sola
+   fila y se despliegan bajo demanda, en vez de llenar la bandeja con respuestas sueltas. */
+.mail-thread{border-bottom:1px solid var(--border2);}
+.mail-thread>.mail-thread-head{border-bottom:0;}
+.mail-thread.open>.mail-thread-head{background:rgba(0,243,255,.035);border-bottom:1px solid var(--border);}
+.mail-thread-chevron{width:15px;flex:0 0 15px;color:var(--text3);font-size:18px;line-height:15px;margin-top:0;transition:transform .15s,color .15s;text-align:center;}
+.mail-thread.open .mail-thread-chevron{transform:rotate(90deg);color:var(--accent);}
+.mail-thread-subject-row{display:flex;align-items:center;gap:7px;min-width:0;}
+.mail-thread-subject-row .mail-item-subject{flex:1;min-width:0;}
+.mail-thread-count{display:inline-flex;align-items:center;flex-shrink:0;border:1px solid var(--border2);background:var(--surface3);color:var(--text2);border-radius:999px;padding:1px 6px;font-size:9.5px;font-weight:800;line-height:1.4;}
+.mail-thread.unread .mail-thread-count,.mail-thread-head.unread .mail-thread-count{border-color:rgba(0,212,204,.35);color:var(--accent);}
+.mail-thread-children{display:none;background:rgba(255,255,255,.012);}
+.mail-thread.open .mail-thread-children{display:block;}
+.mail-thread-child{padding-left:34px;border-bottom:1px solid rgba(255,255,255,.055);position:relative;}
+.mail-thread-child:last-child{border-bottom:0;}
+.mail-thread-child::before{content:'';position:absolute;left:20px;top:0;bottom:0;width:1px;background:var(--border2);}
+.mail-thread-child .mail-item-from{max-width:155px;}
+.mail-thread-head.selected{border-left:2px solid var(--accent);padding-left:8px;}
+@media(max-width:760px){
+  .mail-thread-child{padding-left:27px}
+  .mail-thread-child::before{left:15px}
+  .mail-thread-count{font-size:9px}
+}
 .mail-item-star{color:#facc15;font-size:11px;flex-shrink:0;}
 .mail-att-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11.5px;color:var(--text2);cursor:pointer;transition:all .12s;max-width:220px;}
 .mail-att-chip:hover{border-color:var(--accent);color:var(--accent);}
