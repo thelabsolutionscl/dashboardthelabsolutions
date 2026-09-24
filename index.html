@@ -8477,13 +8477,20 @@ function _proxyCfg(){
 // ¿Hay CÓMO llamar a Claude? (proxy configurado O key local) — las compuertas de
 // features IA deben preguntar esto, no si existe una key en el navegador.
 function hasClaudeAccess(){return !!(window._DEMO_MODE||_proxyCfg()||getAnthropicKey());}
+function _claudeDirectAllowed(){
+  try{
+    const h=String(window.location&&window.location.hostname||'').toLowerCase();
+    return h==='localhost'||h==='127.0.0.1'||h==='::1';
+  }catch(e){return false;}
+}
 async function callClaude(system,user,opts={}){
   // En DEMO la experiencia sigue funcionando con respuestas deterministas y
   // formatos compatibles, sin tocar el proxy ni gastar tokens de Anthropic.
   if(window._DEMO_MODE){await new Promise(r=>setTimeout(r,280));return _demoClaudeResponse(system,user,opts);}
-  // Con proxy: la API key de Anthropic vive en el Worker, no en el navegador
+  // En producción TODO Anthropic debe pasar por el proxy con presupuesto diario.
   const px=_proxyCfg();
   if(px)return _callClaudeViaProxy(system,user,px,opts);
+  if(!_claudeDirectAllowed())throw new Error('Proxy IA requerido: la llamada directa a Anthropic está bloqueada para evitar gasto sin presupuesto');
   let k=getAnthropicKey();
   if(!k){return new Promise((res,rej)=>{showAnthropicModal(async(key)=>{try{res(await _callClaudeRaw(system,user,key,opts));}catch(e){rej(e);}});});}
   return _callClaudeRaw(system,user,k,opts);
