@@ -115,6 +115,26 @@ test('todos los handlers inline de la sección Pedidos tienen una función enlaz
   assert.deepEqual(missing, [], `Handlers sin definición: ${missing.join(', ')}`);
 });
 
+test('Pedidos expone ordenamiento visible para todas sus vistas', () => {
+  const section = pedidosSection();
+  assert.match(section, /id=["']pedidosSortSelect["']/, 'debe existir un selector de orden');
+  for (const value of ['numero:desc','numero:asc','cliente:asc','cliente:desc','titulo:asc','titulo:desc','estado:asc','entrega:asc','monto:desc']) {
+    assert.match(section, new RegExp('value=["\\']' + value.replace(':','\\:') + '["\\']'), 'falta opción '+value);
+  }
+  assert.ok(hasDefinition('setPedidosSort'), 'debe existir setPedidosSort');
+  assert.ok(hasDefinition('_pedApplySearchSort'), 'debe existir el aplicador de búsqueda/orden');
+  const apply = extractFunction('_pedApplySearchSort');
+  assert.match(apply, /case ['"]numero['"]/);
+  assert.match(apply, /case ['"]cliente['"]/);
+  assert.match(apply, /case ['"]titulo['"]/);
+  assert.match(apply, /case ['"]estado['"]/);
+  assert.match(apply, /case ['"]monto['"]/);
+  assert.match(apply, /case ['"]entrega['"]/);
+  assert.match(apply, /_pedSyncSortControl\(\)/, 'el selector debe reflejar también el orden elegido desde la tabla');
+  const render = extractFunction('renderPedidos');
+  assert.match(render, /_pedApplySearchSort\(data\)/, 'el orden debe aplicarse antes de renderizar Tabla/Tarjetas/Kanban');
+});
+
 test('las funciones críticas de Pedidos existen una sola vez', () => {
   const names = [
     'renderPedidos', 'filterPedidos', 'renderPedidosKanban', 'advancePedido',
