@@ -8493,29 +8493,41 @@ async function callClaude(system,user,opts={}){
 const CLAUDE_MODELS=Object.freeze({FAST:'claude-haiku-4-5',REASONING:'claude-sonnet-4-6'});
 const AGENT_MODEL=CLAUDE_MODELS.FAST;
 const AGENT_AI_POLICY=Object.freeze({
-  SALES:{model:CLAUDE_MODELS.FAST,maxTokens:650}, QUOTE:{model:CLAUDE_MODELS.FAST,maxTokens:850},
-  QA:{model:CLAUDE_MODELS.FAST,maxTokens:600}, FOLLOWUP:{model:CLAUDE_MODELS.FAST,maxTokens:450},
-  ONBOARDING:{model:CLAUDE_MODELS.FAST,maxTokens:700}, REPCLIENTE:{model:CLAUDE_MODELS.FAST,maxTokens:550},
-  LINKEDIN:{model:CLAUDE_MODELS.FAST,maxTokens:650}, CAPTION_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:600},
-  COMMUNITY_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:400},
-  PRODUCTION:{model:CLAUDE_MODELS.REASONING,maxTokens:1000}, MANTENCION3D:{model:CLAUDE_MODELS.REASONING,maxTokens:900},
-  CEO:{model:CLAUDE_MODELS.REASONING,maxTokens:1200}, FINANCE:{model:CLAUDE_MODELS.REASONING,maxTokens:1200},
-  ADS:{model:CLAUDE_MODELS.REASONING,maxTokens:1400}, SOCIAL_ADS_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:1200},
-  SOCIAL_STRATEGIST:{model:CLAUDE_MODELS.REASONING,maxTokens:1100}, REPORT_SOCIAL_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:900},
-  CONTENT:{model:CLAUDE_MODELS.REASONING,maxTokens:1000}, NEWSLETTER_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:1000},
-  TREND_AGENT:{model:CLAUDE_MODELS.REASONING,maxTokens:900}, LEADGEN:{model:CLAUDE_MODELS.REASONING,maxTokens:1000},
-  SUPPLIER:{model:CLAUDE_MODELS.REASONING,maxTokens:1000}, SEO:{model:CLAUDE_MODELS.FAST,maxTokens:650}
+  SALES:{model:CLAUDE_MODELS.FAST,maxTokens:480}, QUOTE:{model:CLAUDE_MODELS.FAST,maxTokens:650},
+  QA:{model:CLAUDE_MODELS.FAST,maxTokens:420}, FOLLOWUP:{model:CLAUDE_MODELS.FAST,maxTokens:320},
+  ONBOARDING:{model:CLAUDE_MODELS.FAST,maxTokens:500}, REPCLIENTE:{model:CLAUDE_MODELS.FAST,maxTokens:420},
+  LINKEDIN:{model:CLAUDE_MODELS.FAST,maxTokens:480}, CAPTION_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:450},
+  COMMUNITY_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:300},
+  PRODUCTION:{model:CLAUDE_MODELS.REASONING,maxTokens:850}, MANTENCION3D:{model:CLAUDE_MODELS.REASONING,maxTokens:750},
+  CEO:{model:CLAUDE_MODELS.REASONING,maxTokens:900}, FINANCE:{model:CLAUDE_MODELS.REASONING,maxTokens:850},
+  ADS:{model:CLAUDE_MODELS.REASONING,maxTokens:1000},
+  SOCIAL_ADS_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:650},
+  SOCIAL_STRATEGIST:{model:CLAUDE_MODELS.FAST,maxTokens:700}, REPORT_SOCIAL_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:550},
+  CONTENT:{model:CLAUDE_MODELS.FAST,maxTokens:650}, NEWSLETTER_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:600},
+  TREND_AGENT:{model:CLAUDE_MODELS.FAST,maxTokens:550}, LEADGEN:{model:CLAUDE_MODELS.FAST,maxTokens:650},
+  SUPPLIER:{model:CLAUDE_MODELS.FAST,maxTokens:600}, SEO:{model:CLAUDE_MODELS.FAST,maxTokens:500}
 });
 function agentAiPolicy(agentId,overrides={}){
-  const base=AGENT_AI_POLICY[String(agentId||'').toUpperCase()]||{model:CLAUDE_MODELS.FAST,maxTokens:800};
+  const base=AGENT_AI_POLICY[String(agentId||'').toUpperCase()]||{model:CLAUDE_MODELS.FAST,maxTokens:600};
   return {...base,...overrides,source:String(agentId||overrides.source||'agentes').toLowerCase()};
 }
-function callAgentClaude(agentId,system,user,overrides={}){return callClaude(system,user,agentAiPolicy(agentId,overrides));}
-const _CLAUDE_BODY=(system,user,opts={})=>JSON.stringify({
-  model:opts.model||AGENT_MODEL,
-  max_tokens:Math.max(128,Math.min(2000,Number(opts.maxTokens)||800)),
-  system,messages:[{role:'user',content:user}]
-});
+const _CLAUDE_INFLIGHT=new Map();
+function callAgentClaude(agentId,system,user,overrides={}){
+  const policy=agentAiPolicy(agentId,overrides);
+  const sig=[String(agentId||''),policy.model,policy.maxTokens,String(system||''),String(user||'')].join('\u241f');
+  if(_CLAUDE_INFLIGHT.has(sig))return _CLAUDE_INFLIGHT.get(sig);
+  const p=Promise.resolve(callClaude(system,user,policy)).finally(()=>_CLAUDE_INFLIGHT.delete(sig));
+  _CLAUDE_INFLIGHT.set(sig,p);
+  return p;
+}
+const _CLAUDE_BODY=(system,user,opts={})=>{
+  const staticSystem=Array.isArray(system)?system:[{type:'text',text:String(system||''),cache_control:{type:'ephemeral'}}];
+  return JSON.stringify({
+    model:opts.model||AGENT_MODEL,
+    max_tokens:Math.max(128,Math.min(1400,Number(opts.maxTokens)||600)),
+    system:staticSystem,messages:[{role:'user',content:user}]
+  });
+};
 // Tarifas de lista del API de Anthropic por millón de tokens. Se usan sólo para
 // dar visibilidad operativa en el dashboard; Anthropic sigue siendo la fuente
 // definitiva de facturación. Los valores incluyen prompt caching de 5 minutos.
@@ -8563,24 +8575,23 @@ function _claudeText(j,source){_recordClaudeUsage(j,source);return j.content?.fi
 // 429 o un 503 pasajero —que Anthropic devuelve cuando está cargado— mataba la
 // consulta en vez de reintentarla. KAI ya tenía este cinturón (60 s + 3 intentos);
 // esto lo trae al resto, igual que airtableHttp hace con Airtable.
-async function _claudeHttp(url,opts,{reintentos=2,limite=60000}={}){
+async function _claudeHttp(url,opts,{reintentos=1,limite=60000}={}){
   let ultimo;
   for(let intento=0;intento<=reintentos;intento++){
     const ctrl=new AbortController();
     const t=setTimeout(()=>ctrl.abort(),limite);
     try{
       const r=await fetch(url,{...opts,signal:ctrl.signal});
-      // 429 = límite de la API, 5xx = caída pasajera. Ambos se reintentan.
-      if((r.status===429||r.status>=500)&&intento<reintentos){
-        const espera=r.status===429?((parseInt(r.headers.get('retry-after'))||2)*1000):(800*(intento+1));
+      // Sólo 429 se reintenta: un 5xx puede ocurrir después de iniciar una
+      // generación y repetirlo podría pagar dos veces por el mismo trabajo.
+      if(r.status===429&&intento<reintentos){
+        const espera=(parseInt(r.headers.get('retry-after'))||2)*1000;
         await new Promise(res=>setTimeout(res,espera));
         continue;
       }
       return r;
     }catch(e){
       ultimo=(e&&e.name==='AbortError')?new Error(`La IA no respondió en ${Math.round(limite/1000)} segundos — reintenta en un momento`):e;
-      // Un timeout/error de red tiene resultado desconocido: repetir el POST
-      // puede pagar dos generaciones. Sólo reintentamos respuestas HTTP explícitas.
       throw ultimo;
     }finally{clearTimeout(t);}
   }
@@ -8591,7 +8602,7 @@ async function _callClaudeViaProxy(system,user,px,opts={}){
   // El Worker la inyecta por defecto. Sólo 'Content-Type' y 'X-App-Key' (ambos ya permitidos por el Worker).
   let r;
   try{
-    r=await _claudeHttp(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key},body:_CLAUDE_BODY(system,user,opts)});
+    r=await _claudeHttp(px.url+'/anthropic/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':String(opts.source||'dashboard').slice(0,48)},body:_CLAUDE_BODY(system,user,opts)});
   }catch(e){
     // Un vencimiento por tiempo se explica solo; no lo disfraces de "revisa la URL".
     if(/no respondió en \d+ segundos/.test(e.message||'')) throw e;
@@ -16350,7 +16361,9 @@ function buildAgentContext(id){
   }
 
   lines.push('\n=== FIN CONTEXTO ===');
-  return lines.join('\n');
+  const out=lines.join('\n');
+  const maxChars=9000;
+  return out.length>maxChars?out.slice(0,maxChars)+'\n[Contexto recortado por política de ahorro de tokens]':out;
 }
 
 function prefillAgent(id,btn){
