@@ -130,6 +130,13 @@ CAPACIDADES Y REGLAS:
     {type:'text', text:SYS_RULES(), cache_control:{type:'ephemeral'}},
     {type:'text', text:buildContext()}
   ];
+  const KAI_FAST_MODEL='claude-haiku-4-5';
+  const KAI_REASONING_MODEL='claude-sonnet-4-6';
+  function _kaiNeedsReasoning(text){
+    const s=String(text||'').toLowerCase();
+    if(s.length<24)return false;
+    return /(analiza|análisis|estrateg|diagn[oó]st|proyecci[oó]n|rentabilidad|margen|finanz|google ads|publicidad|compar|prioriza|optimiza|por qu[eé]|causa|riesgo)/i.test(s);
+  }
 
   // ─── UI helpers ───
   function setState(mode){
@@ -143,13 +150,13 @@ CAPACIDADES Y REGLAS:
   }
 
   // ── Contador de tokens / costo estimado de la sesión (#8) ──
-  function _kaiUpdateUsage(inTok,outTok,cacheWrite=0,cacheRead=0){
+  function _kaiUpdateUsage(inTok,outTok,cacheWrite=0,cacheRead=0,model=KAI_FAST_MODEL){
     if(!$usage) return;
     JV.usage.in += (+inTok||0); JV.usage.out += (+outTok||0);
     JV.usage.cacheWrite=(JV.usage.cacheWrite||0)+cacheWrite;
     JV.usage.cacheRead=(JV.usage.cacheRead||0)+cacheRead;
     const tot = JV.usage.in + JV.usage.out + JV.usage.cacheWrite + JV.usage.cacheRead;
-    const cost=typeof _estimateClaudeCost==='function'?_estimateClaudeCost('claude-sonnet-4-6',{input_tokens:JV.usage.in,output_tokens:JV.usage.out,cache_creation_input_tokens:JV.usage.cacheWrite,cache_read_input_tokens:JV.usage.cacheRead}):0;
+    const cost=typeof _estimateClaudeCost==='function'?_estimateClaudeCost(model,{input_tokens:JV.usage.in,output_tokens:JV.usage.out,cache_creation_input_tokens:JV.usage.cacheWrite,cache_read_input_tokens:JV.usage.cacheRead}):0;
     $usage.style.display='';
     $usage.textContent = tot.toLocaleString('es-CL')+' tok · '+(typeof _agentCostLabel==='function'?_agentCostLabel(cost):'costo estimado');
     $usage.title='Sólo KAI en esta sesión; incluye entrada, salida y caché. No es una factura ni incluye agentes delegados.';
@@ -182,12 +189,12 @@ CAPACIDADES Y REGLAS:
 
   // ── Persistencia de conversación (sobrevive a recargas dentro de la sesión) ──
   function _kaiStripTags(s){return String(s||'').replace(/\[NAV:[^\]]*\]/gi,'').replace(/\[NUEVO:[^\]]*\]/gi,'').replace(/\[AGENTE:[^\]]*\]/gi,'').replace(/\[COTIZAR\]/gi,'').replace(/\[FLUJO:[^\]]*\]/gi,'').trim();}
-  function _kaiPersist(){try{sessionStorage.setItem('kai_hist',JSON.stringify(JV.history.slice(-14)));}catch(e){}}
+  function _kaiPersist(){try{sessionStorage.setItem('kai_hist',JSON.stringify(JV.history.slice(-8)));}catch(e){}}
   function _kaiRestore(){
     try{
       const raw=sessionStorage.getItem('kai_hist');if(!raw)return;
       const h=JSON.parse(raw);if(!Array.isArray(h)||!h.length)return;
-      JV.history=h.slice(-14);
+      JV.history=h.slice(-8);
       JV.history.forEach(msg=>{const t=_kaiStripTags(msg.content);if(t)addMsg(msg.role==='user'?'u':'j',t);});
     }catch(e){}
   }
@@ -286,7 +293,7 @@ CAPACIDADES Y REGLAS:
     if(typeof AGENTES_CFG==='undefined'||typeof callClaude!=='function') return;
     // Guard (#2): tope de delegaciones por respuesta y anti-duplicado inmediato
     const sig=agentId+'|'+consulta;
-    if(JV._delegations>=2){ return; }
+    if(JV._delegations>=1){ return; }
     if(sig===JV._lastDeleg){ return; }
     JV._delegations++; JV._lastDeleg=sig;
     const cfg=AGENTES_CFG.find(a=>a.id===agentId);
@@ -469,7 +476,7 @@ CAPACIDADES Y REGLAS:
       if(name==='consultar_crm'){ return _kaiConsultarCRM(input); }
       if(name==='delegar'){
         const agentId=String(input.agente||'').toUpperCase().trim();
-        if(JV._delegations>=2) return 'Límite de delegaciones por turno alcanzado.';
+        if(JV._delegations>=1) return 'Límite de 1 delegación por turno alcanzado.';
         JV._delegations++;
         if(typeof AGENTES_CFG==='undefined'||typeof callClaude!=='function') return 'Los agentes no están disponibles ahora.';
         const cfg=AGENTES_CFG.find(a=>a.id===agentId);
@@ -549,21 +556,23 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
       // este turno: nunca se persisten ni se recortan entre turnos, evitando 400 por
       // bloques huérfanos.
       JV._delegations=0; JV._pendingFlow=null; JV._btns=[]; JV._accum='';
-      const turnUsage={model:'claude-sonnet-4-6',input_tokens:0,output_tokens:0,cache_creation_input_tokens:0,cache_read_input_tokens:0,total_tokens:0,cost_usd:0};
+      const kaiModel=_kaiNeedsReasoning(userText)?KAI_REASONING_MODEL:KAI_FAST_MODEL;
+      const kaiMaxTokens=kaiModel===KAI_REASONING_MODEL?800:520;
+      const turnUsage={model:kaiModel,input_tokens:0,output_tokens:0,cache_creation_input_tokens:0,cache_read_input_tokens:0,total_tokens:0,cost_usd:0};
       const stripTags=s=>s.replace(/\[(NAV|NUEVO|AGENTE|FLUJO|BTN):[^\]]*\]/gi,'').replace(/\[COTIZAR\]/gi,'').replace(/\[(NAV|NUEVO|AGENTE|FLUJO|BTN):[^\]]*$/i,'');
 
       // Una ronda: streamea un mensaje del asistente (Blob body por Unicode/ISO-8859-1)
       // con reintento ante errores transitorios. Devuelve {text, toolUses, stopReason}.
       async function streamRound(convo){
-        const reqBody=new Blob([JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1024, stream:true, system:SYS_BLOCKS(), tools:KAI_TOOLS, messages:convo })],{type:'application/json'});
-        const RETRY=[429,500,502,503,529]; let r=null;
-        for(let attempt=0; attempt<3 && !timedOut; attempt++){
+        const reqBody=new Blob([JSON.stringify({ model:kaiModel, max_tokens:kaiMaxTokens, stream:true, system:SYS_BLOCKS(), tools:KAI_TOOLS, messages:convo })],{type:'application/json'});
+        const RETRY=[429]; let r=null;
+        for(let attempt=0; attempt<2 && !timedOut; attempt++){
           r=await fetch(px ? px.url+'/anthropic/v1/messages' : 'https://api.anthropic.com/v1/messages',{ method:'POST', signal:ctrl.signal,
-            headers: px ? {'Content-Type':'application/json','X-App-Key':px.key}
+            headers: px ? {'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'kai'}
                         : {'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}, body:reqBody });
-          if(r.ok || !RETRY.includes(r.status) || attempt===2) break;
-          $typ.textContent='Reintentando conexión…';
-          await new Promise(res=>setTimeout(res,700*(attempt+1)));
+          if(r.ok || !RETRY.includes(r.status) || attempt===1) break;
+          $typ.textContent='Esperando límite de la IA…';
+          await new Promise(res=>setTimeout(res,900));
         }
         if(!r.ok){ const e=await r.json().catch(()=>({})); if(r.status===401){ localStorage.removeItem('anthropic_key'); sessionStorage.removeItem('anthropic_key'); } throw new Error(e.error?.message||('API '+r.status)); }
         const reader=r.body.getReader(); const decoder=new TextDecoder();
@@ -589,7 +598,7 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
         }
         usageMeta.usage={...usageMeta.usage,output_tokens:outTok};
         if(typeof _recordClaudeUsage==='function') _recordClaudeUsage(usageMeta,'kai');
-        _kaiUpdateUsage(inTok,outTok,usageMeta.usage.cache_creation_input_tokens||0,usageMeta.usage.cache_read_input_tokens||0);
+        _kaiUpdateUsage(inTok,outTok,usageMeta.usage.cache_creation_input_tokens||0,usageMeta.usage.cache_read_input_tokens||0,usageMeta.model||kaiModel);
         turnUsage.model=usageMeta.model||turnUsage.model;
         turnUsage.input_tokens+=inTok;turnUsage.output_tokens+=outTok;
         turnUsage.cache_creation_input_tokens+=usageMeta.usage.cache_creation_input_tokens||0;
@@ -601,9 +610,9 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
       // Orquesta rondas hasta que el modelo deje de pedir herramientas (tope 3).
       // Un turno normal usa una; tres alcanzan para consulta → acción → resumen.
       JV.thinking=false; setState('speaking'); $typ.classList.remove('jvs-cursor');
-      let convo=JV.history.slice(-8).map(m=>({role:m.role,content:m.content}));
+      let convo=JV.history.slice(-6).map(m=>({role:m.role,content:m.content}));
       let guard=0;
-      while(guard++<3){
+      while(guard++<2){
         const res=await streamRound(convo);
         const shown=stripTags(res.text||'').trim();
         if(shown){ JV._accum += (JV._accum?'\n':'')+shown; $typ.textContent=JV._accum; }
@@ -627,7 +636,7 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
       _kaiRenderButtons(JV._btns);
       $log.scrollTop=$log.scrollHeight;
       JV.history.push({role:'assistant',content:(clean||'Listo.')});
-      if(JV.history.length>10) JV.history=JV.history.slice(-8);
+      if(JV.history.length>8) JV.history=JV.history.slice(-6);
       _kaiPersist();
       JV.busy=false;
 
