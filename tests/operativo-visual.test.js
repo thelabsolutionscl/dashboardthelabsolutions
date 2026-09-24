@@ -205,7 +205,7 @@ test('selector de estado de pedidos no invade la tarjeta vecina y queda alineado
   assert.match(src,/class="op-order-head-copy"/,'el bloque de texto del header debe distinguirse del selector');
   assert.match(css,/#tab-pedidos \.op-order-record>header\{[\s\S]*?flex-direction:column/,'el estado debe vivir en una fila propia y estable');
   assert.match(css,/#tab-pedidos \.op-order-record>header>\.op-order-head-copy\{[\s\S]*?min-height:108px/,'el bloque superior debe reservar igual altura para alinear estados');
-  assert.match(css,/#tab-pedidos \.op-order-record>header>\.op-status-select-wrap\{[\s\S]*?width:160px[\s\S]*?margin-left:auto/,'el selector debe conservar ancho compacto y alineación derecha');
+  assert.match(css,/#tab-pedidos \.op-order-record>header>\.op-status-select-wrap\{[\s\S]*?width:160px[\s\S]*?margin-left:0/,'el selector debe conservar ancho compacto y alineación izquierda');
   assert.match(css,/#tab-pedidos \.op-order-record \.op-status-select\{width:100%;max-width:none\}/,'el select debe ocupar solo su wrapper compacto');
 });
 
