@@ -95,6 +95,20 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # Recuperación puntual: el deploy 19cf5c5 agotó los 10 minutos de Actions,
+      # pero Pages siguió reservando su estado e impidió iniciar el siguiente.
+      - name: Clear stale Pages deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(curl -sS -o /tmp/pages-cancel-response -w '%{http_code}' -X POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/deployments/19cf5c537e6b2503241088aaae03cbd1636dd686/cancel")
+          if [ "$status" = 204 ]; then echo 'Deploy anterior cancelado';
+          elif [ "$status" = 404 ]; then echo 'Deploy anterior ya no existe';
+          else cat /tmp/pages-cancel-response; exit 1; fi
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
