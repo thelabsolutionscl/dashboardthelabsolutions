@@ -10894,7 +10894,7 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   const existente=_pedidoDeCot(cot);
   if(existente){ if(!opts.silent) toast(`Esta cotización ya tiene el pedido ${existente.fields['N° Pedido']||''}`,'info'); return false; }
   const numPedido=await _nextNumPedido();
-  const fechaIngreso=typeof hoyCL==='function'?hoyCL():new Date().toISOString().slice(0,10);
+  const fechaIngreso=hoyCL();
   const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0,'Fecha ingreso':fechaIngreso};
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
