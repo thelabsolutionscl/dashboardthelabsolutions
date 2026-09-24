@@ -113,9 +113,10 @@ test('revenue semanal usa pedidos creados en la semana y no despachos',()=>{
 
 test('contexto CEO usa la misma definición de revenue semanal',()=>{
   const body=functionBlock(SOURCE,'buildAgentContext');
-  assert.match(body,/const revSemana=P\.reduce[\s\S]*p\.createdTime/);
-  assert.match(body,/Estado pedido[\s\S]*Cancelado/);
-  assert.doesNotMatch(body,/Fecha despacho['"]\]\|\|f\['Fecha entrega/);
+  const line=(body.match(/const revSemana=P\.reduce\([^\n]+/)||[])[0]||'';
+  assert.match(line,/p\.createdTime/);
+  assert.match(line,/Cancelado/);
+  assert.doesNotMatch(line,/Fecha despacho|Fecha entrega/);
 });
 
 test('reporte CEO recibe revenue mensual determinístico además del semanal',()=>{
