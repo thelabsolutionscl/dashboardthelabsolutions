@@ -1,8 +1,9 @@
 /* js/correo-spellcheck.js
  * Corrección ortográfica visible para el redactor de CORREO.
  * 1) Mantiene el spellcheck nativo del navegador/WebKit.
- * 2) Añade un fallback local para errores frecuentes en español que WebKit
- *    suele dejar pasar (especialmente tildes: ademas → además, tambien → también).
+ * 2) Carga un diccionario Hunspell completo de español de Chile (es-CL)
+ *    y lo ejecuta localmente con Typo.js para marcar palabras desconocidas.
+ * 3) Mantiene un fallback pequeño para errores comunes mientras carga el diccionario.
  * El contenido NO se envía a ningún servicio externo.
  */
 (function(root,factory){
@@ -39,6 +40,56 @@ const SUGGESTIONS=new Map(Object.entries({
 }));
 
 let target=null,installed=false,observer=null,wired=0,timer=null,mutating=false,mailPatched=false;
+let fullDictionary=null,dictionaryPromise=null,dictionaryState='idle';
+
+const ALLOWED_TERMS=new Set([
+  'tls','kai','thelab','airtable','claude','chatgpt','whatsapp','google','drive',
+  'creality','orcaslicer','orca','klipper','fluidd','esp32','nfc','rfid','pla','petg','tpu',
+  'alucobond','heineken','wom','bci','ccu','resend','github','vercel'
+]);
+
+function loadScriptOnce(src){
+  if(target?.Typo)return Promise.resolve(target.Typo);
+  return new Promise((resolve,reject)=>{
+    const d=target?.document;if(!d){reject(new Error('Sin DOM'));return;}
+    const prev=d.querySelector('script[data-tls-spell-lib="1"]');
+    if(prev){
+      prev.addEventListener('load',()=>resolve(target.Typo),{once:true});
+      prev.addEventListener('error',()=>reject(new Error('No se pudo cargar Typo.js')),{once:true});
+      return;
+    }
+    const s=d.createElement('script');s.src=src;s.async=true;s.dataset.tlsSpellLib='1';
+    s.onload=()=>target.Typo?resolve(target.Typo):reject(new Error('Typo.js no quedó disponible'));
+    s.onerror=()=>reject(new Error('No se pudo cargar Typo.js'));
+    (d.head||d.documentElement).appendChild(s);
+  });
+}
+function loadFullDictionary(){
+  if(fullDictionary)return Promise.resolve(fullDictionary);
+  if(dictionaryPromise)return dictionaryPromise;
+  if(!target?.fetch){dictionaryState='unavailable';return Promise.resolve(null);}
+  dictionaryState='loading';
+  dictionaryPromise=(async()=>{
+    try{
+      await loadScriptOnce('vendor/spellcheck/typo.js');
+      const [affRes,dicRes]=await Promise.all([
+        target.fetch('vendor/spellcheck/es_CL.aff',{cache:'force-cache'}),
+        target.fetch('vendor/spellcheck/es_CL.dic',{cache:'force-cache'})
+      ]);
+      if(!affRes.ok||!dicRes.ok)throw new Error('No se pudo cargar diccionario es-CL');
+      const [aff,dic]=await Promise.all([affRes.text(),dicRes.text()]);
+      fullDictionary=new target.Typo('es_CL',aff,dic);
+      dictionaryState='ready';
+      target.setTimeout?.(()=>lintNow(),0);
+      return fullDictionary;
+    }catch(e){
+      dictionaryState='error';
+      console.warn('[Correo spellcheck] diccionario es-CL no disponible:',e?.message||e);
+      return null;
+    }
+  })();
+  return dictionaryPromise;
+}
 
 // Fallback local para errores evidentes que el motor del navegador puede no
 // subrayar si el usuario no tiene español habilitado en Chrome/Safari.
@@ -113,6 +164,36 @@ function suggestionFor(word){
   const direct=SUGGESTIONS.get(key);
   const s=(direct&&direct!==key)?direct:fuzzySuggestionFor(word);
   return preserveCase(word,s);
+}
+
+function looksLikeTechnicalToken(word){
+  const raw=String(word||'');
+  const key=normalizeWord(raw);
+  if(!raw||raw.length<2)return true;
+  if(ALLOWED_TERMS.has(key))return true;
+  if(/^[A-ZÁÉÍÓÚÜÑ]{2,6}$/.test(raw))return true;
+  if(/\d/.test(raw))return true;
+  return false;
+}
+function insideAddressOrUrl(text,index){
+  const re=/(?:https?:\/\/|www\.)\S+|\b\S+@\S+\b/gi;let m;
+  while((m=re.exec(text||''))){
+    if(index>=m.index&&index<m.index+m[0].length)return true;
+  }
+  return false;
+}
+function wordIssue(word,text,index,engine){
+  const direct=suggestionFor(word);
+  if(direct)return{bad:true,suggestion:direct,source:'fallback'};
+  if(looksLikeTechnicalToken(word)||insideAddressOrUrl(text,index))return{bad:false,suggestion:'',source:'skip'};
+  const dict=engine===undefined?fullDictionary:engine;
+  if(dict&&typeof dict.check==='function'){
+    try{
+      if(dict.check(word)||dict.check(normalizeWord(word)))return{bad:false,suggestion:'',source:'dictionary'};
+      return{bad:true,suggestion:'',source:'dictionary'};
+    }catch(_){}
+  }
+  return{bad:false,suggestion:'',source:'pending'};
 }
 
 function apply(el){
@@ -218,11 +299,12 @@ function lintBody(){
       const text=node.nodeValue||'';let last=0,m,changed=false;
       const frag=target.document.createDocumentFragment();
       while((m=re.exec(text))){
-        const sug=suggestionFor(m[0]);if(!sug)continue;
+        const issue=wordIssue(m[0],text,m.index);if(!issue.bad)continue;
         changed=true;
         if(m.index>last)frag.appendChild(target.document.createTextNode(text.slice(last,m.index)));
         const span=target.document.createElement('span');
-        span.className=ERROR_CLASS;span.dataset.suggestion=sug;span.title='Sugerencia: '+sug+' · clic para corregir';
+        span.className=ERROR_CLASS;span.dataset.suggestion=issue.suggestion||'';span.dataset.word=m[0];
+        span.title=issue.suggestion?'Sugerencia: '+issue.suggestion+' · clic para corregir':'Posible falta ortográfica';
         span.textContent=m[0];frag.appendChild(span);last=m.index+m[0].length;count++;
       }
       if(changed){
@@ -244,10 +326,13 @@ function lintBody(){
 
 function lintSubject(){
   const el=target?.document?.getElementById('mailCmpSubject');if(!el)return 0;
-  const words=(el.value||'').match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/g)||[];
-  const bad=words.map(w=>({word:w,suggestion:suggestionFor(w)})).filter(x=>x.suggestion);
+  const text=el.value||'',re=/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/g,bad=[];let m;
+  while((m=re.exec(text))){
+    const issue=wordIssue(m[0],text,m.index);
+    if(issue.bad)bad.push({word:m[0],suggestion:issue.suggestion});
+  }
   el.classList.toggle('mail-local-spell-subject-error',bad.length>0);
-  el.title=bad.length?bad.map(x=>x.word+' → '+x.suggestion).join(' · '):'';
+  el.title=bad.length?bad.map(x=>x.suggestion?(x.word+' → '+x.suggestion):x.word).join(' · '):'';
   return bad.length;
 }
 function lintNow(){return lintBody()+lintSubject();}
@@ -302,7 +387,7 @@ function install(root){
   const start=()=>{
     ensureStyle();applyAll();patchMail();
     root.document.addEventListener('focusin',e=>{
-      const el=e.target;if(el&&IDS.includes(el.id))apply(el);
+      const el=e.target;if(el&&IDS.includes(el.id)){apply(el);loadFullDictionary();}
     });
     root.document.addEventListener('input',e=>{
       if(e.target?.id==='mailCmpBody'){
@@ -323,6 +408,8 @@ function install(root){
       observer.observe(root.document.body,{childList:true,subtree:true});
     }
     target.setTimeout?.(()=>{patchMail();lintNow();},300);
+    const warm=()=>loadFullDictionary();
+    if(typeof root.requestIdleCallback==='function')root.requestIdleCallback(warm,{timeout:2500});else target.setTimeout?.(warm,1200);
   };
   if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',start,{once:true});else start();
   return true;
@@ -330,7 +417,7 @@ function install(root){
 
 function status(){
   const body=target?.document?.getElementById('mailCmpBody');
-  return{installed,wired,observing:!!observer,errors:body?.querySelectorAll?.('.'+ERROR_CLASS)?.length||0};
+  return{installed,wired,observing:!!observer,dictionary:dictionaryState,errors:body?.querySelectorAll?.('.'+ERROR_CLASS)?.length||0};
 }
-return{install,status,_test:{IDS,SUGGESTIONS,COMMON_WORDS,suggestionFor,normalizeWord,stripMarks,oneEditAway,fuzzySuggestionFor,isLineBreakInput}};
+return{install,status,_test:{IDS,SUGGESTIONS,COMMON_WORDS,ALLOWED_TERMS,suggestionFor,normalizeWord,stripMarks,oneEditAway,fuzzySuggestionFor,looksLikeTechnicalToken,insideAddressOrUrl,wordIssue,isLineBreakInput}};
 });
