@@ -99,8 +99,21 @@ test('Overview muestra un digest CEO accionable antes del informe completo',()=>
   assert.match(body,/ceo-kpis/,'debe mostrar indicadores visuales');
   assert.match(body,/Qué haría ahora/,'debe priorizar acciones');
   assert.match(body,/Ojo con esto/,'debe separar observaciones');
-  assert.match(body,/Ver informe completo/,'el detalle duro debe quedar bajo demanda');
+  assert.match(body,/Ver informe (?:anterior|completo)/,'el detalle duro debe quedar bajo demanda');
   assert.match(body,/formatCeoReport\(raw\)/,'el texto completo no se pierde');
+});
+
+test('Overview CEO usa revenue vivo y no deja un análisis viejo presentado como actual',()=>{
+  const body=functionBlock(SOURCE,'ovRenderUltimoReporteCEO');
+  assert.match(body,/liveRevSemana/,'debe recalcular revenue semanal desde pedidos vivos');
+  assert.match(body,/liveRevMes/,'debe recalcular revenue mensual desde pedidos vivos');
+  assert.match(body,/p\.createdTime/,'debe usar la fecha de creación del pedido');
+  assert.match(body,/Cancelado/,'debe excluir pedidos cancelados');
+  assert.match(body,/\/1\.19/,'debe mostrar revenue neto de IVA');
+  assert.match(body,/staleRevenue/,'debe detectar cuando el reporte guardado quedó atrás');
+  assert.match(body,/Análisis desactualizado/,'debe avisar que el texto IA requiere regeneración');
+  assert.match(body,/Revenue mes/,'debe exponer también el acumulado mensual en vivo');
+  assert.match(body,/Datos en vivo/,'debe diferenciar KPI actuales del informe guardado');
 });
 
 test('revenue semanal usa pedidos creados en la semana y no despachos',()=>{
