@@ -537,7 +537,14 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
     try{
       // Con proxy configurado, la key de Anthropic vive en el Worker (streaming pasa igual)
       const px = (typeof window._proxyCfg==='function') ? window._proxyCfg() : null;
-      // reuse dashboard's stored Anthropic key
+      if(!px && typeof window._claudeDirectAllowed==='function' && !window._claudeDirectAllowed()){
+        clearTimeout(to); JV.ctrl=null; popUser();
+        $typ.classList.remove('jvs-cursor');
+        $typ.textContent='Proxy IA requerido: KAI no hará llamadas directas sin presupuesto.';
+        $typ.parentElement.className='jvs-msg jvs-e';
+        JV.busy=false; JV.thinking=false; setState('idle'); return;
+      }
+      // reuse dashboard's stored Anthropic key sólo en desarrollo local
       let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
       if(!key){ key = localStorage.getItem('anthropic_key'); }
       // Strip non-printable-ASCII chars that break fetch headers (ISO-8859-1 enforcement)
