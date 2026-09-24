@@ -114,11 +114,11 @@ async function _simClaude(system, user, maxTokens){
     lineas.push('---','FRENOS: precio y necesidad no urgente','COMPRADOR: empresas y personas que valoran personalización y entrega local','PRECIO: validar con una preventa antes de producir inventario');
     await new Promise(r=>setTimeout(r,220));return{texto:lineas.join('\n'),truncado:false};
   }
-  const body = JSON.stringify({model:SIM_MODEL, max_tokens:maxTokens||3000, system, messages:[{role:'user', content:user}]});
+  const body = JSON.stringify({model:SIM_MODEL, max_tokens:maxTokens||3000, system:[{type:'text',text:String(system||''),cache_control:{type:'ephemeral'}}], messages:[{role:'user', content:user}]});
   const px = (typeof _proxyCfg === 'function') ? _proxyCfg() : null;
   let r;
   if(px){
-    r = await _claudeHttp(px.url+'/anthropic/v1/messages', {method:'POST', headers:{'Content-Type':'application/json','X-App-Key':px.key}, body});
+    r = await _claudeHttp(px.url+'/anthropic/v1/messages', {method:'POST', headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'simulacion'}, body});
   }else{
     const k = (typeof getAnthropicKey === 'function') ? getAnthropicKey() : '';
     if(!k) throw new Error('Sin acceso a la IA — configura el proxy o la API key en Mi cuenta');
