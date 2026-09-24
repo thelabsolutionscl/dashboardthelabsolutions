@@ -122,6 +122,32 @@ test('mail-api entrega respuestas sensibles sin caché y con JSON resiliente', (
   assert.doesNotMatch(PHP, /re_[A-Za-z0-9]{20,}/, 'no debe existir una API key real de Resend en el repositorio');
 });
 
+test('la bandeja agrupa cadenas de correo y permite desplegarlas', () => {
+  const render = methodBlock('renderMsgList');
+  const groups = methodBlock('_threadGroups');
+  assert.match(groups, /message_id|messageId/);
+  assert.match(groups, /references/);
+  assert.match(groups, /in_reply_to|inReplyTo/);
+  assert.match(groups, /_threadSubjectKey/);
+  assert.match(groups, /_threadLooksReply/);
+  assert.match(render, /mail-thread-head/);
+  assert.match(render, /mail-thread-count/);
+  assert.match(render, /mail-thread-children/);
+  assert.match(render, /toggleThread/);
+  assert.match(render, /nuevo/);
+  assert.match(CSS, /\.mail-thread\.open \.mail-thread-children\{display:block/);
+});
+
+test('mail-api expone cabeceras RFC de conversación sin descargar cuerpos', () => {
+  const list = phpCase('list');
+  const search = phpCase('search');
+  for (const key of ['message_id','references','in_reply_to']) {
+    assert.match(list, new RegExp("'" + key + "'"));
+    assert.match(search, new RegExp("'" + key + "'"));
+  }
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-thread-metadata/);
+});
+
 test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
   const list = phpCase('list');
   const snippets = phpCase('snippets');
@@ -303,5 +329,5 @@ test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de
   const send=phpCase('send');
   assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
   assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-utf8-singlepart/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-thread-metadata/);
 });
