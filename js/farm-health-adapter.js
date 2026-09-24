@@ -81,6 +81,7 @@ return{install,refresh,probe,ack,status,_test:{}};
     document.head.appendChild(s);
   };
   load('js/dashboard-notification-badges.js','badges de notificaciones');
+  load('js/ai-cost-control.js','control de consumo IA');
   load('js/nav-context-menu.js','personalización contextual del menú');
   load('js/correo-input-compat.js','compatibilidad de teclado de correo');
   load('js/correo-spellcheck.js','corrección ortográfica visible en correo');
