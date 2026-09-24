@@ -40,12 +40,17 @@ test('fallback local marca tildes y faltas visibles aunque el navegador no tenga
   assert.equal(api._test.suggestionFor('estaz'),'estás');
   assert.equal(api._test.suggestionFor('gracais'),'gracias');
   assert.equal(api._test.suggestionFor('adjnto'),'adjunto');
+  assert.equal(api._test.suggestionFor('abiendo'),'habiendo');
+  assert.equal(api._test.suggestionFor('zido'),'sido');
+  assert.equal(api._test.suggestionFor('aser'),'hacer');
   assert.equal(api._test.suggestionFor('correcto'),'');
   assert.equal(api._test.suggestionFor('como'),'','no debe inventar un error contextual donde la palabra puede ser válida');
   assert.match(SRC,/mail-local-spell-error/);
   assert.match(SRC,/Sugerencia: /);
   assert.match(SRC,/text-decoration-style:wavy/);
   assert.match(SRC,/COMMON_WORDS/);
+  assert.match(SRC,/missingInitialH/);
+  assert.match(SRC,/phoneticFirst/);
   assert.match(SRC,/oneEditAway/);
   assert.match(SRC,/scheduleLint\(\)/);
 });

@@ -33,7 +33,9 @@ const SUGGESTIONS=new Map(Object.entries({
   recivir:'recibir',aver:'a ver',haber:'haber',haci:'así',
   ola:'hola',grasias:'gracias',gracais:'gracias',kiero:'quiero',quiero:'quiero',qe:'que',
   q:'que',xq:'porque',porqe:'porque',porq:'porque',estaz:'estás',estoi:'estoy',
-  hols:'hola',buenoz:'buenos',adjnto:'adjunto',adjntamos:'adjuntamos',mensage:'mensaje'
+  hols:'hola',buenoz:'buenos',adjnto:'adjunto',adjntamos:'adjuntamos',mensage:'mensaje',
+  abiendo:'habiendo',zido:'sido',aser:'hacer',echo:'hecho',ay:'hay',asta:'hasta',
+  tubimos:'tuvimos',tube:'tuve',bamos:'vamos',vien:'bien',qeria:'quería',podria:'podría'
 }));
 
 let target=null,installed=false,observer=null,wired=0,timer=null,mutating=false,mailPatched=false;
@@ -51,7 +53,8 @@ const COMMON_WORDS=[
   'presentación','ubicación','operación','revisión','validación','aprobación','atención','solución','soluciones',
   'comunicación','coordinación','acreditación','administración','gestión','versión','sesión','conexión',
   'configuración','opción','opciones','sección','secciones','menú','útil','fácil','difícil','aquí','ahí',
-  'necesito','necesita','recibir','hacer','haces','tenemos','tienes','puedes','podemos','quedo','quedamos',
+  'necesito','necesita','recibir','hacer','haces','hecho','habiendo','hay','hasta','sido','ser','somos','son',
+  'tenemos','tienes','tiene','tuve','tuvimos','puedes','podemos','vamos','bien','quería','podría','quedo','quedamos',
   'pendiente','pendientes','disponible','disponibles','precio','precios','costo','costos','valor','valores',
   'pago','pagos','factura','facturas','proyecto','proyectos','semana','semanas','mes','meses','mañana','hoy'
 ];
@@ -86,10 +89,16 @@ function fuzzySuggestionFor(word){
   for(const candidate of COMMON_WORDS){
     const c=stripMarks(candidate);
     if(key===c)return '';
-    // Exigimos una raíz inicial razonablemente coincidente para no subrayar
-    // palabras válidas poco comunes solo porque se parecen a otra.
-    if(commonPrefix(key,c)<Math.min(3,Math.max(2,key.length-2)))continue;
-    if(oneEditAway(key,c))return candidate;
+    if(!oneEditAway(key,c))continue;
+    const prefix=commonPrefix(key,c);
+    const firstLetterTypo=key.length===c.length&&key.slice(1)===c.slice(1);
+    const missingInitialH=c[0]==='h'&&key===c.slice(1);
+    const extraInitialH=key[0]==='h'&&c===key.slice(1);
+    const phoneticFirst=(key[0]==='z'&&c[0]==='s'&&key.slice(1)===c.slice(1))||
+      (key[0]==='s'&&c[0]==='z'&&key.slice(1)===c.slice(1));
+    // Normalmente exigimos raíz coincidente para evitar falsos positivos, pero
+    // aceptamos errores muy típicos al inicio: h omitida/agregada y s/z.
+    if(prefix>=Math.min(3,Math.max(2,key.length-2))||firstLetterTypo||missingInitialH||extraInitialH||phoneticFirst)return candidate;
   }
   return '';
 }
