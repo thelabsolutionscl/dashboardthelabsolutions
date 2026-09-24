@@ -1911,7 +1911,7 @@ async function processLeadAgent(env, { clienteId, queueId, norm, agente }) {
       JSON.stringify(norm, null, 2) +
       "\n\nResponde SOLO con el objeto JSON pedido, sin texto adicional.";
 
-    const out = await callClaude(env, sys, userMsg);
+    const out = await callClaude(env, sys, userMsg, { maxTokens: 500, source: agente });
     const parsed = safeJson(out) || {};
 
     // Actualiza el Cliente (tolerante a campos inexistentes)
@@ -1988,9 +1988,41 @@ const CLAUDE_ALLOWED_MODELS = new Set([
   "claude-sonnet-4-6",
 ]);
 
+const CLAUDE_COSTS = {
+  haiku: { input: 1, output: 5 },
+  sonnet: { input: 3, output: 15 },
+};
+function estimateWorkerAiCost(model, system, user, maxTokens) {
+  const p = String(model || "").includes("haiku") ? CLAUDE_COSTS.haiku : CLAUDE_COSTS.sonnet;
+  // 3 chars/token es deliberadamente conservador para reservar presupuesto antes
+  // de llamar a la API; el costo real normalmente será menor.
+  const inputTokens = Math.ceil((String(system || "").length + String(user || "").length) / 3);
+  return (inputTokens * p.input + Number(maxTokens || 0) * p.output) / 1e6;
+}
+async function workerAiBudgetAllowed(env, estimatedUsd) {
+  if (!env.RL) return false;
+  const daily = Math.max(0.05, Number(env.AI_DAILY_BUDGET_USD || "0.50"));
+  const key = `ai-budget:${today()}`;
+  let row = {};
+  try { row = JSON.parse((await env.RL.get(key)) || "{}"); } catch (_) {}
+  const used = Math.max(0, Number(row.reserved_usd) || 0);
+  if (used + estimatedUsd > daily) return false;
+  await env.RL.put(key, JSON.stringify({
+    reserved_usd: used + estimatedUsd,
+    requests: (Number(row.requests) || 0) + 1,
+    updated_at: new Date().toISOString(),
+  }), { expirationTtl: 172800 });
+  return true;
+}
+
 async function callClaude(env, system, user, opts = {}) {
   const requestedModel = opts.model || env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
   const model = CLAUDE_ALLOWED_MODELS.has(requestedModel) ? requestedModel : "claude-haiku-4-5-20251001";
+  const maxTokens = Math.max(128, Math.min(1200, Number(opts.maxTokens) || 600));
+  const estimatedUsd = estimateWorkerAiCost(model, system, user, maxTokens);
+  if (!(await workerAiBudgetAllowed(env, estimatedUsd))) {
+    throw new Error("Presupuesto diario de IA alcanzado; la tarea quedó sin ejecutar para evitar gasto adicional");
+  }
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -2000,8 +2032,8 @@ async function callClaude(env, system, user, opts = {}) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: Math.max(128, Math.min(2000, Number(opts.maxTokens) || 800)),
-      system,
+      max_tokens: maxTokens,
+      system: [{ type: "text", text: String(system || ""), cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: user }],
     }),
   });
@@ -2493,10 +2525,10 @@ async function rateLimited(env, request, scope, max, windowSec) {
 
 // Tope diario de auto-procesamiento (guardrail de costo de Claude). Requiere KV (RL).
 async function autoProcessAllowed(env) {
-  if (!env.RL) return true;
-  const cap = parseInt(env.AUTO_PROCESS_DAILY_CAP || "200", 10);
-  // El día del tope es el día de Chile: con UTC el contador se reiniciaba a las
-  // 20:00 hora local, en plena tarde de trabajo, y no al empezar la jornada.
+  // Si el rate-limit KV no está disponible, el modo automático falla cerrado:
+  // es preferible dejar el lead Pendiente a gastar IA sin control.
+  if (!env.RL) return false;
+  const cap = parseInt(env.AUTO_PROCESS_DAILY_CAP || "25", 10);
   const key = `autoproc:${today()}`;
   const cur = parseInt((await env.RL.get(key)) || "0", 10);
   if (cur >= cap) return false;
@@ -3010,7 +3042,7 @@ Responde SOLO un objeto JSON: {"resumen":"<2-3 líneas del razonamiento>","accio
       (l.camp ? ` · campaña="${l.camp.nombre}" [${l.camp.estado}] ppto=$${l.camp.presupuesto}/día gasto=$${Math.round(l.camp.gasto)} conv=${l.camp.conversiones}` : " · SIN CAMPAÑA")).join("\n") +
     `\nTOTALES: gasto=$${Math.round(totals.gasto)} · conversiones=${totals.conversiones} · pedidos activos=${totals.activos} · tope diario total=$${cfg.capTotalDiario}`;
 
-  const raw = await callClaude(env, sys, user, { maxTokens: 1600, model: env.ADS_AUTOPILOT_MODEL || "claude-sonnet-4-6" });
+  const raw = await callClaude(env, sys, user, { maxTokens: 900, model: env.ADS_AUTOPILOT_MODEL || "claude-sonnet-4-6" });
   let prop = null;
   try { prop = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch (e) { /* abajo */ }
   if (!prop || !Array.isArray(prop.acciones)) return { skipped: "respuesta IA inválida" };
