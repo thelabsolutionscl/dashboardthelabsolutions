@@ -1,52 +1,77 @@
-# Consumo Anthropic: correcciones y verificación
+# Consumo Anthropic: política de ahorro y guardrails
 
-## Cambios de esta revisión
+## Estado actual
 
-- Ads general y por campaña ya no duplican `buildAgentContext`.
-- Un timeout o error de transporte no repite automáticamente el POST. Los
-  errores HTTP explícitos siguen usando el manejo de reintentos existente.
-- El deploy deja de leer `secrets.CLAUDE` y vacía su placeholder; nunca publica
-  la clave Anthropic, aun si falta el proxy.
-- Agentes, simulaciones y rondas KAI registran los tokens informados por la API,
-  separados en entrada, salida, creación y lectura de caché.
-- KAI muestra tokens incluyendo caché, sin la antigua estimación monetaria parcial.
-- El lead-worker registra metadatos de uso en sus logs, sin texto del lead.
+El dashboard aplica una política **Haiku-first**. Sonnet queda reservado para análisis que realmente necesitan razonamiento más pesado.
 
-## Pasos operativos
+### Dashboard
 
-1. Revisar y fusionar el PR. El workflow de Pages publica los cambios del dashboard.
-   El workflow del lead-worker publica su instrumentación si tiene credenciales.
-2. Comprobar que el deploy usa PROXY_URL y PROXY_KEY y que el Worker tiene su
-   ANTHROPIC_TOKEN. Sin proxy, Claude requiere una clave introducida localmente.
-3. En Anthropic, consultar Usage/Cost para el período del alza, por modelo y clave.
-   Guardar el total de llamadas y tokens de entrada/salida/caché. No compartir claves.
-4. Si la clave pudo estar publicada: crear una nueva, actualizar ANTHROPIC_TOKEN
-   en airtable-proxy y ANTHROPIC_API_KEY en lead-worker cuando compartan clave,
-   comprobar funcionamiento y recién entonces revocar la anterior.
-5. Comparar un análisis Ads y una consulta KAI después del despliegue.
-   En consola del navegador filtrar `[anthropic-usage]`. La sesión conserva hasta
-   500 registros en `sessionStorage.claude_usage_v1`. Se pueden inspeccionar con:
+- Haiku por defecto para redacción, clasificación, seguimiento, contenido, newsletter, prospección, SEO y agentes sociales.
+- Sonnet reservado a `CEO`, `FINANCE`, `ADS`, `PRODUCTION` y `MANTENCION3D`.
+- Cada agente tiene un `maxTokens` específico y el helper general impide pedir más de 1.400 tokens de salida.
+- Los `system prompts` se envían como bloques con `cache_control: ephemeral`.
+- `buildAgentContext()` recorta el contexto dinámico a 9.000 caracteres.
+- Dos llamadas idénticas al mismo agente mientras la primera sigue en curso se coalescen en una sola generación.
+- Un 5xx no reintenta automáticamente una generación. Solo 429 puede reintentar.
+- Se registran input, output, cache write y cache read en `sessionStorage.claude_usage_v1`.
 
-   ```js
-   console.table(JSON.parse(sessionStorage.getItem('claude_usage_v1') || '[]'));
-   ```
+### KAI
 
-   Son metadatos locales de diagnóstico: no una base de facturación, no se
-   sincronizan entre dispositivos y desaparecen al terminar la sesión.
-   Los registros son por ruta (`agentes`, `kai`, `simulacion`), no por usuario
-   autenticado o agente individual. Los streams interrumpidos pueden no registrarse.
-   Consultar también los logs del lead-worker y conciliar con Anthropic.
+- Haiku es el modelo normal.
+- Sonnet se selecciona solo para consultas que piden explícitamente análisis, estrategia, diagnóstico, proyección, rentabilidad, finanzas, Ads u otro razonamiento comparable.
+- Máximo **2 rondas** pagadas por turno.
+- Máximo **1 delegación** a otro agente por turno.
+- Se envían solo los últimos 6 mensajes relevantes.
+- Las reglas estáticas usan prompt caching.
+- KAI etiqueta sus llamadas como `kai` para atribución de gasto.
 
-## Límites y pendientes importantes
+### Proxy Anthropic
 
-- No se cambiaron modelos, límites de salida ni automatización de leads.
-- 200/día es un límite de ejecuciones de leads, no una medición del gasto real
-  ni un presupuesto global. Su contador KV no es atómico bajo concurrencia.
-- No se puede atribuir la factura histórica sólo mirando el repositorio.
-- El proxy necesita autenticación server-side real y un presupuesto centralizado:
-  la APP_KEY pública + Origin no evitan abuso desde un cliente HTTP.
-  Rotar la clave de Anthropic no corrige por sí solo esta autorización.
-- Antes de reducir rondas/modelos o contextos adicionales, medir el uso real.
-- Caching de Anthropic puede bajar costos, pero no equivale a eliminar tokens;
-  requiere observar `cache_read_input_tokens` y `cache_creation_input_tokens`.
-  Referencia: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+`airtable-proxy` aplica el control principal de costo antes de llegar a Anthropic.
+
+- Presupuesto diario por defecto: **US$1,00**.
+- Reserva máxima estimada por solicitud: **US$0,20**.
+- El presupuesto vive en KV mediante el binding `AI_BUDGET`.
+- La estimación previa usa 3 caracteres/token para reservar de forma conservadora.
+- Cuando Anthropic devuelve usage verificable, la reserva se reconcilia con el costo real.
+- Si el guard de costo/KV no está disponible, Anthropic falla cerrado.
+- `/anthropic/usage` permite al dashboard leer gasto, saldo y atribución por agente sin ejecutar modelos.
+- Modelos fuera del allowlist siguen bloqueados.
+
+Los valores se cambian en `airtable-proxy/wrangler.toml`:
+
+```toml
+ANTHROPIC_DAILY_BUDGET_USD = "1.00"
+ANTHROPIC_REQUEST_BUDGET_USD = "0.20"
+```
+
+### Captación automática de leads
+
+El procesamiento automático queda **desactivado por defecto**:
+
+```toml
+AUTO_PROCESS_LEADS = "false"
+AUTO_PROCESS_DAILY_CAP = "25"
+AI_DAILY_BUDGET_USD = "0.50"
+```
+
+Si se reactiva, necesita KV; sin KV falla cerrado. El scoring de un lead usa Haiku y una salida acotada. El piloto de Ads continúa desactivado por defecto.
+
+## Panel de control
+
+En **Agentes** aparece `CONTROL DE CONSUMO IA` con gasto usado hoy, presupuesto diario, saldo disponible, solicitudes del día, tokens de la sesión actual y atribución por fuente/agente.
+
+El panel consulta `/anthropic/usage`; no hace ninguna llamada pagada.
+
+## Qué revisar si vuelve a subir el gasto
+
+1. Revisar el panel de Agentes y ordenar las fuentes por costo.
+2. Comparar con Usage/Cost de Anthropic para el mismo día.
+3. Revisar si alguien reactivó `AUTO_PROCESS_LEADS`.
+4. Revisar KAI: una consulta normal debería usar Haiku y no más de dos rondas.
+5. Confirmar que `cache_read_input_tokens` aparece en agentes repetitivos.
+6. Si hace falta, bajar `ANTHROPIC_DAILY_BUDGET_USD` en el proxy.
+
+## Nota
+
+El presupuesto del proxy cubre las llamadas que pasan por `airtable-proxy`. El `lead-worker` tiene su propio presupuesto diario porque llama a Anthropic server-to-server. Usage/Cost de Anthropic sigue siendo la fuente definitiva para conciliar facturación real.
