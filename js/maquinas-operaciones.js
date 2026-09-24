@@ -2677,4 +2677,16 @@ if(typeof printerFirmwareRestart==='function'){
   printerFirmwareRestart=async function(id){audit('Reinicio de firmware solicitado',id,'Klipper firmware_restart','control');writeLocal();scheduleRemote();return baseRestart(id);};
 }
 if(typeof _queueAdd==='function'){
-  const baseQ
+  const baseQueueAdd=_queueAdd;
+  _queueAdd=function(id,gcode,filename,secs,grams,meta={}){const r=baseQueueAdd(id,gcode,filename,secs,grams,meta);api.onLegacyQueueAdd(id,filename,secs,grams,meta);api.persistLegacyQueue(id);return r;};
+}
+if(typeof _queueRemove==='function'){
+  const baseQueueRemove=_queueRemove;
+  _queueRemove=function(id,idx){const r=baseQueueRemove(id,idx);api.persistLegacyQueue(id);return r;};
+}
+if(typeof _queueStartNext==='function'){
+  const baseQueueStartNext=_queueStartNext;
+  _queueStartNext=async function(id){const next=(_printQueue[id]||[])[0];if(!api.canAutoStart(id,next?.secs))return false;const r=await baseQueueStartNext(id);api.persistLegacyQueue(id);return r;};
+}
+
+})();
