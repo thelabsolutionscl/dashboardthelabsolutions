@@ -316,21 +316,26 @@ dialog.op-drawer[data-kind="quote"]{inset:0;width:100vw;max-width:100vw;height:1
   font:800 11px/1.2 'DM Sans',sans-serif;cursor:pointer;outline:none;
   text-align:center;text-align-last:center;box-sizing:border-box
 }
-/* PEDIDOS / Tarjetas: el selector de estado no debe competir por el ancho con
-   el nombre del cliente ni desbordarse hacia la tarjeta vecina. La regla
-   genérica .op-record header>div también afecta a este wrapper por ser un div
-   directo del header; por eso aquí se corrige con mayor especificidad. */
-#tab-pedidos .op-order-record>header{flex-wrap:wrap;align-items:flex-start;gap:10px 12px}
-#tab-pedidos .op-order-record>header>.op-order-head-copy{flex:1 1 190px;min-width:0}
+/* PEDIDOS / Tarjetas: encabezado en dos filas estables.
+   La información del pedido reserva la misma altura en todas las tarjetas y el
+   selector vive siempre en una segunda fila. Así "Despachado", "En producción",
+   etc. quedan alineados horizontalmente aunque el nombre del cliente ocupe 1 o 2 líneas. */
+#tab-pedidos .op-order-record>header{
+  display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:10px
+}
+#tab-pedidos .op-order-record>header>.op-order-head-copy{
+  flex:none;min-width:0;width:100%;min-height:108px
+}
 #tab-pedidos .op-order-record>header>.op-status-select-wrap{
-  flex:0 0 160px;width:160px;max-width:160px;min-width:0;margin-left:auto
+  flex:none;width:160px;max-width:160px;min-width:0;margin-left:auto
 }
 #tab-pedidos .op-order-record .op-status-select{width:100%;max-width:none}
 @media(max-width:900px){
-  #tab-pedidos .op-order-record>header>.op-status-select-wrap{flex-basis:150px;width:150px;max-width:150px}
+  #tab-pedidos .op-order-record>header>.op-status-select-wrap{width:150px;max-width:150px}
 }
 @media(max-width:560px){
-  #tab-pedidos .op-order-record>header>.op-status-select-wrap{margin-left:0;flex-basis:auto;width:auto;max-width:100%}
+  #tab-pedidos .op-order-record>header>.op-order-head-copy{min-height:0}
+  #tab-pedidos .op-order-record>header>.op-status-select-wrap{margin-left:0;width:auto;max-width:100%}
   #tab-pedidos .op-order-record .op-status-select{width:auto;min-width:145px;max-width:100%}
 }
 .op-status-confirmed{color:var(--accent)}
