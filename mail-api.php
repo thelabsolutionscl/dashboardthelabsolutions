@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-24-thread-metadata');
+define('MAIL_API_BUILD', '2026-09-24-spam-action');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -859,6 +859,77 @@ case 'send':
     }
 
     echo json_out(['ok' => true]);
+    break;
+
+// ── spam / no deseado ────────────────────────────────────────
+// Mueve el mensaje a la carpeta especial de Spam/Junk. En servidores Dovecot
+// esto permite que el buzón trate el mensaje como correo no deseado y evita
+// dejarlo mezclado en INBOX. Si la carpeta no existe, intentamos crear "Junk".
+case 'spam':
+    $folder = $_POST['folder'] ?? 'INBOX';
+    $uid    = (int)($_POST['uid'] ?? 0);
+
+    $conn = open_imap($user, $pass, $folder);
+    if (is_array($conn)) { echo json_out($conn); exit; }
+
+    $msgno = imap_msgno($conn, $uid);
+    if (!$msgno) { echo json_out(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
+
+    $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
+    $list   = imap_list($conn, $prefix, '*') ?: [];
+    $spam   = '';
+
+    // Prioridad: nombres estándar exactos; después carpetas que contengan el
+    // concepto. Así funciona con Junk, Spam, INBOX.Junk o "Correo no deseado".
+    foreach ($list as $f) {
+        $name = str_replace($prefix, '', $f);
+        $key  = strtolower(trim($name));
+        $leaf = strtolower(trim(preg_replace('~^.*[./]~', '', $name)));
+        if (in_array($leaf, ['junk', 'spam', 'correo no deseado', 'correos no deseados'], true)) {
+            $spam = $name; break;
+        }
+    }
+    if ($spam === '') {
+        foreach ($list as $f) {
+            $name = str_replace($prefix, '', $f);
+            $key  = strtolower($name);
+            if (str_contains($key, 'junk') || str_contains($key, 'spam') || str_contains($key, 'correo no deseado')) {
+                $spam = $name; break;
+            }
+        }
+    }
+
+    if ($spam === '') {
+        // La mayoría de instalaciones cPanel/Dovecot aceptan una carpeta Junk
+        // en la raíz. Si no se puede crear, devolvemos un error explícito en vez
+        // de eliminar el mensaje accidentalmente.
+        if (@imap_createmailbox($conn, $prefix . 'Junk')) {
+            $spam = 'Junk';
+        } else {
+            imap_close($conn);
+            echo json_out(['error' => 'No se encontró ni se pudo crear la carpeta Spam/Junk.']);
+            exit;
+        }
+    }
+
+    if (strcasecmp($spam, $folder) === 0) {
+        imap_close($conn);
+        echo json_out(['ok' => true, 'already_spam' => true, 'folder' => $spam]);
+        break;
+    }
+
+    @imap_setflag_full($conn, (string)$msgno, '\\Seen');
+    $moved = @imap_mail_move($conn, (string)$msgno, $spam);
+    if (!$moved) {
+        $errors = imap_errors() ?: [];
+        $last = $errors ? end($errors) : 'No se pudo mover el mensaje a Spam';
+        imap_close($conn);
+        echo json_out(['error' => $last]);
+        exit;
+    }
+    imap_expunge($conn);
+    imap_close($conn);
+    echo json_out(['ok' => true, 'folder' => $spam]);
     break;
 
 // ── trash ─────────────────────────────────────────────────────
