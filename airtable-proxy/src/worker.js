@@ -9,6 +9,12 @@ const ANTHROPIC_ALLOWED_MODELS = new Set([
   'claude-sonnet-4-6',
 ]);
 const ANTHROPIC_MAX_OUTPUT_TOKENS = 4000;
+const ANTHROPIC_DAILY_BUDGET_USD_DEFAULT = 1.00;
+const ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT = 0.20;
+const ANTHROPIC_PRICES = {
+  haiku: { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.10 },
+  sonnet: { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
+};
 
 // Solo se aceptan peticiones desde estos orígenes (el dashboard). Así, si la
 // APP_KEY se filtrara (va horneada en el HTML público), no sirve desde otro sitio.
@@ -18,7 +24,7 @@ const ALLOWED_ORIGINS = [
 ];
 const CORS_BASE = {
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,anthropic-version,x-api-key',
+  'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,X-AI-Agent,anthropic-version,x-api-key',
   'Vary': 'Origin',
 };
 // Headers CORS reflejando el origen permitido (si no, el principal).
@@ -58,6 +64,12 @@ export default {
     const appKey = request.headers.get('X-App-Key');
     if (!appKey || appKey !== env.APP_KEY) {
       return json({ error: 'Unauthorized' }, 403, CORS);
+    }
+
+    if (url.pathname === '/anthropic/usage') {
+      if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405, CORS);
+      const usage = await readAiBudget(env);
+      return json(usage, 200, CORS);
     }
 
     // ── SEO fetch — trae el HTML de una página del PROPIO sitio para auditarla ──
@@ -100,6 +112,17 @@ export default {
       if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > ANTHROPIC_MAX_OUTPUT_TOKENS) {
         return json({ error: `max_tokens must be between 1 and ${ANTHROPIC_MAX_OUTPUT_TOKENS}` }, 400, CORS);
       }
+      const source = sanitizeAiSource(request.headers.get('X-AI-Agent') || 'dashboard');
+      const reservation = await reserveAiBudget(env, payload, source);
+      if (!reservation.ok) {
+        return json({
+          error: reservation.error,
+          code: 'AI_BUDGET_LIMIT',
+          budget_usd: reservation.budget_usd,
+          used_usd: reservation.used_usd,
+          estimated_request_usd: reservation.estimated_request_usd,
+        }, reservation.status || 429, CORS);
+      }
       const target = ANTHROPIC_BASE + url.pathname.replace(/^\/anthropic/, '') + url.search;
       const headers = new Headers();
       headers.set('x-api-key', env.ANTHROPIC_TOKEN);
@@ -108,8 +131,12 @@ export default {
       const upstream = await fetch(target, {
         method: request.method,
         headers,
-        body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+        body: JSON.stringify(payload),
       });
+      const usageCopy = upstream.clone();
+      if (ctx && typeof ctx.waitUntil === 'function') {
+        ctx.waitUntil(reconcileAiBudget(env, reservation, usageCopy).catch(() => {}));
+      }
       const respHeaders = new Headers(upstream.headers);
       Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
       return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
@@ -168,6 +195,118 @@ export default {
     return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
   },
 };
+
+
+function sanitizeAiSource(value) {
+  return String(value || 'dashboard').toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 48) || 'dashboard';
+}
+function aiChileDate() {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date()); }
+  catch (_) { return new Date().toISOString().slice(0, 10); }
+}
+function aiPrice(model) {
+  return String(model || '').toLowerCase().includes('haiku') ? ANTHROPIC_PRICES.haiku : ANTHROPIC_PRICES.sonnet;
+}
+function aiCostUsd(model, usage) {
+  const p = aiPrice(model), u = usage || {}, n = (k) => Math.max(0, Number(u[k]) || 0);
+  return (n('input_tokens') * p.input +
+    n('output_tokens') * p.output +
+    n('cache_creation_input_tokens') * p.cacheWrite +
+    n('cache_read_input_tokens') * p.cacheRead) / 1000000;
+}
+function estimateAiRequestUsd(payload) {
+  const model = payload && payload.model;
+  const p = aiPrice(model);
+  const inputObj = { system: payload?.system || '', messages: payload?.messages || [], tools: payload?.tools || [] };
+  const chars = JSON.stringify(inputObj).length;
+  // 3 chars/token intentionally over-reserves versus the common ~4 chars/token.
+  const inputTokens = Math.ceil(chars / 3);
+  const outputTokens = Math.max(0, Number(payload?.max_tokens) || 0);
+  return (inputTokens * p.input + outputTokens * p.output) / 1000000;
+}
+async function readAiBudget(env) {
+  const budget = Math.max(0.05, Number(env.ANTHROPIC_DAILY_BUDGET_USD || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT));
+  const perRequest = Math.max(0.01, Number(env.ANTHROPIC_REQUEST_BUDGET_USD || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT));
+  const key = 'anthropic-budget:' + aiChileDate();
+  if (!env.AI_BUDGET) {
+    return { configured: false, date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
+      spent_usd: 0, reserved_usd: 0, used_usd: 0, remaining_usd: 0, requests: 0, by_source: {} };
+  }
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(key)) || '{}'); } catch (_) {}
+  const spent = Math.max(0, Number(row.spent_usd) || 0);
+  const reserved = Math.max(0, Number(row.reserved_usd) || 0);
+  return {
+    configured: true, date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
+    spent_usd: spent, reserved_usd: reserved, used_usd: spent + reserved,
+    remaining_usd: Math.max(0, budget - spent - reserved),
+    requests: Math.max(0, Number(row.requests) || 0), by_source: row.by_source || {},
+    updated_at: row.updated_at || null,
+  };
+}
+async function reserveAiBudget(env, payload, source) {
+  const snap = await readAiBudget(env);
+  const estimate = estimateAiRequestUsd(payload);
+  if (!snap.configured) return { ok: false, status: 503, error: 'AI cost guard unavailable', budget_usd: snap.budget_usd, used_usd: 0, estimated_request_usd: estimate };
+  if (estimate > snap.request_budget_usd) return { ok: false, status: 429, error: 'AI request exceeds per-request cost limit', budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
+  if (snap.used_usd + estimate > snap.budget_usd) return { ok: false, status: 429, error: 'Daily AI budget reached', budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
+
+  const key = 'anthropic-budget:' + snap.date;
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(key)) || '{}'); } catch (_) {}
+  row.spent_usd = Math.max(0, Number(row.spent_usd) || 0);
+  row.reserved_usd = Math.max(0, Number(row.reserved_usd) || 0) + estimate;
+  row.requests = Math.max(0, Number(row.requests) || 0) + 1;
+  row.by_source = row.by_source || {};
+  const src = row.by_source[source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.requests = Math.max(0, Number(src.requests) || 0) + 1;
+  src.reserved_usd = Math.max(0, Number(src.reserved_usd) || 0) + estimate;
+  row.by_source[source] = src;
+  row.updated_at = new Date().toISOString();
+  await env.AI_BUDGET.put(key, JSON.stringify(row), { expirationTtl: 172800 });
+  return { ok: true, key, source, estimate, model: payload.model, budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
+}
+async function parseAnthropicUsage(response) {
+  if (!response || !response.ok) return null;
+  const ct = response.headers.get('content-type') || '';
+  if (ct.includes('text/event-stream')) {
+    const txt = await response.text();
+    let model = '', usage = {};
+    for (const line of txt.split('\n')) {
+      const t = line.trim(); if (!t.startsWith('data:')) continue;
+      let ev; try { ev = JSON.parse(t.slice(5).trim()); } catch (_) { continue; }
+      if (ev.type === 'message_start' && ev.message) {
+        model = ev.message.model || model;
+        usage = { ...usage, ...(ev.message.usage || {}) };
+      } else if (ev.type === 'message_delta' && ev.usage) {
+        usage = { ...usage, ...ev.usage };
+      }
+    }
+    return Object.keys(usage).length ? { model, usage } : null;
+  }
+  try {
+    const j = await response.json();
+    return j && j.usage ? { model: j.model || '', usage: j.usage } : null;
+  } catch (_) { return null; }
+}
+async function reconcileAiBudget(env, reservation, response) {
+  if (!env.AI_BUDGET || !reservation?.ok) return;
+  const parsed = await parseAnthropicUsage(response);
+  // Si no hay usage verificable, mantenemos la reserva: fail-safe de costo.
+  if (!parsed) return;
+  const actual = aiCostUsd(parsed.model || reservation.model, parsed.usage);
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(reservation.key)) || '{}'); } catch (_) {}
+  row.spent_usd = Math.max(0, Number(row.spent_usd) || 0) + actual;
+  row.reserved_usd = Math.max(0, (Number(row.reserved_usd) || 0) - reservation.estimate);
+  row.by_source = row.by_source || {};
+  const src = row.by_source[reservation.source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.spent_usd = Math.max(0, Number(src.spent_usd) || 0) + actual;
+  src.reserved_usd = Math.max(0, (Number(src.reserved_usd) || 0) - reservation.estimate);
+  row.by_source[reservation.source] = src;
+  row.updated_at = new Date().toISOString();
+  await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
+}
 
 async function readAnthropicJson(request) {
   // Request real de Cloudflare: clone evita consumir el stream que luego se
