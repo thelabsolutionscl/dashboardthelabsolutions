@@ -71,8 +71,8 @@ test('el transporte usa HTTPS, timeout y reintenta solamente lecturas', () => {
   assert.match(post, /new\s+AbortController\s*\(/);
   assert.match(post, /30000/, 'debe tener timeout acotado');
   assert.match(post, /action\s*===\s*['"]send['"]/);
-  assert.match(post, /canRetry\s*=\s*!\(/, 'send debe quedar fuera de los reintentos');
-  assert.match(post, /tries\s*=\s*canRetry\s*\?\s*3\s*:\s*1/, 'lecturas deben reintentarse y envío no');
+  assert.match(post, /canRetry\s*=\s*\[[^\]]*'list'[^\]]*\]\.includes\(params\?\.action\)/, 'solo lecturas pueden reintentarse');
+  assert.match(post, /tries\s*=\s*canRetry\s*\?\s*3\s*:\s*1/, 'las mutaciones no se reintentan');
 });
 
 test('el envío manual valida campos y bloquea doble clic local', () => {
@@ -145,7 +145,7 @@ test('mail-api expone cabeceras RFC de conversación sin descargar cuerpos', () 
     assert.match(list, new RegExp("'" + key + "'"));
     assert.match(search, new RegExp("'" + key + "'"));
   }
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-spam-action/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-spam-verify/);
 });
 
 test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
@@ -195,6 +195,8 @@ test('Correo permite marcar mensajes como no deseados y moverlos a Spam', () => 
   assert.match(current, /_isSpamFolder/, 'no debe intentar volver a mover un correo que ya está en Spam');
   const spam = phpCase('spam');
   assert.match(spam, /imap_mail_move/);
+  assert.match(spam, /imap_expunge/);
+  assert.match(spam, /imap_msgno\(\$conn, \$uid\)/, 'confirmar que el UID dejó la bandeja antes de anunciar éxito');
   assert.match(spam, /junk|spam/i);
   assert.match(spam, /imap_createmailbox/, 'si falta la carpeta Spam/Junk debe intentar crearla');
   assert.doesNotMatch(spam, /imap_delete\s*\(/, 'marcar como no deseado nunca debe borrar el mensaje');
@@ -344,5 +346,5 @@ test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de
   const send=phpCase('send');
   assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
   assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-spam-action/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-spam-verify/);
 });
