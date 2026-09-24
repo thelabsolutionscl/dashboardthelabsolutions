@@ -18,7 +18,7 @@ test('cola permite reintentar Error y recuperar Procesando atascado',()=>{
   assert.match(render,/_aqIsStaleProcessing/);
   assert.match(render,/↻ Reintentar/);
   assert.match(render,/↻ Recuperar/);
-  assert.match(render,/Saldo Anthropic insuficiente/);
+  assert.match(render,/_aqErrorLabel/, 'los errores se presentan con la descripción traducida');
 });
 
 test('procesar pendientes incluye errores y atascados',()=>{
