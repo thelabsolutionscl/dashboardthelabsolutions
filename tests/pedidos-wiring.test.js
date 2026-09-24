@@ -119,7 +119,7 @@ test('Pedidos expone ordenamiento visible para todas sus vistas', () => {
   const section = pedidosSection();
   assert.match(section, /id=["']pedidosSortSelect["']/, 'debe existir un selector de orden');
   for (const value of ['numero:desc','numero:asc','cliente:asc','cliente:desc','titulo:asc','titulo:desc','estado:asc','entrega:asc','monto:desc']) {
-    assert.match(section, new RegExp('value=["\\']' + value.replace(':','\\:') + '["\\']'), 'falta opción '+value);
+    assert.ok(section.includes('value="'+value+'"')||section.includes("value='"+value+"'"), 'falta opción '+value);
   }
   assert.ok(hasDefinition('setPedidosSort'), 'debe existir setPedidosSort');
   assert.ok(hasDefinition('_pedApplySearchSort'), 'debe existir el aplicador de búsqueda/orden');
