@@ -250,3 +250,44 @@ test('la fuente del agente se guarda para atribuir gasto', async () => {
     assert.equal(row.by_source.sales.requests,1);
   } finally { spy.restore(); _kv.clear(); }
 });
+
+
+test('un rechazo de Anthropic libera la reserva para poder reintentar después de recargar créditos', async () => {
+  _kv.clear();
+  const spy = espiarFetch(402, JSON.stringify({type:'error',error:{type:'billing_error',message:'credit balance is too low'}}));
+  const waits=[];
+  const ctx={waitUntil(p){waits.push(p);}};
+  try {
+    const r=await worker.fetch(req('/anthropic/v1/messages', {
+      method:'POST',origin:OK_ORIGIN,key:ENV.APP_KEY,body:HAIKU_BODY,aiAgent:'ceo'
+    }),ENV,ctx);
+    assert.equal(r.status,402);
+    await Promise.all(waits);
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
+    const row=JSON.parse(await MEM_KV.get('anthropic-budget:'+date));
+    assert.equal(row.reserved_usd,0,'el error de facturación no debe consumir presupuesto reservado');
+    assert.equal(row.by_source.ceo.reserved_usd,0);
+    assert.match(row.last_release_reason,/upstream_http_402/);
+  } finally { spy.restore(); _kv.clear(); }
+});
+
+test('el presupuesto se autorrepara si quedó una reserva huérfana de una llamada antigua', async () => {
+  _kv.clear();
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
+  await MEM_KV.put('anthropic-budget:'+date, JSON.stringify({
+    spent_usd:.10,reserved_usd:.40,requests:4,
+    updated_at:new Date(Date.now()-10*60*1000).toISOString(),
+    by_source:{ceo:{requests:2,spent_usd:.10,reserved_usd:.40}}
+  }));
+  const spy=espiarFetch();
+  try {
+    const r=await worker.fetch(req('/anthropic/usage',{origin:OK_ORIGIN,key:ENV.APP_KEY}),ENV,undefined);
+    assert.equal(r.status,200);
+    const j=await r.json();
+    assert.equal(j.reserved_usd,0);
+    assert.equal(j.used_usd,.10);
+    assert.equal(j.by_source.ceo.reserved_usd,0);
+    assert.ok(j.remaining_usd>.8);
+    assert.equal(spy.calls.length,0);
+  } finally { spy.restore(); _kv.clear(); }
+});
