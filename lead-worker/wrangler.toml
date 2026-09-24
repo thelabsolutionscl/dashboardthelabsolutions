@@ -22,7 +22,11 @@ AIRTABLE_BASE_ID = "app1YtD74AqiPWQhy"
 # Orígenes permitidos para CORS (coma-separado). Sin wildcard.
 ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,https://dashboard.thelab.solutions,https://thelabsolutionscl.github.io,http://localhost:3000"
 # "true" para que el Worker llame a Claude y deje el lead pre-scoreado.
-AUTO_PROCESS_LEADS = "true"
+AUTO_PROCESS_LEADS = "false"
+# Si se reactiva: máximo de leads pre-scoreados automáticamente por día.
+AUTO_PROCESS_DAILY_CAP = "25"
+# Presupuesto conservador para TODAS las llamadas Anthropic directas de este Worker.
+AI_DAILY_BUDGET_USD = "0.50"
 # Poda diaria de Agent_Queue: borra tareas "Completado" con más de N días
 # (Pendiente/Procesando/Error se conservan siempre). "0" la desactiva.
 CLEANUP_QUEUE_DAYS = "30"
