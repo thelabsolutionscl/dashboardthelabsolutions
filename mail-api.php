@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-24-spam-action');
+define('MAIL_API_BUILD', '2026-09-24-spam-verify');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -927,7 +927,12 @@ case 'spam':
         echo json_out(['error' => $last]);
         exit;
     }
-    imap_expunge($conn);
+    $expunged = @imap_expunge($conn);
+    if (!$expunged || @imap_msgno($conn, $uid)) {
+        imap_close($conn);
+        echo json_out(['error' => 'El servidor no confirmó que el mensaje saliera de la bandeja. Actualiza y vuelve a intentarlo.']);
+        exit;
+    }
     imap_close($conn);
     echo json_out(['ok' => true, 'folder' => $spam]);
     break;
