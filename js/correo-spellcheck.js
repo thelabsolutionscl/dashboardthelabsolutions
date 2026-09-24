@@ -75,21 +75,21 @@ function ensureStyle(){
   s.textContent=`
     #mailCmpBody::spelling-error,#mailCmpSubject::spelling-error,#mailSigEditor::spelling-error{
       text-decoration-line:underline!important;text-decoration-style:wavy!important;
-      text-decoration-color:#ff4055!important;text-decoration-thickness:1.5px!important;
-      text-underline-offset:2px!important;background:rgba(255,64,85,.035)!important;
+      text-decoration-color:#ff4d5e!important;text-decoration-thickness:1.5px!important;
+      text-underline-offset:2px!important;background:rgba(255,77,94,.035)!important;
     }
     #mailCmpBody::-webkit-spelling-error,#mailCmpSubject::-webkit-spelling-error,#mailSigEditor::-webkit-spelling-error{
-      text-decoration:underline wavy #ff4055!important;text-underline-offset:2px!important;
+      text-decoration:underline wavy #ff4d5e!important;text-underline-offset:2px!important;
     }
     .${ERROR_CLASS}{
       text-decoration-line:underline!important;text-decoration-style:wavy!important;
-      text-decoration-color:#ff4055!important;text-decoration-thickness:1.5px!important;
-      text-underline-offset:2px!important;background:rgba(255,64,85,.04)!important;
+      text-decoration-color:#ff4d5e!important;text-decoration-thickness:1.5px!important;
+      text-underline-offset:2px!important;background:rgba(255,77,94,.04)!important;
       cursor:pointer;border-radius:2px;
     }
-    .${ERROR_CLASS}:hover{background:rgba(255,64,85,.12)!important}
-    #mailCmpSubject.mail-local-spell-subject-error{border-bottom-color:#ff4055!important;
-      box-shadow:inset 0 -1px 0 #ff4055!important}
+    .${ERROR_CLASS}:hover{background:rgba(255,77,94,.12)!important}
+    #mailCmpSubject.mail-local-spell-subject-error{border-bottom-color:#ff4d5e!important;
+      box-shadow:inset 0 -1px 0 #ff4d5e!important}
   `;
   (d.head||d.documentElement).appendChild(s);
 }
