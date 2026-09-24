@@ -2743,3 +2743,18 @@ button[role="tab"][aria-selected="true"]:hover,
 .ceo-full-report-body .agent-report{margin:0}
 @media(max-width:1050px){.ceo-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ceo-overview-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.ceo-kpis{grid-template-columns:1fr}.ceo-overview-summary{padding:14px}.ceo-overview-head h3{font-size:17px}.ceo-opportunity{grid-template-columns:1fr}.ceo-overview-head-meta{justify-content:flex-start}}
+
+
+/* PEDIDOS · selector de orden compartido por Tarjetas / Tabla / Kanban / Calendario */
+#pedidosSortSelect.pedidos-sort-select{
+  margin-left:auto;flex:0 0 auto;min-width:205px;max-width:240px;min-height:32px;
+  padding:6px 32px 6px 10px;border:1px solid var(--border2);border-radius:7px;
+  background:var(--surface2);color:var(--text);font:600 11px/1.2 'DM Sans',sans-serif;
+  cursor:pointer;outline:none;color-scheme:dark
+}
+#pedidosSortSelect.pedidos-sort-select:hover,
+#pedidosSortSelect.pedidos-sort-select:focus{border-color:var(--accent)}
+@media(max-width:768px){
+  #pedidosSortSelect.pedidos-sort-select{margin-left:0;min-width:190px;max-width:none;flex:0 0 auto;font-size:12px!important}
+  #pedidosSearch{margin-left:0!important;min-width:190px!important}
+}
