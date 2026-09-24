@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-24-utf8-singlepart');
+define('MAIL_API_BUILD', '2026-09-24-thread-metadata');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -653,11 +653,16 @@ case 'list':
             'msgno'    => (int)($m->msgno ?? 0),
             'from'     => decode_str($m->from ?? ''),
             'subject'  => decode_str($m->subject ?? '(Sin asunto)'),
-            'date'     => $m->date ?? '',
-            'seen'     => (int)($m->seen     ?? 0),
-            'answered' => (int)($m->answered ?? 0),
-            'flagged'  => (int)($m->flagged  ?? 0),
-            'snippet'  => '',
+            'date'        => $m->date ?? '',
+            // Cabeceras estándar de threading. imap_fetch_overview ya las
+            // expone sin descargar el cuerpo, así que no encarecen el listado.
+            'message_id'   => trim($m->message_id ?? ''),
+            'references'   => trim($m->references ?? ''),
+            'in_reply_to'  => trim($m->in_reply_to ?? ''),
+            'seen'        => (int)($m->seen     ?? 0),
+            'answered'    => (int)($m->answered ?? 0),
+            'flagged'     => (int)($m->flagged  ?? 0),
+            'snippet'     => '',
         ];
     }
     imap_close($conn);
@@ -934,8 +939,11 @@ case 'search':
                 'msgno'   => (int)$m->msgno,
                 'from'    => decode_str($m->from    ?? ''),
                 'subject' => decode_str($m->subject ?? '(Sin asunto)'),
-                'date'    => $m->date ?? '',
-                'seen'    => (int)($m->seen ?? 0),
+                'date'        => $m->date ?? '',
+                'message_id'  => trim($m->message_id ?? ''),
+                'references'  => trim($m->references ?? ''),
+                'in_reply_to' => trim($m->in_reply_to ?? ''),
+                'seen'        => (int)($m->seen ?? 0),
             ];
         }
     }
