@@ -12549,16 +12549,54 @@ async function loadAgentQueue(){
   catch(e){_agentQueue=[];toast('No se pudo cargar Agent_Queue: '+e.message,'error');throw e;}
 }
 
+const _AQ_STALE_MS=15*60*1000;
+function _aqStatus(rec){return rec?.fields?.Estado||'Pendiente';}
+function _aqLastTs(rec){
+  const f=rec?.fields||{};
+  const raw=f['Fecha ejecución']||f['Fecha creación']||rec?.createdTime||'';
+  const t=raw?new Date(raw).getTime():0;
+  return Number.isFinite(t)?t:0;
+}
+function _aqIsStaleProcessing(rec,now=Date.now()){
+  if(_aqStatus(rec)!=='Procesando')return false;
+  const t=_aqLastTs(rec);
+  return !t||now-t>_AQ_STALE_MS;
+}
+function _aqIsRetryable(rec){const s=_aqStatus(rec);return s==='Pendiente'||s==='Error'||_aqIsStaleProcessing(rec);}
+function _aqErrorLabel(err){
+  const s=String(err||'');
+  if(/credit balance is too low|plans\s*&\s*billing/i.test(s))return 'Saldo Anthropic insuficiente';
+  if(/daily budget|presupuesto diario|budget exceeded/i.test(s))return 'Presupuesto IA diario agotado';
+  if(/401|unauthorized|api key|clave/i.test(s))return 'Credencial IA inválida';
+  if(/429|rate limit/i.test(s))return 'Límite temporal de la API';
+  return s.replace(/^Anthropic\s+\d+:\s*/i,'').slice(0,160);
+}
+function _aqFatalError(err){
+  return /credit balance is too low|plans\s*&\s*billing|daily budget|presupuesto diario|budget exceeded|401|unauthorized|api key|proxy IA requerido/i.test(String(err||''));
+}
+
 function renderAgentQueue(){
   const el=document.getElementById('agentQueueList');if(!el)return;
   const cnt=document.getElementById('agentQueueCount');
-  const pend=_agentQueue.filter(r=>(r.fields.Estado||'Pendiente')==='Pendiente').length;
-  if(cnt)cnt.textContent=_agentQueue.length?`${_agentQueue.length} · ${pend} pendientes`:'—';
+  const pend=_agentQueue.filter(r=>_aqStatus(r)==='Pendiente').length;
+  const errs=_agentQueue.filter(r=>_aqStatus(r)==='Error').length;
+  const stale=_agentQueue.filter(r=>_aqIsStaleProcessing(r)).length;
+  if(cnt){
+    const parts=[String(_agentQueue.length)];
+    if(pend)parts.push(pend+' pendiente'+(pend===1?'':'s'));
+    if(errs)parts.push(errs+' error'+(errs===1?'':'es'));
+    if(stale)parts.push(stale+' atascada'+(stale===1?'':'s'));
+    if(!pend&&!errs&&!stale)parts.push('sin pendientes');
+    cnt.textContent=_agentQueue.length?parts.join(' · '):'—';
+  }
   if(!_agentQueue.length){el.innerHTML='<div style="padding:16px;color:var(--text3);font-size:12px">Sin tareas. Crea un lead desde la web o presiona “Cargar cola”.</div>';return;}
   const order={Pendiente:0,Procesando:1,Error:2,Completado:3};
   const badge={Pendiente:'badge-yellow',Procesando:'badge-orange',Completado:'badge-green',Error:'badge-red'};
-  const rows=[..._agentQueue].sort((a,b)=>(order[a.fields.Estado]??9)-(order[b.fields.Estado]??9));
-  el.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Evento</th><th>Entidad</th><th>Agente</th><th>Estado</th><th>Prioridad</th><th>Source</th><th>Campaign</th><th>Score</th><th></th></tr></thead><tbody>${rows.map(r=>{const f=r.fields;const est=f.Estado||'Pendiente';return `<tr><td>${escapeHtml(f.Evento||'')}</td><td>${escapeHtml([f.Entidad,f['ID entidad']].filter(Boolean).join(' '))}</td><td>${escapeHtml(f.Agente||'')}</td><td><span class="badge ${badge[est]||'badge-gray'}">${escapeHtml(est)}</span></td><td>${escapeHtml(f.Prioridad||'')}</td><td>${escapeHtml(f.Source||'')}</td><td>${escapeHtml(f.Campaign||'')}</td><td>${f['Lead Score']??''}</td><td><button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')" ${est==='Procesando'?'disabled':''}>▶ Procesar</button></td></tr>`;}).join('')}</tbody></table></div>`;
+  const rows=[..._agentQueue].sort((a,b)=>{
+    const ar=_aqIsStaleProcessing(a)?0:(order[_aqStatus(a)]??9),br=_aqIsStaleProcessing(b)?0:(order[_aqStatus(b)]??9);
+    return ar-br;
+  });
+  el.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Evento</th><th>Entidad</th><th>Agente</th><th>Estado</th><th>Prioridad</th><th>Source</th><th>Campaign</th><th>Score</th><th></th></tr></thead><tbody>${rows.map(r=>{const f=r.fields,est=_aqStatus(r),staleProc=_aqIsStaleProcessing(r);const shown=staleProc?'Atascado':est;const cls=staleProc?'badge-red':(badge[est]||'badge-gray');const err=est==='Error'?_aqErrorLabel(f.Error):staleProc?'Quedó en Procesando sin terminar; se puede recuperar.':'';const action=est==='Error'?'↻ Reintentar':staleProc?'↻ Recuperar':'▶ Procesar';const disabled=est==='Procesando'&&!staleProc;return `<tr><td>${escapeHtml(f.Evento||'')}</td><td>${escapeHtml([f.Entidad,f['ID entidad']].filter(Boolean).join(' '))}</td><td>${escapeHtml(f.Agente||'')}</td><td><span class="badge ${cls}">${escapeHtml(shown)}</span>${err?`<div title="${escapeHtml(String(f.Error||err))}" style="max-width:260px;margin-top:4px;font-size:9px;line-height:1.35;color:var(--danger);white-space:normal">${escapeHtml(err)}</div>`:''}</td><td>${escapeHtml(f.Prioridad||'')}</td><td>${escapeHtml(f.Source||'')}</td><td>${escapeHtml(f.Campaign||'')}</td><td>${f['Lead Score']??''}</td><td><button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')" ${disabled?'disabled':''}>${action}</button></td></tr>`;}).join('')}</tbody></table></div>`;
 }
 
 async function refreshAgentQueue(){try{await loadAgentQueue();renderAgentQueue();toast('Cola actualizada','success');}catch(e){}}
@@ -12577,25 +12615,26 @@ async function updateClienteFromLead(clienteId,fieldsParsed,agentId){
   catch(e){console.warn('updateClienteFromLead:',e.message);}
 }
 
-// Procesa UNA tarea: lee agente → callClaude → guarda Output/estado → actualiza Cliente si aplica.
+// Procesa UNA tarea. Error y "Procesando" atascado son reintentables.
 async function processAgentQueueItem(recordId){
   let rec=_agentQueue.find(r=>r.id===recordId);
   if(!rec){try{await loadAgentQueue();rec=_agentQueue.find(r=>r.id===recordId);}catch(_){}}
-  if(!rec){toast('Tarea no encontrada en la cola','error');return;}
+  if(!rec){toast('Tarea no encontrada en la cola','error');return{ok:false,error:'Tarea no encontrada'};}
   const f=rec.fields;const agentId=f.Agente||'';
   try{
     const sys=resolveAgentSys(agentId);
     if(!sys)throw new Error('Agente no encontrado: '+(agentId||'(vacío)'));
     try{showAgentWorking(agentId,{verb:'está procesando la tarea de la cola…',messages:['Leyendo los datos del lead…','Calificando y puntuando…','Sugiriendo la próxima acción…']});}catch(e){}
-    await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Procesando'});
-    rec.fields.Estado='Procesando';renderAgentQueue();
+    const runningPatch={'Estado':'Procesando','Error':''};
+    await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,runningPatch);
+    Object.assign(rec.fields,runningPatch);renderAgentQueue();
 
     let inputObj;try{inputObj=JSON.parse(f['Input JSON']||'{}');}catch(_){inputObj=f['Input JSON']||'';}
     const userMsg='Datos de entrada del lead (JSON):\n'+(typeof inputObj==='string'?inputObj:JSON.stringify(inputObj,null,2))+'\n\nResponde según tu formato.';
     const out=await callClaude(sys,userMsg);
 
     const ex=extractLeadFields(out);
-    const patch={'Estado':'Completado','Output':String(out).slice(0,95000),'Fecha ejecución':new Date().toISOString()};
+    const patch={'Estado':'Completado','Output':String(out).slice(0,95000),'Error':'','Fecha ejecución':new Date().toISOString()};
     if(ex.score!=null)patch['Lead Score']=ex.score;
     if(ex.proxima)patch['Accion sugerida']=ex.proxima;
     await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,patch);
@@ -12604,26 +12643,40 @@ async function processAgentQueueItem(recordId){
     if((agentId==='LEAD_AGENT'||agentId==='LINKEDIN_AGENT')&&f.Entidad==='Cliente'&&f['ID entidad']){
       await updateClienteFromLead(f['ID entidad'],ex,agentId);
     }
-    // Log en la tabla Agent_Log (best-effort)
     try{await airtableWriteTolerant('Agent_Log','POST',null,{'Agente':agentId,'Consulta':String(userMsg).slice(0,5000),'Resultado':String(out).slice(0,95000),'Usuario':'Cola de Agentes','Fecha':new Date().toISOString()});}catch(_){}
 
     toast('✓ '+agentId+' procesado','success');renderAgentQueue();
+    return{ok:true};
   }catch(e){
-    try{await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,{'Estado':'Error','Error':String(e.message).slice(0,1000),'Fecha ejecución':new Date().toISOString()});}catch(_){}
-    if(rec){rec.fields.Estado='Error';rec.fields.Error=e.message;}
-    toast('Error procesando '+agentId+': '+e.message,'error');renderAgentQueue();
+    const msg=String(e?.message||e);
+    const patch={'Estado':'Error','Error':msg.slice(0,1000),'Fecha ejecución':new Date().toISOString()};
+    try{await airtableWriteTolerant(AGENT_QUEUE_TABLE,'PATCH',recordId,patch);}catch(_){}
+    if(rec)Object.assign(rec.fields,patch);
+    toast('Error procesando '+agentId+': '+_aqErrorLabel(msg),'error');renderAgentQueue();
+    return{ok:false,error:msg,fatal:_aqFatalError(msg)};
   }finally{try{hideAgentWorking();}catch(e){}}
 }
 
 async function processAllPendingAgentQueue(){
   try{await loadAgentQueue();}catch(e){return;}
-  const pend=_agentQueue.filter(r=>(r.fields.Estado||'Pendiente')==='Pendiente');
-  if(!pend.length){renderAgentQueue();toast('No hay tareas pendientes','info');return;}
-  toast('Procesando '+pend.length+' tarea(s)...','info');
-  for(const r of pend){await processAgentQueueItem(r.id);}
-  toast('✓ Cola procesada','success');
+  const work=_agentQueue.filter(_aqIsRetryable);
+  if(!work.length){renderAgentQueue();toast('No hay tareas pendientes ni errores reintentables','info');return;}
+  const retry=work.filter(r=>_aqStatus(r)==='Error').length;
+  const stale=work.filter(_aqIsStaleProcessing).length;
+  toast('Procesando '+work.length+' tarea(s)'+(retry?' · '+retry+' reintento(s)':'')+(stale?' · '+stale+' recuperada(s)':'')+'...','info');
+  let ok=0;
+  for(const r of work){
+    const res=await processAgentQueueItem(r.id);
+    if(res?.ok)ok++;
+    if(res?.fatal){
+      toast('Procesamiento detenido: '+_aqErrorLabel(res.error)+'. Las demás tareas quedan listas para reintentar cuando se resuelva.','error');
+      break;
+    }
+  }
+  await loadAgentQueue().catch(()=>{});
+  renderAgentQueue();
+  if(ok)toast('✓ '+ok+' tarea'+(ok===1?'':'s')+' procesada'+(ok===1?'':'s'),'success');
 }
-
 // ── WATI WhatsApp API ─────────────────────────────────────────
 function getWatiCfg(){try{return JSON.parse(localStorage.getItem('wati_cfg')||'{}');}catch(e){return {};}}
 function renderWatiConfigBtn(){
