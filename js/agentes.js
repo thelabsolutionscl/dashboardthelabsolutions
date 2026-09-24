@@ -389,7 +389,7 @@ function buildRecompraTray(){
         <div style="font-size:10.5px;color:var(--text3)">${x.nPeds} pedidos · compra cada ~${x.cadencia} días${vencido?' · <span style="color:var(--warn)">ya toca reponer</span>':' · a punto'}</div>
       </div>
       <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="recompraWhatsApp('${cli.id}')" ${tienePhone?'':'title="Sin teléfono en la ficha — se abrirá WhatsApp para elegir contacto"'}>📲</button>
-      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="recompraEmail('${cli.id}',this)">📧</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Revisar borrador de correo antes de enviarlo" onclick="recompraEmail('${cli.id}')">📧</button>
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado (no reaparece por 30 días)" onclick="recompraSnooze('${cli.id}')">✓</button>
     </div>`;
   }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más</div>`:'');
@@ -416,19 +416,18 @@ async function recompraWhatsApp(cliId){
   }
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
 }
-async function recompraEmail(cliId,btn){
+function recompraEmail(cliId){
   const cli=(state.clientes||[]).find(c=>c.id===cliId); if(!cli){toast('Cliente no encontrado','error');return;}
   const cand=_recompraCands().find(x=>x.c.id===cliId)||{c:cli,f:cli.fields,cadencia:_recompraInfo(cli)?.cadencia||30};
   let to=cli.fields['Email']||prompt('¿A qué correo enviamos la invitación de recompra?','');
   if(!to)return; to=String(to).trim();
   if(!validEmail(to)){toast('Correo inválido','error');return;}
-  const prev=btn?btn.innerHTML:'';if(btn){btn.disabled=true;btn.textContent='…';}
-  try{
-    const r=await MAIL.postAs(AGENT_CTA_FROM.email,{action:'send',to,subject:'¿Preparamos tu próxima producción? — The Lab Solutions',body:_recompraMsg(cand),from_name:AGENT_CTA_FROM.name});
-    if(r&&!r.error){toast('✓ Invitación de recompra enviada a '+to,'success');_recompraMark(cliId,'correo');}
-    else throw new Error(r?.error||'Error desconocido');
-  }catch(e){toast('Error: '+e.message,'error');}
-  finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
+  const body=escapeHtml(_recompraMsg(cand)).replace(/\n/g,'<br>');
+  switchTab('correo');
+  setTimeout(()=>{
+    try{MAIL.openCompose({to,subject:'¿Preparamos tu próxima producción? — The Lab Solutions',body,title:'Revisar recompra',_recompraCli:cliId,_fromName:AGENT_CTA_FROM.name,_fromEmail:AGENT_CTA_FROM.email});}
+    catch(e){toast('No se pudo abrir el borrador','error');}
+  },350);
 }
 function recompraSnooze(cliId){_recompraMark(cliId,'manual');toast('✓ Gestionado — no reaparece por 30 días','success');}
 
