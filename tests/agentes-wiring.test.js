@@ -171,6 +171,7 @@ test('revisar un win-back no lo elimina; solo un envío confirmado lo cierra', (
 
   assert.match(MAIL, /this\._cmpWinbackCli=opts\._winbackCli\|\|null/, 'Correos debe guardar el vínculo sin marcar nada al abrir');
   assert.match(MAIL, /wbMarkSent\(this\._cmpWinbackCli,['"]correo['"]\)/, 'solo tras envío exitoso de correo debe salir de pendientes');
+  assert.match(MAIL, /closeCompose\(\)\{[\s\S]*?this\._cmpWinbackCli=null/, 'cerrar el borrador debe cancelar el vínculo sin completar la gestión');
 });
 
 test('WhatsApp de win-back y recompra solo se completa con confirmación WATI', () => {
