@@ -281,6 +281,7 @@ const MAIL={
     const list=document.getElementById('mailList');
     list.innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
     document.getElementById('mailFolderTitle').textContent=this.folder.replace(/^INBOX\./i,'').replace(/^INBOX$/i,'Bandeja de entrada');
+    document.querySelectorAll('.mail-spam-action').forEach(btn=>{btn.style.display=this._isSpamFolder(this.folder)?'none':'';});
     document.getElementById('mailListFooter').style.display='none';
     const data=await this.post({action:'list',folder:this.folder,page:this.page});
     if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
@@ -1422,6 +1423,25 @@ const MAIL={
     await this.loadFolders();
   },
 
+  _isSpamFolder(folder){
+    const raw=String(folder||'').replace(/^INBOX[./]/i,'').toLowerCase();
+    return /(^|[./\s_-])(junk|spam|correo(?:s)? no deseado(?:s)?)([./\s_-]|$)/i.test(raw)||raw==='junk'||raw==='spam';
+  },
+
+  async spamCurrent(){
+    if(!this.selUid)return;
+    if(this._isSpamFolder(this.folder)){toast('Este mensaje ya está en Spam','info');return;}
+    if(!confirm('¿Marcar este correo como no deseado y moverlo a Spam?'))return;
+    const data=await this.post({action:'spam',folder:this.folder,uid:this.selUid});
+    if(data.error){toast(data.error,'error');return;}
+    toast('🚫 Correo movido a Spam','success');
+    this.selUid=null;this._currentMsg=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
   // ── Selección múltiple de la bandeja ──────────────────────────
   toggleSelect(uid,on){
     this._sel=this._sel||new Set();
@@ -1489,6 +1509,32 @@ const MAIL={
     }
     this._sel=new Set();
     toast(fail?`${ok} eliminado${ok!==1?'s':''} · ${fail} con error`:`✓ ${ok} mensaje${ok!==1?'s':''} eliminado${ok!==1?'s':''}`, fail?'info':'success');
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  async spamSelected(){
+    this._sel=this._sel||new Set();
+    const uids=[...this._sel];
+    if(!uids.length)return;
+    if(this._isSpamFolder(this.folder)){toast('Los mensajes seleccionados ya están en Spam','info');return;}
+    if(!confirm(`¿Marcar ${uids.length} correo${uids.length>1?'s':''} como no deseado${uids.length>1?'s':''} y moverlo${uids.length>1?'s':''} a Spam?`))return;
+    const bar=document.getElementById('mailSelBar');
+    const btns=bar?bar.querySelectorAll('button'):[];
+    btns.forEach(b=>b.disabled=true);
+    let ok=0,fail=0;
+    for(const uid of uids){
+      const data=await this.post({action:'spam',folder:this.folder,uid});
+      if(data&&!data.error)ok++;else fail++;
+    }
+    btns.forEach(b=>b.disabled=false);
+    if(this.selUid&&uids.includes(this.selUid)){
+      this.selUid=null;this._currentMsg=null;
+      document.getElementById('mailReaderEmpty').style.display='flex';
+      document.getElementById('mailReaderContent').style.display='none';
+    }
+    this._sel=new Set();
+    toast(fail?`${ok} movido${ok!==1?'s':''} a Spam · ${fail} con error`:`🚫 ${ok} correo${ok!==1?'s':''} movido${ok!==1?'s':''} a Spam`,fail?'info':'success');
     await this.loadMessages();
     await this.loadFolders();
   },
