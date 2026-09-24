@@ -944,7 +944,34 @@
       <button class="btn btn-sm" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.3);color:var(--danger)" onclick="bulkDeletePedidos()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-trash"/></svg> Eliminar</button>
       <button class="btn btn-ghost btn-sm" onclick="clearPedidosSelection()">✕ Cancelar</button>
     </div>
-    <input id="pedidosSearch" type="search" placeholder="Buscar N° pedido o cliente…" oninput="searchPedidos(this.value)" aria-label="Buscar pedidos" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:6px 11px;min-width:210px;outline:none">
+    <select id="pedidosSortSelect" class="pedidos-sort-select" onchange="setPedidosSort(this.value)" aria-label="Ordenar pedidos" title="Ordenar pedidos">
+      <option value="">↕ Ordenar por…</option>
+      <optgroup label="N° de pedido">
+        <option value="numero:desc">N° pedido · mayor → menor</option>
+        <option value="numero:asc">N° pedido · menor → mayor</option>
+      </optgroup>
+      <optgroup label="Cliente">
+        <option value="cliente:asc">Cliente · A → Z</option>
+        <option value="cliente:desc">Cliente · Z → A</option>
+      </optgroup>
+      <optgroup label="Nombre / proyecto">
+        <option value="titulo:asc">Nombre / proyecto · A → Z</option>
+        <option value="titulo:desc">Nombre / proyecto · Z → A</option>
+      </optgroup>
+      <optgroup label="Estado">
+        <option value="estado:asc">Estado · producción → cierre</option>
+        <option value="estado:desc">Estado · cierre → producción</option>
+      </optgroup>
+      <optgroup label="Entrega">
+        <option value="entrega:asc">Entrega · más próxima primero</option>
+        <option value="entrega:desc">Entrega · más lejana primero</option>
+      </optgroup>
+      <optgroup label="Monto">
+        <option value="monto:desc">Monto · mayor → menor</option>
+        <option value="monto:asc">Monto · menor → mayor</option>
+      </optgroup>
+    </select>
+    <input id="pedidosSearch" type="search" placeholder="Buscar N° pedido o cliente…" oninput="searchPedidos(this.value)" aria-label="Buscar pedidos" style="background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;padding:6px 11px;min-width:210px;outline:none">
     <button class="btn btn-ghost btn-sm" onclick="exportToCSV('pedidos')">⬇ CSV</button>
     <div role="group" aria-label="Formato de pedidos" style="display:flex;flex-wrap:wrap;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px">
       <button id="btnVistaTarjetas" class="btn btn-ghost btn-sm" onclick="setPedidosView('tarjetas')" style="padding:4px 12px;font-size:10px">Tarjetas</button>
@@ -11690,15 +11717,53 @@ function exportRemCSV(){
 function searchPedidos(q){ state.pedidoSearch=q||''; _pedCap=60; renderPedidos(); }
 // Limpia búsqueda + vuelve al filtro "Todos" (salida del estado vacío).
 function resetPedidosView(){ const inp=document.getElementById('pedidosSearch'); if(inp) inp.value=''; state.pedidoSearch=''; filterPedidos('all',document.querySelector('#pedidosFilterBar>button')); }
+// Ordenar pedidos: el mismo estado gobierna Tabla, Tarjetas, Kanban y las
+// demás vistas derivadas de renderPedidos. El selector visual permite elegir
+// explícitamente campo + dirección y las cabeceras de Tabla siguen alternando.
+function _pedLoadSortPref(){
+  if(state._pedidoSortLoaded)return;
+  state._pedidoSortLoaded=true;
+  try{
+    const raw=localStorage.getItem('pedidos_sort')||'';
+    const [key,dir]=raw.split(':');
+    if(['numero','cliente','titulo','estado','monto','entrega'].includes(key)&&['asc','desc'].includes(dir)){
+      state.pedidoSort={key,dir};
+    }
+  }catch(e){}
+}
+function _pedSyncSortControl(){
+  const el=document.getElementById('pedidosSortSelect');if(!el)return;
+  const s=state.pedidoSort;
+  const value=s&&s.key&&s.dir?`${s.key}:${s.dir}`:'';
+  el.value=[...el.options].some(o=>o.value===value)?value:'';
+}
+function setPedidosSort(value){
+  const raw=String(value||'').trim();
+  if(!raw){
+    state.pedidoSort=null;
+    try{localStorage.removeItem('pedidos_sort');}catch(e){}
+  }else{
+    const [key,dir]=raw.split(':');
+    if(!['numero','cliente','titulo','estado','monto','entrega'].includes(key)||!['asc','desc'].includes(dir))return;
+    state.pedidoSort={key,dir};
+    try{localStorage.setItem('pedidos_sort',raw);}catch(e){}
+  }
+  state._pedidoSortLoaded=true;
+  _pedCap=60;
+  renderPedidos();
+}
 // Ordenar por columna: primer clic asc, segundo desc, en la misma columna.
 function sortPedidos(key){
+  _pedLoadSortPref();
   const s=state.pedidoSort;
   if(s&&s.key===key) s.dir=s.dir==='asc'?'desc':'asc';
   else state.pedidoSort={key,dir:'asc'};
+  try{localStorage.setItem('pedidos_sort',state.pedidoSort.key+':'+state.pedidoSort.dir);}catch(e){}
   renderPedidos();
 }
 // Aplica buscador + orden a la lista de pedidos ya filtrada por estado.
 function _pedApplySearchSort(data){
+  _pedLoadSortPref();
   const q=(state.pedidoSearch||'').trim().toLowerCase();
   if(q) data=data.filter(p=>{const f=p.fields;return [
     f['N° Pedido']||'', resolveClienteName(f['Cliente']), f['Estado pedido']||'',
@@ -11708,10 +11773,14 @@ function _pedApplySearchSort(data){
   const s=state.pedidoSort;
   if(s&&s.key){
     const dir=s.dir==='desc'?-1:1;
-    const stageOrder={'Confirmado':0,'En producción':1,'Listo para despacho':2,'Despachado':3,'Cancelado':4};
+    const stageOrder={'Confirmado':0,'En producción':1,'Listo para despacho':2,'Despachado':3,'Completado':4,'Cancelado':5};
     const val=p=>{const f=p.fields;switch(s.key){
       case 'numero':{const m=(f['N° Pedido']||'').match(/(\d{4}).*?(\d+)\s*$/);return m?parseInt(m[1])*100000+parseInt(m[2]):0;}
-      case 'cliente':return resolveClienteName(f['Cliente']).toLowerCase();
+      case 'cliente':return resolveClienteName(f['Cliente']).toLocaleLowerCase('es');
+      case 'titulo':{
+        const cot=state.cotizacionesById?.[f['Cotizaciones']?.[0]];
+        return String(f['Alias / Título']||cot?.fields?.['Alias / Título']||f['Detalle productos']||'').toLocaleLowerCase('es');
+      }
       case 'estado':return stageOrder[f['Estado pedido']]??99;
       case 'monto':return Number(f['Monto total (CLP)']||0);
       case 'entrega':return f['Fecha entrega']?new Date(f['Fecha entrega']+'T00:00:00').getTime():null;
@@ -11729,6 +11798,7 @@ function _pedApplySearchSort(data){
     el.textContent=on?(s.dir==='desc'?' ↓':' ↑'):'';
     el.style.color=on?'var(--accent)':'';
   });}catch(e){}
+  _pedSyncSortControl();
   return data;
 }
 function pedidoActMenuHtml(p,menuId){
@@ -15710,7 +15780,7 @@ function renderPedidosKanban(){
   const colores={'Confirmado':'var(--semantic-info)','En producción':'var(--semantic-production)','Listo para despacho':'var(--semantic-info)','Despachado':'var(--semantic-success)'};
   // La vista Tabla filtra por vendedor; Kanban no lo hacía, así que cambiar de
   // vista dentro de la misma pestaña mostraba los pedidos (y montos) de todos.
-  const activos=_pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));
+  const activos=_pedApplySearchSort(_pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||'')));
   const cols=stages.map(stage=>{
     const items=activos.filter(p=>(p.fields['Estado pedido']||'')==stage);
     const nextStage=stages[stages.indexOf(stage)+1]||(stage==='Despachado'?'Completado':null);
