@@ -28,10 +28,9 @@ const SUGGESTIONS=new Map(Object.entries({
   gestion:'gestión',version:'versión',sesion:'sesión',conexion:'conexión',configuracion:'configuración',
   opcion:'opción',opciones:'opciones',seccion:'sección',secciones:'secciones',
   menu:'menú',util:'útil',facil:'fácil',dificil:'difícil',aqui:'aquí',ahi:'ahí',
-  como:'cómo',cuando:'cuándo',donde:'dónde',cual:'cuál',cuales:'cuáles',quien:'quién',
-  quienes:'quiénes',porque:'por qué',porfavor:'por favor',gracias:'gracias',
+  porfavor:'por favor',gracias:'gracias',
   nesecito:'necesito',nececita:'necesita',necesito:'necesito',resivir:'recibir',
-  recivir:'recibir',aver:'a ver',haber:'haber',haci:'así',asia:'hacia',
+  recivir:'recibir',aver:'a ver',haber:'haber',haci:'así',
   ola:'hola',grasias:'gracias',kiero:'quiero',quiero:'quiero',qe:'que',
   q:'que',xq:'porque',porqe:'porque',porq:'porque'
 }));
