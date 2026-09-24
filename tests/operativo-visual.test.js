@@ -198,14 +198,15 @@ test('menu de pago se cierra al hacer click fuera y selector de estado queda cen
   assert.match(css,/text-align:center;text-align-last:center/,'el texto del estado debe quedar centrado en todas las opciones');
 });
 
-test('selector de estado de pedidos no invade la tarjeta vecina',()=>{
+test('selector de estado de pedidos no invade la tarjeta vecina y queda alineado entre tarjetas',()=>{
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
   const css=fs.readFileSync('operativo-visual.css','utf8');
   assert.match(src,/class="op-record op-order-record/,'las tarjetas de pedido deben tener alcance CSS propio');
   assert.match(src,/class="op-order-head-copy"/,'el bloque de texto del header debe distinguirse del selector');
-  assert.match(css,/#tab-pedidos \.op-order-record>header>\.op-status-select-wrap\{[\s\S]*?flex:0 0 160px/,'el wrapper no puede heredar flex:1 del div genérico');
+  assert.match(css,/#tab-pedidos \.op-order-record>header\{[\s\S]*?flex-direction:column/,'el estado debe vivir en una fila propia y estable');
+  assert.match(css,/#tab-pedidos \.op-order-record>header>\.op-order-head-copy\{[\s\S]*?min-height:108px/,'el bloque superior debe reservar igual altura para alinear estados');
+  assert.match(css,/#tab-pedidos \.op-order-record>header>\.op-status-select-wrap\{[\s\S]*?width:160px[\s\S]*?margin-left:auto/,'el selector debe conservar ancho compacto y alineación derecha');
   assert.match(css,/#tab-pedidos \.op-order-record \.op-status-select\{width:100%;max-width:none\}/,'el select debe ocupar solo su wrapper compacto');
-  assert.match(css,/max-width:160px/,'el control debe tener un ancho máximo acotado');
 });
 
 test('VER PEDIDO muestra detalle y unidades desde la cotización asociada sin exponer costos',()=>{
