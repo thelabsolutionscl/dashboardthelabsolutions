@@ -39,6 +39,15 @@ function calendarContext(state = { cotizaciones: [], pedidos: [], clientes: [] }
   return context;
 }
 
+test('el calendario mantiene tipografía legible en eventos y días', () => {
+  assert.match(HTML, /#tab-calendario \.cal-ev\{[^}]*font-size:13px[^}]*line-height:1\.35/);
+  assert.match(HTML, /#tab-calendario \.cal-ev-h\{[^}]*font-size:11\.5px/);
+  assert.match(HTML, /#tab-calendario \.cal-num\{[^}]*font-size:13px/);
+  assert.match(HTML, /#tab-calendario \.cal-cell\{[^}]*min-height:112px/);
+  assert.match(HTML, /@media\(max-width:760px\)\{[^}]*\.cal-cell\{[^}]*min-height:82px/);
+  assert.match(HTML, /#tab-calendario \.cal-ev\{font-size:10\.5px/);
+});
+
 test('el cargador respeta el orden completo de módulos', () => {
   const expected = [
     'js/calendario-base.js',
