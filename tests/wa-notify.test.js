@@ -15,13 +15,13 @@ const CONTROLLER=fs.readFileSync(path.join(ROOT,'printer-bridge','farm-controlle
 const wa=()=>import(path.join(ROOT,'lead-worker','src','wa-notify.js'));
 const {detectPrintEvent}=require(path.join(ROOT,'printer-bridge','print-notify.js'));
 
-const ENV={WATI_API_URL:'https://wati.test/123',WATI_API_TOKEN:'tok',WA_PHONE_NICANOR:'56971806142',WA_PHONE_GUSTAVO:'+56 9 8828 5822'};
+const ENV={WA_PHONE_NUMBER_ID:'999',WA_ACCESS_TOKEN:'tok',WA_PHONE_NICANOR:'56971806142',WA_PHONE_GUSTAVO:'+56 9 8828 5822'};
 function kv(){const m=new Map();return{m,get:async k=>m.get(k)??null,put:async(k,v)=>{m.set(k,v);}};}
 function fakeFetch(respuestas){
   const calls=[];
   global.fetch=async(url,opts)=>{
     calls.push({url:String(url),body:opts?.body?JSON.parse(opts.body):null,headers:opts?.headers});
-    const r=respuestas.shift()||{status:200,body:{result:true}};
+    const r=respuestas.shift()||{status:200,body:{messages:[{id:'wamid.1'}]}};
     return{ok:r.status<300,status:r.status,json:async()=>r.body};
   };
   return calls;
@@ -35,12 +35,12 @@ test('enrutamiento pedido: leads a ambos; cotizaciones a Nicanor; pedidos e impr
   assert.deepEqual(WA_RUTAS.impresora,['gustavo']);
 });
 
-test('sin credenciales WATI no intenta enviar nada',async()=>{
+test('sin credenciales de Meta no intenta enviar nada',async()=>{
   const {waNotify}=await wa();
   const calls=fakeFetch([]);
   const res=await waNotify({WA_PHONE_NICANOR:'569'},'cotizacion_envio',{titulo:'x'});
   assert.equal(calls.length,0);
-  assert.equal(res[0].skipped,'wati-no-configurado');
+  assert.equal(res[0].skipped,'whatsapp-no-configurado');
 });
 
 test('WA_NOTIFY_ENABLED=false apaga los avisos aunque haya credenciales',async()=>{
@@ -56,24 +56,52 @@ test('lead avisa a Nicanor y Gustavo, con teléfono solo en dígitos, y no repit
   const msg=mensajeLead({name:'Juan',company:'Acme',service:'Trofeos',phone:'+56911112222'},'google_ads');
   await waNotify(env,'lead',msg,{dedupKey:'recX'});
   assert.equal(calls.length,2);
-  assert.match(calls[0].url,/sendSessionMessage\/56971806142\?/);
-  assert.match(calls[1].url,/sendSessionMessage\/56988285822\?/);
+  assert.equal(calls[0].url,'https://graph.facebook.com/v21.0/999/messages');
+  assert.equal(calls[0].body.to,'56971806142');
+  assert.equal(calls[1].body.to,'56988285822');
   assert.equal(calls[0].headers.Authorization,'Bearer tok');
-  assert.match(calls[0].body.messageText,/Nuevo lead[\s\S]*Juan — Acme[\s\S]*Google Ads/);
+  assert.equal(calls[0].body.messaging_product,'whatsapp');
+  assert.match(calls[0].body.text.body,/Nuevo lead[\s\S]*Juan — Acme[\s\S]*Google Ads/);
   const again=await waNotify(env,'lead',msg,{dedupKey:'recX'});
   assert.equal(calls.length,2,'el segundo aviso del mismo cliente es duplicado');
   assert.ok(again.every(r=>r.skipped==='duplicado'));
 });
 
-test('fuera de la ventana de 24 h cae a la plantilla aprobada, con detalle en una sola línea',async()=>{
-  const {waSend}=await wa();
-  const calls=fakeFetch([{status:200,body:{result:false,info:'ventana expirada'}},{status:200,body:{result:true}}]);
-  const r=await waSend({...ENV,WATI_TEMPLATE_NAME:'aviso_equipo'},'569',{titulo:'Pedidos por vencer',lineas:['• P-1','• P-2']});
-  assert.deepEqual(r,{ok:true,via:'template'});
-  assert.match(calls[1].url,/sendTemplateMessage\?whatsappNumber=569$/);
-  assert.equal(calls[1].body.template_name,'aviso_equipo');
-  const detalle=calls[1].body.parameters.find(p=>p.name==='detalle').value;
+test('ventana de 24 h: texto si la persona escribió hace poco, plantilla si no',async()=>{
+  const {waSend,waWebhookEvento}=await wa();
+  const env={...ENV,RL:kv(),WA_TEMPLATE_NAME:'aviso_equipo'};
+  const calls=fakeFetch([]);
+  const msg={titulo:'Pedidos por vencer',lineas:['• P-1','• P-2']};
+  assert.deepEqual(await waSend(env,'569',msg),{ok:true,via:'plantilla'});
+  const t=calls[0].body.template;
+  assert.equal(t.name,'aviso_equipo');
+  assert.equal(t.language.code,'es');
+  const [titulo,detalle]=t.components[0].parameters.map(p=>p.text);
+  assert.equal(titulo,'Pedidos por vencer');
   assert.doesNotMatch(detalle,/\n/,'Meta rechaza saltos de línea en parámetros');
+  await waWebhookEvento(env,{entry:[{changes:[{value:{messages:[{from:'569',type:'text'}]}}]}]});
+  assert.deepEqual(await waSend(env,'569',msg),{ok:true,via:'texto'});
+  assert.equal(calls[1].body.type,'text');
+});
+
+test('sin plantilla todavía, intenta el texto igual',async()=>{
+  const {waSend}=await wa();
+  const calls=fakeFetch([]);
+  assert.deepEqual(await waSend({...ENV,RL:kv()},'569',{titulo:'x'}),{ok:true,via:'texto-sin-ventana'});
+  assert.equal(calls[0].body.type,'text');
+});
+
+test('webhook: verificación de Meta y firma X-Hub-Signature-256 obligatoria',async()=>{
+  const {waWebhookVerify,waWebhookFirmaValida}=await wa();
+  const env={WA_VERIFY_TOKEN:'v3r1',WA_APP_SECRET:'s3cr3t'};
+  const ok=waWebhookVerify(env,new URL('https://w/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=v3r1&hub.challenge=42'));
+  assert.equal(ok.status,200);assert.equal(await ok.text(),'42');
+  assert.equal(waWebhookVerify(env,new URL('https://w/x?hub.mode=subscribe&hub.verify_token=otro&hub.challenge=42')).status,403);
+  const raw='{"entry":[]}';
+  const firma='sha256='+require('node:crypto').createHmac('sha256','s3cr3t').update(raw).digest('hex');
+  assert.equal(await waWebhookFirmaValida(env,raw,firma),true);
+  assert.equal(await waWebhookFirmaValida(env,raw+' ',firma),false);
+  assert.equal(await waWebhookFirmaValida({},raw,firma),false,'sin WA_APP_SECRET no se acepta nada');
 });
 
 test('un envío fallido no se marca como enviado (se reintenta)',async()=>{
@@ -123,11 +151,11 @@ test('el resumen diario sale solo a la hora configurada de Chile y una vez por d
   global.fetch=async(url,opts)=>{
     const u=String(url);calls.push(u);
     if(u.includes('api.airtable.com')) return{ok:true,status:200,json:async()=>u.includes('/Pedidos?')?pedidos:{records:[]}};
-    return{ok:true,status:200,json:async()=>({result:true})};
+    return{ok:true,status:200,json:async()=>({messages:[{id:'wamid.1'}]})};
   };
   assert.equal((await waDailyReminders(env,new Date('2026-09-24T13:17:00Z'))).skipped,'fuera-de-hora');
   await waDailyReminders(env,nueve);
-  const envios=()=>calls.filter(u=>u.includes('wati.test')).length;
+  const envios=()=>calls.filter(u=>u.includes('graph.facebook.com')).length;
   assert.equal(envios(),1,'solo Gustavo recibe el de pedidos; sin cotizaciones no se avisa a Nicanor');
   await waDailyReminders(env,nueve);
   assert.equal(envios(),1,'la segunda corrida del mismo día no repite');
@@ -151,6 +179,8 @@ test('cableado: el Worker avisa leads, corre el resumen y protege /notify con WA
   assert.match(WORKER,/!env\.WA_NOTIFY_KEY \|\| !timingSafeEqual\(key, env\.WA_NOTIFY_KEY\)/);
   assert.match(TOML,/WA_PHONE_NICANOR = "56971806142"/);
   assert.match(TOML,/WA_PHONE_GUSTAVO = "56988285822"/);
-  assert.doesNotMatch(TOML,/^WATI_API_TOKEN\s*=/m,'el token va como secreto, nunca en el toml');
+  assert.doesNotMatch(TOML,/^WA_ACCESS_TOKEN\s*=/m,'el token va como secreto, nunca en el toml');
+  assert.doesNotMatch(TOML,/^WA_APP_SECRET\s*=/m);
+  assert.match(WORKER,/waWebhookFirmaValida\(env, raw, request\.headers\.get\("X-Hub-Signature-256"\)/);
   assert.match(CONTROLLER,/require\('\.\/print-notify'\)\.start\(\)/);
 });

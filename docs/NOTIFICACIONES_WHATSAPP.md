@@ -3,8 +3,11 @@
 ## 0. Avisos desde el servidor (fase 1, vigente desde 2026-09-24)
 
 Los avisos que antes dependían de tener el dashboard abierto ahora salen del
-**lead-worker** (Cloudflare, 24/7) por WATI. Código: `lead-worker/src/wa-notify.js`
-y `printer-bridge/print-notify.js`.
+**lead-worker** (Cloudflare, 24/7) por la **API oficial de WhatsApp de Meta
+(Cloud API)**, sin intermediario ni mensualidad (WATI se descartó por costo).
+Salen desde un número propio, **KAI TLS** (chip prepago dedicado, que no se usa
+en la app de WhatsApp). Código: `lead-worker/src/wa-notify.js` y
+`printer-bridge/print-notify.js`.
 
 | Aviso | Para | Cuándo |
 |---|---|---|
@@ -13,45 +16,37 @@ y `printer-bridge/print-notify.js`.
 | Pedidos por vencer (atrasados o entrega ≤ 2 días) | Gustavo | Resumen diario 09:17 (Chile) |
 | Impresión finalizada / con error / en pausa con mensaje | Gustavo | Al detectarlo (farm-controller, cada 30 s) |
 
-Pendiente: correo nuevo (fase 2) y chat con KAI por WhatsApp (fase 3).
+**Costo:** si la persona escribió al número en las últimas 24 h, el aviso va
+como texto normal (gratis); si no, como plantilla *utility* (centavos de dólar).
+El webhook `/whatsapp/webhook` anota en KV cuándo escribió cada uno.
 
-### Puesta en marcha
+Pendiente: correo nuevo (fase 2) y chat con KAI por WhatsApp (fase 3, se
+engancha en el mismo webhook).
 
-1. **Secretos del Worker** (una vez):
-   ```bash
-   cd lead-worker
-   npx wrangler secret put WATI_API_URL     # Dashboard WATI → API Docs → "API Endpoint"
-   npx wrangler secret put WATI_API_TOKEN   # el token, sin la palabra "Bearer"
-   npx wrangler secret put WA_NOTIFY_KEY    # una clave larga al azar: openssl rand -hex 24
-   npx wrangler deploy                      # o merge a main (deploy-worker.yml)
-   ```
-2. **Probar**:
-   ```bash
-   curl -X POST https://<worker>/notify/test -H "X-Notify-Key: <WA_NOTIFY_KEY>" \
-     -H "Content-Type: application/json" -d '{"persona":"gustavo"}'
-   ```
-   `{"ok":true,"via":"session"}` = llegó. Si responde `sesión rechazada … falta
-   plantilla`, esa persona no le ha escrito al número WATI en 24 h (ver paso 4).
-3. **Impresoras** — en el iMac, crear
-   `~/Library/Application Support/TheLabFarm/print-notify-config.json`:
-   ```json
-   {"url":"https://<worker>/notify/printer","key":"<WA_NOTIFY_KEY>"}
-   ```
-   y reiniciar: `launchctl kickstart -k gui/$(id -u)/com.thelab.farm-controller`.
-   En el log debe aparecer `[print-notify] activo`. (Linux: `PRINT_NOTIFY_URL` y
-   `PRINT_NOTIFY_KEY` en `/etc/thelab-farm.env`.)
-4. **Plantilla para entrega 24/7** — sin plantilla, WhatsApp solo entrega si la
-   persona escribió al número en las últimas 24 h. Crear en WATI una plantilla
-   *Utility* (p. ej. `aviso_equipo`) con cuerpo:
-   `🔔 {{titulo}}` / `{{detalle}}` / `— Dashboard The Lab`. Cuando Meta la
-   apruebe, poner `WATI_TEMPLATE_NAME = "aviso_equipo"` en `wrangler.toml`. El
-   Worker intenta primero el mensaje normal y, si WhatsApp lo rechaza, usa la plantilla.
-5. **Evitar duplicados del navegador** — en cada computador con el dashboard:
-   Máquinas → configuración de alertas → desmarcar el aviso por WhatsApp
-   (`monitor_wa_enabled`). Ese aviso ahora lo manda el servidor.
+### Configuración (resumen; guía detallada en el chat de la sesión)
 
+| Dónde | Qué |
+|---|---|
+| `wrangler.toml` | `WA_PHONE_NUMBER_ID` (id del número KAI TLS), `WA_TEMPLATE_NAME` cuando Meta apruebe la plantilla |
+| Secretos Cloudflare | `WA_ACCESS_TOKEN` (token permanente de usuario del sistema), `WA_APP_SECRET`, `WA_VERIFY_TOKEN`, `WA_NOTIFY_KEY` |
+| Meta → WhatsApp → Configuración → Webhook | URL `https://<worker>/whatsapp/webhook`, token = `WA_VERIFY_TOKEN`, campo `messages` |
+| iMac | `~/Library/Application Support/TheLabFarm/print-notify-config.json` con `{"url":"https://<worker>/notify/printer","key":"<WA_NOTIFY_KEY>"}` |
+
+Plantilla (Utility, español, nombre `aviso_equipo`):
+
+```
+🔔 Aviso del dashboard: {{1}}
+
+Detalle: {{2}}
+
+— Dashboard The Lab Solutions
+```
+
+Prueba: `curl -X POST https://<worker>/notify/test -H "X-Notify-Key: <WA_NOTIFY_KEY>" -H "Content-Type: application/json" -d '{"persona":"gustavo"}'`
+
+Evitar duplicados: en cada computador, Máquinas → configuración de alertas →
+desmarcar el aviso por WhatsApp (el navegador ya no debe mandarlo).
 Apagar todo: `WA_NOTIFY_ENABLED = "false"` en `wrangler.toml` y desplegar.
-Números: `WA_PHONE_NICANOR` / `WA_PHONE_GUSTAVO` en `wrangler.toml`.
 
 ---
 

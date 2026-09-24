@@ -49,17 +49,21 @@ WORKER_PUBLIC_URL = ""
 # Destinatario del email semanal (fallback: LEADS_NOTIFY_TO).
 ADS_AUTOPILOT_EMAIL = "thelabsolutionscl@gmail.com"
 
-# ── Avisos internos por WhatsApp (WATI) — ver src/wa-notify.js ─────────
+# ── Avisos internos por WhatsApp (API oficial de Meta) — ver src/wa-notify.js ──
 # Leads → Nicanor+Gustavo · cotizaciones por enviar → Nicanor ·
-# pedidos por vencer + impresoras → Gustavo. Sin WATI_API_URL/TOKEN no envía nada.
+# pedidos por vencer + impresoras → Gustavo. Sin WA_PHONE_NUMBER_ID y el
+# secreto WA_ACCESS_TOKEN no envía nada.
 WA_NOTIFY_ENABLED = "true"
+# Meta → WhatsApp → Configuración de la API → "Identificador del número de teléfono" (KAI TLS).
+WA_PHONE_NUMBER_ID = ""
 WA_PHONE_NICANOR = "56971806142"
 WA_PHONE_GUSTAVO = "56988285822"
 # Hora de Chile del resumen diario de recordatorios (el cron corre a los :17).
 WA_DIGEST_HOUR = "9"
-# Plantilla aprobada en WATI con parámetros {{titulo}} y {{detalle}}; se usa
-# cuando el mensaje de sesión falla por la ventana de 24 h. Vacío = solo sesión.
-WATI_TEMPLATE_NAME = ""
+# Plantilla utility aprobada en Meta con {{1}} = título y {{2}} = detalle. Se usa
+# cuando la persona no escribió al número en las últimas 24 h. Vacío = solo texto.
+WA_TEMPLATE_NAME = ""
+WA_TEMPLATE_LANG = "es"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
@@ -87,7 +91,8 @@ id = "c148848321344f60939fa71a51d050c6"
 #   ADS_APPROVAL_SECRET     (piloto Ads — OBLIGATORIO para los links Aprobar/Rechazar del email
 #                            y el disparo manual; sin él solo se aprueba desde el dashboard)
 #   ADS_SCRIPT_SECRET       (piloto Ads — secret del Script 1; si falta usa el default del Script)
-#   WATI_API_URL            (avisos WhatsApp — URL del servidor WATI, ej. https://live-mt-server.wati.io/123456)
-#   WATI_API_TOKEN          (avisos WhatsApp — token Bearer de WATI, sin "Bearer ")
+#   WA_ACCESS_TOKEN         (WhatsApp Meta — token PERMANENTE de un usuario del sistema)
+#   WA_APP_SECRET           (WhatsApp Meta — "Clave secreta de la app"; valida la firma del webhook)
+#   WA_VERIFY_TOKEN         (WhatsApp Meta — texto al azar que se repite al configurar el webhook)
 #   WA_NOTIFY_KEY           (avisos WhatsApp — clave de /notify/printer y /notify/test;
 #                            el mismo valor va en PRINT_NOTIFY_KEY del farm-controller)

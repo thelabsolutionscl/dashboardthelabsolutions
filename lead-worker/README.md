@@ -16,6 +16,7 @@ Worker **dedicado y separado** de `sii-worker`. Ningún secreto vive en el repo.
 | POST | `/portal/cotizacion/decision` | token firmado | El cliente aprueba/rechaza su cotización |
 | POST | `/notify/printer` | `X-Notify-Key` | El farm-controller avisa impresión con error/finalizada → WhatsApp a Gustavo |
 | POST | `/notify/test` | `X-Notify-Key` | Mensaje de prueba por WhatsApp (`{"persona":"nicanor"}`) |
+| GET/POST | `/whatsapp/webhook` | firma Meta (`WA_APP_SECRET`) | Webhook de la Cloud API: verificación y mensajes entrantes |
 
 Avisos internos por WhatsApp (leads, recordatorios diarios, impresoras): ver
 [`docs/NOTIFICACIONES_WHATSAPP.md`](../docs/NOTIFICACIONES_WHATSAPP.md) §0.

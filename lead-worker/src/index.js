@@ -27,11 +27,12 @@
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
  *   POST /notify/printer        (farm-controller — impresión con error/finalizada → WhatsApp; clave WA_NOTIFY_KEY)
  *   POST /notify/test           (prueba de WhatsApp a nicanor/gustavo; clave WA_NOTIFY_KEY)
+ *   GET|POST /whatsapp/webhook  (Meta Cloud API — verificación y mensajes entrantes; firma WA_APP_SECRET)
  *
  * NINGÚN secreto vive en este archivo. Todo viene de `env` (wrangler secret put).
  */
 
-import { waNotify, waSend, waPhone, mensajeLead, mensajeImpresora, waDailyReminders, WA_RUTAS } from "./wa-notify.js";
+import { waNotify, waSend, waPhone, mensajeLead, mensajeImpresora, waDailyReminders, WA_RUTAS, waWebhookVerify, waWebhookFirmaValida, waWebhookEvento } from "./wa-notify.js";
 
 const AIRTABLE_API = "https://api.airtable.com/v0";
 
@@ -165,6 +166,19 @@ export default {
         }
         const res = await adsAutopilotRun(env, { force: true });
         return json({ ok: true, ...res }, 200, cors);
+      }
+
+      // Webhook de WhatsApp (Meta): verificación y mensajes entrantes.
+      if (url.pathname === "/whatsapp/webhook") {
+        if (request.method === "GET") return waWebhookVerify(env, url);
+        if (request.method === "POST") {
+          const raw = await request.text();
+          if (!(await waWebhookFirmaValida(env, raw, request.headers.get("X-Hub-Signature-256") || ""))) {
+            return new Response("firma inválida", { status: 401 });
+          }
+          await waWebhookEvento(env, safeJson(raw) || {});
+          return new Response("ok", { status: 200 });
+        }
       }
 
       // Avisos por WhatsApp desde otros servicios (farm-controller) y prueba manual.

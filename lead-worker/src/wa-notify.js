@@ -1,27 +1,38 @@
 /**
- * Avisos internos por WhatsApp (WATI) — fase 1
+ * Avisos internos por WhatsApp (API oficial de Meta, Cloud API) — fase 1
  * ---------------------------------------------------------------------------
  * Hasta ahora los avisos por WhatsApp salían del NAVEGADOR: solo existían si
  * alguien tenía el dashboard abierto, y se duplicaban si había dos pestañas.
  * Este módulo los manda desde el Worker (servidor, 24/7), con anti-duplicado
- * en KV.
+ * en KV, directo por la Cloud API de Meta (sin intermediario ni mensualidad).
  *
  *   Nuevo lead                        → Nicanor + Gustavo  (al instante)
  *   Recordatorio envío de cotización  → Nicanor            (resumen diario)
  *   Recordatorio vencimiento pedido   → Gustavo            (resumen diario)
  *   Impresión con error / finalizada  → Gustavo            (lo avisa el farm-controller)
  *
+ * Ventana de 24 h: WhatsApp solo entrega texto libre si la persona escribió al
+ * número en las últimas 24 h. El webhook (/whatsapp/webhook) anota en KV cuándo
+ * escribió cada uno; dentro de la ventana va texto (gratis), fuera va la
+ * plantilla aprobada (utility, centavos). La Cloud API acepta el texto aunque
+ * no lo vaya a entregar, por eso hay que decidirlo antes de enviar.
+ *
  * Correo nuevo (fase 2) y el chat con KAI (fase 3) se enchufan a WA_RUTAS.
  *
  * Config (wrangler.toml / secretos):
- *   WATI_API_URL, WATI_API_TOKEN   (secretos) — sin ellos no se envía nada
- *   WATI_TEMPLATE_NAME             (opcional) plantilla aprobada con parámetros
- *                                  {{titulo}} y {{detalle}}; se usa si el
- *                                  mensaje de sesión falla (ventana de 24 h)
+ *   WA_PHONE_NUMBER_ID             id del número KAI TLS en Meta (no secreto)
+ *   WA_ACCESS_TOKEN                (secreto) token permanente de usuario del sistema
+ *   WA_APP_SECRET                  (secreto) firma de los webhooks de Meta
+ *   WA_VERIFY_TOKEN                (secreto) verificación inicial del webhook
+ *   WA_TEMPLATE_NAME / WA_TEMPLATE_LANG  plantilla utility con {{1}} título y
+ *                                  {{2}} detalle; vacío = solo texto
  *   WA_PHONE_NICANOR, WA_PHONE_GUSTAVO
  *   WA_NOTIFY_ENABLED              "false" apaga todos los avisos
  *   WA_DIGEST_HOUR                 hora de Chile del resumen diario (def. 9)
  */
+
+const GRAPH = "https://graph.facebook.com/v21.0";
+const VENTANA_MS = 23.5 * 3600 * 1000; // margen bajo las 24 h de Meta
 
 export const WA_RUTAS = {
   lead: ["nicanor", "gustavo"],
@@ -41,7 +52,7 @@ export function waPhone(env, persona) {
 
 export function waEnabled(env) {
   return String(env.WA_NOTIFY_ENABLED ?? "true").toLowerCase() !== "false" &&
-    !!env.WATI_API_URL && !!env.WATI_API_TOKEN;
+    !!env.WA_PHONE_NUMBER_ID && !!env.WA_ACCESS_TOKEN;
 }
 
 export function waTexto({ titulo, lineas = [] }) {
@@ -53,46 +64,109 @@ export function waLineaUnica(lineas = []) {
   return lineas.filter(Boolean).join(" · ").replace(/[\r\n\t]+/g, " ").replace(/ {4,}/g, "   ").slice(0, 1000);
 }
 
-async function watiPost(env, path, body) {
-  const base = String(env.WATI_API_URL).replace(/\/+$/, "");
-  return fetch(`${base}${path}`, {
+async function graphSend(env, payload) {
+  const r = await fetch(`${GRAPH}/${env.WA_PHONE_NUMBER_ID}/messages`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.WATI_API_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: { Authorization: `Bearer ${env.WA_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
   });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok && d?.messages?.[0]?.id) return { ok: true, id: d.messages[0].id };
+  return { ok: false, error: d?.error?.message || `HTTP ${r.status}` };
 }
 
-// WATI responde 200 con {result:false} cuando no entrega (p. ej. fuera de la
-// ventana de 24 h), así que el HTTP ok no basta.
-async function watiOk(r) {
-  if (!r.ok) return false;
-  const d = await r.json().catch(() => ({}));
-  return d?.result !== false && d?.ok !== false;
+const INBOUND_KEY = (phone) => `wa:inbound:${phone}`;
+
+// ¿La persona escribió al número en las últimas ~24 h? (lo anota el webhook)
+export async function waEnVentana(env, phone, now = Date.now()) {
+  if (!env.RL) return false;
+  try {
+    const t = Number(await env.RL.get(INBOUND_KEY(phone)));
+    return t > 0 && now - t < VENTANA_MS;
+  } catch (_) {
+    return false;
+  }
 }
 
 export async function waSend(env, phone, msg) {
-  if (!waEnabled(env)) return { ok: false, skipped: "wati-no-configurado" };
+  if (!waEnabled(env)) return { ok: false, skipped: "whatsapp-no-configurado" };
   if (!phone) return { ok: false, skipped: "sin-telefono" };
-  const texto = waTexto(msg);
   try {
-    // Sesión primero (texto con formato); la API de WATI lee messageText de la
-    // query, el body se manda igual por compatibilidad con el dashboard.
-    const r = await watiPost(env, `/api/v1/sendSessionMessage/${phone}?messageText=${encodeURIComponent(texto)}`, { messageText: texto });
-    if (await watiOk(r)) return { ok: true, via: "session" };
-    if (!env.WATI_TEMPLATE_NAME) return { ok: false, error: `sesión rechazada (HTTP ${r.status}); falta plantilla` };
-    const t = await watiPost(env, `/api/v1/sendTemplateMessage?whatsappNumber=${phone}`, {
-      template_name: env.WATI_TEMPLATE_NAME,
-      broadcast_name: `aviso_${Date.now()}`,
-      parameters: [
-        { name: "titulo", value: String(msg.titulo || "Aviso").slice(0, 200) },
-        { name: "detalle", value: waLineaUnica(msg.lineas) || "—" },
-      ],
+    const ventana = await waEnVentana(env, phone);
+    if (ventana || !env.WA_TEMPLATE_NAME) {
+      // Sin plantilla todavía (recién creada, esperando a Meta) se intenta el
+      // texto igual: llega si la persona escribió hace poco.
+      const r = await graphSend(env, { to: phone, type: "text", text: { body: waTexto(msg).slice(0, 4000), preview_url: false } });
+      return r.ok ? { ok: true, via: ventana ? "texto" : "texto-sin-ventana" } : r;
+    }
+    const r = await graphSend(env, {
+      to: phone,
+      type: "template",
+      template: {
+        name: env.WA_TEMPLATE_NAME,
+        language: { code: env.WA_TEMPLATE_LANG || "es" },
+        components: [{ type: "body", parameters: [
+          { type: "text", text: String(msg.titulo || "Aviso").replace(/[\r\n\t]+/g, " ").slice(0, 200) },
+          { type: "text", text: waLineaUnica(msg.lineas) || "—" },
+        ] }],
+      },
     });
-    if (await watiOk(t)) return { ok: true, via: "template" };
-    return { ok: false, error: `plantilla rechazada (HTTP ${t.status})` };
+    return r.ok ? { ok: true, via: "plantilla" } : r;
   } catch (e) {
     return { ok: false, error: e.message };
   }
+}
+
+/* ── Webhook de Meta ─────────────────────────────────────────────────────
+ * GET  = verificación al configurarlo en Meta (hub.challenge).
+ * POST = mensajes y estados. Firmado con WA_APP_SECRET (X-Hub-Signature-256);
+ * sin firma válida se rechaza. Por ahora solo anota la ventana de 24 h de
+ * cada remitente y registra los envíos fallidos; el chat con KAI (fase 3)
+ * se engancha aquí.
+ */
+export function waWebhookVerify(env, url) {
+  const q = url.searchParams;
+  if (q.get("hub.mode") === "subscribe" && env.WA_VERIFY_TOKEN && q.get("hub.verify_token") === env.WA_VERIFY_TOKEN) {
+    return new Response(q.get("hub.challenge") || "", { status: 200 });
+  }
+  return new Response("forbidden", { status: 403 });
+}
+
+async function hmacHex(secret, body) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function waWebhookFirmaValida(env, raw, header) {
+  if (!env.WA_APP_SECRET || !header) return false;
+  const esperado = "sha256=" + (await hmacHex(env.WA_APP_SECRET, raw));
+  if (esperado.length !== header.length) return false;
+  let diff = 0;
+  for (let i = 0; i < esperado.length; i++) diff |= esperado.charCodeAt(i) ^ header.charCodeAt(i);
+  return diff === 0;
+}
+
+export async function waWebhookEvento(env, body, now = Date.now()) {
+  const out = { mensajes: 0, fallidos: 0 };
+  for (const entry of body?.entry || []) {
+    for (const ch of entry?.changes || []) {
+      const v = ch?.value || {};
+      for (const m of v.messages || []) {
+        const from = String(m.from || "").replace(/\D/g, "");
+        if (!from) continue;
+        out.mensajes++;
+        if (env.RL) await env.RL.put(INBOUND_KEY(from), String(now), { expirationTtl: 86400 }).catch(() => {});
+      }
+      for (const st of v.statuses || []) {
+        if (st.status !== "failed") continue;
+        out.fallidos++;
+        const err = st.errors?.[0] || {};
+        console.error(`[wa-notify] no entregado a ${st.recipient_id}: ${err.code || ""} ${err.title || err.message || ""}`);
+      }
+    }
+  }
+  return out;
 }
 
 // Envía a cada persona de la ruta, una sola vez por dedupKey (KV `RL`).
