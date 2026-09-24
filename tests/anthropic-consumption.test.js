@@ -59,7 +59,11 @@ test('la política central reserva Sonnet para razonamiento y acota cada salida'
   assert.equal(sandbox.agentAiPolicy('ADS').model,'claude-sonnet-4-6');
   assert.equal(sandbox.agentAiPolicy('COMMUNITY_AGENT').maxTokens,400);
   const body=JSON.parse(sandbox._CLAUDE_BODY('s','u',{model:'claude-sonnet-4-6',maxTokens:99999}));
-  assert.equal(body.max_tokens,2000,'el navegador no puede pedir una salida ilimitada');
+  assert.equal(body.max_tokens,1400,'el navegador no puede pedir una salida ilimitada');
+  assert.ok(Array.isArray(body.system),'el system debe enviarse en bloques cacheables');
+  assert.equal(body.system[0].cache_control.type,'ephemeral');
+  assert.equal(sandbox.agentAiPolicy('CONTENT').model,'claude-haiku-4-5');
+  assert.equal(sandbox.agentAiPolicy('NEWSLETTER_AGENT').model,'claude-haiku-4-5');
 });
 
 test('el lead worker solo acepta Haiku/Sonnet y limita el autopilot de Ads',()=>{
@@ -67,5 +71,8 @@ test('el lead worker solo acepta Haiku/Sonnet y limita el autopilot de Ads',()=>
   assert.match(worker,/const CLAUDE_ALLOWED_MODELS = new Set/);
   assert.doesNotMatch(worker,/CLAUDE_ALLOWED_MODELS[\s\S]{0,180}["']claude-opus/);
   assert.match(worker,/ADS_AUTOPILOT_MODEL \|\| "claude-sonnet-4-6"/);
-  assert.match(worker,/maxTokens: 1600/);
+  assert.match(worker,/maxTokens: 900/);
+  assert.match(worker,/workerAiBudgetAllowed/);
+  assert.match(worker,/AI_DAILY_BUDGET_USD \|\| "0\.50"/);
+  assert.match(worker,/cache_control: \{ type: "ephemeral" \}/);
 });
