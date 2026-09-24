@@ -118,6 +118,13 @@ test('contexto CEO usa la misma definición de revenue semanal',()=>{
   assert.doesNotMatch(body,/Fecha despacho['"]\]\|\|f\['Fecha entrega/);
 });
 
+test('reporte CEO recibe revenue mensual determinístico además del semanal',()=>{
+  const body=functionBlock(SOURCE,'crearReporte');
+  assert.match(body,/const revMes=.*state\.pedidos/s);
+  assert.match(body,/Revenue semana \(venta contratada neta\)/);
+  assert.match(body,/Revenue mes a la fecha \(venta contratada neta\)/);
+});
+
 test('Overview prioriza el último reporte real cuando hay varios el mismo día',()=>{
   const body=functionBlock(SOURCE,'ovRenderUltimoReporteCEO');
   assert.match(body,/b\.createdTime/,'debe desempatar por createdTime');
