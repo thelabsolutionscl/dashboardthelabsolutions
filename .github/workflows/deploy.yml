@@ -108,6 +108,23 @@ jobs:
           if [ "$status" = 204 ]; then echo 'Deploy anterior cancelado';
           elif [ "$status" = 404 ]; then echo 'Deploy anterior ya no existe';
           else cat /tmp/pages-cancel-response; exit 1; fi
+          # La cancelación es asíncrona. Pages puede devolver 204 mientras aún
+          # rechaza el siguiente deployment por conservar el anterior en curso.
+          ready=0
+          for attempt in $(seq 1 24); do
+            code=$(curl -sS -o /tmp/pages-old-status -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/deployments/19cf5c537e6b2503241088aaae03cbd1636dd686")
+            if [ "$code" = 404 ]; then ready=1; break; fi
+            if [ "$code" != 200 ]; then cat /tmp/pages-old-status; exit 1; fi
+            state=$(python3 -c 'import json; print(json.load(open("/tmp/pages-old-status")).get("status", ""))')
+            echo "Estado del deploy anterior: ${state}"
+            if [[ "$state" =~ ^(canceled|cancelled|failed|succeed)$ ]]; then ready=1; break; fi
+            sleep 5
+          done
+          if [ "$ready" != 1 ]; then echo 'Pages aún retiene el deploy anterior'; exit 1; fi
+          sleep 5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
