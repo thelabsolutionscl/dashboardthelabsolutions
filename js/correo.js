@@ -1161,6 +1161,7 @@ const MAIL={
     this._cmpCotId=opts._cotId||null;   // vínculo con la cotización (registro al enviar)
     this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
     this._cmpWinbackCli=opts._winbackCli||null;   // sacar de Leads dormidos SOLO tras envío exitoso
+    this._cmpRecompraCli=opts._recompraCli||null; // sacar de Recompra SOLO tras envío exitoso
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
     this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
     this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
@@ -1190,6 +1191,7 @@ const MAIL={
     this._cmpCotId=null;
     this._cmpReactivarCli=null;
     this._cmpWinbackCli=null;
+    this._cmpRecompraCli=null;
     this._cmpFuCotId=null;
     this._cmpPdPedido=null;
     this._cmpFromName=null;
@@ -1411,6 +1413,7 @@ const MAIL={
         // aquí después de que mail-api confirmó el envío.
         if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') await marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
         if(this._cmpWinbackCli){try{if(typeof wbMarkSent==='function') wbMarkSent(this._cmpWinbackCli,'correo');}catch(e){}this._cmpWinbackCli=null;}
+        if(this._cmpRecompraCli){try{if(typeof _recompraMark==='function') _recompraMark(this._cmpRecompraCli,'correo');}catch(e){}this._cmpRecompraCli=null;}
         if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') await fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
         // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
         if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
