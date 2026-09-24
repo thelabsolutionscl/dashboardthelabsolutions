@@ -22,6 +22,12 @@ function demoResponses(){
   return context.result;
 }
 
+test('el popup de carga de agentes no muestra barra horizontal',()=>{
+  const modal=HTML.slice(HTML.indexOf('id="agentWorkingModal"'),HTML.indexOf('<!-- ══ DETALLE DE AGENTE',HTML.indexOf('id="agentWorkingModal"')));
+  assert.doesNotMatch(modal,/apw-bar/);
+  assert.doesNotMatch(HTML,/\.apw-bar\s*\{/);
+});
+
 test('cada oficio tiene una presentación visual explícita',()=>{
   const block=HTML.slice(HTML.indexOf('const AGENT_RESULT_PROFILES='),HTML.indexOf('function _agentVisualId'));
   for(const id of ['SALES','QUOTE','PRODUCTION','MANTENCION3D','QA','FOLLOWUP','CEO','LEADGEN','ONBOARDING','FINANCE','REPCLIENTE','CONTENT','ADS','LINKEDIN','SOCIAL_STRATEGIST','CAPTION_AGENT','COMMUNITY_AGENT','SOCIAL_ADS_AGENT','TREND_AGENT','REPORT_SOCIAL_AGENT','NEWSLETTER_AGENT','SUPPLIER','KAI']){
