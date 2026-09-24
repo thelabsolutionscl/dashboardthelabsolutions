@@ -108,18 +108,38 @@ function _markAgentModalReactivado(){
   actions.appendChild(chip);
 }
 
-// Envía el mensaje de WhatsApp del agente (prellenado y limpio) y marca reactivado.
-function agentSendWA(phone,cliId){
+// Solo cerramos la gestión de WhatsApp cuando WATI confirma el envío real.
+// Abrir wa.me no prueba que el usuario haya pulsado "Enviar".
+async function agentSendWA(phone,cliId,flow){
   const waPart=_cleanMsg(_extractWAPart(_agentInlineText)||_agentInlineText);
-  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(waPart),'_blank');
+  const clean=String(phone||'').replace(/[^0-9]/g,'');
+  // Solo el flujo win-back necesita evidencia de envío para desaparecer de su
+  // bandeja. Los demás botones conservan el comportamiento histórico de abrir WA.
+  if(flow==='winback'){
+    const cfg=typeof getWatiCfg==='function'?getWatiCfg():null;
+    if(cfg?.url&&cfg?.token&&typeof sendWatiMessage==='function'){
+      try{
+        await sendWatiMessage(clean,waPart);
+        if(cliId){try{await marcarReactivado(cliId,'WhatsApp');}catch(e){}}
+        if(cliId){try{wbMarkSent(cliId,'WhatsApp');}catch(e){}}
+        toast('✓ WhatsApp enviado y gestión registrada','success');
+        return true;
+      }catch(e){
+        toast('No se pudo confirmar el envío por WATI. Se abrirá WhatsApp y el pendiente seguirá visible.','info');
+      }
+    }
+    window.open('https://wa.me/'+clean+'?text='+encodeURIComponent(waPart),'_blank');
+    return false;
+  }
+  window.open('https://wa.me/'+clean+'?text='+encodeURIComponent(waPart),'_blank');
   if(window._fuCotId){try{fuMarkDone(window._fuCotId,'WhatsApp');}catch(e){}window._fuCotId=null;}
   if(cliId){try{marcarReactivado(cliId,'WhatsApp');}catch(e){}}
+  return true;
 }
 
-// Abre un BORRADOR de correo en la sección Correos con el mensaje del agente,
-// listo para revisar y enviar. Al enviarlo de verdad, marca al cliente Reactivado
-// (y registra el seguimiento de la cotización si aplica).
-function draftAgentEmail(toEmail,subject,cliId,fuCotId){
+// Abre un BORRADOR de correo. Revisarlo/cerrarlo no cambia el estado.
+// Solo un envío exitoso puede completar la gestión.
+function draftAgentEmail(toEmail,subject,cliId,fuCotId,flow){
   if(!_agentInlineText){toast('Sin contenido','error');return;}
   let bodyText=_cleanMsg(_extractEmailPart(_agentInlineText)||_agentInlineText);
   let subj=subject;
@@ -128,7 +148,7 @@ function draftAgentEmail(toEmail,subject,cliId,fuCotId){
   const bodyHtml=escapeHtml(bodyText).replace(/\n/g,'<br>');
   closeAgentInlineModal();
   if(typeof switchTab==='function') switchTab('correo');
-  setTimeout(()=>{try{MAIL.openCompose({to:toEmail,subject:subj,body:bodyHtml,title:'Enviar mensaje',_reactivarCli:cliId||'',_fuCotId:fuCotId||''});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
+  setTimeout(()=>{try{MAIL.openCompose({to:toEmail,subject:subj,body:bodyHtml,title:'Enviar mensaje',_reactivarCli:cliId||'',_fuCotId:fuCotId||'',_winbackCli:flow==='winback'?(cliId||''):''});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
 }
 
 async function runAgentInline(agentId,contextText,actionsFn){
@@ -237,7 +257,17 @@ async function fuMarkDone(cotId,via){
 // excluye a quien tiene una cotización abierta reciente, está bloqueado o ya
 // fue gestionado hace <30 días (registro en thelab_wb_log_v1).
 const _WB_LOG_KEY='thelab_wb_log_v1';
-function _wbLog(){try{return JSON.parse(localStorage.getItem(_WB_LOG_KEY)||'{}');}catch(e){return{};}}
+function _wbLog(){
+  try{
+    const log=JSON.parse(localStorage.getItem(_WB_LOG_KEY)||'{}')||{};
+    // Migración del bug anterior: abrir/generar el mensaje guardaba via:'ia'
+    // como si ya se hubiera contactado al cliente. Esa marca no demuestra envío.
+    let dirty=false;
+    Object.keys(log).forEach(id=>{if(log[id]?.via==='ia'){delete log[id];dirty=true;}});
+    if(dirty)localStorage.setItem(_WB_LOG_KEY,JSON.stringify(log));
+    return log;
+  }catch(e){return{};}
+}
 function _wbCands(){
   const now=Date.now(),log=_wbLog();
   const cotsByCli={},pedsByCli={};
@@ -278,15 +308,19 @@ function buildWinbackTray(){
         <div style="font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.f['Empresa']||x.f['Contacto']||'—')}</div>
         <div style="font-size:10.5px;color:var(--text3)">😴 ${x.dias} días sin actividad · ${sub}</div>
       </div>
-      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="wbReactivar('${x.c.id}')">♻ Reactivar IA</button>
-      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado sin enviar" onclick="wbMarkDone('${x.c.id}')">✓</button>
+      <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="wbReactivar('${x.c.id}')" title="Generar y revisar el mensaje. No se marca como gestionado hasta enviarlo.">♻ Preparar mensaje IA</button>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Marcar como gestionado manualmente, sin enviar" onclick="wbMarkDone('${x.c.id}')">✓</button>
     </div>`;
   }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más (se muestran primero los de mayor revenue histórico)</div>`:'');
 }
 function wbReactivar(cliId){
-  const log=_wbLog(); log[cliId]={ts:Date.now(),via:'ia'};
-  try{localStorage.setItem(_WB_LOG_KEY,JSON.stringify(log));}catch(e){}
+  // Revisar/generar el mensaje NO cuenta como gestión.
   runClienteWinbackAgent(cliId);
+}
+function wbMarkSent(cliId,via){
+  if(!cliId)return;
+  const log=_wbLog();log[cliId]={ts:Date.now(),via:via||'enviado'};
+  try{localStorage.setItem(_WB_LOG_KEY,JSON.stringify(log));}catch(e){}
   buildWinbackTray();
 }
 function wbMarkDone(cliId){
@@ -365,12 +399,22 @@ function _recompraMark(cliId,via){
   try{localStorage.setItem(_RECOMPRA_LOG_KEY,JSON.stringify(log));}catch(e){}
   buildRecompraTray();
 }
-function recompraWhatsApp(cliId){
+async function recompraWhatsApp(cliId){
   const cli=(state.clientes||[]).find(c=>c.id===cliId); if(!cli){toast('Cliente no encontrado','error');return;}
   const cand=_recompraCands().find(x=>x.c.id===cliId)||{c:cli,f:cli.fields,cadencia:_recompraInfo(cli)?.cadencia||30};
-  const phone=_getClienteWAPhone(cli)||'';
-  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(_recompraMsg(cand)),'_blank');
-  _recompraMark(cliId,'WhatsApp');
+  const phone=_getClienteWAPhone(cli)||'',msg=_recompraMsg(cand);
+  const cfg=typeof getWatiCfg==='function'?getWatiCfg():null;
+  if(cfg?.url&&cfg?.token&&typeof sendWatiMessage==='function'){
+    try{
+      await sendWatiMessage(phone,msg);
+      toast('✓ WhatsApp de recompra enviado','success');
+      _recompraMark(cliId,'WhatsApp');
+      return;
+    }catch(e){
+      toast('No se pudo confirmar el envío por WATI. Se abrirá WhatsApp y la recompra seguirá pendiente.','info');
+    }
+  }
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
 }
 async function recompraEmail(cliId,btn){
   const cli=(state.clientes||[]).find(c=>c.id===cliId); if(!cli){toast('Cliente no encontrado','error');return;}
@@ -1006,8 +1050,8 @@ function runClienteWinbackAgent(cliId){
   const ultPed=pedsCli.length?pedsCli[pedsCli.length-1]:null;
   const ctx=`Cliente ${f['Etapa venta']==='Perdido'?'PERDIDO':'INACTIVO'}: ${f['Empresa']||'—'} | Contacto: ${f['Contacto']||'—'}${email?' | Email: '+email:''}${waPhone?' | Tel: +'+waPhone:''}\nIndustria: ${f['Industria / Rubro']||'—'} | Revenue histórico: ${formatCLP(f['Revenue total cliente (CLP)']||0)}\n${ultPed?'Último pedido: '+(ultPed.fields['Descripción del pedido']||ultPed.fields['Solicitud cliente (texto libre)']||'—').substring(0,120):''}${ultCot?'\nÚltima cotización: '+(ultCot.fields['N° Cotización']||'—')+' ('+(ultCot.fields['Estado cotización']||'—')+')':''}${f['Notas internas']?'\nNotas: '+String(f['Notas internas']).substring(0,150):''}\nTAREA: redacta un mensaje de RECONEXIÓN para recuperar a este cliente. Referencia lo que compró antes, ofrece algo concreto (novedad de producto o revisión de precios), sin sonar desesperado.`+agentMemoriaCliente(f['Empresa'],cliId)+AGENT_MSG_RULES;
   runAgentInline('SALES',ctx,()=>{
-    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliId}')">📲 Abrir WhatsApp</button>`:'';
-    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Tenemos novedades para ti — The Lab Solutions','${cliId}')">✉️ Enviar correo</button>`:'';
+    const waBtn=waPhone?`<button class="btn btn-primary btn-sm" onclick="agentSendWA('${waPhone}','${cliId}','winback')">📲 Enviar WhatsApp</button>`:'';
+    const mailBtn=email?`<button class="btn btn-primary btn-sm" onclick="draftAgentEmail('${email.replace(/'/g,'')}','Tenemos novedades para ti — The Lab Solutions','${cliId}','','winback')">✉️ Revisar / enviar correo</button>`:'';
     return `${waBtn}${mailBtn}<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`;
   });
 }
