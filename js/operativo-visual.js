@@ -522,6 +522,18 @@
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
   global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,quoteWorkItems,quoteWorkDetail,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
+  // Los botones de pago en Vista Tarjetas viven dentro de <details> y pueden
+  // quedar aislados por handlers que detienen el bubbling en menús/tarjetas.
+  // Interceptamos SOLO esas acciones en capture y reutilizamos el mismo dispatcher
+  // y las mismas funciones (toggleAnticipo/toggleSaldo/toggleTotal/marcarPago30Dias)
+  // que gobiernan la lógica de pago de la vista Tabla.
+  document.addEventListener('click',e=>{
+    const b=e.target.closest?.('.op-payment-menu [data-op^="card-pay-"]');
+    if(!b)return;
+    e.preventDefault();
+    e.stopPropagation();
+    void events(e);
+  },true);
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
   document.addEventListener('DOMContentLoaded',mount);
