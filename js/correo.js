@@ -1183,7 +1183,18 @@ const MAIL={
     if(!opts.to) document.getElementById('mailCmpTo').focus();
     else document.getElementById('mailCmpBody').focus();
   },
-  closeCompose(){document.getElementById('mailComposePanel').style.display='none';},
+  closeCompose(){
+    document.getElementById('mailComposePanel').style.display='none';
+    // Cerrar un borrador equivale a cancelar la acción: no debe quedar ningún
+    // vínculo de seguimiento capaz de marcar un envío futuro distinto.
+    this._cmpCotId=null;
+    this._cmpReactivarCli=null;
+    this._cmpWinbackCli=null;
+    this._cmpFuCotId=null;
+    this._cmpPdPedido=null;
+    this._cmpFromName=null;
+    this._cmpFromEmail=null;
+  },
 
   _mojibakeScore(value){
     const s=String(value||'');
