@@ -168,3 +168,12 @@ test('los modelos y topes siguen una política de costo explícita', () => {
   assert.match(WORKER, /AUTO_PROCESS_DAILY_CAP \|\| "25"/, 'y el procesamiento automático tiene un tope diario conservador');
   assert.match(WORKER, /if \(!env\.RL\) return false/, 'sin KV el auto-proceso falla cerrado');
 });
+
+
+test('producción no puede saltarse el presupuesto del proxy con una key local',()=>{
+  const call=bloque(HTML,'function _claudeDirectAllowed','const CLAUDE_MODELS=');
+  assert.match(call,/localhost/);
+  assert.match(call,/127\.0\.0\.1/);
+  assert.match(call,/if\(!_claudeDirectAllowed\(\)\)throw new Error/);
+  assert.match(call,/Proxy IA requerido/);
+});
