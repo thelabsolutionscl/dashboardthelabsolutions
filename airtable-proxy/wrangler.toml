@@ -26,3 +26,15 @@ compatibility_date = "2024-09-01"
 #   fire-and-forget, sin añadir latencia). Usa la base del dashboard por
 #   defecto; para apuntar a otra base define la variable:
 #     [vars]  HEARTBEAT_BASE = "appXXXXXXXXXXXXXX"
+
+
+[vars]
+# Tope diario del proxy Anthropic. Ajustable sin modificar el dashboard.
+ANTHROPIC_DAILY_BUDGET_USD = "1.00"
+# Tope conservador por solicitud para impedir una generación accidental enorme.
+ANTHROPIC_REQUEST_BUDGET_USD = "0.20"
+
+# Reutiliza el KV ya disponible en esta cuenta Cloudflare para el control de costo.
+[[kv_namespaces]]
+binding = "AI_BUDGET"
+id = "c148848321344f60939fa71a51d050c6"
