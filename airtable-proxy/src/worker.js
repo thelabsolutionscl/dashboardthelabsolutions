@@ -11,6 +11,9 @@ const ANTHROPIC_ALLOWED_MODELS = new Set([
 const ANTHROPIC_MAX_OUTPUT_TOKENS = 4000;
 const ANTHROPIC_DAILY_BUDGET_USD_DEFAULT = 1.00;
 const ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT = 0.20;
+// Una reserva representa una llamada en curso. El cliente corta las llamadas a los 60 s,
+// así que cualquier reserva de más de 2 min es huérfana y no debe bloquear el día.
+const AI_RESERVATION_STALE_MS = 2 * 60 * 1000;
 const ANTHROPIC_PRICES = {
   haiku: { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.10 },
   sonnet: { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
@@ -134,9 +137,9 @@ export default {
         body: JSON.stringify(payload),
       });
       const usageCopy = upstream.clone();
-      if (ctx && typeof ctx.waitUntil === 'function') {
-        ctx.waitUntil(reconcileAiBudget(env, reservation, usageCopy).catch(() => {}));
-      }
+      const reconciliation = reconcileAiBudget(env, reservation, usageCopy).catch(() => {});
+      if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(reconciliation);
+      else await reconciliation;
       const respHeaders = new Headers(upstream.headers);
       Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
       return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
@@ -235,7 +238,21 @@ async function readAiBudget(env) {
   let row = {};
   try { row = JSON.parse((await env.AI_BUDGET.get(key)) || '{}'); } catch (_) {}
   const spent = Math.max(0, Number(row.spent_usd) || 0);
-  const reserved = Math.max(0, Number(row.reserved_usd) || 0);
+  let reserved = Math.max(0, Number(row.reserved_usd) || 0);
+  // Autorreparación: antes una respuesta 4xx/5xx de Anthropic podía dejar la reserva
+  // atrapada hasta 48 h. Eso hacía que, incluso después de recargar créditos,
+  // el dashboard siguiera respondiendo AI_BUDGET_LIMIT. Las reservas viejas no son gasto.
+  const reservationAt = Date.parse(row.reserved_at || row.updated_at || '');
+  if (reserved > 0 && (!Number.isFinite(reservationAt) || Date.now() - reservationAt > AI_RESERVATION_STALE_MS)) {
+    reserved = 0;
+    row.reserved_usd = 0;
+    row.by_source = row.by_source || {};
+    for (const src of Object.values(row.by_source)) if (src && typeof src === 'object') src.reserved_usd = 0;
+    row.reserved_at = null;
+    row.recovered_stale_reservation_at = new Date().toISOString();
+    row.updated_at = row.recovered_stale_reservation_at;
+    await env.AI_BUDGET.put(key, JSON.stringify(row), { expirationTtl: 172800 });
+  }
   return {
     configured: true, date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
     spent_usd: spent, reserved_usd: reserved, used_usd: spent + reserved,
@@ -263,6 +280,7 @@ async function reserveAiBudget(env, payload, source) {
   src.reserved_usd = Math.max(0, Number(src.reserved_usd) || 0) + estimate;
   row.by_source[source] = src;
   row.updated_at = new Date().toISOString();
+  row.reserved_at = row.updated_at;
   await env.AI_BUDGET.put(key, JSON.stringify(row), { expirationTtl: 172800 });
   return { ok: true, key, source, estimate, model: payload.model, budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
 }
@@ -289,10 +307,32 @@ async function parseAnthropicUsage(response) {
     return j && j.usage ? { model: j.model || '', usage: j.usage } : null;
   } catch (_) { return null; }
 }
+async function releaseAiReservation(env, reservation, reason) {
+  if (!env.AI_BUDGET || !reservation?.ok) return;
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(reservation.key)) || '{}'); } catch (_) {}
+  row.reserved_usd = Math.max(0, (Number(row.reserved_usd) || 0) - reservation.estimate);
+  row.by_source = row.by_source || {};
+  const src = row.by_source[reservation.source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.reserved_usd = Math.max(0, (Number(src.reserved_usd) || 0) - reservation.estimate);
+  row.by_source[reservation.source] = src;
+  if (row.reserved_usd <= 1e-9) row.reserved_at = null;
+  row.last_release_reason = String(reason || 'no_usage').slice(0, 80);
+  row.updated_at = new Date().toISOString();
+  await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
+}
 async function reconcileAiBudget(env, reservation, response) {
   if (!env.AI_BUDGET || !reservation?.ok) return;
+  // Un 4xx/5xx es un rechazo confirmado por Anthropic: no hubo una generación
+  // facturable que justifique mantener la reserva. Liberarla permite reintentar
+  // después de recargar créditos o resolver un rate limit.
+  if (!response || !response.ok) {
+    await releaseAiReservation(env, reservation, 'upstream_http_' + (response?.status || 'unknown'));
+    return;
+  }
   const parsed = await parseAnthropicUsage(response);
-  // Si no hay usage verificable, mantenemos la reserva: fail-safe de costo.
+  // Si un 2xx excepcional no trae usage, conservamos la reserva por seguridad;
+  // readAiBudget la recupera automáticamente si queda huérfana >2 min.
   if (!parsed) return;
   const actual = aiCostUsd(parsed.model || reservation.model, parsed.usage);
   let row = {};
@@ -304,6 +344,7 @@ async function reconcileAiBudget(env, reservation, response) {
   src.spent_usd = Math.max(0, Number(src.spent_usd) || 0) + actual;
   src.reserved_usd = Math.max(0, (Number(src.reserved_usd) || 0) - reservation.estimate);
   row.by_source[reservation.source] = src;
+  if (row.reserved_usd <= 1e-9) row.reserved_at = null;
   row.updated_at = new Date().toISOString();
   await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
 }
