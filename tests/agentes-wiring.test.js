@@ -167,7 +167,7 @@ test('revisar un win-back no lo elimina; solo un envío confirmado lo cierra', (
 
   const winback = functionSource('runClienteWinbackAgent', AGENTS);
   assert.match(winback, /agentSendWA\([^)]*['"]winback['"]\)/, 'WhatsApp debe identificarse como flujo win-back');
-  assert.match(winback, /draftAgentEmail\([^)]*['"]winback['"]\)/, 'el borrador de correo debe conservar que pertenece al win-back');
+  assert.match(winback, /draftAgentEmail\([\s\S]*?,'winback'\)/, 'el borrador de correo debe conservar que pertenece al win-back');
 
   assert.match(MAIL, /this\._cmpWinbackCli=opts\._winbackCli\|\|null/, 'Correos debe guardar el vínculo sin marcar nada al abrir');
   assert.match(MAIL, /wbMarkSent\(this\._cmpWinbackCli,['"]correo['"]\)/, 'solo tras envío exitoso de correo debe salir de pendientes');
@@ -189,6 +189,17 @@ test('WhatsApp de win-back y recompra solo se completa con confirmación WATI', 
   assert.ok(sendAt>=0&&markAt>sendAt, 'recompra se marca solo después del envío WATI');
   const lastOpen=recompra.lastIndexOf("window.open('https://wa.me/");
   assert.ok(lastOpen>markAt, 'el fallback manual debe quedar después del único marcado confirmado');
+});
+
+test('recompra abre un borrador y espera el envío confirmado antes de salir de pendientes', () => {
+  const preview = functionSource('recompraEmail', AGENTS);
+  assert.match(preview, /MAIL\.openCompose\(/, 'el correo de recompra debe poder revisarse antes del envío');
+  assert.doesNotMatch(preview, /MAIL\.postAs\(|_recompraMark\(/, 'revisar el borrador no debe enviarlo ni ocultar la recompra');
+  assert.match(MAIL, /this\._cmpRecompraCli=opts\._recompraCli\|\|null/, 'el borrador conserva el cliente asociado');
+  assert.match(MAIL, /closeCompose\(\)\{[\s\S]*?this\._cmpRecompraCli=null/, 'cerrar sin enviar cancela el vínculo');
+  const success = MAIL.indexOf("status.textContent='✓ Enviado'");
+  const mark = MAIL.indexOf("_recompraMark(this._cmpRecompraCli,'correo')");
+  assert.ok(success >= 0 && mark > success, 'la recompra solo desaparece al confirmar el envío de correo');
 });
 
 test('los envíos de correo se previsualizan antes de salir', () => {
