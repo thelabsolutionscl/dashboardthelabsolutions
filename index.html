@@ -12647,6 +12647,47 @@ function _aqFatalError(err){
   return /credit balance is too low|plans\s*&\s*billing|daily budget|presupuesto diario|budget exceeded|401|unauthorized|api key|proxy IA requerido/i.test(String(err||''));
 }
 
+const _aqExpandedIds=new Set();
+function toggleAgentQueueDetail(recordId){
+  if(_aqExpandedIds.has(recordId))_aqExpandedIds.delete(recordId);
+  else _aqExpandedIds.add(recordId);
+  const row=document.getElementById('aq-detail-'+recordId);
+  const button=document.querySelector(`#agentQueueList [data-aq-detail="${recordId}"]`);
+  const open=_aqExpandedIds.has(recordId);
+  if(row){
+    const cell=row.querySelector('td');
+    if(cell)cell.innerHTML=open?_aqDetailContent(_agentQueue.find(r=>r.id===recordId)):'';
+    row.hidden=!open;
+  }
+  if(button){button.setAttribute('aria-expanded',String(open));button.textContent=open?'Ocultar detalle':'Ver detalle';}
+}
+function _aqEntityName(f){
+  const id=f['ID entidad'];
+  const cliente=(state.clientes||[]).find(c=>c.id===id);
+  return cliente?.fields?.Empresa||cliente?.fields?.Contacto||[f.Entidad,id].filter(Boolean).join(' ')||'—';
+}
+function _aqDetailBlock(title,value,empty){
+  return `<section class="aq-detail-block"><h4>${title}</h4><pre>${escapeHtml(String(value||empty))}</pre></section>`;
+}
+function _aqDetailContent(r){
+  const f=r.fields||{};
+  let input=f['Input JSON']||'';
+  try{input=JSON.stringify(JSON.parse(input),null,2);}catch(_){}
+  const meta=[
+    ['Evento',f.Evento],['Cliente o entidad',_aqEntityName(f)],['ID entidad',f['ID entidad']],
+    ['Agente',f.Agente],['Estado',_aqStatus(r)],['Prioridad',f.Prioridad],
+    ['Origen',f.Source],['Campaña',f.Campaign],['Score',f['Lead Score']],
+    ['Creado',f['Fecha creación']||r.createdTime],['Ejecutado',f['Fecha ejecución']],['ID de tarea',r.id]
+  ];
+  const facts=meta.map(([label,value])=>`<div><span>${label}</span><strong>${escapeHtml(value==null||value===''?'—':String(value))}</strong></div>`).join('');
+  return `<div class="aq-detail"><div class="aq-detail-facts">${facts}</div><div class="aq-detail-grid">
+    ${_aqDetailBlock('Datos de entrada',input,'Sin datos de entrada')}
+    ${_aqDetailBlock('Resultado del agente',f.Output,'Todavía no hay resultado')}
+    ${_aqDetailBlock('Acción sugerida',f['Accion sugerida'],'Sin acción sugerida')}
+    ${f.Error?_aqDetailBlock('Error',f.Error,''):''}
+  </div></div>`;
+}
+
 function renderAgentQueue(){
   const el=document.getElementById('agentQueueList');if(!el)return;
   const cnt=document.getElementById('agentQueueCount');
@@ -12668,7 +12709,7 @@ function renderAgentQueue(){
     const ar=_aqIsStaleProcessing(a)?0:(order[_aqStatus(a)]??9),br=_aqIsStaleProcessing(b)?0:(order[_aqStatus(b)]??9);
     return ar-br;
   });
-  el.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Evento</th><th>Entidad</th><th>Agente</th><th>Estado</th><th>Prioridad</th><th>Source</th><th>Campaign</th><th>Score</th><th></th></tr></thead><tbody>${rows.map(r=>{const f=r.fields,est=_aqStatus(r),staleProc=_aqIsStaleProcessing(r);const shown=staleProc?'Atascado':est;const cls=staleProc?'badge-red':(badge[est]||'badge-gray');const err=est==='Error'?_aqErrorLabel(f.Error):staleProc?'Quedó en Procesando sin terminar; se puede recuperar.':'';const action=est==='Error'?'↻ Reintentar':staleProc?'↻ Recuperar':'▶ Procesar';const disabled=est==='Procesando'&&!staleProc;return `<tr><td>${escapeHtml(f.Evento||'')}</td><td>${escapeHtml([f.Entidad,f['ID entidad']].filter(Boolean).join(' '))}</td><td>${escapeHtml(f.Agente||'')}</td><td><span class="badge ${cls}">${escapeHtml(shown)}</span>${err?`<div title="${escapeHtml(String(f.Error||err))}" style="max-width:260px;margin-top:4px;font-size:9px;line-height:1.35;color:var(--danger);white-space:normal">${escapeHtml(err)}</div>`:''}</td><td>${escapeHtml(f.Prioridad||'')}</td><td>${escapeHtml(f.Source||'')}</td><td>${escapeHtml(f.Campaign||'')}</td><td>${f['Lead Score']??''}</td><td><button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')" ${disabled?'disabled':''}>${action}</button></td></tr>`;}).join('')}</tbody></table></div>`;
+  el.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Evento</th><th>Entidad</th><th>Agente</th><th>Estado</th><th>Prioridad</th><th>Source</th><th>Campaign</th><th>Score</th><th>Acciones</th></tr></thead><tbody>${rows.map(r=>{const f=r.fields,est=_aqStatus(r),staleProc=_aqIsStaleProcessing(r);const shown=staleProc?'Atascado':est;const cls=staleProc?'badge-red':(badge[est]||'badge-gray');const err=est==='Error'?_aqErrorLabel(f.Error):staleProc?'Quedó en Procesando sin terminar; se puede recuperar.':'';const action=est==='Error'?'↻ Reintentar':staleProc?'↻ Recuperar':'▶ Procesar';const disabled=est==='Procesando'&&!staleProc;const open=_aqExpandedIds.has(r.id);return `<tr><td>${escapeHtml(f.Evento||'')}</td><td>${escapeHtml(_aqEntityName(f))}</td><td>${escapeHtml(f.Agente||'')}</td><td><span class="badge ${cls}">${escapeHtml(shown)}</span>${err?`<div title="${escapeHtml(String(f.Error||err))}" style="max-width:260px;margin-top:4px;font-size:9px;line-height:1.35;color:var(--danger);white-space:normal">${escapeHtml(err)}</div>`:''}</td><td>${escapeHtml(f.Prioridad||'')}</td><td>${escapeHtml(f.Source||'')}</td><td>${escapeHtml(f.Campaign||'')}</td><td>${escapeHtml(f['Lead Score']==null?'':String(f['Lead Score']))}</td><td><div class="aq-row-actions"><button class="btn btn-ghost btn-sm" data-aq-detail="${r.id}" aria-controls="aq-detail-${r.id}" aria-expanded="${open}" onclick="toggleAgentQueueDetail(this.dataset.aqDetail)">${open?'Ocultar detalle':'Ver detalle'}</button><button class="btn btn-ghost btn-sm" onclick="processAgentQueueItem('${r.id}')" ${disabled?'disabled':''}>${action}</button></div></td></tr><tr class="aq-detail-row" id="aq-detail-${r.id}" ${open?'':'hidden'}><td colspan="9">${open?_aqDetailContent(r):''}</td></tr>`;}).join('')}</tbody></table></div>`;
 }
 
 async function refreshAgentQueue(){try{await loadAgentQueue();renderAgentQueue();toast('Cola actualizada','success');}catch(e){}}
