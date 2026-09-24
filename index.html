@@ -16150,10 +16150,10 @@ function buildAgentContext(id){
     const deudores=CL.filter(c=>(c.fields['Facturas vencidas']||0)>=1);
     lines.push('\nCOBRANZA:');
     lines.push(`- Total por cobrar (neto): ${fmtCLP(porCobrar)} | Sin anticipo: ${sinAnticipo.length} | Sin saldo (listos): ${sinSaldo.length}`);
-    if(sinAnticipo.length){lines.push('  ANTICIPO PENDIENTE:');sinAnticipo.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | anticipo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | ${f['Estado pedido']||'—'} | Forma pago: ${f['Forma de pago']||'—'}`);});}
-    if(sinSaldo.length){lines.push('  SALDO PENDIENTE (listos para despacho):');sinSaldo.forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | saldo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | Forma pago: ${f['Forma de pago']||'—'}`);});}
+    if(sinAnticipo.length){lines.push('  ANTICIPO PENDIENTE:');sinAnticipo.slice(0,10).forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | anticipo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | ${f['Estado pedido']||'—'} | Forma pago: ${f['Forma de pago']||'—'}`);});}
+    if(sinSaldo.length){lines.push('  SALDO PENDIENTE (listos para despacho):');sinSaldo.slice(0,10).forEach(p=>{const f=p.fields;lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | saldo ${fmtCLP((f['Monto total (CLP)']||0)/1.19*0.5)} | Forma pago: ${f['Forma de pago']||'—'}`);});}
     lines.push('\nCLIENTES CON FACTURAS VENCIDAS:');
-    if(deudores.length){deudores.forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Facturas vencidas']||0} fact. vencidas | Estado: ${f['Estado cuenta']||'—'} | Email: ${f['Email']||'—'}`);});}else lines.push('  Ninguno ✓');
+    if(deudores.length){deudores.slice().sort((a,b)=>(b.fields['Facturas vencidas']||0)-(a.fields['Facturas vencidas']||0)).slice(0,10).forEach(c=>{const f=c.fields;lines.push(`  • ${f['Empresa']||'—'} | ${f['Facturas vencidas']||0} fact. vencidas | Estado: ${f['Estado cuenta']||'—'} | Email: ${f['Email']||'—'}`);});}else lines.push('  Ninguno ✓');
     const cotM=C.filter(c=>getMargenCot(c.fields)!==null);
     const avgM=cotM.length?cotM.reduce((s,c)=>s+getMargenCot(c.fields),0)/cotM.length:0;
     lines.push(`\nMARGEN PROMEDIO: ${avgM.toFixed(1)}% | Objetivo: 35–45%`);
@@ -16161,7 +16161,7 @@ function buildAgentContext(id){
 
   if(id==='PRODUCTION'){
     lines.push('\nPEDIDOS EN PRODUCCIÓN:');
-    if(pedActivos.length){pedActivos.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Equipo: ${f['Equipo asignado']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);const req=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';if(req) lines.push(`    Solicitud: ${req.substring(0,100)}`);});}else lines.push('  Sin pedidos activos');
+    if(pedActivos.length){pedActivos.slice(0,12).forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Equipo: ${f['Equipo asignado']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);const req=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';if(req) lines.push(`    Solicitud: ${req.substring(0,100)}`);});}else lines.push('  Sin pedidos activos');
   }
 
   if(id==='MANTENCION3D'){
@@ -16221,7 +16221,7 @@ function buildAgentContext(id){
 
   if(id==='REPCLIENTE'){
     lines.push('\nPEDIDOS PARA REPORTAR A CLIENTE:');
-    if(pedActivos.length){pedActivos.forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);const qa=f['Resultado QA'];if(qa) lines.push(`    QA: ${qa}`);});}else lines.push('  Sin pedidos activos');
+    if(pedActivos.length){pedActivos.slice(0,12).forEach(p=>{const f=p.fields;const atr=f['Fecha entrega']&&new Date(f['Fecha entrega']+'T00:00:00')<today?' ⚠ATRASADO':'';lines.push(`  • ${f['N° Pedido']||'—'} | ${resolveClienteName(f['Cliente'])} | ${f['Estado pedido']||'—'} | Entrega: ${f['Fecha entrega']||'—'}${atr}`);const qa=f['Resultado QA'];if(qa) lines.push(`    QA: ${qa}`);});}else lines.push('  Sin pedidos activos');
   }
 
   if(id==='LEADGEN'){
