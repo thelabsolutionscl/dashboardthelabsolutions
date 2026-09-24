@@ -32,15 +32,21 @@ test('el helper se carga desde el bootstrap visual global',()=>{
 });
 
 
-test('fallback local marca tildes que WebKit puede aceptar como palabras válidas',()=>{
+test('fallback local marca tildes y faltas visibles aunque el navegador no tenga español activo',()=>{
   const api=require('../js/correo-spellcheck.js');
   assert.equal(api._test.suggestionFor('ademas'),'además');
   assert.equal(api._test.suggestionFor('Tambien'),'También');
   assert.equal(api._test.suggestionFor('informacion'),'información');
+  assert.equal(api._test.suggestionFor('estaz'),'estás');
+  assert.equal(api._test.suggestionFor('gracais'),'gracias');
+  assert.equal(api._test.suggestionFor('adjnto'),'adjunto');
   assert.equal(api._test.suggestionFor('correcto'),'');
+  assert.equal(api._test.suggestionFor('como'),'','no debe inventar un error contextual donde la palabra puede ser válida');
   assert.match(SRC,/mail-local-spell-error/);
   assert.match(SRC,/Sugerencia: /);
   assert.match(SRC,/text-decoration-style:wavy/);
+  assert.match(SRC,/COMMON_WORDS/);
+  assert.match(SRC,/oneEditAway/);
   assert.match(SRC,/scheduleLint\(\)/);
 });
 
