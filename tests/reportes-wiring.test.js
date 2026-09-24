@@ -85,6 +85,24 @@ test('crearReporte usa datos vivos, CEO_AGENT y persiste el registro completo',(
   assert.match(body,/btn\.disabled\s*=\s*false/,'el botón debe recuperarse al terminar');
 });
 
+test('el CEO semanal usa el mismo tono procesado que los demás agentes',()=>{
+  const body=functionBlock(SOURCE,'crearReporte');
+  assert.match(body,/AGENT_TONE/,'el reporte semanal debe aplicar la directiva de tono compartida');
+  assert.match(SOURCE,/convertir los datos del negocio en una lectura ejecutiva clara, tranquila y accionable/);
+  assert.match(SOURCE,/Evita lenguaje dramático o castigador/);
+});
+
+test('Overview muestra un digest CEO accionable antes del informe completo',()=>{
+  const body=functionBlock(SOURCE,'ovRenderUltimoReporteCEO');
+  assert.match(body,/_ceoOverviewSummary\s*\(/,'debe sintetizar el texto en lenguaje simple');
+  assert.match(body,/_ceoOverviewItems\s*\(/,'debe separar prioridades, alertas y oportunidad');
+  assert.match(body,/ceo-kpis/,'debe mostrar indicadores visuales');
+  assert.match(body,/Qué haría ahora/,'debe priorizar acciones');
+  assert.match(body,/Ojo con esto/,'debe separar observaciones');
+  assert.match(body,/Ver informe completo/,'el detalle duro debe quedar bajo demanda');
+  assert.match(body,/formatCeoReport\(raw\)/,'el texto completo no se pierde');
+});
+
 test('el reporte 1-clic rellena primero las métricas y luego genera',()=>{
   const body=functionBlock(SOURCE,'crearReporteAuto');
   const prefill=body.search(/prefillReporte\s*\(/);

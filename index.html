@@ -6659,15 +6659,35 @@ FORMATO: entrega siempre DOS versiones:
 
   {id:'CEO',tab:'reporte',label:'CEO_AGENT',persona:'Elon Musk',icon:'<svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-chart"/></svg>',badge:'badge-green',
    sys:`Eres el CEO_AGENT de The Lab Solutions, empresa de fabricación digital en Santiago.
-ROL: análisis ejecutivo y toma de decisiones estratégicas basadas en datos reales.
-ESTRUCTURA FIJA DEL REPORTE:
-1. RESUMEN EJECUTIVO (3 líneas máx — qué pasó esta semana en términos de negocio)
-2. MÉTRICAS CLAVE (revenue, margen, conversión cotizaciones, pedidos activos/atrasados)
-3. ALERTAS CRÍTICAS (máx 3, con acción recomendada concreta para cada una)
-4. TOP 3 PRIORIDADES ESTA SEMANA (acciones específicas, no genéricas — quién hace qué)
-5. OPORTUNIDAD DETECTADA (1 insight accionable desde los datos)
-CRITERIOS DE ALERTA: margen <25% = crítico | +3 pedidos atrasados = alerta roja | tasa conversión <20% = revisar pricing.
-Sé directo. Sin relleno. Números en CLP con puntos de miles.`,
+ROL: convertir los datos del negocio en una lectura ejecutiva clara, tranquila y accionable. No eres un auditor que descarga cifras: eres un socio de gestión que explica qué significan y qué conviene hacer.
+
+TONO:
+- Español chileno profesional, cercano y sereno.
+- Primero interpreta; después muestra el número que sustenta la lectura.
+- Evita lenguaje dramático o castigador ("desastre", "rojo severo", "imposible", "fracaso"). Usa "por debajo de meta", "exigente", "conviene priorizar", "principal punto de atención".
+- Usa "crítico/urgente" solo cuando exista un riesgo operativo o financiero inmediato y verificable.
+- No repitas la misma cifra en varias secciones.
+- Si una comparación o proyección depende de datos parciales, dilo brevemente y no la presentes como certeza.
+
+ESTRUCTURA FIJA:
+EN RESUMEN:
+2 frases máximo. Qué está funcionando + qué merece atención. Debe entenderse sin leer el resto.
+
+INDICADORES QUE IMPORTAN:
+Máximo 4 líneas. Formato exacto "Nombre: valor — interpretación breve".
+Prioriza revenue, conversión, margen y pedidos. No hagas una tabla grande.
+
+OJO CON ESTO:
+Máximo 2 puntos. Cada punto debe explicar el impacto en lenguaje simple y terminar con una acción concreta. Si no hay algo realmente relevante, di "Sin alertas relevantes esta semana".
+
+QUÉ HARÍA AHORA:
+Exactamente 3 acciones priorizadas. Cada acción en una línea con responsable sugerido cuando sea evidente. Deben poder ejecutarse esta semana.
+
+OPORTUNIDAD:
+Un solo insight accionable, máximo 2 líneas.
+
+CRITERIOS INTERNOS DE ALERTA: margen <25% = atención alta | +3 pedidos atrasados = atención alta | conversión <20% = revisar propuesta/pricing.
+Números en CLP con puntos de miles. Frases cortas. Cero relleno.`,
    pre:'',
    qs:['Analiza la semana y dame el reporte ejecutivo completo','¿Qué pedidos debo priorizar esta semana y por qué?','¿Dónde estoy perdiendo dinero según los datos actuales?','Dame las 3 acciones más urgentes para esta semana']},
 
@@ -13957,7 +13977,7 @@ async function crearReporte(){
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
   const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
   const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('CEO'):Date.now();
-  const response=await callAgentClaude('CEO',sys,`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
+  const response=await callAgentClaude('CEO',sys+(typeof AGENT_TONE!=='undefined'?AGENT_TONE:''),`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
   const meta=typeof agentResultMeta==='function'?agentResultMeta('CEO',started):{};
   out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('CEO',response,meta):formatAgentReport(response);
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response,meta);}catch(e){}
@@ -14464,29 +14484,86 @@ function _emailRich(raw){if(!raw)return '';const esc=escapeHtml;
     else if((m=l.match(/^(\d+)[\.\)]\s+(.+)$/)))h+=`<div style="margin:3px 0;padding-left:6px;color:#ccc;font-size:12px;line-height:1.5"><strong style="color:#fff">${m[1]}.</strong> ${inl(m[2])}</div>`;
     else h+=`<div style="margin:4px 0;color:#ccc;font-size:12px;line-height:1.55">${inl(l)}</div>`;});
   return h;}
+function _ceoOverviewCleanLine(line){
+  const s=_kaiSimpleText(line);
+  if(!s)return'';
+  if(/^(?:generado|reporte ejecutivo(?: semanal)?|the lab solutions|semana\s+\d+\b)/i.test(s))return'';
+  return s;
+}
+function _ceoOverviewItems(raw,re,max){
+  const blocks=_agentResultBlocks(raw);
+  const block=blocks.find(b=>re.test(b.title||''));
+  const source=block?block.body:[];
+  const out=[];
+  source.forEach(line=>{
+    const s=_ceoOverviewCleanLine(line);
+    if(!s||/^[-–—_=]+$/.test(s)||/^\|/.test(String(line).trim()))return;
+    if(!out.includes(s))out.push(s);
+  });
+  return out.slice(0,max||3);
+}
+function _ceoOverviewSummary(raw){
+  const blocks=_agentResultBlocks(raw);
+  const block=blocks.find(b=>/(en resumen|resumen ejecutivo|resumen|conclusi[oó]n)/i.test(b.title||''));
+  const lines=(block?block.body:_agentCleanResult(raw).split('\n')).map(_ceoOverviewCleanLine).filter(Boolean);
+  return _kaiSimpleClip(lines.slice(0,3).join(' '),360);
+}
+function _ceoOverviewPct(raw){
+  const n=Number(raw)||0;return n<=1?n*100:n;
+}
+function _ceoOverviewDelta(cur,prev,suffix){
+  cur=Number(cur)||0;prev=Number(prev)||0;if(!prev||!cur)return'';
+  const d=Math.round((cur-prev)/prev*100);
+  if(!d)return'≈ igual a la semana anterior';
+  return (d>0?'▲ +':'▼ ')+Math.abs(d)+'% vs semana anterior'+(suffix||'');
+}
+function _ceoOverviewStatus(raw){
+  const u=_reportUrgency(raw);
+  if(u.level==='red')return{level:'red',icon:'●',label:'Prioridades activas'};
+  if(u.level==='amber')return{level:'amber',icon:'●',label:'Hay puntos a revisar'};
+  return{level:'green',icon:'●',label:'Semana bajo control'};
+}
 function ovRenderUltimoReporteCEO(){
   const chk=document.getElementById('ovCeoAuto');if(chk)chk.checked=localStorage.getItem('ceo_auto_weekly')==='1';
   const body=document.getElementById('ovCeoBody');if(!body)return;
   const reps=(state.reportes||[]).slice().sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')));
   const r=reps[0];
   if(!(r&&r.fields['Resumen ejecutivo'])) return;
-  const f=r.fields;
-  const fecha=f['Fecha generación']||'',semana=f['Semana']||'';
-  // Chips de métricas a partir de los campos numéricos del reporte
-  const mp=f['Margen promedio semana (%)']||0,marg=mp<=1?mp*100:mp;
-  const cp=f['Tasa conversión (%)']||0,conv=cp<=1?cp*100:cp;
-  const chips=[];
-  // Delta vs reporte anterior (dirección de un vistazo)
-  let dRev='';try{const prev=reps[1]?.fields['Revenue semana (CLP)']||0;const cur=f['Revenue semana (CLP)']||0;
-    if(prev>0&&cur>0){const p=Math.round((cur-prev)/prev*100);if(p) dRev=` <span style="font-size:10px;color:${p>0?'var(--success)':'var(--danger)'}">${p>0?'▲+':'▼'}${Math.abs(p)}%</span>`;}}catch(e){}
-  if(f['Revenue semana (CLP)']) chips.push({l:'Revenue',v:formatCLP(f['Revenue semana (CLP)']),c:'var(--accent)',extra:dRev});
-  if(conv) chips.push({l:'Conversión',v:conv.toFixed(0)+'%',c:'var(--accent4)'});
-  if(f['Pedidos activos']!=null||f['Pedidos despachados']!=null) chips.push({l:'Pedidos',v:(f['Pedidos activos']||0)+' act · '+(f['Pedidos despachados']||0)+' desp',c:'var(--text)'});
-  if(marg) chips.push({l:'Margen',v:marg.toFixed(0)+'%',c:marg>=35?'var(--success)':marg>=20?'var(--warn)':'var(--danger)'});
-  const chipsHtml=chips.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">${chips.map(c=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:78px"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:2px">${escapeHtml(c.l)}</div><div style="font-size:13px;font-weight:700;color:${c.c}">${escapeHtml(c.v)}${c.extra||''}</div></div>`).join('')}</div>`:'';
-  const head=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;color:var(--text)">${escapeHtml(semana||'Reporte semanal')}</span>${fecha?`<span style="font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);padding:2px 8px;border-radius:20px">Generado · ${escapeHtml(String(fecha))}</span>`:''}</div>`;
+  const f=r.fields,prev=reps[1]?.fields||{},raw=f['Resumen ejecutivo'];
+  const fecha=f['Fecha generación']||'',semana=f['Semana']||'Reporte semanal';
+  const rev=Number(f['Revenue semana (CLP)'])||0,prevRev=Number(prev['Revenue semana (CLP)'])||0;
+  const conv=_ceoOverviewPct(f['Tasa conversión (%)']),prevConv=_ceoOverviewPct(prev['Tasa conversión (%)']);
+  const marg=_ceoOverviewPct(f['Margen promedio semana (%)']);
+  const env=Number(f['Cotizaciones enviadas'])||0,apr=Number(f['Cotizaciones aprobadas'])||0;
+  const activos=Number(f['Pedidos activos'])||0,desp=Number(f['Pedidos despachados'])||0;
+  const summary=_ceoOverviewSummary(raw);
+  const alerts=_ceoOverviewItems(raw,/(ojo|alerta|riesgo|atenci[oó]n|cr[ií]tic)/i,2);
+  const priorities=_ceoOverviewItems(raw,/(qu[eé] har[ií]a|prioridad|acci[oó]n|pr[oó]xim|siguiente|plan)/i,3);
+  const opportunity=_ceoOverviewItems(raw,/(oportunidad|insight)/i,1)[0]||'';
+  const status=_ceoOverviewStatus(raw);
+  const metrics=[];
+  if(rev)metrics.push({label:'Revenue semana',value:formatCLP(rev),note:_ceoOverviewDelta(rev,prevRev)||'Venta neta despachada esta semana',tone:prevRev&&rev<prevRev?'down':'up'});
+  if(conv||env)metrics.push({label:'Conversión',value:conv.toFixed(0)+'%',note:env?apr+' de '+env+' cotizaciones aprobadas':(prevConv?'vs '+prevConv.toFixed(0)+'% anterior':''),tone:prevConv&&conv<prevConv?'down':'neutral'});
+  metrics.push({label:'Pedidos',value:activos+' activos',note:desp+' despachados esta semana',tone:'neutral'});
+  if(marg)metrics.push({label:'Margen',value:marg.toFixed(0)+'%',note:marg>=35?'En rango/por sobre objetivo':marg>=25?'Bajo el rango objetivo':'Requiere revisión de precio/costo',tone:marg>=35?'up':marg>=25?'neutral':'down'});
+  const metricHtml=metrics.slice(0,4).map(m=>`<div class="ceo-kpi ceo-kpi-${m.tone}"><span>${escapeHtml(m.label)}</span><strong>${escapeHtml(m.value)}</strong><small>${escapeHtml(m.note||'')}</small></div>`).join('');
+  const prioritiesHtml=priorities.length?priorities.map((x,i)=>`<div class="ceo-action"><b>${i+1}</b><p>${escapeHtml(_kaiSimpleClip(x,190))}</p></div>`).join(''):'<div class="ceo-empty">No hay acciones adicionales destacadas en este reporte.</div>';
+  const alertsHtml=alerts.length?alerts.map(x=>`<div class="ceo-watch"><span>!</span><p>${escapeHtml(_kaiSimpleClip(x,210))}</p></div>`).join(''):'<div class="ceo-watch ceo-watch-ok"><span>✓</span><p>Sin alertas relevantes esta semana.</p></div>';
   body.style.whiteSpace='normal';
-  body.innerHTML=head+chipsHtml+formatCeoReport(f['Resumen ejecutivo']);
+  body.innerHTML=`<div class="ceo-overview">
+    <div class="ceo-overview-head">
+      <div><span class="ceo-overview-eyebrow">LECTURA EJECUTIVA · ${escapeHtml(semana)}</span><h3>Qué importa esta semana</h3></div>
+      <div class="ceo-overview-head-meta"><span class="ceo-status ceo-status-${status.level}">${status.icon} ${escapeHtml(status.label)}</span>${fecha?`<span>Generado ${escapeHtml(String(fecha))}</span>`:''}</div>
+    </div>
+    <div class="ceo-overview-summary"><span>EN SIMPLE</span><p>${escapeHtml(summary||'Reporte listo. Revisa los indicadores y las prioridades de esta semana.')}</p></div>
+    <div class="ceo-kpis">${metricHtml}</div>
+    <div class="ceo-overview-grid">
+      <section class="ceo-panel ceo-panel-actions"><div class="ceo-panel-title"><span>01</span><div><b>Qué haría ahora</b><small>3 acciones para mover la semana</small></div></div><div class="ceo-actions">${prioritiesHtml}</div></section>
+      <section class="ceo-panel ceo-panel-watch"><div class="ceo-panel-title"><span>02</span><div><b>Ojo con esto</b><small>Solo lo que realmente merece atención</small></div></div><div class="ceo-watches">${alertsHtml}</div></section>
+    </div>
+    ${opportunity?`<div class="ceo-opportunity"><span>💡 OPORTUNIDAD</span><p>${escapeHtml(_kaiSimpleClip(opportunity,260))}</p></div>`:''}
+    <details class="ceo-full-report"><summary>Ver informe completo</summary><div class="ceo-full-report-body">${formatCeoReport(raw)}</div></details>
+  </div>`;
 }
 async function ovGenerarReporteCEO(){
   if(!state.loaded){toast('Pulsa ↺ Actualizar para cargar los datos primero','error');return;}
