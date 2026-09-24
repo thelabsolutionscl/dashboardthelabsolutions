@@ -98,9 +98,13 @@ test('navegar y abrir_formulario se apoyan en el guardia que ya existe', () => {
   assert.match(st, /No tienes acceso a esta sección/, 'y switchTab sigue siendo el que corta');
 });
 
-test('KAI cachea reglas estables y limita historial y rondas pagadas', () => {
+test('KAI usa Haiku primero, cachea reglas y limita rondas pagadas', () => {
   assert.match(KAI, /cache_control:\{type:'ephemeral'\}/, 'las reglas estables deben usar prompt caching');
-  assert.match(KAI, /JV\.history\.slice\(-8\)/, 'no debe reenviar una conversación ilimitada');
-  assert.match(KAI, /while\(guard\+\+<3\)/, 'un turno no puede encadenar más de tres generaciones');
-  assert.match(KAI, /model:'claude-sonnet-4-6', max_tokens:1024/, 'KAI conserva Sonnet con salida acotada');
+  assert.match(KAI, /JV\.history\.slice\(-6\)/, 'no debe reenviar una conversación ilimitada');
+  assert.match(KAI, /while\(guard\+\+<2\)/, 'un turno no puede encadenar más de dos generaciones');
+  assert.match(KAI, /const KAI_FAST_MODEL='claude-haiku-4-5'/, 'KAI debe usar Haiku por defecto');
+  assert.match(KAI, /const KAI_REASONING_MODEL='claude-sonnet-4-6'/, 'Sonnet queda disponible sólo para razonamiento');
+  assert.match(KAI, /_kaiNeedsReasoning\(userText\)\?KAI_REASONING_MODEL:KAI_FAST_MODEL/);
+  assert.match(KAI, /if\(JV\._delegations>=1\)/, 'una sola delegación por turno evita cascadas de costo');
+  assert.match(KAI, /const RETRY=\[429\]/, 'no reintenta 5xx potencialmente cobrados');
 });
