@@ -419,7 +419,37 @@ function showOsNotif(title, body, onClick){
   }catch(e){}
 }
 
-// Actualiza el título de la pestaña con el contador de no leídos
+// Badge directo y robusto del módulo CORREO. No depende del bootstrap de
+// badges contextuales: si ese módulo aún no cargó, el contador igual se ve.
+function syncMailNavBadge(total){
+  total=Math.max(0,Number(total)||0);
+  try{
+    const sels=[
+      '.dock-btn[data-tab="correo"]',
+      '.mobile-tab-btn[data-tab="correo"]',
+      '.mbd-btn[data-tab="correo"]',
+      '.mg-item[data-tab="correo"]'
+    ];
+    document.querySelectorAll(sels.join(',')).forEach(host=>{
+      host.style.position='relative';
+      host.style.overflow='visible';
+      let b=host.querySelector(':scope > .mail-nav-unread-badge');
+      if(!b){
+        b=document.createElement('span');
+        b.className='dock-badge mail-nav-unread-badge';
+        b.setAttribute('aria-hidden','true');
+        host.appendChild(b);
+      }
+      b.textContent=total>99?'99+':String(total);
+      b.title=total+` correo${total===1?'':'s'} sin leer`;
+      b.style.cssText='position:absolute;top:-5px;right:-5px;z-index:40;min-width:20px;height:20px;padding:0 5px;border-radius:999px;align-items:center;justify-content:center;background:#ff4655;color:#fff;font:800 10px/1 "JetBrains Mono",monospace;box-shadow:0 0 0 2px rgba(10,10,10,.96),0 4px 13px rgba(255,70,85,.38);pointer-events:none;';
+      b.style.display=total>0?'inline-flex':'none';
+    });
+  }catch(e){}
+  return total;
+}
+
+// Actualiza título, badge superior e ícono lateral con el contador de no leídos.
 function updateTabTitle(unseen){
   let total=Math.max(0,Number(unseen)||0);
   try{
@@ -431,6 +461,7 @@ function updateTabTitle(unseen){
   try{
     const b=document.getElementById('mailBadge');
     if(b){ b.textContent = total>99?'99+':total; b.style.display = total>0?'flex':'none'; }
+    syncMailNavBadge(total);
     window.DashboardNotificationBadges?.render?.();
   }catch(e){}
 }
