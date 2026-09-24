@@ -132,7 +132,9 @@ test('Pedidos expone ordenamiento visible para todas sus vistas', () => {
   assert.match(apply, /case ['"]entrega['"]/);
   assert.match(apply, /_pedSyncSortControl\(\)/, 'el selector debe reflejar también el orden elegido desde la tabla');
   const render = extractFunction('renderPedidos');
-  assert.match(render, /_pedApplySearchSort\(data\)/, 'el orden debe aplicarse antes de renderizar Tabla/Tarjetas/Kanban');
+  assert.match(render, /_pedApplySearchSort\(data\)/, 'el orden debe aplicarse antes de renderizar Tabla/Tarjetas');
+  const kanban = extractFunction('renderPedidosKanban');
+  assert.match(kanban, /_pedApplySearchSort\(/, 'Kanban debe respetar el mismo orden dentro de cada columna');
 });
 
 test('las funciones críticas de Pedidos existen una sola vez', () => {
