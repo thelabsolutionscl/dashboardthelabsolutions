@@ -269,3 +269,15 @@ test('contador del icono CORREO sigue los no leídos de las cuentas',()=>{
   assert.match(NOTIFY,/MAIL\.setAccountUnseen\(total\)/);
   assert.match(NOTIFY,/DashboardNotificationBadges\?\.render/);
 });
+
+
+test('badge lateral de Correo se renderiza sin depender del bootstrap de badges contextuales',()=>{
+  assert.match(NOTIFY,/function syncMailNavBadge\(total\)/);
+  assert.match(NOTIFY,/\.dock-btn\[data-tab="correo"\]/);
+  assert.match(NOTIFY,/\.mobile-tab-btn\[data-tab="correo"\]/);
+  assert.match(NOTIFY,/mail-nav-unread-badge/);
+  assert.match(NOTIFY,/b\.style\.display=total>0\?'inline-flex':'none'/);
+  const setter=methodBlock('setAccountUnseen');
+  assert.match(setter,/syncMailNavBadge\(total\)/,'cargar o cambiar una cuenta debe actualizar el ícono al instante');
+  assert.match(NOTIFY,/syncMailNavBadge\(total\);/,'el polling también debe actualizar el ícono');
+});
