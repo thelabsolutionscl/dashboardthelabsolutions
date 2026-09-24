@@ -14626,9 +14626,8 @@ function _histSemanas(n){
   for(const r of ordered){
     const f=r.fields||{},key=f['Semana']||f['Fecha generación']||r.id;
     if(seen.has(key))continue;seen.add(key);unique.push(r);
-    if(unique.length>=(n||8))break;
   }
-  return unique.map(r=>{const f=r.fields;const cv=f['Tasa conversión (%)']||0;
+  return unique.slice(0,n||8).map(r=>{const f=r.fields;const cv=f['Tasa conversión (%)']||0;
     return {sem:f['Semana']||f['Fecha generación']||'—',fecha:f['Fecha generación']||'',rev:f['Revenue semana (CLP)']||0,conv:cv<=1?cv*100:cv,ce:f['Cotizaciones enviadas']||0,ca:f['Cotizaciones aprobadas']||0,pa:f['Pedidos activos']||0,pd:f['Pedidos despachados']||0};});
 }
 // Bloque de dirección para el correo semanal: esta semana contra la anterior.
