@@ -1112,7 +1112,7 @@ const MAIL={
     if(!s) return '';
     // Sin línea separadora: las firmas con diseño propio (tarjeta) traen su
     // borde, y en las de texto el espacio en blanco basta como separación.
-    return `<br><br><div style="margin-top:12px">${s}</div>`;
+    return `<br><br><div class="mail-signature-block" contenteditable="false" style="margin-top:12px">${s}</div>`;
   },
 
   insertSignature(){
