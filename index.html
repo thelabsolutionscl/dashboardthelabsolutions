@@ -13981,8 +13981,10 @@ async function crearReporte(){
   const ceoCfg=typeof AGENTES_CFG!=='undefined'?AGENTES_CFG.find(a=>a.id==='CEO'):null;
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
   const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
+  const monthStart=new Date();monthStart.setDate(1);monthStart.setHours(0,0,0,0);
+  const revMes=(state.pedidos||[]).reduce((sum,p)=>{const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')return sum;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?sum+Math.round((f['Monto total (CLP)']||0)/1.19):sum;},0);
   const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('CEO'):Date.now();
-  const response=await callAgentClaude('CEO',sys+(typeof AGENT_TONE!=='undefined'?AGENT_TONE:''),`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
+  const response=await callAgentClaude('CEO',sys+(typeof AGENT_TONE!=='undefined'?AGENT_TONE:''),`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue semana (venta contratada neta): ${formatCLP(parseFloat(rev)||0)}\nRevenue mes a la fecha (venta contratada neta): ${formatCLP(revMes)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
   const meta=typeof agentResultMeta==='function'?agentResultMeta('CEO',started):{};
   out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('CEO',response,meta):formatAgentReport(response);
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response,meta);}catch(e){}
