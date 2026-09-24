@@ -10846,23 +10846,19 @@ async function toggleUrgenciaCotizacion(id){
 }
 // ¿La cotización ya tiene un pedido creado? Evita duplicar cuando aprueban por
 // el portal y también desde el dashboard, o si se pulsa dos veces el botón.
-// Devuelve el pedido asociado a una cotización, o null. Recibe el registro de la
-// cotización (no el número). Match: (1) el pedido enlaza la cotización por el campo
-// link "Cotizaciones"; (2) respaldo para pedidos antiguos sin ese link → mismo
-// cliente y mismo monto total. (La tabla Pedidos no tiene un campo "N° Cotización".)
+// La asociación debe ser EXPLÍCITA por linked-record. Nunca inferir por cliente +
+// monto: un cliente puede repetir exactamente el mismo importe meses después.
 function _pedidoDeCot(cot){
   if(!cot||!cot.id) return null;
   const cotId=cot.id;
-  const cli=Array.isArray(cot.fields['Cliente'])?cot.fields['Cliente'][0]:null;
-  const total=Number(cot.fields['Total final (CLP)']||0);
+  const directIds=Array.isArray(cot.fields?.['Pedido'])?cot.fields['Pedido']:[];
+  for(const pid of directIds){
+    const p=(state.pedidosById&&state.pedidosById[pid])||(state.pedidos||[]).find(x=>x.id===pid);
+    if(p) return p;
+  }
   return (state.pedidos||[]).find(p=>{
-    const pf=p.fields||{};
-    if(Array.isArray(pf['Cotizaciones'])&&pf['Cotizaciones'].includes(cotId)) return true;
-    if(cli&&total>0){
-      const pCli=Array.isArray(pf['Cliente'])?pf['Cliente'][0]:null;
-      if(pCli===cli&&Number(pf['Monto total (CLP)']||0)===total) return true;
-    }
-    return false;
+    const links=p?.fields?.['Cotizaciones'];
+    return Array.isArray(links)&&links.includes(cotId);
   })||null;
 }
 async function ensurePedidoCotField(){
@@ -10898,21 +10894,30 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   const existente=_pedidoDeCot(cot);
   if(existente){ if(!opts.silent) toast(`Esta cotización ya tiene el pedido ${existente.fields['N° Pedido']||''}`,'info'); return false; }
   const numPedido=await _nextNumPedido();
-  const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0};
+  const fechaIngreso=hoyCL();
+  const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':f['Total final (CLP)']||0,'Fecha ingreso':fechaIngreso};
   if(Array.isArray(f['Cliente'])&&f['Cliente'].length>0) fields['Cliente']=f['Cliente'];
   if(f['Forma de pago']) fields['Forma de pago']=f['Forma de pago'];
   if(f['Vendedor']) fields['Vendedor']=f['Vendedor'];
   fields['Cotizaciones']=[cotId];                                        // link real cotización→pedido
-  if(f['Detalle productos']) fields['Detalle productos']=f['Detalle productos'];
-  if(f['Tiempo de producción']) fields['Tiempo de producción']=f['Tiempo de producción'];
-  if(f['Tipo días producción']) fields['Tipo días producción']=f['Tipo días producción'];
+  if(Number(f['Cantidad'])>0) fields['Cantidad']=Number(f['Cantidad']);
+  const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
+  if(solicitudCot) fields['Instrucciones fabricación']=solicitudCot;
+  const plazoMin=Number(f['Tiempo de producción']||0),plazoMax=Number(f['Tiempo de producción máx']||0);
+  const plazo=plazoMin?(plazoMax&&plazoMax!==plazoMin?`${plazoMin}–${plazoMax}`:`${plazoMin}`):'';
+  const tipoPlazo=f['Tipo días producción']||'días';
+  fields['Notas pedido']=`Creado desde cotización ${numCot||cotId}${plazo?` · Plazo cotizado: ${plazo} ${tipoPlazo}`:''}`;
   // Si la cotización comprometió una fecha fija de entrega, el pedido nace con esa fecha.
   if(f['Fecha de entrega']){fields['Fecha entrega']=f['Fecha de entrega'];if(typeof calInternalDate==='function')fields['Fecha objetivo interna']=calInternalDate(f['Fecha de entrega'],2);}
-  const solicitudCot=f['Solicitud cliente (texto libre)']||f['Detalle productos']||'';
-  // Reintento tolerante: si Airtable rechaza por un campo desconocido, reintenta
-  // dejando solo los campos base garantizados (no perder el pedido por un campo nuevo).
-  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)'],'Cotizaciones':[cotId]};
+  // Reintento tolerante: ante un dato opcional incompatible, conserva la relación
+  // cotización→pedido y los datos operativos esenciales.
+  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':fields['Monto total (CLP)'],'Fecha ingreso':fechaIngreso,'Cotizaciones':[cotId]};
   if(fields['Cliente']) base['Cliente']=fields['Cliente'];
+  if(fields['Forma de pago']) base['Forma de pago']=fields['Forma de pago'];
+  if(fields['Vendedor']) base['Vendedor']=fields['Vendedor'];
+  if(fields['Cantidad']) base['Cantidad']=fields['Cantidad'];
+  if(fields['Instrucciones fabricación']) base['Instrucciones fabricación']=fields['Instrucciones fabricación'];
+  if(fields['Notas pedido']) base['Notas pedido']=fields['Notas pedido'];
   try{
     await airtableWrite('Pedidos','POST',null,fields);
   }catch(e){

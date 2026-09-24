@@ -175,6 +175,22 @@ test('la conversión a pedido es idempotente y evita pedidos duplicados', () => 
   assert.match(combined, /['"]Cotización origen['"]|['"]Cotizacion origen['"]|Cotización/, 'El pedido debe conservar referencia a su cotización de origen');
 });
 
+test('la asociación cotización→pedido usa links explícitos y no confunde importes repetidos', () => {
+  const body = extractFunction('_pedidoDeCot');
+  assert.match(body, /\['Pedido'\]/, 'Debe respetar el link recíproco Pedido de la cotización');
+  assert.match(body, /\['Cotizaciones'\]/, 'Debe reconocer el link de origen guardado en el pedido');
+  assert.doesNotMatch(body, /Monto total \(CLP\)/, 'No debe inferir el pedido por monto');
+  assert.doesNotMatch(body, /fields\['Cliente'\]/, 'No debe inferir el pedido por cliente');
+});
+
+test('crear pedido desde cotización guarda campos operativos válidos', () => {
+  const body = extractFunction('crearPedidoDesdeCotizacion');
+  for (const field of ['Fecha ingreso','Cantidad','Instrucciones fabricación','Notas pedido','Forma de pago','Vendedor','Cotizaciones']) {
+    assert.ok(body.includes(field), `Debe conservar ${field}`);
+  }
+  assert.ok(body.includes('Tiempo de producción máx'), 'Debe conservar el rango de plazo dentro de las notas');
+});
+
 test('existe recuperación visible para aprobadas que todavía no tienen pedido', () => {
   const tray = extractFunction('renderCotToOrderTray');
   // El filtro vive en _cotAprobadasSinPedido (la bandeja lo consume): se verifica
