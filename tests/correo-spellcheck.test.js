@@ -44,6 +44,15 @@ test('fallback local marca tildes que WebKit puede aceptar como palabras válida
   assert.match(SRC,/scheduleLint\(\)/);
 });
 
+test('Enter y Shift+Enter conservan el salto de línea del editor',()=>{
+  const api=require('../js/correo-spellcheck.js');
+  assert.equal(api._test.isLineBreakInput({inputType:'insertParagraph'}),true);
+  assert.equal(api._test.isLineBreakInput({inputType:'insertLineBreak'}),true);
+  assert.equal(api._test.isLineBreakInput({inputType:'insertText'}),false);
+  assert.match(SRC,/if\(isLineBreakInput\(e\)\)\{clearTimeout\(timer\);return;\}/,'el corrector debe cancelar cualquier lint pendiente al insertar un salto');
+  assert.match(SRC,/if\(domChanged\)restoreSelection\(root,saved\)/,'un lint que no cambió el DOM no debe mover el caret');
+});
+
 test('las marcas del corrector no se envían dentro del correo',()=>{
   assert.match(SRC,/function cleanHtml\(root\)/);
   assert.match(SRC,/mail\.sendCompose=async function/);

@@ -121,10 +121,13 @@ function restoreSelection(root,saved){
 }
 
 function unwrapErrors(root){
+  let changed=false;
   root?.querySelectorAll?.('.'+ERROR_CLASS).forEach(span=>{
+    changed=true;
     span.replaceWith(target.document.createTextNode(span.textContent||''));
   });
-  try{root?.normalize?.();}catch(_){}
+  if(changed)try{root?.normalize?.();}catch(_){}
+  return changed;
 }
 function shouldSkip(node,root){
   const p=node.parentElement;if(!p||!root.contains(p))return true;
@@ -135,8 +138,9 @@ function lintBody(){
   const root=target?.document?.getElementById('mailCmpBody');if(!root||mutating)return 0;
   mutating=true;
   const saved=saveSelection(root);
+  let domChanged=false;
   try{
-    unwrapErrors(root);
+    domChanged=unwrapErrors(root)||domChanged;
     const walker=target.document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
     const nodes=[];let n;while((n=walker.nextNode()))if(!shouldSkip(n,root))nodes.push(n);
     let count=0;
@@ -155,10 +159,16 @@ function lintBody(){
       if(changed){
         if(last<text.length)frag.appendChild(target.document.createTextNode(text.slice(last)));
         node.replaceWith(frag);
+        domChanged=true;
       }
     });
   }finally{
-    restoreSelection(root,saved);mutating=false;
+    // No tocar la selección si el DOM quedó idéntico. En un contenteditable,
+    // un Enter deja el cursor en un bloque vacío que comparte el mismo offset
+    // de texto que el final de la línea anterior; restaurarlo por offset lo
+    // devolvía a esa línea y hacía parecer que Enter no funcionaba.
+    if(domChanged)restoreSelection(root,saved);
+    mutating=false;
   }
   return root.querySelectorAll('.'+ERROR_CLASS).length;
 }
@@ -172,6 +182,10 @@ function lintSubject(){
   return bad.length;
 }
 function lintNow(){return lintBody()+lintSubject();}
+function isLineBreakInput(e){
+  const t=String(e?.inputType||'');
+  return t==='insertParagraph'||t==='insertLineBreak';
+}
 function scheduleLint(){
   clearTimeout(timer);timer=target.setTimeout?.(()=>lintNow(),280);
 }
@@ -222,7 +236,14 @@ function install(root){
       const el=e.target;if(el&&IDS.includes(el.id))apply(el);
     });
     root.document.addEventListener('input',e=>{
-      if(e.target?.id==='mailCmpBody'||e.target?.id==='mailCmpSubject')scheduleLint();
+      if(e.target?.id==='mailCmpBody'){
+        // Enter/Shift+Enter deben quedar 100% nativos. Además cancelamos un
+        // lint pendiente de la última tecla: si corre después del salto, el
+        // restaurador de selección puede devolver el caret a la línea anterior.
+        if(isLineBreakInput(e)){clearTimeout(timer);return;}
+        scheduleLint();return;
+      }
+      if(e.target?.id==='mailCmpSubject')scheduleLint();
     });
     root.document.addEventListener('click',onClick);
     root.document.addEventListener('paste',e=>{
@@ -242,5 +263,5 @@ function status(){
   const body=target?.document?.getElementById('mailCmpBody');
   return{installed,wired,observing:!!observer,errors:body?.querySelectorAll?.('.'+ERROR_CLASS)?.length||0};
 }
-return{install,status,_test:{IDS,SUGGESTIONS,suggestionFor,normalizeWord}};
+return{install,status,_test:{IDS,SUGGESTIONS,suggestionFor,normalizeWord,isLineBreakInput}};
 });
