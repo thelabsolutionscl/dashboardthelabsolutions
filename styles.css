@@ -2758,3 +2758,16 @@ button[role="tab"][aria-selected="true"]:hover,
   #pedidosSortSelect.pedidos-sort-select{margin-left:0;min-width:190px;max-width:none;flex:0 0 auto;font-size:12px!important}
   #pedidosSearch{margin-left:0!important;min-width:190px!important}
 }
+/* Detalle expandible de cada tarea en la Cola de Agentes. */
+#agentQueueList .aq-detail-row[hidden]{display:none}
+#agentQueueList .aq-detail-row>td{padding:0;border-top:0;background:var(--surface2)}
+#agentQueueList .aq-row-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:190px}
+#agentQueueList .aq-detail{padding:18px 20px;border-left:3px solid var(--accent);white-space:normal}
+#agentQueueList .aq-detail-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:12px;margin-bottom:16px}
+#agentQueueList .aq-detail-facts>div{min-width:0;display:flex;flex-direction:column;gap:4px}
+#agentQueueList .aq-detail-facts span,#agentQueueList .aq-detail-block h4{color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+#agentQueueList .aq-detail-facts strong{color:var(--text);font-size:12px;font-weight:600;overflow-wrap:anywhere}
+#agentQueueList .aq-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px}
+#agentQueueList .aq-detail-block{min-width:0;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+#agentQueueList .aq-detail-block h4{margin:0 0 8px}
+#agentQueueList .aq-detail-block pre{margin:0;max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);font:12px/1.55 'DM Sans',sans-serif}
