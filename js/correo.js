@@ -395,6 +395,10 @@ const MAIL={
     const data=await this.post({action:'read',folder:this.folder,uid});
     if(seq!==this._readSeq) return; // llegó tarde: el usuario ya abrió otro mensaje
     if(data.error){this._currentMsg=null;document.getElementById('mailRdrBody').innerHTML=`<div style="color:var(--danger)">${this.esc(data.error)}</div>`;return;}
+    if(data.body_html)data.body_html=this._normalizeMailHtml(data.body_html);
+    if(data.body_text)data.body_text=this._repairMojibake(data.body_text);
+    data.subject=this._repairMojibake(data.subject||'');
+    data.from_name=this._repairMojibake(data.from_name||'');
     this._currentMsg=data;
     document.getElementById('mailRdrSubject').textContent=data.subject;
     // Vínculo con el CRM: ¿el remitente es un cliente conocido?
@@ -1030,11 +1034,60 @@ const MAIL={
   },
   closeCompose(){document.getElementById('mailComposePanel').style.display='none';},
 
+  _mojibakeScore(value){
+    const s=String(value||'');
+    return (s.match(/(?:Ã.|Â.|â.|ðŸ|ï¿½|�)/g)||[]).length;
+  },
+  _repairMojibake(value){
+    let s=String(value??'');
+    const cp1252=new Map([[0x20AC,0x80],[0x201A,0x82],[0x0192,0x83],[0x201E,0x84],[0x2026,0x85],[0x2020,0x86],[0x2021,0x87],[0x02C6,0x88],[0x2030,0x89],[0x0160,0x8A],[0x2039,0x8B],[0x0152,0x8C],[0x017D,0x8E],[0x2018,0x91],[0x2019,0x92],[0x201C,0x93],[0x201D,0x94],[0x2022,0x95],[0x2013,0x96],[0x2014,0x97],[0x02DC,0x98],[0x2122,0x99],[0x0161,0x9A],[0x203A,0x9B],[0x0153,0x9C],[0x017E,0x9E],[0x0178,0x9F]]);
+    const decodeOnce=input=>{
+      const bytes=[];
+      for(const ch of input){
+        const cp=ch.codePointAt(0);
+        if(cp<=255)bytes.push(cp);
+        else if(cp1252.has(cp))bytes.push(cp1252.get(cp));
+        else return input;
+      }
+      try{return new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(bytes));}catch(_){return input;}
+    };
+    for(let i=0;i<2;i++){
+      const before=this._mojibakeScore(s);if(!before)break;
+      const candidate=decodeOnce(s);
+      if(candidate===s||this._mojibakeScore(candidate)>=before)break;
+      s=candidate;
+    }
+    return s;
+  },
+  _looksLikeMailGarbage(text){
+    const s=String(text||'').trim();if(s.length<18)return false;
+    const replacements=(s.match(/[�\u0000-\u0008\u000B\u000C\u000E-\u001F]/g)||[]).length;
+    const weird=(s.match(/[^\p{L}\p{N}\s.,;:!?¿¡@+\-_/()'"“”‘’%&]/gu)||[]).length;
+    return replacements>=1 || (weird>=7&&weird/Math.max(1,s.length)>.16);
+  },
+  _normalizeMailHtml(value){
+    let html=String(value??'');
+    // Un mensaje single-part mal leído podía anteponer bytes de cabeceras
+    // decodificados como base64 antes del primer tag HTML.
+    const firstTag=html.search(/<[A-Za-z][^>]*>/);
+    if(firstTag>0&&this._looksLikeMailGarbage(html.slice(0,firstTag)))html=html.slice(firstTag);
+    html=html.replace(/>([^<]+)</g,(all,text)=>'>'+this._repairMojibake(text)+'<');
+    // Si el HTML es básicamente texto plano, repara también la cadena completa.
+    if(!/<[A-Za-z][^>]*>/.test(html))html=this._repairMojibake(html);
+    return html;
+  },
+
   // Firma independiente por cuenta: se guarda con la casilla activa, no con el
   // usuario del dashboard. Como la cuenta por defecto es la del usuario logueado,
   // la firma ya existente se conserva para esa casilla (misma clave).
   _sigKey(){const a=this.activeAccount();return a?'thelab_mail_sig_'+a:null;},
-  getSig(){const k=this._sigKey();return k?localStorage.getItem(k)||'':null;},
+  getSig(){
+    const k=this._sigKey();if(!k)return null;
+    const raw=localStorage.getItem(k)||'';
+    const fixed=this._normalizeMailHtml(raw);
+    if(fixed!==raw&&fixed)try{localStorage.setItem(k,fixed);}catch(e){}
+    return fixed;
+  },
   setSig(html){
     const k=this._sigKey();if(k) localStorage.setItem(k,html);
     // Respaldo permanente: la firma queda también en Airtable (sobrevive a
@@ -1165,8 +1218,8 @@ const MAIL={
     const to=document.getElementById('mailCmpTo').value.trim();
     const cc=document.getElementById('mailCmpCc').value.trim();
     const bcc=(document.getElementById('mailCmpBcc')?.value||'').trim();
-    const subject=document.getElementById('mailCmpSubject').value.trim();
-    const body=document.getElementById('mailCmpBody').innerHTML;
+    const subject=this._repairMojibake(document.getElementById('mailCmpSubject').value.trim());
+    const body=this._normalizeMailHtml(document.getElementById('mailCmpBody').innerHTML);
     const status=document.getElementById('mailSendStatus');
     const err=m=>{status.textContent=m;status.style.color='var(--danger)';};
     if(!to) return err('Falta el destinatario');
