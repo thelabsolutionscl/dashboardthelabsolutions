@@ -15780,7 +15780,7 @@ function renderPedidosKanban(){
   const colores={'Confirmado':'var(--semantic-info)','En producción':'var(--semantic-production)','Listo para despacho':'var(--semantic-info)','Despachado':'var(--semantic-success)'};
   // La vista Tabla filtra por vendedor; Kanban no lo hacía, así que cambiar de
   // vista dentro de la misma pestaña mostraba los pedidos (y montos) de todos.
-  const activos=_pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||''));
+  const activos=_pedApplySearchSort(_pedidosVisibles().filter(p=>!['Cancelado','Completado'].includes(p.fields['Estado pedido']||'')));
   const cols=stages.map(stage=>{
     const items=activos.filter(p=>(p.fields['Estado pedido']||'')==stage);
     const nextStage=stages[stages.indexOf(stage)+1]||(stage==='Despachado'?'Completado':null);
