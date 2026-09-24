@@ -14537,22 +14537,54 @@ function ovRenderUltimoReporteCEO(){
   const r=reps[0];
   if(!(r&&r.fields['Resumen ejecutivo'])) return;
   const f=r.fields,prev=reps[1]?.fields||{},raw=f['Resumen ejecutivo'];
+
+  // Los KPI del Overview son SIEMPRE datos vivos. El texto IA puede quedar
+  // desactualizado si el negocio cambió después de generar el reporte; en ese
+  // caso se marca como tal y no se vuelve a presentar como si fuera actual.
+  const today=new Date();today.setHours(0,0,0,0);
+  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
+  const monthStart=new Date(today.getFullYear(),today.getMonth(),1);
+  const pedidos=state.pedidos||[],cotizaciones=state.cotizaciones||[];
+  const liveRevSemana=pedidos.reduce((s,p)=>{const pf=p.fields||{};if((pf['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((pf['Monto total (CLP)']||0)/1.19):s;},0);
+  const liveRevMes=pedidos.reduce((s,p)=>{const pf=p.fields||{};if((pf['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?s+Math.round((pf['Monto total (CLP)']||0)/1.19):s;},0);
+  const reportRev=Number(f['Revenue semana (CLP)'])||0;
+  const staleRevenue=reportRev!==liveRevSemana;
+
+  const cotSem=cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart);
+  const env=cotSem.length,apr=cotSem.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
+  const conv=env>0?apr/env*100:0,prevConv=_ceoOverviewPct(prev['Tasa conversión (%)']);
+  const activos=pedidos.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
+  const desp=pedidos.filter(p=>_pedDespachadoEnSemana(p.fields,weekStart)).length;
+  const margenSem=cotSem.map(c=>getMargenCot(c.fields)).filter(v=>v!==null&&Number.isFinite(v));
+  const marg=margenSem.length?margenSem.reduce((s,v)=>s+v,0)/margenSem.length:0;
+
   const fecha=f['Fecha generación']||'',semana=f['Semana']||'Reporte semanal';
-  const rev=Number(f['Revenue semana (CLP)'])||0,prevRev=Number(prev['Revenue semana (CLP)'])||0;
-  const conv=_ceoOverviewPct(f['Tasa conversión (%)']),prevConv=_ceoOverviewPct(prev['Tasa conversión (%)']);
-  const marg=_ceoOverviewPct(f['Margen promedio semana (%)']);
-  const env=Number(f['Cotizaciones enviadas'])||0,apr=Number(f['Cotizaciones aprobadas'])||0;
-  const activos=Number(f['Pedidos activos'])||0,desp=Number(f['Pedidos despachados'])||0;
-  const summary=_ceoOverviewSummary(raw);
-  const alerts=_ceoOverviewItems(raw,/(ojo|alerta|riesgo|atenci[oó]n|cr[ií]tic)/i,2);
-  const priorities=_ceoOverviewItems(raw,/(qu[eé] har[ií]a|prioridad|acci[oó]n|pr[oó]xim|siguiente|plan)/i,3);
-  const opportunity=_ceoOverviewItems(raw,/(oportunidad|insight)/i,1)[0]||'';
-  const status=_ceoOverviewStatus(raw);
-  const metrics=[];
-  if(rev)metrics.push({label:'Revenue semana',value:formatCLP(rev),note:_ceoOverviewDelta(rev,prevRev)||'Venta neta contratada esta semana',tone:prevRev&&rev<prevRev?'down':'up'});
-  if(conv||env)metrics.push({label:'Conversión',value:conv.toFixed(0)+'%',note:env?apr+' de '+env+' cotizaciones aprobadas':(prevConv?'vs '+prevConv.toFixed(0)+'% anterior':''),tone:prevConv&&conv<prevConv?'down':'neutral'});
-  metrics.push({label:'Pedidos',value:activos+' activos',note:desp+' despachados esta semana',tone:'neutral'});
-  if(marg)metrics.push({label:'Margen',value:marg.toFixed(0)+'%',note:marg>=35?'En rango/por sobre objetivo':marg>=25?'Bajo el rango objetivo':'Requiere revisión de precio/costo',tone:marg>=35?'up':marg>=25?'neutral':'down'});
+  const prevRev=Number(prev['Revenue semana (CLP)'])||0;
+  const savedSummary=_ceoOverviewSummary(raw);
+  const savedAlerts=_ceoOverviewItems(raw,/(ojo|alerta|riesgo|atenci[oó]n|cr[ií]tic)/i,2);
+  const savedPriorities=_ceoOverviewItems(raw,/(qu[eé] har[ií]a|prioridad|acci[oó]n|pr[oó]xim|siguiente|plan)/i,3);
+  const savedOpportunity=_ceoOverviewItems(raw,/(oportunidad|insight)/i,1)[0]||'';
+
+  const summary=staleRevenue
+    ?`Los datos cambiaron desde que se generó este análisis. En vivo, la semana lleva ${formatCLP(liveRevSemana)} y el mes acumula ${formatCLP(liveRevMes)}. Regenera el informe para actualizar también las prioridades y alertas con estas cifras.`
+    :(savedSummary||'Reporte listo. Revisa los indicadores y las prioridades de esta semana.');
+  const alerts=staleRevenue
+    ?['El análisis de texto corresponde a una fotografía anterior. Los KPI de arriba ya muestran los datos actuales.']
+    :savedAlerts;
+  const priorities=staleRevenue
+    ?['Regenerar el informe ejecutivo para recalcular prioridades, alertas y proyección con los datos actuales.']
+    :savedPriorities;
+  const opportunity=staleRevenue?'':savedOpportunity;
+  const status=staleRevenue?{level:'amber',icon:'↻',label:'Análisis desactualizado'}:_ceoOverviewStatus(raw);
+
+  const metrics=[
+    {label:'Revenue semana',value:formatCLP(liveRevSemana),note:_ceoOverviewDelta(liveRevSemana,prevRev)||'Venta neta contratada esta semana',tone:prevRev&&liveRevSemana<prevRev?'down':'up'},
+    {label:'Revenue mes',value:formatCLP(liveRevMes),note:'Venta neta contratada en el mes',tone:'neutral'},
+    {label:'Conversión',value:conv.toFixed(0)+'%',note:env?apr+' de '+env+' cotizaciones aprobadas':(prevConv?'vs '+prevConv.toFixed(0)+'% anterior':'Sin cotizaciones esta semana'),tone:prevConv&&conv<prevConv?'down':'neutral'},
+    {label:'Pedidos',value:activos+' activos',note:desp+' despachados esta semana',tone:'neutral'}
+  ];
+  if(marg&&metrics.length<4)metrics.push({label:'Margen',value:marg.toFixed(0)+'%',note:marg>=35?'En rango/por sobre objetivo':marg>=25?'Bajo el rango objetivo':'Requiere revisión de precio/costo',tone:marg>=35?'up':marg>=25?'neutral':'down'});
+
   const metricHtml=metrics.slice(0,4).map(m=>`<div class="ceo-kpi ceo-kpi-${m.tone}"><span>${escapeHtml(m.label)}</span><strong>${escapeHtml(m.value)}</strong><small>${escapeHtml(m.note||'')}</small></div>`).join('');
   const prioritiesHtml=priorities.length?priorities.map((x,i)=>`<div class="ceo-action"><b>${i+1}</b><p>${escapeHtml(_kaiSimpleClip(x,190))}</p></div>`).join(''):'<div class="ceo-empty">No hay acciones adicionales destacadas en este reporte.</div>';
   const alertsHtml=alerts.length?alerts.map(x=>`<div class="ceo-watch"><span>!</span><p>${escapeHtml(_kaiSimpleClip(x,210))}</p></div>`).join(''):'<div class="ceo-watch ceo-watch-ok"><span>✓</span><p>Sin alertas relevantes esta semana.</p></div>';
@@ -14560,16 +14592,16 @@ function ovRenderUltimoReporteCEO(){
   body.innerHTML=`<div class="ceo-overview">
     <div class="ceo-overview-head">
       <div><span class="ceo-overview-eyebrow">LECTURA EJECUTIVA · ${escapeHtml(semana)}</span><h3>Qué importa esta semana</h3></div>
-      <div class="ceo-overview-head-meta"><span class="ceo-status ceo-status-${status.level}">${status.icon} ${escapeHtml(status.label)}</span>${fecha?`<span>Generado ${escapeHtml(String(fecha))}</span>`:''}</div>
+      <div class="ceo-overview-head-meta"><span class="ceo-status ceo-status-${status.level}">${status.icon} ${escapeHtml(status.label)}</span><span>Datos en vivo</span>${fecha?`<span>Informe ${escapeHtml(String(fecha))}</span>`:''}</div>
     </div>
-    <div class="ceo-overview-summary"><span>EN SIMPLE</span><p>${escapeHtml(summary||'Reporte listo. Revisa los indicadores y las prioridades de esta semana.')}</p></div>
+    <div class="ceo-overview-summary"><span>EN SIMPLE</span><p>${escapeHtml(summary)}</p></div>
     <div class="ceo-kpis">${metricHtml}</div>
     <div class="ceo-overview-grid">
       <section class="ceo-panel ceo-panel-actions"><div class="ceo-panel-title"><span>01</span><div><b>Qué haría ahora</b><small>3 acciones para mover la semana</small></div></div><div class="ceo-actions">${prioritiesHtml}</div></section>
       <section class="ceo-panel ceo-panel-watch"><div class="ceo-panel-title"><span>02</span><div><b>Ojo con esto</b><small>Solo lo que realmente merece atención</small></div></div><div class="ceo-watches">${alertsHtml}</div></section>
     </div>
     ${opportunity?`<div class="ceo-opportunity"><span>💡 OPORTUNIDAD</span><p>${escapeHtml(_kaiSimpleClip(opportunity,260))}</p></div>`:''}
-    <details class="ceo-full-report"><summary>Ver informe completo</summary><div class="ceo-full-report-body">${formatCeoReport(raw)}</div></details>
+    <details class="ceo-full-report"><summary>${staleRevenue?'Ver informe anterior':'Ver informe completo'}</summary><div class="ceo-full-report-body">${formatCeoReport(raw)}</div></details>
   </div>`;
 }
 async function ovGenerarReporteCEO(){
