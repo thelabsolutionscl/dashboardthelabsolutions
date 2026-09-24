@@ -31,19 +31,79 @@ const SUGGESTIONS=new Map(Object.entries({
   porfavor:'por favor',gracias:'gracias',
   nesecito:'necesito',nececita:'necesita',necesito:'necesito',resivir:'recibir',
   recivir:'recibir',aver:'a ver',haber:'haber',haci:'así',
-  ola:'hola',grasias:'gracias',kiero:'quiero',quiero:'quiero',qe:'que',
-  q:'que',xq:'porque',porqe:'porque',porq:'porque'
+  ola:'hola',grasias:'gracias',gracais:'gracias',kiero:'quiero',quiero:'quiero',qe:'que',
+  q:'que',xq:'porque',porqe:'porque',porq:'porque',estaz:'estás',estoi:'estoy',
+  hols:'hola',buenoz:'buenos',adjnto:'adjunto',adjntamos:'adjuntamos',mensage:'mensaje'
 }));
 
 let target=null,installed=false,observer=null,wired=0,timer=null,mutating=false,mailPatched=false;
 
+// Fallback local para errores evidentes que el motor del navegador puede no
+// subrayar si el usuario no tiene español habilitado en Chrome/Safari.
+// No intenta ser un corrector gramatical: solo marca palabras muy cercanas
+// (1 edición) a vocabulario común de correo/negocio, minimizando falsos positivos.
+const COMMON_WORDS=[
+  'hola','buenos','buenas','días','tardes','noches','cómo','estás','está','estoy','estamos',
+  'gracias','favor','saludos','estimado','estimada','equipo','cliente','clientes','correo','mensaje',
+  'adjunto','adjunta','adjuntamos','archivo','archivos','documento','documentos','cotización','cotizaciones',
+  'pedido','pedidos','producción','entrega','entregas','fecha','fechas','confirmación','confirmar','información',
+  'reunión','reuniones','dirección','teléfono','número','página','envío','instalación','fabricación','terminación',
+  'presentación','ubicación','operación','revisión','validación','aprobación','atención','solución','soluciones',
+  'comunicación','coordinación','acreditación','administración','gestión','versión','sesión','conexión',
+  'configuración','opción','opciones','sección','secciones','menú','útil','fácil','difícil','aquí','ahí',
+  'necesito','necesita','recibir','hacer','haces','tenemos','tienes','puedes','podemos','quedo','quedamos',
+  'pendiente','pendientes','disponible','disponibles','precio','precios','costo','costos','valor','valores',
+  'pago','pagos','factura','facturas','proyecto','proyectos','semana','semanas','mes','meses','mañana','hoy'
+];
+
 function normalizeWord(w){return String(w||'').normalize('NFC').toLocaleLowerCase('es-CL');}
-function suggestionFor(word){
-  const key=normalizeWord(word);
-  const s=SUGGESTIONS.get(key);
-  if(!s||s===key)return '';
+function stripMarks(w){return normalizeWord(w).normalize('NFD').replace(/[\u0300-\u036f]/g,'');}
+function commonPrefix(a,b){
+  let i=0;while(i<a.length&&i<b.length&&a[i]===b[i])i++;return i;
+}
+function oneEditAway(a,b){
+  a=stripMarks(a);b=stripMarks(b);
+  if(a===b)return false;
+  if(Math.abs(a.length-b.length)>1)return false;
+  // Sustitución o transposición de dos letras vecinas.
+  if(a.length===b.length){
+    const dif=[];for(let i=0;i<a.length;i++)if(a[i]!==b[i])dif.push(i);
+    if(dif.length===1)return true;
+    return dif.length===2&&dif[1]===dif[0]+1&&a[dif[0]]===b[dif[1]]&&a[dif[1]]===b[dif[0]];
+  }
+  // Inserción/eliminación de una letra.
+  const short=a.length<b.length?a:b,long=a.length<b.length?b:a;
+  let i=0,j=0,skips=0;
+  while(i<short.length&&j<long.length){
+    if(short[i]===long[j]){i++;j++;continue;}
+    if(++skips>1)return false;j++;
+  }
+  return true;
+}
+function fuzzySuggestionFor(word){
+  const key=stripMarks(word);
+  if(key.length<4)return '';
+  for(const candidate of COMMON_WORDS){
+    const c=stripMarks(candidate);
+    if(key===c)return '';
+    // Exigimos una raíz inicial razonablemente coincidente para no subrayar
+    // palabras válidas poco comunes solo porque se parecen a otra.
+    if(commonPrefix(key,c)<Math.min(3,Math.max(2,key.length-2)))continue;
+    if(oneEditAway(key,c))return candidate;
+  }
+  return '';
+}
+function preserveCase(word,s){
+  if(!s)return '';
+  if(word&&word===word.toUpperCase()&&word.length>1)return s.toUpperCase();
   if(word&&word[0]===word[0]?.toUpperCase())return s.charAt(0).toUpperCase()+s.slice(1);
   return s;
+}
+function suggestionFor(word){
+  const key=normalizeWord(word);
+  const direct=SUGGESTIONS.get(key);
+  const s=(direct&&direct!==key)?direct:fuzzySuggestionFor(word);
+  return preserveCase(word,s);
 }
 
 function apply(el){
@@ -263,5 +323,5 @@ function status(){
   const body=target?.document?.getElementById('mailCmpBody');
   return{installed,wired,observing:!!observer,errors:body?.querySelectorAll?.('.'+ERROR_CLASS)?.length||0};
 }
-return{install,status,_test:{IDS,SUGGESTIONS,suggestionFor,normalizeWord,isLineBreakInput}};
+return{install,status,_test:{IDS,SUGGESTIONS,COMMON_WORDS,suggestionFor,normalizeWord,stripMarks,oneEditAway,fuzzySuggestionFor,isLineBreakInput}};
 });
