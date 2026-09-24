@@ -860,7 +860,9 @@ const MAIL={
     document.getElementById('mailListFooter').style.display='none';
     const data=await this.post({action:'search',folder:this.folder,query:q});
     if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
-    this.renderMsgList(data.messages);
+    this._sel=new Set();
+    this.msgs=data.messages||[];
+    this.renderMsgList(this.msgs);
   },
 
   _cmpAtts:[],
@@ -1426,6 +1428,18 @@ const MAIL={
     if(on) this._sel.add(uid); else this._sel.delete(uid);
     const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
     if(item) item.classList.toggle('sel-checked',on);
+    if(this._renderThreads){
+      for(const [tid,members] of this._renderThreads){
+        if(!members.some(m=>String(m.uid)===String(uid))||members.length<2)continue;
+        const all=members.every(m=>this._sel.has(m.uid)),some=members.some(m=>this._sel.has(m.uid));
+        const head=document.querySelector(`.mail-thread[data-thread-id="${CSS.escape(String(tid))}"]>.mail-thread-head`);
+        if(head){
+          head.classList.toggle('sel-checked',all);
+          const chk=head.querySelector('.mail-item-chk');if(chk){chk.checked=all;chk.indeterminate=!all&&some;}
+        }
+        break;
+      }
+    }
     this._updateSelBar();
   },
   toggleSelectAll(on){
