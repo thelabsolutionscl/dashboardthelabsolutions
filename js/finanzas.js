@@ -710,8 +710,11 @@ async function finPlanCobranzaIA(){
   });
   const lista=[...byCli.values()].sort((a,b)=>b.maxDias-a.maxDias||b.total-a.total);
   const total=lista.reduce((s,e)=>s+e.total,0);
-  const ctx=`CARTERA POR COBRAR (total ${formatCLP(total)}, ${lista.length} clientes):\n`+
-    lista.map(e=>`- ${e.empresa}: ${formatCLP(e.total)} · ${e.n} factura(s) · mora máx ${e.maxDias} días`).join('\n')+
+  // Claude sólo necesita los casos que realmente puede priorizar. Mandar toda la
+  // cartera repetía decenas de filas que no cambian la decisión y encarecía input.
+  const foco=lista.slice(0,12);
+  const ctx=`CARTERA POR COBRAR (total ${formatCLP(total)}, ${lista.length} clientes; se muestran los ${foco.length} más urgentes):\n`+
+    foco.map(e=>`- ${e.empresa}: ${formatCLP(e.total)} · ${e.n} factura(s) · mora máx ${e.maxDias} días`).join('\n')+
     `\n\nTAREA: prioriza la cobranza de esta semana. Para los 5–8 casos más urgentes indica en orden: prioridad, canal recomendado (WhatsApp → email → llamada → carta según mora) y la acción concreta. Cierra con el monto total recuperable priorizado.`;
   const out=document.getElementById('finCobranzaIAout'),btn=document.getElementById('finCobranzaIABtn'),prev=btn.innerHTML;
   btn.disabled=true;btn.innerHTML='⏳ Analizando…';
