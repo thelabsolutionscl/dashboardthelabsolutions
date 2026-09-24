@@ -1160,6 +1160,7 @@ const MAIL={
     if(!opts._keepAtts){this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();}
     this._cmpCotId=opts._cotId||null;   // vínculo con la cotización (registro al enviar)
     this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
+    this._cmpWinbackCli=opts._winbackCli||null;   // sacar de Leads dormidos SOLO tras envío exitoso
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
     this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
     this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
@@ -1395,9 +1396,11 @@ const MAIL={
         try{this.addSentAddrs(to,cc,bcc);}catch(e){}   // recuerda las direcciones para autocompletar luego
         // Cierre del ciclo cotización→PDF→correo: marca Enviada y deja registro
         if(this._cmpCotId){try{await this._registrarCotEnviada(this._cmpCotId,to);}catch(e){}this._cmpCotId=null;}
-        // Reactivación: si el borrador vino de un agente, marca al cliente Reactivado
-        if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
-        if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
+        // Reactivación: revisar/abrir el borrador no cambia nada. Solo llegamos
+        // aquí después de que mail-api confirmó el envío.
+        if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') await marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
+        if(this._cmpWinbackCli){try{if(typeof wbMarkSent==='function') wbMarkSent(this._cmpWinbackCli,'correo');}catch(e){}this._cmpWinbackCli=null;}
+        if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') await fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
         // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
         if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
         this._cmpFromName=null;this._cmpFromEmail=null;
