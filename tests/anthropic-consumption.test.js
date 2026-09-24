@@ -76,3 +76,18 @@ test('el lead worker solo acepta Haiku/Sonnet y limita el autopilot de Ads',()=>
   assert.match(worker,/AI_DAILY_BUDGET_USD \|\| "0\.50"/);
   assert.match(worker,/cache_control: \{ type: "ephemeral" \}/);
 });
+
+
+test('contexto dinámico y llamadas duplicadas quedan acotados',()=>{
+  assert.match(html,/const _CLAUDE_INFLIGHT=new Map\(\)/);
+  assert.match(html,/if\(_CLAUDE_INFLIGHT\.has\(sig\)\)return/);
+  assert.match(html,/const maxChars=9000/);
+  assert.match(html,/Contexto recortado por política de ahorro de tokens/);
+  assert.match(html,/cache_control:\{type:'ephemeral'\}/);
+});
+
+test('finanzas manda sólo la cola urgente al agente',()=>{
+  const fin=read('js/finanzas.js');
+  assert.match(fin,/const foco=lista\.slice\(0,12\)/);
+  assert.match(fin,/se muestran los \$\{foco\.length\} más urgentes/);
+});
