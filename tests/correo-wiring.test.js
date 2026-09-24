@@ -281,3 +281,27 @@ test('badge lateral de Correo se renderiza sin depender del bootstrap de badges 
   assert.match(setter,/syncMailNavBadge\(total\)/,'cargar o cambiar una cuenta debe actualizar el ícono al instante');
   assert.match(NOTIFY,/syncMailNavBadge\(total\);/,'el polling también debe actualizar el ícono');
 });
+
+
+test('corrige mojibake UTF-8 al leer, redactar y reutilizar firmas',()=>{
+  assert.match(MAIL,/_repairMojibake\(value\)/);
+  assert.match(MAIL,/_normalizeMailHtml\(value\)/);
+  const read=methodBlock('readMsg');
+  assert.match(read,/data\.body_html=this\._normalizeMailHtml\(data\.body_html\)/);
+  assert.match(read,/data\.body_text=this\._repairMojibake\(data\.body_text\)/);
+  const send=methodBlock('sendCompose');
+  assert.match(send,/const subject=this\._repairMojibake/);
+  assert.match(send,/const body=this\._normalizeMailHtml/);
+  const sig=methodBlock('getSig');
+  assert.match(sig,/this\._normalizeMailHtml\(raw\)/);
+});
+
+test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de enviar',()=>{
+  assert.match(PHP,/function\s+repair_mojibake_utf8\s*\(/);
+  assert.match(PHP,/\$partno === ''[\s\S]*?imap_body\(\$conn, \$msgno, FT_PEEK\)[\s\S]*?: imap_fetchbody\(\$conn, \$msgno, \$partno, FT_PEEK\)/,
+    'single-part no debe usar fetchbody con section vacía');
+  const send=phpCase('send');
+  assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
+  assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-utf8-singlepart/);
+});
