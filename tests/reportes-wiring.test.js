@@ -103,6 +103,43 @@ test('Overview muestra un digest CEO accionable antes del informe completo',()=>
   assert.match(body,/formatCeoReport\(raw\)/,'el texto completo no se pierde');
 });
 
+test('revenue semanal usa pedidos creados en la semana y no despachos',()=>{
+  const body=functionBlock(SOURCE,'prefillReporte');
+  assert.match(body,/p\.createdTime/,'debe fechar revenue por creación del pedido');
+  assert.match(body,/Estado pedido[\s\S]*Cancelado/,'debe excluir cancelados');
+  assert.doesNotMatch(body,/_pedDespachadoEnSemana\(p\.fields,weekStart\)\?s\+/,'despacho no debe definir revenue');
+  assert.match(body,/\/1\.19/,'revenue debe ser neto de IVA');
+});
+
+test('contexto CEO usa la misma definición de revenue semanal',()=>{
+  const body=functionBlock(SOURCE,'buildAgentContext');
+  const line=(body.match(/const revSemana=P\.reduce\([^\n]+/)||[])[0]||'';
+  assert.match(line,/p\.createdTime/);
+  assert.match(line,/Cancelado/);
+  assert.doesNotMatch(line,/Fecha despacho|Fecha entrega/);
+});
+
+test('reporte CEO recibe revenue mensual determinístico además del semanal',()=>{
+  const body=functionBlock(SOURCE,'crearReporte');
+  assert.match(body,/const revMes=.*state\.pedidos/s);
+  assert.match(body,/Revenue semana \(venta contratada neta\)/);
+  assert.match(body,/Revenue mes a la fecha \(venta contratada neta\)/);
+});
+
+test('Overview prioriza el último reporte real cuando hay varios el mismo día',()=>{
+  const body=functionBlock(SOURCE,'ovRenderUltimoReporteCEO');
+  assert.match(body,/b\.createdTime/,'debe desempatar por createdTime');
+  assert.match(body,/a\.createdTime/);
+  assert.match(body,/Venta neta contratada esta semana/);
+});
+
+test('histórico semanal deduplica múltiples generaciones de la misma semana',()=>{
+  const body=functionBlock(SOURCE,'_histSemanas');
+  assert.match(body,/const seen=new Set\(\)/);
+  assert.match(body,/seen\.has\(key\)/);
+  assert.match(body,/createdTime/);
+});
+
 test('el reporte 1-clic rellena primero las métricas y luego genera',()=>{
   const body=functionBlock(SOURCE,'crearReporteAuto');
   const prefill=body.search(/prefillReporte\s*\(/);

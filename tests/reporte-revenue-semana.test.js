@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 /*
- * Reporte semanal · "Revenue semana" solo cuenta lo DESPACHADO, no el backlog.
+ * Reporte semanal · separa VENTA CONTRATADA de DESPACHOS.
  *
- * prefillReporte calculaba el revenue de la semana sumando TODO pedido cuya
- * `Fecha despacho || Fecha entrega` fuera >= inicio de semana, sin filtro de
- * estado y sin cota superior. Como `Fecha entrega` es la fecha PLANIFICADA
- * (futura), casi todo el backlog activo entraba: el "Revenue semana (CLP)" que se
- * guarda en la tabla Reportes salía inflado — y contradecía al conteo de "pedidos
- * despachados" de la línea de al lado, que SÍ exige estado Despachado/Completado.
- * Ahora ambas métricas comparten un solo criterio: _pedDespachadoEnSemana.
+ * Revenue semana es la venta neta de pedidos creados/confirmados en el período,
+ * mientras "Pedidos despachados" sigue midiendo operación mediante
+ * _pedDespachadoEnSemana. Mezclar ambas fechas hacía que pedidos históricos
+ * despachados hoy inflaran revenue y que ventas nuevas aún en producción no
+ * aparecieran en el reporte.
  *
- * Se monta el _pedDespachadoEnSemana REAL de index.html.
+ * Se monta el _pedDespachadoEnSemana REAL de index.html para proteger el conteo
+ * operativo, y se inspecciona prefillReporte para proteger la definición comercial.
  *
  * Correr:  node --test tests/reporte-revenue-semana.test.js
  */
@@ -71,11 +70,13 @@ test('el mismo inicio de semana (borde) cuenta', () => {
   assert.equal(despachado(f({ 'Estado pedido': 'Despachado', 'Fecha despacho': '2026-08-16' }), WS), true);
 });
 
-// ── Revenue y conteo comparten criterio (no pueden divergir) ─────────────
+// ── Revenue comercial y despacho operativo son métricas distintas ────────
 
-test('prefillReporte usa el helper tanto para el revenue como para el conteo', () => {
+test('prefillReporte calcula revenue por createdTime y despachos por el helper', () => {
   const pf = extract('prefillReporte');
-  assert.match(pf, /_pedDespachadoEnSemana\(p\.fields,weekStart\)\?s\+Math\.round/, 'revenue por el helper');
-  assert.match(pf, /filter\(p=>_pedDespachadoEnSemana\(p\.fields,weekStart\)\)\.length/, 'conteo por el helper');
-  assert.doesNotMatch(pf, /const revSemana=state\.pedidos\.reduce\(\(s,p\)=>\{/, 'ya no hay suma sin filtro de estado');
+  assert.match(pf, /const revSemana=state\.pedidos\.reduce/);
+  assert.match(pf, /p\.createdTime/,'revenue debe usar creación del pedido');
+  assert.match(pf, /Estado pedido[\s\S]*Cancelado/,'revenue debe excluir cancelados');
+  assert.match(pf, /filter\(p=>_pedDespachadoEnSemana\(p\.fields,weekStart\)\)\.length/, 'el conteo de despachos conserva el helper');
+  assert.doesNotMatch(pf, /_pedDespachadoEnSemana\(p\.fields,weekStart\)\?s\+Math\.round/, 'revenue no debe depender del despacho');
 });

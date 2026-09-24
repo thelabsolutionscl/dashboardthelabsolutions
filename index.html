@@ -13956,8 +13956,13 @@ function prefillReporte(){
   const weekNum=Math.ceil(((today-jan1)/86400000+jan1.getDay()+1)/7);
   const mesLabel=today.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
   document.getElementById('rep-semana').value=`Semana ${weekNum} — ${mesLabel}`;
-  // Revenue neto de lo DESPACHADO esta semana (mismo criterio que "pedidos despachados")
-  const revSemana=state.pedidos.reduce((s,p)=>_pedDespachadoEnSemana(p.fields,weekStart)?s+Math.round((p.fields['Monto total (CLP)']||0)/1.19):s,0);
+  // Revenue semanal = venta contratada neta de IVA: pedidos creados esta semana,
+  // excluyendo cancelados. "Pedidos despachados" es otra métrica y no debe definir revenue.
+  const revSemana=state.pedidos.reduce((s,p)=>{
+    const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')return s;
+    const d=p.createdTime?new Date(p.createdTime):null;
+    return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;
+  },0);
   document.getElementById('rep-revenue').value=revSemana;
   // Cotizaciones creadas esta semana
   const cotSem=state.cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart);
@@ -13976,8 +13981,10 @@ async function crearReporte(){
   const ceoCfg=typeof AGENTES_CFG!=='undefined'?AGENTES_CFG.find(a=>a.id==='CEO'):null;
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
   const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
+  const monthStart=new Date();monthStart.setDate(1);monthStart.setHours(0,0,0,0);
+  const revMes=(state.pedidos||[]).reduce((sum,p)=>{const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')return sum;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?sum+Math.round((f['Monto total (CLP)']||0)/1.19):sum;},0);
   const started=typeof beginAgentResultRun==='function'?beginAgentResultRun('CEO'):Date.now();
-  const response=await callAgentClaude('CEO',sys+(typeof AGENT_TONE!=='undefined'?AGENT_TONE:''),`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue: ${formatCLP(parseFloat(rev)||0)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
+  const response=await callAgentClaude('CEO',sys+(typeof AGENT_TONE!=='undefined'?AGENT_TONE:''),`${liveCtx}CONSULTA: Genera el reporte ejecutivo semanal.\nSemana: ${s||'actual'}\nRevenue semana (venta contratada neta): ${formatCLP(parseFloat(rev)||0)}\nRevenue mes a la fecha (venta contratada neta): ${formatCLP(revMes)}\nCotizaciones: ${ce||0} env., ${ca||0} apr.\nPedidos: ${pa||0} activos, ${pd||0} despachados\nNotas: ${n||'—'}`);
   const meta=typeof agentResultMeta==='function'?agentResultMeta('CEO',started):{};
   out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('CEO',response,meta):formatAgentReport(response);
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response,meta);}catch(e){}
@@ -14526,7 +14533,10 @@ function _ceoOverviewStatus(raw){
 function ovRenderUltimoReporteCEO(){
   const chk=document.getElementById('ovCeoAuto');if(chk)chk.checked=localStorage.getItem('ceo_auto_weekly')==='1';
   const body=document.getElementById('ovCeoBody');if(!body)return;
-  const reps=(state.reportes||[]).slice().sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')));
+  const reps=(state.reportes||[]).slice().sort((a,b)=>{
+    const byDate=String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||''));
+    return byDate||String(b.createdTime||'').localeCompare(String(a.createdTime||''));
+  });
   const r=reps[0];
   if(!(r&&r.fields['Resumen ejecutivo'])) return;
   const f=r.fields,prev=reps[1]?.fields||{},raw=f['Resumen ejecutivo'];
@@ -14542,7 +14552,7 @@ function ovRenderUltimoReporteCEO(){
   const opportunity=_ceoOverviewItems(raw,/(oportunidad|insight)/i,1)[0]||'';
   const status=_ceoOverviewStatus(raw);
   const metrics=[];
-  if(rev)metrics.push({label:'Revenue semana',value:formatCLP(rev),note:_ceoOverviewDelta(rev,prevRev)||'Venta neta despachada esta semana',tone:prevRev&&rev<prevRev?'down':'up'});
+  if(rev)metrics.push({label:'Revenue semana',value:formatCLP(rev),note:_ceoOverviewDelta(rev,prevRev)||'Venta neta contratada esta semana',tone:prevRev&&rev<prevRev?'down':'up'});
   if(conv||env)metrics.push({label:'Conversión',value:conv.toFixed(0)+'%',note:env?apr+' de '+env+' cotizaciones aprobadas':(prevConv?'vs '+prevConv.toFixed(0)+'% anterior':''),tone:prevConv&&conv<prevConv?'down':'neutral'});
   metrics.push({label:'Pedidos',value:activos+' activos',note:desp+' despachados esta semana',tone:'neutral'});
   if(marg)metrics.push({label:'Margen',value:marg.toFixed(0)+'%',note:marg>=35?'En rango/por sobre objetivo':marg>=25?'Bajo el rango objetivo':'Requiere revisión de precio/costo',tone:marg>=35?'up':marg>=25?'neutral':'down'});
@@ -14608,11 +14618,17 @@ function _resumenPendientesTexto(){
 // Últimas N semanas desde la tabla Reportes (del más reciente al más antiguo),
 // normalizando la conversión que a veces viene como fracción (0.38) y a veces en %.
 function _histSemanas(n){
-  return (state.reportes||[]).slice()
-    .sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')))
-    .slice(0,n||8)
-    .map(r=>{const f=r.fields;const cv=f['Tasa conversión (%)']||0;
-      return {sem:f['Semana']||f['Fecha generación']||'—',fecha:f['Fecha generación']||'',rev:f['Revenue semana (CLP)']||0,conv:cv<=1?cv*100:cv,ce:f['Cotizaciones enviadas']||0,ca:f['Cotizaciones aprobadas']||0,pa:f['Pedidos activos']||0,pd:f['Pedidos despachados']||0};});
+  const ordered=(state.reportes||[]).slice().sort((a,b)=>{
+    const byDate=String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||''));
+    return byDate||String(b.createdTime||'').localeCompare(String(a.createdTime||''));
+  });
+  const seen=new Set(),unique=[];
+  for(const r of ordered){
+    const f=r.fields||{},key=f['Semana']||f['Fecha generación']||r.id;
+    if(seen.has(key))continue;seen.add(key);unique.push(r);
+  }
+  return unique.slice(0,n||8).map(r=>{const f=r.fields;const cv=f['Tasa conversión (%)']||0;
+    return {sem:f['Semana']||f['Fecha generación']||'—',fecha:f['Fecha generación']||'',rev:f['Revenue semana (CLP)']||0,conv:cv<=1?cv*100:cv,ce:f['Cotizaciones enviadas']||0,ca:f['Cotizaciones aprobadas']||0,pa:f['Pedidos activos']||0,pd:f['Pedidos despachados']||0};});
 }
 // Bloque de dirección para el correo semanal: esta semana contra la anterior.
 function _tendenciaTexto(){
@@ -14641,7 +14657,10 @@ async function ceoAutoWeeklyCheck(){
     ovRenderUltimoReporteCEO();
     localStorage.setItem('ceo_auto_last_week',wk);
     const to=localStorage.getItem('ceo_auto_email')||'';
-    const reps=(state.reportes||[]).slice().sort((a,b)=>String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||'')));
+    const reps=(state.reportes||[]).slice().sort((a,b)=>{
+    const byDate=String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||''));
+    return byDate||String(b.createdTime||'').localeCompare(String(a.createdTime||''));
+  });
     const body=reps[0]?.fields['Resumen ejecutivo']||'';
     if(to&&body&&typeof MAIL!=='undefined'){
       try{
@@ -16168,7 +16187,9 @@ function buildAgentContext(id){
   const pedActivos=P.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
   const pedAtrasados=pedActivos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<today);
   const cotAbiertas=C.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''));
-  const revSemana=P.reduce((s,p)=>{const f=p.fields,d=f['Fecha despacho']||f['Fecha entrega']||p.createdTime;return d&&new Date(d)>=weekStart?s+(f['Monto total (CLP)']||0)/1.19:s;},0);
+  // Revenue semanal = pedidos creados/confirmados en la semana, netos de IVA.
+  // No usar fecha de despacho/entrega: eso mide operación, no venta contratada.
+  const revSemana=P.reduce((s,p)=>{const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const revTotal=P.reduce((s,p)=>(p.fields['Estado pedido']||'')==='Cancelado'?s:s+(p.fields['Monto total (CLP)']||0)/1.19,0);
 
   if(['CEO','FINANCE','SALES','PRODUCTION','FOLLOWUP','QA','REPCLIENTE'].includes(id)){
