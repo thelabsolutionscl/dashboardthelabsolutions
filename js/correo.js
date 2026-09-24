@@ -145,9 +145,9 @@ const MAIL={
     fd.append('user',a.user); fd.append('pass',a.pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
     // El WAF del hosting bloquea de forma INTERMITENTE (fetch falla sin CORS).
-    // Reintentamos con backoff SOLO en lecturas — nunca en 'send', para no
-    // arriesgar envíos duplicados.
-    const canRetry=!(params&&params.action==='send');
+    // Una mutación pudo completarse aunque se haya perdido la respuesta.
+    // Reintentar spam/trash/mark/send podría actuar sobre un UID ya movido.
+    const canRetry=['folders','list','snippets','read','search','attachment','sent_addrs'].includes(params?.action);
     const tries=canRetry?3:1;
     let lastErr='Sin conexión con el servidor';
     for(let i=0;i<tries;i++){
@@ -1451,6 +1451,9 @@ const MAIL={
     if(!confirm('¿Marcar este correo como no deseado y moverlo a Spam?'))return;
     const data=await this.post({action:'spam',folder:this.folder,uid:this.selUid});
     if(data.error){toast(data.error,'error');return;}
+    if(data.ok!==true||!this._isSpamFolder(data.folder)){
+      toast('El servidor no confirmó el movimiento a Spam. El correo sigue en la bandeja.','error');return;
+    }
     toast('🚫 Correo movido a Spam','success');
     this.selUid=null;this._currentMsg=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
@@ -1540,12 +1543,13 @@ const MAIL={
     const btns=bar?bar.querySelectorAll('button'):[];
     btns.forEach(b=>b.disabled=true);
     let ok=0,fail=0;
+    const moved=new Set();
     for(const uid of uids){
       const data=await this.post({action:'spam',folder:this.folder,uid});
-      if(data&&!data.error)ok++;else fail++;
+      if(data?.ok===true&&this._isSpamFolder(data.folder)){ok++;moved.add(uid);}else fail++;
     }
     btns.forEach(b=>b.disabled=false);
-    if(this.selUid&&uids.includes(this.selUid)){
+    if(this.selUid&&moved.has(this.selUid)){
       this.selUid=null;this._currentMsg=null;
       document.getElementById('mailReaderEmpty').style.display='flex';
       document.getElementById('mailReaderContent').style.display='none';
