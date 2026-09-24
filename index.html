@@ -1869,10 +1869,7 @@
 .apw-dots i:nth-child(2){animation-delay:.18s;}
 .apw-dots i:nth-child(3){animation-delay:.36s;}
 @keyframes apwDot{0%,100%{transform:translateY(0);opacity:.35;}50%{transform:translateY(-5px);opacity:1;}}
-.apw-bar{height:4px;border-radius:3px;background:var(--surface3);overflow:hidden;margin-top:16px;}
-.apw-bar>i{display:block;height:100%;width:40%;border-radius:3px;background:linear-gradient(90deg,transparent,var(--apw-col,var(--accent)),transparent);animation:apwBar 1.3s linear infinite;}
-@keyframes apwBar{0%{transform:translateX(-120%);}100%{transform:translateX(320%);}}
-@media(prefers-reduced-motion:reduce){.apw-bolt,.apw-dots i,.apw-bar>i{animation:none;}}
+@media(prefers-reduced-motion:reduce){.apw-bolt,.apw-dots i{animation:none;}}
 /* ── Reporte de agente: semáforo de urgencia + modo TL;DR ── */
 .agent-report{border-left:3px solid var(--agr-col,var(--border2));border-radius:3px 10px 10px 3px;padding-left:12px;}
 .agent-report.agr-green{--agr-col:#00d4aa;--agr-bg:rgba(0,212,170,0.12);}
@@ -19498,7 +19495,6 @@ trusted_clients:
     <div class="apw-stage" id="apwStage"></div>
     <div class="apw-status" id="apwStatus">Analizando tus datos…</div>
     <div class="apw-dots"><i></i><i></i><i></i></div>
-    <div class="apw-bar"><i></i></div>
   </div>
 </div>
 
