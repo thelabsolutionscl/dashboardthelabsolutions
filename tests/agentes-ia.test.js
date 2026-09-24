@@ -57,7 +57,7 @@ test('una IA que no responde corta sola en vez de dejar el modal colgado', async
   assert.ok(Date.now() - t0 < 4000, 'sin quedarse pegado');
 });
 
-test('un 429 o una caída pasajera se reintentan', async () => {
+test('solo 429 se reintenta; 5xx no duplica una generación potencialmente cobrada', async () => {
   const _claudeHttp = montarClaudeHttp();
   let intentos = 0;
   global.fetch = async () => { intentos++; return intentos < 3 ? { status: 429, headers: { get: () => '0' } } : { status: 200, ok: true, headers: { get: () => null } }; };
@@ -69,7 +69,7 @@ test('un 429 o una caída pasajera se reintentan', async () => {
   global.fetch = async () => { intentos++; return { status: 503, ok: false, headers: { get: () => null } }; };
   const r2 = await _claudeHttp('x', {}, { limite: 5000, reintentos: 2 });
   assert.equal(r2.status, 503, 'si no se recupera, se devuelve el error real');
-  assert.equal(intentos, 3);
+  assert.equal(intentos, 1, 'un 5xx no debe lanzar una segunda generación');
 });
 
 test('un error de credenciales no se reintenta', async () => {
@@ -163,7 +163,8 @@ test('lo que devuelve la IA se escapa antes de pintarse', () => {
 test('los modelos y topes siguen una política de costo explícita', () => {
   assert.match(HTML, /FAST:'claude-haiku-4-5'/, 'Haiku es el modelo rápido');
   assert.match(HTML, /REASONING:'claude-sonnet-4-6'/, 'Sonnet queda explícito para razonamiento');
-  assert.match(HTML, /Math\.min\(2000,Number\(opts\.maxTokens\)\|\|800\)/, 'cada consulta tiene un techo duro');
+  assert.match(HTML, /Math\.min\(1400,Number\(opts\.maxTokens\)\|\|600\)/, 'cada consulta tiene un techo duro más bajo');
   assert.doesNotMatch(HTML, /claude-opus|claude-fable/i, 'el dashboard no puede seleccionar modelos caros');
-  assert.match(WORKER, /AUTO_PROCESS_DAILY_CAP \|\| "200"/, 'y el procesamiento automático tiene tope diario');
+  assert.match(WORKER, /AUTO_PROCESS_DAILY_CAP \|\| "25"/, 'y el procesamiento automático tiene un tope diario conservador');
+  assert.match(WORKER, /if \(!env\.RL\) return false/, 'sin KV el auto-proceso falla cerrado');
 });
