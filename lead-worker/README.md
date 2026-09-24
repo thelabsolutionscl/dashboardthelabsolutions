@@ -14,6 +14,11 @@ Worker **dedicado y separado** de `sii-worker`. Ningún secreto vive en el repo.
 | POST | `/portal/revocar` | `X-Portal-Admin-Key` | Invalida los links ya enviados a un cliente |
 | GET | `/portal?t=…` | token firmado | Portal del cliente: pedidos y cotizaciones |
 | POST | `/portal/cotizacion/decision` | token firmado | El cliente aprueba/rechaza su cotización |
+| POST | `/notify/printer` | `X-Notify-Key` | El farm-controller avisa impresión con error/finalizada → WhatsApp a Gustavo |
+| POST | `/notify/test` | `X-Notify-Key` | Mensaje de prueba por WhatsApp (`{"persona":"nicanor"}`) |
+
+Avisos internos por WhatsApp (leads, recordatorios diarios, impresoras): ver
+[`docs/NOTIFICACIONES_WHATSAPP.md`](../docs/NOTIFICACIONES_WHATSAPP.md) §0.
 
 ### Portal del cliente
 El portal lo sirve **este Worker**, no el dashboard: los datos se leen acá con

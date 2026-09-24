@@ -696,6 +696,8 @@ function start(){
     setTimeout(() => discoverLan().catch(e => console.warn('[registry] discovery', e.message)), 5000).unref();
     setInterval(() => discoverLan().catch(e => console.warn('[registry] discovery', e.message)), DISCOVERY_INTERVAL_MS).unref();
   }
+  // Aviso por WhatsApp de impresiones con error/finalizadas (solo si hay PRINT_NOTIFY_URL/KEY).
+  try { require('./print-notify').start(); } catch (e) { console.warn('[print-notify] no arrancó', e.message); }
   server.listen(PUBLIC_PORT, '0.0.0.0', () => {
     console.log('─'.repeat(64));
     console.log('  The Lab Solutions — Farm Controller');

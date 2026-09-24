@@ -25,9 +25,13 @@
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
+ *   POST /notify/printer        (farm-controller — impresión con error/finalizada → WhatsApp; clave WA_NOTIFY_KEY)
+ *   POST /notify/test           (prueba de WhatsApp a nicanor/gustavo; clave WA_NOTIFY_KEY)
  *
  * NINGÚN secreto vive en este archivo. Todo viene de `env` (wrangler secret put).
  */
+
+import { waNotify, waSend, waPhone, mensajeLead, mensajeImpresora, waDailyReminders, WA_RUTAS } from "./wa-notify.js";
 
 const AIRTABLE_API = "https://api.airtable.com/v0";
 
@@ -163,6 +167,11 @@ export default {
         return json({ ok: true, ...res }, 200, cors);
       }
 
+      // Avisos por WhatsApp desde otros servicios (farm-controller) y prueba manual.
+      if (request.method === "POST" && (url.pathname === "/notify/printer" || url.pathname === "/notify/test")) {
+        return await handleNotify(request, env, url.pathname, cors);
+      }
+
       return json({ ok: false, error: "Ruta no encontrada" }, 404, cors);
     } catch (e) {
       console.error("[leads-worker]", e?.stack || e?.message || String(e));
@@ -177,6 +186,13 @@ export default {
       return;
     }
     ctx.waitUntil(retryDeadLetters(env));
+    // Resumen diario por WhatsApp (cotizaciones por enviar / pedidos por vencer);
+    // solo actúa a la hora WA_DIGEST_HOUR de Chile y una vez por día.
+    ctx.waitUntil(
+      waDailyReminders(env, new Date(event.scheduledTime || Date.now())).catch((e) =>
+        console.error("[wa-notify] recordatorios", e.message)
+      )
+    );
     // Una vez al día (07:17 UTC ≈ madrugada en Chile): poda de la cola de agentes
     // y canario del formulario web (ver checkLeadFormHealth).
     if (new Date(event.scheduledTime || Date.now()).getUTCHours() === 7) {
@@ -1795,6 +1811,7 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
   const clienteFields = buildClienteFields(norm, source);
 
   let clienteId = null;
+  let recurrente = false;
   try {
     const existing = await airtableFindCliente(env, {
       email: norm.email,
@@ -1804,6 +1821,7 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
       // Cliente recurrente: reutiliza el registro y refresca interés/cargo
       // sin pisar notas ni la fecha de primer contacto.
       clienteId = existing;
+      recurrente = true;
       await airtableUpdateTolerant(
         env,
         "Clientes",
@@ -1881,6 +1899,12 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
 
   // Auto-respuesta al lead (speed-to-lead), best-effort, no bloquea la respuesta
   if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
+
+  // Aviso interno por WhatsApp (Nicanor + Gustavo), una vez por cliente y hora.
+  ctx.waitUntil(
+    waNotify(env, "lead", mensajeLead(norm, source, { recurrente }), { dedupKey: clienteId, ttl: 3600 })
+      .catch((e) => console.error("[wa-notify] lead", e.message))
+  );
 
   // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
   if (
@@ -2564,6 +2588,7 @@ async function retryDeadLetters(env) {
         email: norm.email,
         phone: norm.phone,
       });
+      const recurrente = !!clienteId;
       if (!clienteId) {
         const cliente = await airtableCreateTolerant(
           env,
@@ -2589,10 +2614,51 @@ async function retryDeadLetters(env) {
         })
       );
       await env.RL.delete(k.name); // recuperado → fuera del buffer
+      // El lead no avisó al entrar (cayó al buffer): avisa ahora que quedó en el CRM.
+      await waNotify(env, "lead", mensajeLead(norm, source, { recurrente }), { dedupKey: clienteId, ttl: 3600 }).catch(() => {});
     } catch (_) {
       /* sigue en buffer para el próximo intento */
     }
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Avisos por WhatsApp disparados desde fuera (ver wa-notify.js)
+ *   /notify/printer → el farm-controller del taller avisa impresión con error
+ *                     o finalizada. Dedup por eventId (12 h).
+ *   /notify/test    → manda un mensaje de prueba a una persona de WA_RUTAS.
+ * Ambas exigen X-Notify-Key = WA_NOTIFY_KEY (sin fallback).
+ * ══════════════════════════════════════════════════════════════════════ */
+async function handleNotify(request, env, pathname, cors) {
+  const key = request.headers.get("X-Notify-Key") || "";
+  if (!env.WA_NOTIFY_KEY || !timingSafeEqual(key, env.WA_NOTIFY_KEY)) {
+    return json({ ok: false, error: "No autorizado" }, 401, cors);
+  }
+  const body = (await readJson(request)) || {};
+  if (pathname === "/notify/test") {
+    const personas = [...new Set(Object.values(WA_RUTAS).flat())];
+    const persona = String(body.persona || "").toLowerCase();
+    if (!personas.includes(persona)) return json({ ok: false, error: `persona debe ser: ${personas.join(", ")}` }, 400, cors);
+    const res = await waSend(env, waPhone(env, persona), {
+      titulo: "Prueba de avisos The Lab",
+      lineas: ["Si lees esto, los avisos del dashboard por WhatsApp funcionan. ✅"],
+    });
+    return json({ persona, ...res }, res.ok ? 200 : 502, cors);
+  }
+  const state = String(body.state || "").toLowerCase();
+  if (!["complete", "error", "paused"].includes(state)) {
+    return json({ ok: false, error: "state debe ser complete | error | paused" }, 400, cors);
+  }
+  const ev = {
+    machine: String(body.machine || "").slice(0, 80),
+    state,
+    filename: String(body.filename || "").slice(0, 160),
+    message: String(body.message || "").slice(0, 300),
+    durationSec: Number(body.durationSec) || 0,
+  };
+  const dedupKey = String(body.eventId || `${ev.machine}|${ev.filename}|${state}`).slice(0, 300);
+  const res = await waNotify(env, "impresora", mensajeImpresora(ev), { dedupKey, ttl: 12 * 3600 });
+  return json({ ok: res.every((r) => r.ok || r.skipped), res }, 200, cors);
 }
 
 function corsHeaders(origin, env) {
