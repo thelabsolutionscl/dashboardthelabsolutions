@@ -113,21 +113,28 @@ function _markAgentModalReactivado(){
 async function agentSendWA(phone,cliId,flow){
   const waPart=_cleanMsg(_extractWAPart(_agentInlineText)||_agentInlineText);
   const clean=String(phone||'').replace(/[^0-9]/g,'');
-  const cfg=typeof getWatiCfg==='function'?getWatiCfg():null;
-  if(cfg?.url&&cfg?.token&&typeof sendWatiMessage==='function'){
-    try{
-      await sendWatiMessage(clean,waPart);
-      if(window._fuCotId){try{await fuMarkDone(window._fuCotId,'WhatsApp');}catch(e){}window._fuCotId=null;}
-      if(cliId){try{await marcarReactivado(cliId,'WhatsApp');}catch(e){}}
-      if(flow==='winback'&&cliId){try{wbMarkSent(cliId,'WhatsApp');}catch(e){}}
-      toast('✓ WhatsApp enviado y gestión registrada','success');
-      return true;
-    }catch(e){
-      toast('No se pudo confirmar el envío por WATI. Se abrirá WhatsApp y el pendiente seguirá visible.','info');
+  // Solo el flujo win-back necesita evidencia de envío para desaparecer de su
+  // bandeja. Los demás botones conservan el comportamiento histórico de abrir WA.
+  if(flow==='winback'){
+    const cfg=typeof getWatiCfg==='function'?getWatiCfg():null;
+    if(cfg?.url&&cfg?.token&&typeof sendWatiMessage==='function'){
+      try{
+        await sendWatiMessage(clean,waPart);
+        if(cliId){try{await marcarReactivado(cliId,'WhatsApp');}catch(e){}}
+        if(cliId){try{wbMarkSent(cliId,'WhatsApp');}catch(e){}}
+        toast('✓ WhatsApp enviado y gestión registrada','success');
+        return true;
+      }catch(e){
+        toast('No se pudo confirmar el envío por WATI. Se abrirá WhatsApp y el pendiente seguirá visible.','info');
+      }
     }
+    window.open('https://wa.me/'+clean+'?text='+encodeURIComponent(waPart),'_blank');
+    return false;
   }
   window.open('https://wa.me/'+clean+'?text='+encodeURIComponent(waPart),'_blank');
-  return false;
+  if(window._fuCotId){try{fuMarkDone(window._fuCotId,'WhatsApp');}catch(e){}window._fuCotId=null;}
+  if(cliId){try{marcarReactivado(cliId,'WhatsApp');}catch(e){}}
+  return true;
 }
 
 // Abre un BORRADOR de correo. Revisarlo/cerrarlo no cambia el estado.
