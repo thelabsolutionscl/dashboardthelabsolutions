@@ -52,9 +52,11 @@ const MAIL={
     const account=email||this.activeAccount();if(!account)return 0;
     this._accountUnseen=this._accountUnseen||{};
     this._accountUnseen[account]=Math.max(0,Number(value)||0);
+    const total=this.unseenTotal();
     try{this.renderAccounts();}catch(e){}
+    try{if(typeof syncMailNavBadge==='function')syncMailNavBadge(total);}catch(e){}
     try{window.DashboardNotificationBadges?.render?.();}catch(e){}
-    return this.unseenTotal();
+    return total;
   },
 
   _mailPassKey(){const a=this.activeAccount();return a?'thelab_mail_pass_'+a:null;},
