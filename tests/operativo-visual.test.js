@@ -174,7 +174,7 @@ test('tarjetas de pedidos muestran pago como desplegable con las mismas acciones
   const pedido=record('p',{'N° Pedido':'PED-1','Cliente':'ABC','Estado pedido':'En producción','Monto total (CLP)':119000,'Forma de pago':'30 DÍAS DESDE OC','Anticipo pagado (50%)':true,'Saldo pagado (50%)':true,'Monto abono (CLP)':50000});
   const menu=op.orderPaymentDropdown(pedido);
   assert.match(menu,/<details class="op-payment-dropdown"/);
-  assert.doesNotMatch(menu,/onclick="event\.stopPropagation\(\)"/,'el dropdown no debe cortar el bubbling porque las acciones data-op se resuelven por delegación en document');
+  assert.doesNotMatch(menu,/onclick="event\.stopPropagation\(\)"/,'el dropdown no debe depender de handlers inline');
   assert.match(menu,/Pagado/);
   assert.match(menu,/✓ Abono/);assert.match(menu,/✓ Saldo/);assert.match(menu,/✓ Total/);assert.match(menu,/✓ Pago a 30 días/);
   assert.match(menu,/card-pay-abono/);assert.match(menu,/card-pay-saldo/);assert.match(menu,/card-pay-total/);assert.match(menu,/card-pay-30/);
@@ -182,6 +182,9 @@ test('tarjetas de pedidos muestran pago como desplegable con las mismas acciones
   const html=element('opOrders').innerHTML;
   assert.match(html,/op-payment-dropdown/,'Vista Tarjetas debe usar el badge Pagado como desplegable');
   assert.match(html,/card-pay-abono/,'el menú debe exponer las mismas acciones de pago que Tabla');
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  assert.match(src,/\.op-payment-menu \[data-op\^="card-pay-"\]/,'las acciones de pago de Tarjetas deben capturarse antes de que otro menú corte el bubbling');
+  assert.match(src,/void events\(e\)/,'Tarjetas debe reutilizar el mismo dispatcher de lógica de pago');
 });
 
 
