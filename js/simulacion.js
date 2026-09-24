@@ -120,8 +120,9 @@ async function _simClaude(system, user, maxTokens){
   if(px){
     r = await _claudeHttp(px.url+'/anthropic/v1/messages', {method:'POST', headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'simulacion'}, body});
   }else{
+    if(typeof _claudeDirectAllowed==='function'&&!_claudeDirectAllowed()) throw new Error('Proxy IA requerido: la simulación no hará llamadas directas sin presupuesto');
     const k = (typeof getAnthropicKey === 'function') ? getAnthropicKey() : '';
-    if(!k) throw new Error('Sin acceso a la IA — configura el proxy o la API key en Mi cuenta');
+    if(!k) throw new Error('Sin acceso a la IA — configura el proxy para continuar');
     r = await _claudeHttp('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':k.replace(/[^\x20-\x7E]/g,'').trim(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
