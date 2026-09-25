@@ -31,9 +31,11 @@ El dashboard aplica una política **Haiku-first**. Sonnet queda reservado para a
 
 - Presupuesto diario por defecto: **US$1,00**.
 - Reserva máxima estimada por solicitud: **US$0,20**.
-- El presupuesto vive en KV mediante el binding `AI_BUDGET`.
+- El presupuesto se decide en un **Durable Object** (`AI_BUDGET_GUARD`) que serializa reserva, conciliación y liberación; así dos llamadas simultáneas no pueden leer el mismo saldo y sobrepasar el tope.
+- KV (`AI_BUDGET`) se conserva solo para migrar de forma conservadora el saldo del día desde el guard anterior.
+- Además hay un máximo de **2 solicitudes Anthropic simultáneas** en el proxy.
 - La estimación previa usa 3 caracteres/token para reservar de forma conservadora.
-- Cuando Anthropic devuelve usage verificable, la reserva se reconcilia con el costo real.
+- Cuando Anthropic devuelve usage verificable, la reserva se reconcilia con el costo real de forma idempotente.
 - Si el guard de costo/KV no está disponible, Anthropic falla cerrado.
 - `/anthropic/usage` permite al dashboard leer gasto, saldo y atribución por agente sin ejecutar modelos.
 - Modelos fuera del allowlist siguen bloqueados.
