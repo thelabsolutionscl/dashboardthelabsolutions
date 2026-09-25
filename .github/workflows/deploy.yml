@@ -124,14 +124,7 @@ jobs:
             "${api}/deployments?sha=${STALE_SHA}&environment=github-pages&per_page=100" \
             -o /tmp/stale-deployments.json
 
-          python3 - <<'PY' >/tmp/stale-deployment-ids
-import json
-with open('/tmp/stale-deployments.json') as fh:
-    data=json.load(fh)
-for dep in data if isinstance(data,list) else []:
-    if dep.get('sha')=='19cf5c537e6b2503241088aaae03cbd1636dd686' and dep.get('environment')=='github-pages':
-        print(dep['id'])
-PY
+          python3 -c 'import json; data=json.load(open("/tmp/stale-deployments.json")); print("\n".join(str(dep["id"]) for dep in data if dep.get("sha")=="19cf5c537e6b2503241088aaae03cbd1636dd686" and dep.get("environment")=="github-pages"))' > /tmp/stale-deployment-ids
 
           while read -r deployment_id; do
             [ -n "$deployment_id" ] || continue
