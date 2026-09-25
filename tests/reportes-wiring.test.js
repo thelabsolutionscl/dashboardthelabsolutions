@@ -80,7 +80,10 @@ test('crearReporte usa datos vivos, CEO_AGENT y persiste el registro completo',(
   for(const field of ['Semana','Revenue semana (CLP)','Cotizaciones enviadas','Cotizaciones aprobadas','Pedidos activos','Pedidos despachados','Resumen ejecutivo','Fecha generación','Tasa conversión (%)','Estado reporte']){
     assert.match(body,new RegExp(escapeRegExp(field)),`el registro debe incluir ${field}`);
   }
-  assert.match(body,/loadAllDataSilent\s*\(/,'debe recargar la fuente de verdad después de guardar');
+  assert.match(body,/const\s+created\s*=\s*await\s+airtableWrite\(\s*['\"]Reportes['\"]\s*,\s*['\"]POST['\"]/,'debe capturar el registro recién creado');
+  assert.match(body,/state\.reportes\s*=\s*\[created/,'debe incorporar el reporte nuevo al estado inmediatamente, sin depender del throttle global');
+  assert.doesNotMatch(body,/await\s+loadAllDataSilent\s*\(\s*\)/,'no debe depender del refresco silencioso de 10 minutos para mostrar el informe nuevo');
+  assert.match(body,/ovRenderUltimoReporteCEO\s*\(/,'debe refrescar de inmediato el informe CEO del Overview');
   assert.match(body,/renderReportes\s*\(/,'debe refrescar el historial');
   assert.match(body,/btn\.disabled\s*=\s*false/,'el botón debe recuperarse al terminar');
 });
