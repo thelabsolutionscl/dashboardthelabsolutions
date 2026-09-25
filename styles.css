@@ -1106,7 +1106,7 @@ body.mail-fs-on .mail-compose-panel{z-index:460!important;}
 .mail-thread-child::before{content:'';position:absolute;left:20px;top:0;bottom:0;width:1px;background:var(--border2);}
 .mail-thread-child .mail-item-from{max-width:155px;}
 .mail-thread-head.selected{border-left:2px solid var(--accent);padding-left:8px;}
-@media(max-width:760px){
+@media(max-width:768px){
   .mail-thread-child{padding-left:27px}
   .mail-thread-child::before{left:15px}
   .mail-thread-count{font-size:9px}
