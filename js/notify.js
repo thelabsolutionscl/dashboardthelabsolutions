@@ -4,8 +4,10 @@ const NOTIFY={
   _key:'thelab_notifications_v1',
   _histKey:'thelab_notifications_hist_v1',
   _alertKeysKey:'thelab_alert_keys_v1',
+  _priorityPrefix:'thelab_priority_v1_',
   items:[],
   _hist:[],
+  _priority:[],
   _seq:0,
   _filter:'todas',
 
@@ -17,7 +19,9 @@ const NOTIFY={
       this._hist=h.length?h:this.items.slice();
     }catch(e){this._hist=this.items.slice();}
     this.loadPrefs();
+    this.loadPriority();
     this.updateBadge();
+    this.renderPriority();
     window.addEventListener('storage',ev=>{
       if(ev.key===this._key){
         try{this.items=JSON.parse(ev.newValue||'[]');}catch(e){return;}
@@ -25,6 +29,8 @@ const NOTIFY={
       }
     });
     setTimeout(()=>this.checkDailySummary(),10000);
+    // El correo debe avisar aunque el usuario esté trabajando en otra sección.
+    setTimeout(()=>{try{startMailPolling();}catch(e){}},5000);
   },
   save(){
     try{localStorage.setItem(this._key,JSON.stringify(this.items.slice(0,60)));}catch(e){}
@@ -48,6 +54,52 @@ const NOTIFY={
 
   // ── HELPERS ──────────────────────────────────────────────────
   esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');},
+
+  // ── AVISOS PERSONALES GLOBALES ───────────────────────────────
+  persona(){
+    try{
+      const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
+      const raw=[u?.username,u?.email,u?.name].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      if(raw.includes('nicanor'))return'nicanor';
+      if(raw.includes('gustavo'))return'gustavo';
+    }catch(e){}
+    return'';
+  },
+  _priorityKey(){return this._priorityPrefix+(this.persona()||'otro');},
+  loadPriority(){
+    try{
+      const rows=JSON.parse(localStorage.getItem(this._priorityKey())||'[]');
+      const min=Date.now()-7*86400000;
+      this._priority=(Array.isArray(rows)?rows:[]).filter(x=>x&&Date.parse(x.time||0)>=min).slice(0,20);
+    }catch(e){this._priority=[];}
+  },
+  savePriority(){try{localStorage.setItem(this._priorityKey(),JSON.stringify(this._priority.slice(0,20)));}catch(e){}},
+  priority(kind,title,sub,action,opts={}){
+    const me=this.persona(),personas=Array.isArray(opts.personas)?opts.personas:[];
+    if(personas.length&&(!me||!personas.includes(me)))return false;
+    const key=String(opts.key||'');
+    if(key&&this._priority.some(x=>x.key===key))return false;
+    const item={id:Date.now()*100+(++this._seq%100),kind:String(kind||'info'),tone:String(opts.tone||'info'),title:String(title||'Aviso'),sub:String(sub||''),action:action||null,key,time:new Date().toISOString()};
+    this._priority.unshift(item);this._priority=this._priority.slice(0,20);this.savePriority();this.renderPriority();return true;
+  },
+  dismissPriority(id){
+    this._priority=this._priority.filter(x=>String(x.id)!==String(id));this.savePriority();this.renderPriority();
+  },
+  openPriority(id){
+    const item=this._priority.find(x=>String(x.id)===String(id));if(!item)return;
+    this.dismissPriority(id);
+    if(!item.action)return;
+    if(String(item.action).startsWith('@')){const fn=window[String(item.action).slice(1)];if(typeof fn==='function')fn();return;}
+    if(typeof switchTab==='function')switchTab(item.action);
+  },
+  renderPriority(){
+    if(typeof document==='undefined'||!document.body)return;
+    let host=document.getElementById('tlsPersonalNotifications');
+    if(!host){host=document.createElement('aside');host.id='tlsPersonalNotifications';host.className='tls-personal-alerts';host.setAttribute('aria-live','polite');document.body.appendChild(host);}
+    const rows=this._priority||[];host.hidden=!rows.length;
+    const icon={lead:'◎',quote:'↗',order:'!',mail:'✉',printer:'⬡',info:'i'};
+    host.innerHTML=rows.map(item=>`<article class="tls-personal-alert tone-${this.esc(item.tone)}"><span class="tls-personal-alert-icon">${icon[item.kind]||icon.info}</span><div class="tls-personal-alert-copy"><b>${this.esc(item.title)}</b>${item.sub?`<small>${this.esc(item.sub)}</small>`:''}</div><div class="tls-personal-alert-actions">${item.action?`<button type="button" class="btn btn-primary btn-sm" onclick="NOTIFY.openPriority('${item.id}')">Abrir</button>`:''}<button type="button" class="btn btn-ghost btn-sm" onclick="NOTIFY.dismissPriority('${item.id}')">Descartar</button></div></article>`).join('');
+  },
 
   // ── CORE ADD ─────────────────────────────────────────────────
   add(type,title,sub,action,opts={}){
@@ -90,6 +142,10 @@ const NOTIFY={
       this.add('warning',shortMsg,
         a.sev===3?'Crítico':a.sev===2?'Advertencia':'Info',
         tabMap[a.type]||a.tab||'overview',{silent:true,key});
+      if(typeof this.priority==='function'){
+        if(a.type==='cot-sin-enviar')this.priority('quote','Recordatorio de envío de cotización',shortMsg,'cotizaciones',{key:'personal:'+key,personas:['nicanor'],tone:a.sev===3?'danger':'warning'});
+        if(a.type==='pedido-atrasado'||a.type==='pedido-urgente')this.priority('order','Recordatorio de vencimiento de pedido',shortMsg,'pedidos',{key:'personal:'+key,personas:['gustavo'],tone:a.type==='pedido-atrasado'?'danger':'warning'});
+      }
       if(a.sev===3){
         nuevasCriticas++;
         this._sendWhatsApp(shortMsg);
@@ -391,6 +447,7 @@ ${ceoHtml}
 // ── POLLING DE CORREO ──────────────────────────────────────────
 let _mailPollTimer = null;
 let _mailLastUnseen = -1;
+const _mailLastByAccount=Object.create(null);
 let _notifPermission = false;
 const _POLL_INTERVAL = 60000; // 60 segundos (SilverHost pidió bajar la frecuencia de consulta a mail-api para no disparar el antibot del firewall; 1/min alcanza de sobra)
 const _BASE_TITLE = document.title;
@@ -450,11 +507,11 @@ function syncMailNavBadge(total){
 }
 
 // Actualiza título, badge superior e ícono lateral con el contador de no leídos.
-function updateTabTitle(unseen){
+function updateTabTitle(unseen,email){
   let total=Math.max(0,Number(unseen)||0);
   try{
     if(typeof MAIL!=='undefined'&&typeof MAIL.setAccountUnseen==='function'){
-      total=MAIL.setAccountUnseen(total);
+      total=MAIL.setAccountUnseen(total,email);
     }
   }catch(e){}
   document.title = total>0 ? `(${total}) ${_BASE_TITLE}` : _BASE_TITLE;
@@ -507,30 +564,45 @@ function _mailPollCadencia(lento, motivo){
   }
 }
 
-async function _mailCheck(){
-  if(document.hidden) return;          // no consultar el servidor de correo con la pestaña oculta
-  if(!MAIL.getMailPass || !MAIL.getMailPass()) return;
+function _mailPersona(){
+  try{return typeof NOTIFY!=='undefined'&&typeof NOTIFY.persona==='function'?NOTIFY.persona():'';}catch(e){return'';}
+}
+function _mailRelevantAccounts(){
   try{
-    const data = await MAIL.post({action:'check'});
-    if(data.error){
-      if(++_mailPollErrors>=10) _mailPollCadencia(true, data.error);
-      return;
-    }
-    _mailPollErrors=0;
-    _mailPollCadencia(false);
-    const unseen = data.unseen ?? 0;
-    updateTabTitle(unseen);
-    if(_mailLastUnseen >= 0 && unseen > _mailLastUnseen){
-      const n = unseen - _mailLastUnseen;
-      const title = `${n} correo${n>1?'s':''} nuevo${n>1?'s':''}`;
-      NOTIFY.add('mail', title, 'Bandeja de entrada', 'correo');
-      playMailSound();
-      showOsNotif(`✉️ ${title}`, 'Haz clic para abrir el correo', ()=>switchTab('correo'));
-      const active = sessionStorage.getItem('thelab_active_tab');
-      if(active==='correo'){ MAIL.loadMessages(); MAIL.loadFolders(); }
-    }
-    _mailLastUnseen = unseen;
-  }catch(e){}
+    const persona=_mailPersona();if(!['nicanor','gustavo'].includes(persona))return[];
+    const u=AUTH.getUser&&AUTH.getUser(),own=String(u?.username||u?.email||'').trim().toLowerCase();
+    return[own,'hola@thelab.solutions'].filter((v,i,a)=>v&&v.includes('@')&&a.indexOf(v)===i);
+  }catch(e){return[];}
+}
+function _mailHasPass(email){try{return!!localStorage.getItem('thelab_mail_pass_'+email);}catch(e){return false;}}
+async function _mailCheckAccount(email,{baseline=false}={}){
+  if(!_mailHasPass(email)||!MAIL?.postAs)return{attempted:false,ok:false};
+  const data=await MAIL.postAs(email,{action:'check'});
+  if(data?.error)return{attempted:true,ok:false,error:data.error};
+  const unseen=Math.max(0,Number(data?.unseen)||0),prev=Number.isFinite(_mailLastByAccount[email])?_mailLastByAccount[email]:-1;
+  _mailLastByAccount[email]=unseen;
+  if(email===MAIL.activeAccount?.())_mailLastUnseen=unseen;
+  updateTabTitle(unseen,email);
+  if(!baseline&&prev>=0&&unseen>prev){
+    const n=unseen-prev,shared=email==='hola@thelab.solutions',box=shared?'hola@thelab.solutions':email;
+    const title=`${n} correo${n>1?'s':''} nuevo${n>1?'s':''} · ${shared?'HOLA':(_mailPersona()==='nicanor'?'NICANOR':'GUSTAVO')}`;
+    NOTIFY.add('mail',title,box,'correo',{silent:true,key:`mail:${email}:${Date.now()}`});
+    NOTIFY.priority('mail','Nuevo correo electrónico',`${n} nuevo${n>1?'s':''} en ${box}`,'correo',{key:`mail-priority:${email}:${Date.now()}`,personas:[_mailPersona()],tone:'info'});
+    playMailSound();
+    showOsNotif(`✉️ ${title}`,`Bandeja: ${box}`,()=>switchTab('correo'));
+    const active=sessionStorage.getItem('thelab_active_tab');
+    if(active==='correo'&&email===MAIL.activeAccount?.()){MAIL.loadMessages();MAIL.loadFolders();}
+  }
+  return{attempted:true,ok:true,unseen};
+}
+async function _mailCheck(){
+  if(document.hidden)return;
+  const accounts=_mailRelevantAccounts();let attempted=0,ok=0,lastError='';
+  for(const email of accounts){
+    try{const r=await _mailCheckAccount(email);if(r.attempted)attempted++;if(r.ok)ok++;else if(r.error)lastError=r.error;}catch(e){attempted++;lastError=e?.message||String(e);}
+  }
+  if(attempted&&ok===0){if(++_mailPollErrors>=10)_mailPollCadencia(true,lastError||'sin respuesta');}
+  else if(ok>0){_mailPollErrors=0;_mailPollCadencia(false);}
 }
 
 let _mailPollArmando = false;
@@ -540,19 +612,15 @@ function startMailPolling(){
   // DOS intervalos consultando el servidor, justo lo que el hosting pidió evitar.
   if(_mailPollTimer || _mailPollArmando) return;
   _mailPollArmando=true;
-  // Establece el baseline inmediatamente (sin notificar), luego empieza el polling
+  // Establece baseline por cuenta (personal + hola@) sin disparar avisos viejos.
   setTimeout(async()=>{
     try{
-      if(!MAIL.getMailPass || !MAIL.getMailPass()) return;   // sin clave no hay nada que consultar
-      const data = await MAIL.post({action:'check'});
-      if(!data.error) _mailLastUnseen = data.unseen ?? 0;
-      updateTabTitle(_mailLastUnseen);
-      // Ahora sí arranca el intervalo de detección
-      _mailPollTimer = setInterval(_mailCheck, _POLL_INTERVAL);
+      const accounts=_mailRelevantAccounts();
+      for(const email of accounts){try{await _mailCheckAccount(email,{baseline:true});}catch(e){}}
+      if(accounts.some(_mailHasPass))_mailPollTimer=setInterval(_mailCheck,_POLL_INTERVAL);
     }catch(e){}
-    finally{ _mailPollArmando=false; }   // si no llegó a armarse, se puede reintentar
-  }, 4000); // espera 4s a que cargue la bandeja inicial
-  // Solicita permiso para notificaciones del SO
+    finally{ _mailPollArmando=false; }
+  },4000);
   requestWebNotifPermission();
 }
 
