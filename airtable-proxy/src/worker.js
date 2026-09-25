@@ -456,7 +456,12 @@ function estimateAiRequestUsd(payload) {
   // 3 chars/token intentionally over-reserves versus the common ~4 chars/token.
   const inputTokens = Math.ceil(chars / 3);
   const outputTokens = Math.max(0, Number(payload?.max_tokens) || 0);
-  return (inputTokens * p.input + outputTokens * p.output) / 1000000;
+  // Reserva al peor precio posible del input: el primer uso de prompt caching
+  // puede cobrarse como cache write, que es más caro que input normal.
+  // Con max_tokens como techo de salida, la reserva queda deliberadamente >=
+  // al costo facturable esperable de la solicitud.
+  const inputRate = Math.max(p.input, p.cacheWrite);
+  return (inputTokens * inputRate + outputTokens * p.output) / 1000000;
 }
 
 async function aiBudgetGuardCall(env, pathname, payload) {
