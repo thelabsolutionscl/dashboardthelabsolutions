@@ -9,7 +9,7 @@ LINKEDIN_WEBHOOK_KEY=otra-clave-larga-aleatoria
 
 # Opcionales
 TURNSTILE_SECRET=
-ANTHROPIC_API_KEY=
+AI_PROXY_KEY=
 AUTO_PROCESS_LEADS=false
 
 # Piloto automático de Google Ads (semanal, con aprobación por email)
