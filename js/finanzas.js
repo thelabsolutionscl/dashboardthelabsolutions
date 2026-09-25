@@ -1822,10 +1822,8 @@ function populateMobileConfig(){
   const ptk=document.getElementById('mbPrinterToken');if(ptk){const v=localStorage.getItem('printer_tunnel_token');ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••'))ptk.value='';};ptk.onblur=()=>{if(!ptk.value){const vv=localStorage.getItem('printer_tunnel_token');ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const pts=document.getElementById('mbPrinterTunnelStatus');
   if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=(v?'✓ '+v:'Default: https://printers.thelab.solutions')+(localStorage.getItem('printer_tunnel_token')?' · 🔑':'');}
-  const ak=document.getElementById('mbAnthropicKey');
-  if(ak){const v=lsGet('anthropic_key');ak.value='';ak.placeholder=v&&!v.startsWith('%%')?'(guardada — escribe nueva para cambiar)':'sk-ant-api03-...';}
   const aks=document.getElementById('mbAnthropicStatus');
-  if(aks){const v=lsGet('anthropic_key');aks.textContent=v&&!v.startsWith('%%')?'✓ KAI conectado':'Sin configurar';}
+  if(aks){const px=(typeof _proxyCfg==='function')&&_proxyCfg();aks.textContent=px?'✓ Proxy IA activo · gasto protegido':'⚠ Proxy IA no configurado';}
 }
 function saveMbAirtableToken(){
   const inp=document.getElementById('mbAirtableToken');const v=(inp?.value||'').trim();
@@ -1902,26 +1900,6 @@ function clearMbPrinterTunnel(){
   const tkInp=document.getElementById('mbPrinterToken');if(tkInp) tkInp.value='';
   const pts=document.getElementById('mbPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
   toast('Túnel restablecido al default','info');
-}
-function saveMbAnthropicKey(){
-  const inp=document.getElementById('mbAnthropicKey');const v=(inp?.value||'').trim();
-  if(!v){
-    const existing=lsGet('anthropic_key');
-    if(existing&&!existing.startsWith('%%')) toast('KAI ya tiene una key configurada','info');
-    else toast('Ingresa una API Key de Anthropic','error');
-    return;
-  }
-  if(v.startsWith('•')){toast('Ingresa la key completa, no el valor enmascarado','error');return;}
-  lsSet('anthropic_key',v);
-  if(inp){inp.value='';inp.placeholder='(guardada — escribe nueva para cambiar)';}
-  const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='✓ KAI conectado';
-  toast('✓ KAI API Key guardada','success');
-}
-function clearMbAnthropicKey(){
-  lsSet('anthropic_key','');
-  const inp=document.getElementById('mbAnthropicKey');if(inp){inp.value='';inp.placeholder='sk-ant-api03-...';}
-  const st=document.getElementById('mbAnthropicStatus');if(st) st.textContent='Sin configurar';
-  toast('KAI API Key eliminada','info');
 }
 function saveMbElevenLabsKey(){
   const inp=document.getElementById('mbElevenLabsKey');const v=(inp?.value||'').trim();
