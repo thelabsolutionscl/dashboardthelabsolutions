@@ -644,32 +644,32 @@ async function evaluatePreflightLive(job,machine){
 function alertRow(key,machineId,severity,title,detail,action=''){
   return{key,machineId,severity,title,detail,action,at:Date.now()};
 }
+function livePrintActive(live){return !!live&&['printing','paused'].includes(String(live.state||''));}
+function liveProgressPct(live){
+  // _printerStatus ya normaliza virtual_sdcard.progress a 0..100. No volver a
+  // multiplicar valores <=1: hacerlo convertía 0,4% en 40% y 1% en 100%.
+  return clamp(num(live?.progressRaw??live?.progress),0,100);
+}
 function printRun(live,now=Date.now()){
-  const elapsed=Math.max(0,num(live?.elapsed)),progress=Math.max(0,Math.min(100,num(live?.progress)));
+  const elapsed=Math.max(0,num(live?.elapsed)),progress=liveProgressPct(live);
   return{file:fileKey(live?.filename),startedAt:now-elapsed*1000,elapsed,progress,lastSeenAt:num(live?.lastSeenAt)};
 }
 function samePrintRun(a,b){
   return !!a&&!!b&&a.file===b.file&&Math.abs(num(a.startedAt)-num(b.startedAt))<120000;
 }
-// "Saltar esta impresión" debe mantenerse durante TODA la ejecución aunque
-// Moonraker/WS entregue un elapsed momentáneamente distinto. Antes dependíamos
-// casi solo de startedAt estimado; una variación >2 min hacía reaparecer la
-// misma alerta una y otra vez. Para un skip, el archivo sigue silenciado mientras
-// continúe imprimiendo. Solo se considera una ejecución nueva si cambia el
-// archivo o hay evidencia fuerte de reinicio (progreso Y elapsed retroceden).
+// "Saltar esta impresión" dura toda la ejecución actual. La identidad tolera
+// telemetría inestable, filename vacío momentáneo y pausas. Solo se abre de
+// nuevo cuando existe evidencia real de otro archivo o de un reinicio.
 function ignoredPrintMatches(ignored,live,now=Date.now()){
-  if(!ignored||ignored.clearedAt||!live||live.state!=='printing')return false;
-  const run=printRun(live,now);
-  if(!ignored.file||ignored.file!==run.file)return false;
-  const ignoredAt=Math.max(0,num(ignored.ignoredAt));
-  // Red de seguridad para un dashboard que estuvo cerrado entre dos ejecuciones
-  // idénticas y nunca alcanzó a observar el estado terminal.
-  if(ignoredAt&&now-ignoredAt>24*3600*1000)return false;
+  if(!ignored||ignored.clearedAt||!livePrintActive(live))return false;
+  const run=printRun(live,now),ignoredAt=Math.max(0,num(ignored.ignoredAt));
+  if(ignored.file&&run.file&&ignored.file!==run.file)return false;
   if(samePrintRun(ignored,run))return true;
   const prevElapsed=Math.max(0,num(ignored.elapsed)),prevProgress=Math.max(0,num(ignored.progress));
-  const elapsedRestart=prevElapsed>=300&&run.elapsed+180<prevElapsed;
-  const progressRestart=prevProgress>=20&&run.progress+15<prevProgress;
-  if(elapsedRestart&&progressRestart)return false;
+  const elapsedRestart=prevElapsed>=60&&run.elapsed+45<prevElapsed;
+  const progressRestart=prevProgress>=4&&run.progress+3<prevProgress;
+  const startedAfterSkip=ignoredAt>0&&run.startedAt>ignoredAt+30000;
+  if(progressRestart&&(elapsedRestart||startedAfterSkip))return false;
   return true;
 }
 function linkedLiveJob(machineId,live,now=Date.now()){
@@ -684,18 +684,18 @@ function linkedLiveJob(machineId,live,now=Date.now()){
 function unlinkedPrints(now=Date.now()){
   return (typeof MAQUINAS!=='undefined'?MAQUINAS:[]).filter(m=>{
     const evidence=liveEvidence(m.id,now),live=evidence.live;
-    return evidence.known&&live.state==='printing'&&!linkedLiveJob(m.id,live,now)&&
+    return evidence.known&&livePrintActive(live)&&!linkedLiveJob(m.id,live,now)&&
       !ignoredPrintMatches(data().ignoredPrints[m.id],live,now);
   });
 }
 function renderUnlinkedPrints(){
   if(typeof document==='undefined'||!document.body)return;
   let el=document.getElementById('mopsGlobalUnlinked');
-  if(!el){el=document.createElement('aside');el.id='mopsGlobalUnlinked';el.className='mops-global-unlinked';el.setAttribute('role','alert');document.body.appendChild(el);}
+  if(!el){el=document.createElement('aside');el.id='mopsGlobalUnlinked';el.className='mops-global-unlinked';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','false');document.body.appendChild(el);}
   const rows=unlinkedPrints();el.hidden=!rows.length;
   el.innerHTML=rows.map(m=>{
-    const live=_printerStatus[m.id]||{};
-    return `<div class="mops-global-unlinked-row"><div><b>⚠ Impresión sin trabajo asignado · ${esc(machineLabel(m.id))}</b><small>${esc(live.filename||'Archivo sin identificar')} · ${Math.round(num(live.progress))}% completado</small></div><div class="mops-global-unlinked-actions"><button type="button" class="btn btn-primary btn-sm" data-machine="${esc(m.id)}" data-action="assign">Asignar existente</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="create">Crear trabajo</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="skip">Saltar esta impresión</button></div></div>`;
+    const live=_printerStatus[m.id]||{},paused=live.state==='paused';
+    return `<div class="mops-global-unlinked-row"><div><b>⚠ Impresión sin trabajo asignado · ${esc(machineLabel(m.id))}</b><small>${esc(live.filename||'Archivo sin identificar')} · ${Math.round(liveProgressPct(live))}% completado${paused?' · PAUSADA':''}</small></div><div class="mops-global-unlinked-actions"><button type="button" class="btn btn-primary btn-sm" data-machine="${esc(m.id)}" data-action="assign">Asignar existente</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="create">Crear trabajo</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="skip">Saltar esta impresión</button></div></div>`;
   }).join('');
   if(!el.dataset.bound){el.dataset.bound='1';el.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;if(button.dataset.action==='assign')openUnlinkedAssignment(button.dataset.machine);else if(button.dataset.action==='create')openJobFromLive(button.dataset.machine);else skipUnlinkedPrint(button.dataset.machine);});}
 }
@@ -711,13 +711,13 @@ function refreshUnlinkedPrintAlerts(){
 }
 function skipUnlinkedPrint(machineId){
   const live=_printerStatus[machineId]||{};
-  if(live.state!=='printing')return;
-  data().ignoredPrints[machineId]={...printRun(live),ignoredAt:Date.now()};
-  persist('Impresión sin trabajo saltada',{render:false});refreshUnlinkedPrintAlerts();
+  if(!livePrintActive(live)){toast('La impresión ya no está activa','info');refreshUnlinkedPrintAlerts();return false;}
+  const at=Date.now();data().ignoredPrints[machineId]={...printRun(live,at),ignoredAt:at,updatedAt:at};
+  persist('Impresión sin trabajo saltada',{render:false});refreshUnlinkedPrintAlerts();return true;
 }
 function openUnlinkedAssignment(machineId){
   const m=getMachine(machineId),live=_printerStatus[machineId]||{};
-  if(!m||live.state!=='printing'||!liveEvidence(machineId).known){toast('La impresión ya no está activa o la telemetría está vencida','error');renderUnlinkedPrints();return;}
+  if(!m||!livePrintActive(live)||!liveEvidence(machineId).known){toast('La impresión ya no está activa o la telemetría está vencida','error');renderUnlinkedPrints();return;}
   let modal=document.getElementById('mopsAssignLiveModal');
   if(!modal){modal=document.createElement('div');modal.id='mopsAssignLiveModal';modal.className='mops-assign-live-backdrop';document.body.appendChild(modal);modal.addEventListener('click',event=>{if(event.target===modal||event.target.closest('[data-close]'))closeUnlinkedAssignment();else if(event.target.closest('[data-create]'))openJobFromLive(modal.dataset.machine);else if(event.target.closest('[data-confirm]'))assignUnlinkedPrint();});}
   const candidates=data().jobs.filter(j=>!j.archived&&['pendiente','planificado','en_cola'].includes(j.status)&&!j.farmJobId&&!j.executionId&&modelCanRun(m.modelo,j));
@@ -729,7 +729,7 @@ function closeUnlinkedAssignment(){const modal=document.getElementById('mopsAssi
 function assignUnlinkedPrint(){
   const modal=document.getElementById('mopsAssignLiveModal'),machineId=modal?.dataset.machine,live=_printerStatus[machineId]||{};
   const job=data().jobs.find(j=>j.id===modal?.querySelector('select')?.value),m=getMachine(machineId);
-  if(!m||live.state!=='printing'||!liveEvidence(machineId).known){toast('La impresión ya no está activa','error');closeUnlinkedAssignment();renderUnlinkedPrints();return;}
+  if(!m||!livePrintActive(live)||!liveEvidence(machineId).known){toast('La impresión ya no está activa','error');closeUnlinkedAssignment();renderUnlinkedPrints();return;}
   if(!job||job.archived||!['pendiente','planificado','en_cola'].includes(job.status)||job.farmJobId||job.executionId||!modelCanRun(m.modelo,job)){toast('Selecciona un trabajo compatible y pendiente','error');return;}
   if(linkedLiveJob(machineId,live)){toast('La impresión ya tiene un trabajo vinculado','info');closeUnlinkedAssignment();renderUnlinkedPrints();return;}
   job.machineId=machineId;job.status='imprimiendo';job.livePrintRun=printRun(live);job.liveFilename=live.filename||'';
@@ -746,7 +746,7 @@ function connectivityAlertDecision(machine,stateNow,offlineForMs,jobs=[],offline
   return{show:!!(unreachable&&!intentionallyOffline&&urgentJob),unreachable,intentionallyOffline,urgentJob,operationalState};
 }
 function buildSmartAlerts(now=Date.now()){
-  const rows=[],active=activeJobs();
+  const rows=[],active=activeJobs(),unlinkedIds=new Set(unlinkedPrints(now).map(m=>m.id));
   let farmJobs=[];try{farmJobs=window.FarmQueue?.status?.().jobs||[];}catch(_){}
   if(_bridgeHealth.state==='down')rows.push(alertRow('bridge-down','', 'critical','Bridge de impresoras sin respuesta',_bridgeHealth.error||'No se pudo alcanzar el bridge','bridge'));
   active.filter(j=>j.dueDate&&dateValue(j.dueDate)<now).forEach(j=>rows.push(alertRow('late-'+j.id,j.machineId,'warning','Trabajo atrasado',`${j.name} · ${orderLabel(j.pedidoId)||'sin pedido'}`,'job:'+j.id)));
@@ -762,11 +762,11 @@ function buildSmartAlerts(now=Date.now()){
     if(['error','shutdown'].includes(stateNow))rows.push(alertRow('error-'+machine.id,machine.id,'critical','Impresora detenida',live.klMsg||'Klipper requiere atención','machine:'+machine.id));
     if(stateNow==='paused')rows.push(alertRow('paused-'+machine.id,machine.id,'warning','Impresión pausada',live.filename||'Archivo sin nombre','machine:'+machine.id));
     if(stateNow==='cancelled')rows.push(alertRow('cancelled-'+machine.id,machine.id,'warning','Última impresión cancelada',live.filename||'Revisa la máquina','machine:'+machine.id));
-    if(stateNow==='complete')rows.push(alertRow('pickup-'+machine.id,machine.id,'info','Impresión terminada',`${live.filename||'Trabajo'} · retirar pieza y realizar QA`,'machine:'+machine.id));
+    if(stateNow==='complete'&&!bedIsCleared(machine.id))rows.push(alertRow('pickup-'+machine.id,machine.id,'info','Impresión terminada',`${live.filename||'Trabajo'} · retirar pieza y realizar QA`,'machine:'+machine.id));
     if((stateNow==='printing'||stateNow==='paused')&&live.filament?.detected===false)rows.push(alertRow('filament-'+machine.id,machine.id,'critical','Sin filamento detectado','Sensor físico reporta vacío','machine:'+machine.id));
     if(stateNow==='printing'&&watch.unchangedAt&&now-watch.unchangedAt>num(data().automation.stallMinutes,12)*60000)rows.push(alertRow('stalled-'+machine.id,machine.id,'critical','Progreso detenido',`Sin avance por ${Math.floor((now-watch.unchangedAt)/60000)} min`,'machine:'+machine.id));
     if(stateNow==='printing'&&(num(live.elapsed)>300||num(live.progress)>0)&&((num(live.hotend?.target)>0&&Math.abs(num(live.hotend.actual)-num(live.hotend.target))>num(data().automation.tempTolerance,18))||(num(live.bed?.target)>0&&Math.abs(num(live.bed.actual)-num(live.bed.target))>num(data().automation.tempTolerance,18))))rows.push(alertRow('temperature-'+machine.id,machine.id,'warning','Temperatura fuera del objetivo',`Hotend ${num(live.hotend?.actual)}°/${num(live.hotend?.target)}° · cama ${num(live.bed?.actual)}°/${num(live.bed?.target)}°`,'machine:'+machine.id));
-    if(unlinkedPrints(now).some(m=>m.id===machine.id))rows.push(alertRow('unlinked-'+machine.id,machine.id,'warning','Impresión sin trabajo vinculado',live.filename||'Archivo sin identificar','link:'+machine.id));
+    if(unlinkedIds.has(machine.id))rows.push(alertRow('unlinked-'+machine.id,machine.id,'warning','Impresión sin trabajo vinculado',live.filename||'Archivo sin identificar','link:'+machine.id));
     try{getMaintAlerts(machine).forEach(a=>rows.push(alertRow('maint-'+machine.id+'-'+a.key,machine.id,a.hours>=a.threshold?'critical':'warning','Mantención '+(a.hours>=a.threshold?'vencida':'próxima'),`${a.label}: ${Math.round(a.hours)}/${a.threshold} h`,'machine:'+machine.id)));}catch(_){ }
   });
   const ttl=4*3600000;
@@ -774,7 +774,11 @@ function buildSmartAlerts(now=Date.now()){
 }
 function machineAlertsFor(machineId){return buildSmartAlerts().filter(a=>a.machineId===machineId);}
 
-function acknowledgeAlert(key){data().alertAcks[key]=Date.now();persist('Alerta atendida',{render:true});}
+function acknowledgeAlert(key){
+  key=String(key||'');
+  if(key.startsWith('unlinked-'))return skipUnlinkedPrint(key.slice('unlinked-'.length));
+  data().alertAcks[key]=Date.now();persist('Alerta atendida',{render:true});return true;
+}
 function handleAlertAction(action){
   const [type,...rest]=String(action||'').split(':'),id=rest.join(':');
   if(type==='bridge'){checkBridgeHealth(false);return;}
@@ -791,13 +795,13 @@ function applyRecommendation(jobId,machineId=''){
   job.updatedAt=nowIso();persist('Recomendación inteligente aplicada');toast(`${job.name} → ${machineLabel(job.machineId)}`,'success');
 }
 function createJobFromLive(machineId){
-  const m=getMachine(machineId),live=typeof _printerStatus!=='undefined'?_printerStatus[machineId]||{}:{};if(!m||live.state!=='printing'){toast('No hay una impresión activa para vincular','error');return;}
-  const existing=findJobForPrint(machineId,live.filename);
-  if(existing){existing.status='imprimiendo';existing.startedAt=existing.startedAt||nowIso();existing.updatedAt=nowIso();persist('Impresión vinculada automáticamente');toast(`Vinculada a ${existing.name}`,'success');return;}
-  const filename=String(live.filename||'Impresión sin nombre'),job={id:uid('job'),name:filename.replace(/\.(gcode|3mf)$/i,''),pedidoId:'',qty:1,unitsPerBed:1,cycles:1,
+  const m=getMachine(machineId),live=typeof _printerStatus!=='undefined'?_printerStatus[machineId]||{}:{};if(!m||!livePrintActive(live)){toast('No hay una impresión activa para vincular','error');return;}
+  const run=printRun(live),existing=findJobForPrint(machineId,live.filename);
+  if(existing){existing.machineId=machineId;existing.status='imprimiendo';existing.livePrintRun=run;existing.liveFilename=live.filename||'';existing.startedAt=new Date(run.startedAt).toISOString();existing.updatedAt=nowIso();clearIgnoredPrint(machineId,'vinculada-automaticamente');persist('Impresión vinculada automáticamente');refreshUnlinkedPrintAlerts();toast(`Vinculada a ${existing.name}`,'success');return;}
+  const filename=String(live.filename||'Impresión sin nombre'),job={id:uid('job'),name:filename.replace(/\.(gcode|gco|3mf)$/i,''),pedidoId:'',qty:1,unitsPerBed:1,cycles:1,
     minutesPerCycle:Math.max(1,Math.round((num(live.elapsed)+num(live.eta))/60)||60),material:'PLA',color:'',grams:0,nozzle:'0.4',machineId,spoolId:'',profileId:'',gcodeFile:filename,
-    compatibleModels:[m.modelo],postStages:[],status:'imprimiendo',priority:'normal',startedAt:new Date(Date.now()-num(live.elapsed)*1000).toISOString(),createdAt:nowIso(),updatedAt:nowIso(),archived:false};
-  data().jobs.push(job);persist('Trabajo creado desde impresión en vivo');toast('Impresión incorporada al control de producción ✓','success');
+    compatibleModels:[m.modelo],postStages:[],status:'imprimiendo',priority:'normal',livePrintRun:run,liveFilename:live.filename||'',startedAt:new Date(run.startedAt).toISOString(),createdAt:nowIso(),updatedAt:nowIso(),archived:false};
+  data().jobs.push(job);clearIgnoredPrint(machineId,'trabajo-creado-rapido');persist('Trabajo creado desde impresión en vivo');refreshUnlinkedPrintAlerts();toast('Impresión incorporada al control de producción ✓','success');
 }
 function addIncident({machineId='',jobId='',type='other',note='',photo='',source='manual'}={}){
   const dedupeMs=source==='telemetry'?30*60000:5*60000;
@@ -965,7 +969,7 @@ function renderIntelligence(){
   const el=input('mopsIntelligence');if(!el)return;
   const embedded=_parkIntelligenceEmbeddedNodes(el);
   const alerts=buildSmartAlerts(),critical=alerts.filter(row=>row.severity==='critical').length;
-  const unlinked=(MAQUINAS||[]).filter(m=>liveState(m.id)==='printing'&&!data().jobs.some(j=>j.machineId===m.id&&j.status==='imprimiendo'&&!j.archived)).length;
+  const unlinked=unlinkedPrints().length;
   const healthRows=(MAQUINAS||[]).map(machine=>({machine,...machineReliability(machine.id)}));
   const monthCut=Date.now()-30*86400000,costRows=data().jobs.filter(j=>['terminado','fallido'].includes(j.status)&&Date.parse(j.completedAt||j.updatedAt||0)>=monthCut).map(jobCostBreakdown),monthCost=costRows.reduce((sum,row)=>sum+row.total,0);
   const recommend=data().jobs.filter(j=>!j.archived&&['pendiente','planificado','en_cola'].includes(j.status)).sort((a,b)=>dueUrgency(a)-dueUrgency(b)).slice(0,6).map(job=>({job,...recommendationForJob(job)}));
@@ -982,7 +986,7 @@ function renderIntelligence(){
     <div class="mops-kpis mops-diagnostic-kpis op-expert-only">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
     <div id="mopsOpsOverviewAnchor" class="mops-intelligence-overview-anchor" aria-hidden="true"></div>
     <div class="mops-intel-grid">
-      <section class="card mops-intel-panel mops-actionable-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm op-expert-only" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">Atendida</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
+      <section class="card mops-intel-panel mops-actionable-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm op-expert-only" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">${row.key.startsWith('unlinked-')?'Saltar':'Atendida'}</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
       <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Sugerencias de carga; siempre puedes revisarlas antes de aplicar.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:'<span class="mops-status" style="color:var(--danger)">Sin opción segura</span>'}</article>`).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
     </div>
 
@@ -1631,7 +1635,7 @@ function openJob(id=''){
 function closeJob(){const modal=input('mopsJobModal');if(modal)modal.style.display='none';_liveJobDraft=null;}
 function openJobFromLive(machineId){
   const m=getMachine(machineId),live=typeof _printerStatus!=='undefined'?_printerStatus[machineId]||{}:{};
-  if(!m||live.state!=='printing'||!liveEvidence(machineId).known){toast('La impresión ya no está activa o la telemetría está vencida','error');renderUnlinkedPrints();return false;}
+  if(!m||!livePrintActive(live)||!liveEvidence(machineId).known){toast('La impresión ya no está activa o la telemetría está vencida','error');renderUnlinkedPrints();return false;}
   if(linkedLiveJob(machineId,live)){toast('La impresión ya tiene un trabajo vinculado','info');renderUnlinkedPrints();return false;}
   closeUnlinkedAssignment();
   openJob('');
@@ -1686,7 +1690,7 @@ function saveJob(){
   let boundLive=false;
   if(liveDraft&&j.machineId===liveDraft.machineId){
     const live=typeof _printerStatus!=='undefined'?_printerStatus[liveDraft.machineId]||{}:{},run=printRun(live);
-    if(live.state==='printing'&&liveEvidence(liveDraft.machineId).known&&samePrintRun(liveDraft.run,run)){
+    if(livePrintActive(live)&&liveEvidence(liveDraft.machineId).known&&samePrintRun(liveDraft.run,run)){
       j.status='imprimiendo';j.livePrintRun=run;j.liveFilename=live.filename||liveDraft.filename||j.gcodeFile;
       j.startedAt=new Date(run.startedAt).toISOString();j.gcodeFile=j.gcodeFile||j.liveFilename;clearIgnoredPrint(liveDraft.machineId,'trabajo-creado');boundLive=true;
     }
@@ -2330,9 +2334,9 @@ function findJobForPrint(machineId,filename){
   return null;
 }
 function handlePrinterTransition(m,s,previous){
-  const progressInput=s.progressRaw??s.progress,progress=clamp(num(progressInput)*(num(progressInput)<=1?100:1),0,100),watch=_telemetryWatch[m.id]||{progress:null,unchangedAt:Date.now(),lastSeenAt:0};
+  const progress=liveProgressPct(s),watch=_telemetryWatch[m.id]||{progress:null,unchangedAt:Date.now(),lastSeenAt:0};
   if(s.state==='offline'){if(!watch.offlineAt)watch.offlineAt=Date.now();}else watch.offlineAt=0;
-  if(s.state==='printing'){
+  if(livePrintActive(s)){
     if(watch.progress===null||Math.abs(progress-watch.progress)>=.2)watch.unchangedAt=Date.now();
     watch.progress=progress;watch.lastSeenAt=Date.now();
   }else{watch.progress=null;watch.unchangedAt=Date.now();}
@@ -2343,10 +2347,10 @@ function handlePrinterTransition(m,s,previous){
   if(data().ignoredPrints?.[m.id]&&!data().ignoredPrints[m.id].clearedAt&&['complete','cancelled','error','shutdown'].includes(s.state)){
     clearIgnoredPrint(m.id,'terminal:'+s.state);data().updatedAt=Date.now();writeLocal();scheduleRemote();
   }
-  if(s.state==='printing'&&previous!=='printing'&&data().bedClearAcks?.[m.id]){
+  if(livePrintActive(s)&&!['printing','paused'].includes(previous)&&data().bedClearAcks?.[m.id]){
     delete data().bedClearAcks[m.id];writeLocal();scheduleRemote();
   }
-  if(s.state==='printing'&&data().automation.enabled&&data().automation.autoLink){
+  if(livePrintActive(s)&&data().automation.enabled&&data().automation.autoLink){
     const active=linkedLiveJob(m.id,s),j=active||findJobForPrint(m.id,s.filename);
     if(j&&j.status!=='imprimiendo'){j.status='imprimiendo';j.livePrintRun=printRun(s);j.liveFilename=s.filename||'';j.startedAt=new Date(j.livePrintRun.startedAt).toISOString();j.updatedAt=nowIso();persist('Trabajo detectado y vinculado por G-code',{render:true});}
   }
@@ -2770,7 +2774,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,printRun,samePrintRun,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,livePrintActive,liveProgressPct,printRun,samePrintRun,ignoredPrintMatches,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 // El monitor también arranca cuando el usuario trabaja en otras secciones.
