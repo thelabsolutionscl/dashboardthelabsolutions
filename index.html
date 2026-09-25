@@ -8053,13 +8053,38 @@ function _schemaHealthCheck(){
 }
 // ── Carga de datos core (centralizada) ──────────────────────────────
 // Trae las 7 tablas completas en paralelo.
+const _CORE_TABLES=[
+  ['Clientes',1000],['Cotizaciones',1000],['Pedidos',1000],['Reportes',500],
+  ['Proveedores',500],['Monitor Sistema',200],['Facturas',1000]
+];
+// Clientes, Cotizaciones y Pedidos forman el núcleo del CRM. Promise.allSettled
+// evita que una tabla secundaria tumbe toda la app, pero antes también permitía
+// marcar "en vivo" y guardar caché aunque Pedidos hubiese fallado: el navegador
+// seguía mostrando un snapshot parcial como si fuera actual. Reintentamos solo
+// el núcleo y no avanzamos el reloj/caché si alguno sigue fallando.
+const _CRITICAL_CORE_INDEXES=[0,1,2];
 function _fetchAllCore(){
-  return Promise.allSettled([
-    airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),
-    airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),
-    airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),
-    airtableFetch('Facturas',1000)
-  ]);
+  return Promise.allSettled(_CORE_TABLES.map(([table,max])=>airtableFetch(table,max)));
+}
+async function _retryCriticalCore(res,loader){
+  const out=(res||[]).slice();
+  for(const i of _CRITICAL_CORE_INDEXES){
+    if(out[i]?.status==='fulfilled') continue;
+    const [table,max]=_CORE_TABLES[i];
+    try{
+      const value=await (loader?loader(table,max,i):airtableFetch(table,max));
+      out[i]={status:'fulfilled',value};
+    }catch(e){
+      out[i]={status:'rejected',reason:e};
+    }
+  }
+  return out;
+}
+function _criticalCoreError(res){
+  const failed=_CRITICAL_CORE_INDEXES
+    .filter(i=>res?.[i]?.status!=='fulfilled')
+    .map(i=>_CORE_TABLES[i][0]);
+  return failed.length?new Error('Carga incompleta del CRM: '+failed.join(', ')):null;
 }
 // Trae sólo los registros de una tabla modificados después de sinceIso (refresco incremental).
 async function airtableFetchSince(table,sinceIso,max=1000){
@@ -8102,12 +8127,13 @@ function _rebuildCotizacionesById(){
 // convención que el resto de prefs: thelab_*_<username>). En el arranque se
 // hidrata el state y se pinta de inmediato; loadAllData() refresca en segundo
 // plano. No se cachea en modo demo (datos sintéticos que igual se regeneran).
+const _DATA_CACHE_VERSION=2;
 function _dataCacheKey(){const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;return(u&&u.username)?'thelab_datacache_'+u.username:null;}
 function _saveDataCache(){
   if(window._DEMO_MODE) return;
   const k=_dataCacheKey();if(!k) return;
   try{
-    const snap=JSON.stringify({v:1,t:Date.now(),d:{
+    const snap=JSON.stringify({v:_DATA_CACHE_VERSION,scope:'full',t:Date.now(),d:{
       clientes:state.clientes,cotizaciones:state.cotizaciones,pedidos:state.pedidos,
       reportes:state.reportes,proveedores:state.proveedores,facturas:state.facturas
     }});
@@ -8124,7 +8150,7 @@ function _hydrateFromCache(){
     // El snapshot se guarda con {v:1} pero nadie lo miraba. Si algún día cambia
     // la forma de lo guardado, una caché vieja se hidrataría igual y pintaría
     // datos mal formados como si fueran buenos. Mejor descartarla y recargar.
-    if(o.v!==1){try{localStorage.removeItem(k);}catch(e2){}return false;}
+    if(o.v!==_DATA_CACHE_VERSION||o.scope!=='full'){try{localStorage.removeItem(k);}catch(e2){}return false;}
     state.clientes=o.d.clientes||[];state.cotizaciones=o.d.cotizaciones||[];
     state.pedidos=o.d.pedidos||[];state.reportes=o.d.reportes||[];
     state.proveedores=o.d.proveedores||[];state.facturas=o.d.facturas||[];
@@ -8435,7 +8461,8 @@ async function loadAllData(){
     if(btn){btn.disabled=true;btn.textContent='↺ Cargando...';}
     setStatus('cargando...',false);
     if(isFirst){ slProgress(10,'Conectando con Airtable...'); slProgress(20,'Cargando datos...'); }
-    const res=await _fetchAllCore();
+    let res=await _fetchAllCore();
+    res=await _retryCriticalCore(res);
     const cRes=res[0];
     // Detectar token inválido (401) — solo avisa, no bloquea el dashboard
     const tokenErr=msg=>/401|403|Sin token/.test(msg||'');
@@ -8451,6 +8478,8 @@ async function loadAllData(){
         setTimeout(()=>showTokenModal(),1200);
       }
     }
+    const coreErr=_criticalCoreError(res);
+    if(coreErr) throw coreErr;
     if(isFirst) slProgress(60,'Procesando registros...');
     _assignCoreState(res,true);
     if(isFirst) slProgress(92,'Calculando resumen...');
@@ -8497,17 +8526,23 @@ async function loadAllDataSilent(){
   try{
     let changed=true;
     if(doFull){
-      const res=await _fetchAllCore();
+      let res=await _fetchAllCore();
+      res=await _retryCriticalCore(res);
+      const coreErr=_criticalCoreError(res);
+      if(coreErr) throw coreErr;
       _assignCoreState(res,false);
     } else {
       // 2 min de solape para no perder registros por desfase de reloj
       const sinceIso=new Date(Math.max(0,(state.lastUpdateTs||0)-120000)).toISOString();
-      const res=await Promise.allSettled([
+      let res=await Promise.allSettled([
         airtableFetchSince('Clientes',sinceIso),airtableFetchSince('Cotizaciones',sinceIso),
         airtableFetchSince('Pedidos',sinceIso),airtableFetchSince('Reportes',sinceIso),
         airtableFetchSince('Proveedores',sinceIso),airtableFetchSince('Monitor Sistema',sinceIso),
         airtableFetchSince('Facturas',sinceIso)
       ]);
+      res=await _retryCriticalCore(res,(table)=>airtableFetchSince(table,sinceIso));
+      const coreErr=_criticalCoreError(res);
+      if(coreErr) throw coreErr;
       // Si el delta no trajo registros, nada cambió: evitamos recomputar KPIs,
       // acciones, tablas y overview (re-render inútil cada ciclo).
       changed=_mergeCoreState(res)>0;
