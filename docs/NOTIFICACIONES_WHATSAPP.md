@@ -1,4 +1,67 @@
-# Notificaciones por WhatsApp por vendedor (Make + WATI)
+# Notificaciones por WhatsApp para el equipo
+
+## 0. Avisos desde el servidor (fase 1, vigente desde 2026-09-24)
+
+Los avisos que antes dependían de tener el dashboard abierto ahora salen del
+**lead-worker** (Cloudflare, 24/7) por la **API oficial de WhatsApp de Meta
+(Cloud API)**, sin intermediario ni mensualidad (WATI se descartó por costo).
+Salen desde un número propio, **KAI TLS** (chip prepago dedicado, que no se usa
+en la app de WhatsApp). Código: `lead-worker/src/wa-notify.js` y
+`printer-bridge/print-notify.js`.
+
+| Aviso | Para | Cuándo |
+|---|---|---|
+| Nuevo lead (web, Google Ads, LinkedIn, redes) | Nicanor + Gustavo | Al instante, 1 vez por cliente/hora |
+| Cotizaciones por enviar (Solicitada +48 h o fecha límite hoy/mañana) | Nicanor | Resumen diario 09:17 (Chile); si esa pasada falla, 10:17 u 11:17 |
+| Pedidos por vencer (atrasados o entrega ≤ 2 días) | Gustavo | Resumen diario 09:17 (Chile); si esa pasada falla, 10:17 u 11:17 |
+| Impresión finalizada / con error / interrumpida (corte de luz, reinicio) / en pausa con mensaje | Gustavo | Al detectarlo (farm-controller, cada 30 s) |
+| Impresora sin conexión ≥ 10 min mientras imprimía | Gustavo | Una vez por impresión |
+
+**Costo:** si la persona escribió al número en las últimas 24 h, el aviso va
+como texto normal (gratis); si no, como plantilla *utility* (centavos de dólar).
+El webhook `/whatsapp/webhook` anota en KV cuándo escribió cada uno.
+
+**Nada se pierde en silencio:** si un aviso no se pudo entregar (Meta lo
+rechazó, o avisó después por el webhook que falló, p. ej. porque aún no hay
+plantilla y la persona no escribió en 24 h), queda en una bandeja de pendientes
+(KV, 7 días, máx. 15) y se entrega junto —"📬 Avisos que no te llegaron"— apenas
+esa persona le escriba cualquier cosa al número KAI TLS.
+
+**Graph API:** se usa `v25.0` (vigente hasta 2028). Meta retira cada versión
+~2 años después de publicarla; para cambiarla basta `WA_GRAPH_VERSION` en
+`wrangler.toml`, sin tocar código.
+
+Pendiente: correo nuevo (fase 2) y chat con KAI por WhatsApp (fase 3, se
+engancha en el mismo webhook).
+
+### Configuración (resumen; guía detallada en el chat de la sesión)
+
+| Dónde | Qué |
+|---|---|
+| `wrangler.toml` | `WA_PHONE_NUMBER_ID` (id del número KAI TLS), `WA_TEMPLATE_NAME` cuando Meta apruebe la plantilla |
+| Secretos Cloudflare | `WA_ACCESS_TOKEN` (token permanente de usuario del sistema), `WA_APP_SECRET`, `WA_VERIFY_TOKEN`, `WA_NOTIFY_KEY` |
+| Meta → WhatsApp → Configuración → Webhook | URL `https://<worker>/whatsapp/webhook`, token = `WA_VERIFY_TOKEN`, campo `messages` |
+| iMac | `~/Library/Application Support/TheLabFarm/print-notify-config.json` con `{"url":"https://<worker>/notify/printer","key":"<WA_NOTIFY_KEY>"}` |
+
+Plantilla (Utility, español, nombre `aviso_equipo`):
+
+```
+🔔 Aviso del dashboard: {{1}}
+
+Detalle: {{2}}
+
+— Dashboard The Lab Solutions
+```
+
+Prueba: `curl -X POST https://<worker>/notify/test -H "X-Notify-Key: <WA_NOTIFY_KEY>" -H "Content-Type: application/json" -d '{"persona":"gustavo"}'`
+
+Evitar duplicados: en cada computador, Máquinas → configuración de alertas →
+desmarcar el aviso por WhatsApp (el navegador ya no debe mandarlo).
+Apagar todo: `WA_NOTIFY_ENABLED = "false"` en `wrangler.toml` y desplegar.
+
+---
+
+## Histórico: avisos por vendedor vía Make + WATI (junio 2026, inactivos)
 
 Sistema de avisos automáticos por WhatsApp para el equipo, enrutados según el
 campo **Vendedor** (o el estado de máquina). Construido en **Make.com**
