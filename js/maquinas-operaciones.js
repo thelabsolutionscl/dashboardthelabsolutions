@@ -1005,7 +1005,7 @@ function renderIntelligence(){
     <div id="mopsOpsOverviewAnchor" class="mops-intelligence-overview-anchor" aria-hidden="true"></div>
     <div class="mops-intel-grid">
       <section class="card mops-intel-panel mops-actionable-panel"><div class="mops-intel-head"><div><b>🚨 Alertas accionables</b><small>Solo situaciones que requieren una acción ahora.</small></div><button class="btn btn-ghost btn-sm op-expert-only" onclick="MachineOps.checkBridgeHealth(false)">↻ Revisar bridge</button></div><div class="mops-smart-alerts">${alerts.length?alerts.slice(0,14).map(row=>`<article class="mops-smart-alert ${row.severity}"><span class="mops-smart-severity">${row.severity==='critical'?'!':row.severity==='warning'?'⚠':'i'}</span><div><b>${esc(row.title)}</b><small>${row.machineId?esc(machineLabel(row.machineId))+' · ':''}${esc(row.detail)}</small></div><div class="mops-smart-actions">${row.action?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.handleAlertAction('${esc(row.action)}')">Revisar</button>`:''}<button class="btn btn-ghost btn-sm" onclick="MachineOps.acknowledgeAlert('${esc(row.key)}')">${row.key.startsWith('unlinked-')?'Saltar':'Atendida'}</button></div></article>`).join(''):'<div class="mops-intel-empty">✓ Nada requiere atención ahora.</div>'}</div></section>
-      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Sugerencias de carga; siempre puedes revisarlas antes de aplicar.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div><button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:'<span class="mops-status" style="color:var(--danger)">Sin opción segura</span>'}</article>`).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
+      <section class="card mops-intel-panel"><div class="mops-intel-head"><div><b>🎯 Asignación recomendada</b><small>Sugerencias de carga; puedes crear, editar, eliminar o asignar trabajos desde aquí.</small></div><div class="mops-intel-head-actions"><button class="btn btn-ghost btn-sm" onclick="MachineOps.openJob('')">+ Crear trabajo</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.autoPlan()">Aplicar a todas</button></div></div><div class="mops-recommendations">${recommend.length?recommend.map(({job,best})=>`<article><div><b>${esc(job.name)}</b><small>${esc(orderLabel(job.pedidoId)||'Sin pedido')} · ${fmtMin(jobMinutes(job))} · ${esc(job.material)}</small></div>${best?`<div class="mops-rec-target"><b>${esc(machineLabel(best.machine.id))}</b><small>${esc(best.reasons.join(' · '))}</small></div>`:`<div class="mops-rec-target"><b style="color:var(--danger)">Sin opción segura</b><small>Revisa compatibilidad, estado de máquinas o material.</small></div>`}<div class="mops-rec-actions"><button class="btn btn-ghost btn-sm" onclick="MachineOps.openJob('${job.id}')">Editar</button><button class="btn btn-danger btn-sm" onclick="MachineOps.deletePlanningJob('${job.id}')">Eliminar</button>${best?`<button class="btn btn-primary btn-sm" onclick="MachineOps.applyRecommendation('${job.id}')">Asignar</button>`:''}</div></article>`).join(''):'<div class="mops-intel-empty">No hay trabajos pendientes de asignación.</div>'}</div></section>
     </div>
 
     <div id="mopsLiveMonitorAnchor" aria-hidden="true"></div>
@@ -1810,9 +1810,25 @@ function startExistingFile(machineId,filename){
   data().jobs.push(j);audit('Reimpresión preparada',machineId,j.gcodeFile,'control');writeLocal();scheduleRemote();renderAll();
   toast('Reimpresión preparada: revisa el preflight','info');openPreflight(j.id);return j.id;
 }
+function jobCanBeDeleted(job){
+  if(!job||job.archived||job.status==='imprimiendo')return false;
+  const terminalController=['completed','cancelled','failed'].includes(String(job.controllerState||'').toLowerCase());
+  if((job.farmJobId||job.executionId)&&!terminalController)return false;
+  return true;
+}
+function deletePlanningJob(id){
+  const j=data().jobs.find(x=>x.id===id);if(!j)return false;
+  if(!jobCanBeDeleted(j)){
+    toast('No se puede eliminar mientras existe una ejecución activa o pendiente en el Controller','error');return false;
+  }
+  if(typeof confirm==='function'&&!confirm(`¿Eliminar el trabajo "${j.name||'Sin nombre'}"?\n\nSe quitará de la planificación y de Asignación recomendada.`))return false;
+  j.archivedFromStatus=j.status;j.archived=true;j.status='archivado';j.deletedAt=nowIso();j.deletedBy=actor();j.updatedAt=nowIso();
+  persist('Trabajo eliminado desde asignación recomendada');
+  toast('Trabajo eliminado ✓','success');return true;
+}
 function archiveJob(id){
   const j=data().jobs.find(x=>x.id===id);if(!j)return;
-  if(j.status==='imprimiendo'||(j.status==='en_cola'&&(j.farmJobId||j.executionId))){
+  if(!jobCanBeDeleted(j)){
     toast('No se puede archivar mientras existe una ejecución activa en el Controller','error');return;
   }
   j.archivedFromStatus=j.status;j.archived=true;j.status='archivado';j.updatedAt=nowIso();persist('Trabajo archivado');
@@ -2778,7 +2794,7 @@ function startGlobalMonitoring(){
 }
 
 const api={
-  init,startGlobalMonitoring,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,openJobFromLive,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,selectJobGcode,uploadJobGcode,cancelJobGcodeUpload,syncRemoteNow,remoteSyncStatus,
+  init,startGlobalMonitoring,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,openJobFromLive,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,deletePlanningJob,selectJobGcode,uploadJobGcode,cancelJobGcodeUpload,syncRemoteNow,remoteSyncStatus,
   openPreflight,closePreflight,confirmPreflight,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,
@@ -2792,7 +2808,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,livePrintActive,liveProgressPct,printRun,samePrintRun,currentPrintRunMatches,ignoredPrintMatches,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,jobCanBeDeleted,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,livePrintActive,liveProgressPct,printRun,samePrintRun,currentPrintRunMatches,ignoredPrintMatches,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 // El monitor también arranca cuando el usuario trabaja en otras secciones.
