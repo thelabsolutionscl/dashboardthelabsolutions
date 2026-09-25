@@ -25,8 +25,8 @@ ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,https:/
 AUTO_PROCESS_LEADS = "false"
 # Si se reactiva: máximo de leads pre-scoreados automáticamente por día.
 AUTO_PROCESS_DAILY_CAP = "25"
-# Presupuesto conservador para TODAS las llamadas Anthropic directas de este Worker.
-AI_DAILY_BUDGET_USD = "0.50"
+# Todas las llamadas Claude pasan por el proxy central protegido.
+AI_PROXY_URL = "https://airtable-proxy.wast3dspa.workers.dev"
 # Poda diaria de Agent_Queue: borra tareas "Completado" con más de N días
 # (Pendiente/Procesando/Error se conservan siempre). "0" la desactiva.
 CLEANUP_QUEUE_DAYS = "30"
@@ -81,7 +81,7 @@ id = "c148848321344f60939fa71a51d050c6"
 #   GOOGLE_ADS_WEBHOOK_KEY  (clave del webhook de Google Lead Form)
 #   LINKEDIN_WEBHOOK_KEY    (clave del webhook de LinkedIn vía Make/Zapier)
 #   TURNSTILE_SECRET        (opcional — verificación Cloudflare Turnstile)
-#   ANTHROPIC_API_KEY       (opcional — solo si AUTO_PROCESS_LEADS=true)
+#   AI_PROXY_KEY            (mismo valor que APP_KEY/PROXY_KEY del airtable-proxy; GitHub Actions lo sincroniza)
 #   RESEND_API_KEY          (opcional — auto-respuesta de leads + confirmación de newsletter)
 #   NEWSLETTER_SECRET       (opcional — firma tokens de confirmación/baja; si falta usa PUBLIC_LEAD_KEY)
 #   PORTAL_SECRET           (portal del cliente — firma los links de /portal. Ponlo:
