@@ -613,18 +613,21 @@ function pedirPOD(pedidoId){
   window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_podMsg(p)),'_blank');
   toast('Enviando solicitud de confirmación de entrega','success');
 }
+function _pdUsesNps(p){return !_pdReviewUrl()&&!!_npsLink(p);}
 function _pdMsg(p){
   const f=p.fields;
   const cli=_pdCliRec(p);
   const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
   const prod=String(f['Detalle productos']||f['Solicitud cliente (texto libre)']||'').trim().slice(0,60);
-  const nps=_npsLink(p);
   const rev=_pdReviewUrl();
+  const nps=_npsLink(p);
   const base=`Hola${nombre?' '+nombre:''} 👋 Soy Andrea de The Lab Solutions. Hace unos días te entregamos ${prod?('tu pedido ('+prod+')'):'tu pedido'} y queríamos saber cómo llegó todo — ¿quedaste conforme? 😊`;
-  // Con lead-worker: encuesta de 1 clic (registra la nota y ofrece la reseña si quedó feliz).
+  // Si hay un enlace de Google configurado, ese es el CTA principal. No mostramos
+  // la URL técnica del worker al cliente.
+  if(rev) return `${base}\n\nSi hubo cualquier detalle, respóndeme este mensaje y lo vemos de inmediato.\n\nSi quedaste conforme, ¿nos ayudas con una reseña en Google? ⭐\n${rev}\n\n¡Gracias por preferirnos! 💙`;
+  // El NPS queda solo como respaldo cuando no existe enlace directo de Google.
   if(nps) return `${base}\n\nCalifícanos en 5 segundos (del 1 al 5): ${nps}\n\n¡Gracias por preferirnos! 💙`;
-  // Sin worker: cae al flujo anterior (comentario libre + reseña directa).
-  return `${base} Si hubo cualquier detalle, cuéntame y lo resolvemos de inmediato.${rev?`\n\nY si quedaste contento/a, nos ayudarías un montón dejándonos una reseña en Google: ${rev}`:''}\n¡Gracias por preferirnos! 💙`;
+  return `${base}\n\nSi hubo cualquier detalle, respóndeme este mensaje y lo vemos de inmediato.\n\n¡Gracias por preferirnos! 💙`;
 }
 // Crea los campos NPS en Pedidos bajo demanda (nota, fecha, comentario) para que
 // las escrituras del worker persistan. Best-effort: requiere token/proxy con meta.
@@ -715,7 +718,7 @@ function pdWhatsApp(pedidoId){
   const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
   const cli=_pdCliRec(p);
   const phone=cli?_getClienteWAPhone(cli):'';
-  if(_npsLink(p)){try{ensureNpsFields();}catch(e){}}   // prepara los campos NPS (best-effort)
+  if(_pdUsesNps(p)){try{ensureNpsFields();}catch(e){}}   // prepara NPS solo cuando no existe link directo de Google
   window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_pdMsg(p)),'_blank');
   pdMarkDone(pedidoId,'WhatsApp',true);
 }
@@ -730,7 +733,7 @@ async function pdEmail(pedidoId,btn){
   if(!validEmail(to)){toast('Correo inválido','error');return;}
   const prev=btn?btn.innerHTML:'';
   if(btn){btn.disabled=true;btn.textContent='…';}
-  if(_npsLink(p)){try{await ensureNpsFields();}catch(e){}}   // prepara los campos NPS antes de abrir el borrador
+  if(_pdUsesNps(p)){try{await ensureNpsFields();}catch(e){}}   // prepara NPS solo cuando no existe link directo de Google
   if(btn){btn.disabled=false;btn.innerHTML=prev;}
   const bodyHtml=escapeHtml(_pdMsg(p)).replace(/\n/g,'<br>');
   if(typeof switchTab==='function') switchTab('correo');
