@@ -1907,6 +1907,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-intel-panel{padding:13px;min-width:0}
 .mops-intel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:11px}
 .mops-intel-head>div>b,.mops-intel-head>div>small{display:block}.mops-intel-head>div>b{font-size:11.5px;color:var(--text)}.mops-intel-head>div>small{font-size:10px;color:var(--text3);margin-top:3px;line-height:1.4}
+.mops-intel-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
 .mops-intel-empty{padding:16px;border:1px dashed var(--border2);border-radius:8px;text-align:center;color:var(--text3);font-size:10.5px}
 .mops-smart-alerts,.mops-recommendations,.mops-incidents{display:grid;gap:7px;max-height:420px;overflow:auto}
 .mops-smart-alert{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;align-items:center;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface2)}
@@ -1937,6 +1938,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-assign-live-card h3{margin:0 0 12px}.mops-assign-live-card p{font-size:12px;overflow-wrap:anywhere}.mops-assign-live-card label{display:block;font-size:12px;margin:16px 0 6px}.mops-assign-live-card select{width:100%;min-height:40px;padding:8px;background:var(--surface2,#242c36);color:var(--text,#fff);border:1px solid var(--border2,#555);border-radius:8px}.mops-assign-live-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:20px}
 .mops-recommendations>article{display:grid;grid-template-columns:minmax(120px,1fr) minmax(150px,1fr) auto;gap:9px;align-items:center;padding:8px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2)}
 .mops-recommendations b,.mops-recommendations small{display:block}.mops-recommendations b{font-size:10.5px;color:var(--text)}.mops-recommendations small{font-size:10px;color:var(--text3);margin-top:2px;line-height:1.35}.mops-rec-target{min-width:0}
+.mops-rec-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
 .mops-reliability-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}.mops-reliability-grid>article{padding:10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2)}
 .mops-reliability-title{display:flex;justify-content:space-between;gap:8px;font-size:11.5px}.mops-reliability-bar{height:7px;background:var(--surface3);border-radius:5px;overflow:hidden;margin:8px 0}.mops-reliability-bar i{display:block;height:100%;border-radius:5px}.mops-reliability-grid small{display:block;color:var(--text3);font-size:10px;line-height:1.4;margin-bottom:8px}.mops-reliability-grid>article>div:last-child{display:flex;gap:4px;flex-wrap:wrap}
 .mops-cfs-grid{display:grid;gap:7px}.mops-cfs-grid>article{padding:10px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2)}.mops-cfs-grid>article>div:first-child{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10.5px}.mops-cfs-grid>article>small{display:block;color:var(--text3);font-size:10px;margin-top:8px}
@@ -1969,7 +1971,7 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .mops-tech-job-due{grid-column:2}
   .mops-tech-actions .btn{flex:1 1 44%;justify-content:center;min-height:38px}
   .mops-job-table{min-width:760px}
-  .mops-smart-alert{grid-template-columns:24px minmax(0,1fr)}.mops-smart-actions{grid-column:2;justify-content:flex-start}.mops-recommendations>article{grid-template-columns:1fr}.mops-intel-head{align-items:stretch}.mops-intel-head>.btn{flex:0 0 auto}.mops-config-grid{grid-template-columns:1fr}
+  .mops-smart-alert{grid-template-columns:24px minmax(0,1fr)}.mops-smart-actions{grid-column:2;justify-content:flex-start}.mops-recommendations>article{grid-template-columns:1fr}.mops-rec-actions{justify-content:flex-start}.mops-intel-head{align-items:stretch;flex-direction:column}.mops-intel-head-actions{justify-content:flex-start}.mops-intel-head>.btn{flex:0 0 auto}.mops-config-grid{grid-template-columns:1fr}
 }
 
 
