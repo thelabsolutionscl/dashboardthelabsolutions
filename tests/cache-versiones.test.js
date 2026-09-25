@@ -118,9 +118,10 @@ test('el service worker también funciona en localhost', () => {
   assert.match(REGISTRO, /location\.protocol==='https:'\|\|\['localhost','127\.0\.0\.1','\[::1\]'\]\.includes\(location\.hostname\)/);
 });
 
-test('una caché de datos con formato viejo se descarta en vez de pintarse', () => {
-  const fn = HTML.slice(HTML.indexOf('function _hydrateFromCache'), HTML.indexOf('function _hydrateFromCache') + 1200);
-  assert.match(HTML, /JSON\.stringify\(\{v:1,/, 'el snapshot se guarda con número de formato');
-  assert.match(fn, /if\(o\.v!==1\)/, 'y ese número tiene que comprobarse al leerlo');
+test('una caché de datos con formato viejo o scope dudoso se descarta en vez de pintarse', () => {
+  const fn = HTML.slice(HTML.indexOf('function _hydrateFromCache'), HTML.indexOf('function _hydrateFromCache') + 1400);
+  assert.match(HTML, /const _DATA_CACHE_VERSION=2;/, 'el cambio invalida snapshots antiguos que pudieron quedar recortados');
+  assert.match(HTML, /JSON\.stringify\(\{v:_DATA_CACHE_VERSION,scope:'full',/, 'la caché declara que contiene el CRM completo');
+  assert.match(fn, /o\.v!==_DATA_CACHE_VERSION\|\|o\.scope!=='full'/, 'versión o scope incompatibles deben rechazarse');
   assert.match(fn, /removeItem\(k\)/, 'descartando la caché incompatible');
 });
