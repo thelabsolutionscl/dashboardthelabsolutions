@@ -57,8 +57,10 @@ Tras el deploy, en el código fuente de <https://dashboard.thelab.solutions>:
 - buscar `pat` (token Airtable) y `sk-ant` → **no deben aparecer**
 - `curl https://<worker>/health` → `{"ok":true,"anthropic":true,"airtable":true}`
 
-## Volver al modo sin proxy
+## Sin proxy
 
-Sin proxy, Claude requiere una clave introducida localmente en el navegador.
-El deploy no publica la clave de Anthropic bajo ninguna configuración.
-El fallback de Airtable sigue siendo legado y requiere migración por separado.
+Claude queda **bloqueado deliberadamente** si el Proxy Worker no está
+configurado. No existe modo directo, fallback local ni formulario para guardar
+una API key Anthropic en el navegador, tampoco en localhost.
+
+El fallback directo de Airtable es legado y requiere migración por separado.
