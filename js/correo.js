@@ -145,9 +145,9 @@ const MAIL={
     fd.append('user',a.user); fd.append('pass',a.pass);
     for(const[k,v] of Object.entries(params)) fd.append(k,v);
     // El WAF del hosting bloquea de forma INTERMITENTE (fetch falla sin CORS).
-    // Reintentamos con backoff SOLO en lecturas — nunca en 'send', para no
-    // arriesgar envíos duplicados.
-    const canRetry=!(params&&params.action==='send');
+    // Una mutación pudo completarse aunque se haya perdido la respuesta.
+    // Reintentar spam/trash/mark/send podría actuar sobre un UID ya movido.
+    const canRetry=['folders','list','snippets','read','search','attachment','sent_addrs'].includes(params?.action);
     const tries=canRetry?3:1;
     let lastErr='Sin conexión con el servidor';
     for(let i=0;i<tries;i++){
@@ -281,6 +281,7 @@ const MAIL={
     const list=document.getElementById('mailList');
     list.innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
     document.getElementById('mailFolderTitle').textContent=this.folder.replace(/^INBOX\./i,'').replace(/^INBOX$/i,'Bandeja de entrada');
+    document.querySelectorAll('.mail-spam-action').forEach(btn=>{btn.style.display=this._isSpamFolder(this.folder)?'none':'';});
     document.getElementById('mailListFooter').style.display='none';
     const data=await this.post({action:'list',folder:this.folder,page:this.page});
     if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
@@ -1159,6 +1160,8 @@ const MAIL={
     if(!opts._keepAtts){this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();}
     this._cmpCotId=opts._cotId||null;   // vínculo con la cotización (registro al enviar)
     this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
+    this._cmpWinbackCli=opts._winbackCli||null;   // sacar de Leads dormidos SOLO tras envío exitoso
+    this._cmpRecompraCli=opts._recompraCli||null; // sacar de Recompra SOLO tras envío exitoso
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
     this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
     this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
@@ -1181,7 +1184,19 @@ const MAIL={
     if(!opts.to) document.getElementById('mailCmpTo').focus();
     else document.getElementById('mailCmpBody').focus();
   },
-  closeCompose(){document.getElementById('mailComposePanel').style.display='none';},
+  closeCompose(){
+    document.getElementById('mailComposePanel').style.display='none';
+    // Cerrar un borrador equivale a cancelar la acción: no debe quedar ningún
+    // vínculo de seguimiento capaz de marcar un envío futuro distinto.
+    this._cmpCotId=null;
+    this._cmpReactivarCli=null;
+    this._cmpWinbackCli=null;
+    this._cmpRecompraCli=null;
+    this._cmpFuCotId=null;
+    this._cmpPdPedido=null;
+    this._cmpFromName=null;
+    this._cmpFromEmail=null;
+  },
 
   _mojibakeScore(value){
     const s=String(value||'');
@@ -1394,9 +1409,12 @@ const MAIL={
         try{this.addSentAddrs(to,cc,bcc);}catch(e){}   // recuerda las direcciones para autocompletar luego
         // Cierre del ciclo cotización→PDF→correo: marca Enviada y deja registro
         if(this._cmpCotId){try{await this._registrarCotEnviada(this._cmpCotId,to);}catch(e){}this._cmpCotId=null;}
-        // Reactivación: si el borrador vino de un agente, marca al cliente Reactivado
-        if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
-        if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
+        // Reactivación: revisar/abrir el borrador no cambia nada. Solo llegamos
+        // aquí después de que mail-api confirmó el envío.
+        if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') await marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
+        if(this._cmpWinbackCli){try{if(typeof wbMarkSent==='function') wbMarkSent(this._cmpWinbackCli,'correo');}catch(e){}this._cmpWinbackCli=null;}
+        if(this._cmpRecompraCli){try{if(typeof _recompraMark==='function') _recompraMark(this._cmpRecompraCli,'correo');}catch(e){}this._cmpRecompraCli=null;}
+        if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') await fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
         // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
         if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
         this._cmpFromName=null;this._cmpFromEmail=null;
@@ -1416,6 +1434,28 @@ const MAIL={
     if(data.error){toast(data.error,'error');return;}
     toast('Mensaje eliminado','success');
     this.selUid=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  _isSpamFolder(folder){
+    const raw=String(folder||'').replace(/^INBOX[./]/i,'').toLowerCase();
+    return /(^|[./\s_-])(junk|spam|correo(?:s)? no deseado(?:s)?)([./\s_-]|$)/i.test(raw)||raw==='junk'||raw==='spam';
+  },
+
+  async spamCurrent(){
+    if(!this.selUid)return;
+    if(this._isSpamFolder(this.folder)){toast('Este mensaje ya está en Spam','info');return;}
+    if(!confirm('¿Marcar este correo como no deseado y moverlo a Spam?'))return;
+    const data=await this.post({action:'spam',folder:this.folder,uid:this.selUid});
+    if(data.error){toast(data.error,'error');return;}
+    if(data.ok!==true||!this._isSpamFolder(data.folder)){
+      toast('El servidor no confirmó el movimiento a Spam. El correo sigue en la bandeja.','error');return;
+    }
+    toast('🚫 Correo movido a Spam','success');
+    this.selUid=null;this._currentMsg=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
     document.getElementById('mailReaderContent').style.display='none';
     await this.loadMessages();
@@ -1489,6 +1529,33 @@ const MAIL={
     }
     this._sel=new Set();
     toast(fail?`${ok} eliminado${ok!==1?'s':''} · ${fail} con error`:`✓ ${ok} mensaje${ok!==1?'s':''} eliminado${ok!==1?'s':''}`, fail?'info':'success');
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  async spamSelected(){
+    this._sel=this._sel||new Set();
+    const uids=[...this._sel];
+    if(!uids.length)return;
+    if(this._isSpamFolder(this.folder)){toast('Los mensajes seleccionados ya están en Spam','info');return;}
+    if(!confirm(`¿Marcar ${uids.length} correo${uids.length>1?'s':''} como no deseado${uids.length>1?'s':''} y moverlo${uids.length>1?'s':''} a Spam?`))return;
+    const bar=document.getElementById('mailSelBar');
+    const btns=bar?bar.querySelectorAll('button'):[];
+    btns.forEach(b=>b.disabled=true);
+    let ok=0,fail=0;
+    const moved=new Set();
+    for(const uid of uids){
+      const data=await this.post({action:'spam',folder:this.folder,uid});
+      if(data?.ok===true&&this._isSpamFolder(data.folder)){ok++;moved.add(uid);}else fail++;
+    }
+    btns.forEach(b=>b.disabled=false);
+    if(this.selUid&&moved.has(this.selUid)){
+      this.selUid=null;this._currentMsg=null;
+      document.getElementById('mailReaderEmpty').style.display='flex';
+      document.getElementById('mailReaderContent').style.display='none';
+    }
+    this._sel=new Set();
+    toast(fail?`${ok} movido${ok!==1?'s':''} a Spam · ${fail} con error`:`🚫 ${ok} correo${ok!==1?'s':''} movido${ok!==1?'s':''} a Spam`,fail?'info':'success');
     await this.loadMessages();
     await this.loadFolders();
   },

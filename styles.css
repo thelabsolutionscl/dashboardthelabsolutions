@@ -1060,6 +1060,8 @@ body.mail-fs-on .mail-compose-panel{z-index:460!important;}
 .mail-reader-subject{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3;}
 .mail-reader-meta{font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;}
 .mail-reader-actions{display:flex;gap:7px;flex-wrap:wrap;}
+.mail-spam-action{color:var(--warn)!important;border-color:rgba(245,158,11,.28)!important;}
+.mail-spam-action:hover{background:rgba(245,158,11,.09)!important;border-color:rgba(245,158,11,.5)!important;}
 .mail-reader-body{flex:1;overflow-y:auto;padding:16px;}
 .mail-reader-body iframe{width:100%;border:none;display:block;min-height:300px;}
 /* Compose */
@@ -1911,6 +1913,13 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
 .mops-smart-alert.critical{border-color:rgba(255,68,68,.38);background:rgba(255,68,68,.055)}.mops-smart-alert.warning{border-color:rgba(255,170,0,.32);background:rgba(255,170,0,.05)}
 .mops-smart-severity{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:var(--surface3);color:var(--text2);font-weight:900}.mops-smart-alert.critical .mops-smart-severity{background:rgba(255,68,68,.18);color:var(--danger)}.mops-smart-alert.warning .mops-smart-severity{background:rgba(255,170,0,.16);color:var(--warn)}
 .mops-smart-alert b,.mops-smart-alert small{display:block}.mops-smart-alert b{font-size:10.5px;color:var(--text)}.mops-smart-alert small{font-size:10px;color:var(--text3);line-height:1.35;margin-top:2px}.mops-smart-actions{display:flex;gap:4px}
+.mops-global-unlinked{position:fixed;z-index:9990;right:16px;bottom:16px;width:min(470px,calc(100vw - 32px));max-height:min(55vh,480px);overflow:auto;display:grid;gap:8px;pointer-events:none}
+.mops-global-unlinked[hidden],.mops-assign-live-backdrop[hidden]{display:none}
+.mops-global-unlinked-row{pointer-events:auto;background:var(--surface,#18212b);color:var(--text,#fff);border:1px solid var(--warn,#ffaa00);border-left:4px solid var(--warn,#ffaa00);border-radius:12px;padding:14px;box-shadow:0 14px 38px rgba(0,0,0,.3);display:grid;gap:12px}
+.mops-global-unlinked-row b,.mops-global-unlinked-row small{display:block}.mops-global-unlinked-row b{font-size:13px}.mops-global-unlinked-row small{font-size:11px;color:var(--text2);margin-top:4px;overflow-wrap:anywhere}.mops-global-unlinked-actions{display:flex;gap:8px;flex-wrap:wrap}
+.mops-assign-live-backdrop{position:fixed;inset:0;z-index:9995;background:rgba(0,0,0,.65);display:grid;place-items:center;padding:16px}
+.mops-assign-live-card{background:var(--surface,#18212b);color:var(--text,#fff);border:1px solid var(--border2,#555);border-radius:14px;padding:22px;width:min(500px,100%);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.mops-assign-live-card h3{margin:0 0 12px}.mops-assign-live-card p{font-size:12px;overflow-wrap:anywhere}.mops-assign-live-card label{display:block;font-size:12px;margin:16px 0 6px}.mops-assign-live-card select{width:100%;min-height:40px;padding:8px;background:var(--surface2,#242c36);color:var(--text,#fff);border:1px solid var(--border2,#555);border-radius:8px}.mops-assign-live-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:20px}
 .mops-recommendations>article{display:grid;grid-template-columns:minmax(120px,1fr) minmax(150px,1fr) auto;gap:9px;align-items:center;padding:8px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2)}
 .mops-recommendations b,.mops-recommendations small{display:block}.mops-recommendations b{font-size:10.5px;color:var(--text)}.mops-recommendations small{font-size:10px;color:var(--text3);margin-top:2px;line-height:1.35}.mops-rec-target{min-width:0}
 .mops-reliability-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}.mops-reliability-grid>article{padding:10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2)}
@@ -2741,3 +2750,31 @@ button[role="tab"][aria-selected="true"]:hover,
 .ceo-full-report-body .agent-report{margin:0}
 @media(max-width:1050px){.ceo-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ceo-overview-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.ceo-kpis{grid-template-columns:1fr}.ceo-overview-summary{padding:14px}.ceo-overview-head h3{font-size:17px}.ceo-opportunity{grid-template-columns:1fr}.ceo-overview-head-meta{justify-content:flex-start}}
+
+
+/* PEDIDOS · selector de orden compartido por Tarjetas / Tabla / Kanban / Calendario */
+#pedidosSortSelect.pedidos-sort-select{
+  margin-left:auto;flex:0 0 auto;min-width:205px;max-width:240px;min-height:32px;
+  padding:6px 32px 6px 10px;border:1px solid var(--border2);border-radius:7px;
+  background:var(--surface2);color:var(--text);font:600 11px/1.2 'DM Sans',sans-serif;
+  cursor:pointer;outline:none;color-scheme:dark
+}
+#pedidosSortSelect.pedidos-sort-select:hover,
+#pedidosSortSelect.pedidos-sort-select:focus{border-color:var(--accent)}
+@media(max-width:768px){
+  #pedidosSortSelect.pedidos-sort-select{margin-left:0;min-width:190px;max-width:none;flex:0 0 auto;font-size:12px!important}
+  #pedidosSearch{margin-left:0!important;min-width:190px!important}
+}
+/* Detalle expandible de cada tarea en la Cola de Agentes. */
+#agentQueueList .aq-detail-row[hidden]{display:none}
+#agentQueueList .aq-detail-row>td{padding:0;border-top:0;background:var(--surface2)}
+#agentQueueList .aq-row-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:190px}
+#agentQueueList .aq-detail{padding:18px 20px;border-left:3px solid var(--accent);white-space:normal}
+#agentQueueList .aq-detail-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:12px;margin-bottom:16px}
+#agentQueueList .aq-detail-facts>div{min-width:0;display:flex;flex-direction:column;gap:4px}
+#agentQueueList .aq-detail-facts span,#agentQueueList .aq-detail-block h4{color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+#agentQueueList .aq-detail-facts strong{color:var(--text);font-size:12px;font-weight:600;overflow-wrap:anywhere}
+#agentQueueList .aq-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px}
+#agentQueueList .aq-detail-block{min-width:0;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+#agentQueueList .aq-detail-block h4{margin:0 0 8px}
+#agentQueueList .aq-detail-block pre{margin:0;max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);font:12px/1.55 'DM Sans',sans-serif}

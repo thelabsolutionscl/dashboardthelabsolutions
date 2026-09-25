@@ -295,8 +295,10 @@ test('el envío sigue teniendo freno y no se puede disparar dos veces', () => {
   // El freno horario debe cubrir las DOS rutas de salida.
   assert.equal((CORREO.match(/action==='send'\)\{const g=this\._sendGate\(\);if\(g\) return g;\}/g) || []).length, 2,
     'post() y postAs() deben pasar por el freno');
-  // Enviar no se reintenta solo: un reintento es un correo duplicado al cliente.
-  assert.match(cuerpo('async post(params){'), /const canRetry=!\(params&&params\.action==='send'\)/);
+  // Una respuesta perdida después de mover o enviar no puede disparar la acción dos veces.
+  const post=cuerpo('async post(params){');
+  assert.match(post, /const canRetry=\[[^\]]*'list'[^\]]*\]\.includes\(params\?\.action\)/);
+  assert.doesNotMatch(post.match(/const canRetry=([^;]+);/)[1], /'send'|'spam'|'trash'/);
 });
 
 test('el servidor limpia las cabeceras antes de armar el mensaje SMTP', () => {

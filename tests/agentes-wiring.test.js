@@ -112,7 +112,7 @@ test('todo handler on*= de la sección apunta a una función real', () => {
 test('las funciones críticas existen y no están duplicadas', () => {
   const names = ['buildFollowupTray', 'buildWinbackTray', 'buildRecompraTray', 'buildPostEntregaTray',
     'renderChurn', 'renderCsatSummary', 'runAgentInline', 'draftAgentEmail', 'agentSendWA',
-    'fuMarkDone', 'pdMarkDone', 'pdEmail', 'pdWhatsApp', 'pdToggleTray', '_pdBindTrayCollapse', '_bindAgentCollapsibleCard', 'initAgentSectionCollapsibles', 'marcarReactivado'];
+    'fuMarkDone', 'pdMarkDone', 'pdEmail', 'pdWhatsApp', 'pdToggleTray', '_pdBindTrayCollapse', '_bindAgentCollapsibleCard', 'initAgentSectionCollapsibles', 'marcarReactivado', 'wbMarkSent'];
   for (const name of names) {
     assert.ok(hasFunction(name, AGENTS), `falta ${name}`);
     assert.equal(count(new RegExp(`function\\s+${esc(name)}\\s*\\(`, 'g'), AGENTS), 1, `${name} debe definirse una vez`);
@@ -154,6 +154,52 @@ test('post-entrega se puede desplegar y ocultar desde su cabecera', () => {
   assert.match(bind, /list\.style\.display/, 'el click debe mostrar u ocultar la lista');
   assert.match(bind, /aria-expanded/, 'el estado desplegado debe ser accesible');
   assert.match(AGENTS, /thelab_postdel_collapsed_v1/, 'la preferencia debe persistir entre renderizados');
+});
+
+test('revisar un win-back no lo elimina; solo un envío confirmado lo cierra', () => {
+  const preview = functionSource('wbReactivar', AGENTS);
+  assert.match(preview, /runClienteWinbackAgent\(cliId\)/, 'Reactivar IA debe abrir/generar el mensaje');
+  assert.doesNotMatch(preview, /_wbLog\(|localStorage\.setItem|buildWinbackTray\(/, 'previsualizar no debe registrar gestión ni ocultar la fila');
+
+  const log = functionSource('_wbLog', AGENTS);
+  assert.match(log, /via===['"]ia['"]/, 'debe limpiar las falsas marcas del comportamiento anterior');
+  assert.match(log, /delete log\[id\]/, 'las revisiones antiguas deben volver a pendientes');
+
+  const winback = functionSource('runClienteWinbackAgent', AGENTS);
+  assert.match(winback, /agentSendWA\([^)]*['"]winback['"]\)/, 'WhatsApp debe identificarse como flujo win-back');
+  assert.match(winback, /draftAgentEmail\([\s\S]*?,'winback'\)/, 'el borrador de correo debe conservar que pertenece al win-back');
+
+  assert.match(MAIL, /this\._cmpWinbackCli=opts\._winbackCli\|\|null/, 'Correos debe guardar el vínculo sin marcar nada al abrir');
+  assert.match(MAIL, /wbMarkSent\(this\._cmpWinbackCli,['"]correo['"]\)/, 'solo tras envío exitoso de correo debe salir de pendientes');
+  assert.match(MAIL, /closeCompose\(\)\{[\s\S]*?this\._cmpWinbackCli=null/, 'cerrar el borrador debe cancelar el vínculo sin completar la gestión');
+});
+
+test('WhatsApp de win-back y recompra solo se completa con confirmación WATI', () => {
+  const wa = functionSource('agentSendWA', AGENTS);
+  assert.match(wa, /flow===['"]winback['"]/, 'el comportamiento confirmado debe estar acotado al win-back');
+  assert.match(wa, /await sendWatiMessage\(/, 'debe esperar confirmación del API de WhatsApp');
+  assert.match(wa, /wbMarkSent\(cliId,['"]WhatsApp['"]\)/, 'tras confirmación debe cerrar el pendiente');
+  assert.match(wa, /window\.open\(['"]https:\/\/wa\.me\//, 'sin confirmación debe poder abrir WhatsApp manual');
+  const fallbackTail=wa.slice(wa.lastIndexOf("window.open('https://wa.me/"));
+  assert.doesNotMatch(fallbackTail, /wbMarkSent\(/, 'abrir WhatsApp manual no debe ocultar el pendiente');
+
+  const recompra = functionSource('recompraWhatsApp', AGENTS);
+  const markAt=recompra.indexOf('_recompraMark(cliId');
+  const sendAt=recompra.indexOf('await sendWatiMessage');
+  assert.ok(sendAt>=0&&markAt>sendAt, 'recompra se marca solo después del envío WATI');
+  const lastOpen=recompra.lastIndexOf("window.open('https://wa.me/");
+  assert.ok(lastOpen>markAt, 'el fallback manual debe quedar después del único marcado confirmado');
+});
+
+test('recompra abre un borrador y espera el envío confirmado antes de salir de pendientes', () => {
+  const preview = functionSource('recompraEmail', AGENTS);
+  assert.match(preview, /MAIL\.openCompose\(/, 'el correo de recompra debe poder revisarse antes del envío');
+  assert.doesNotMatch(preview, /MAIL\.postAs\(|_recompraMark\(/, 'revisar el borrador no debe enviarlo ni ocultar la recompra');
+  assert.match(MAIL, /this\._cmpRecompraCli=opts\._recompraCli\|\|null/, 'el borrador conserva el cliente asociado');
+  assert.match(MAIL, /closeCompose\(\)\{[\s\S]*?this\._cmpRecompraCli=null/, 'cerrar sin enviar cancela el vínculo');
+  const success = MAIL.indexOf("status.textContent='✓ Enviado'");
+  const mark = MAIL.indexOf("_recompraMark(this._cmpRecompraCli,'correo')");
+  assert.ok(success >= 0 && mark > success, 'la recompra solo desaparece al confirmar el envío de correo');
 });
 
 test('los envíos de correo se previsualizan antes de salir', () => {
