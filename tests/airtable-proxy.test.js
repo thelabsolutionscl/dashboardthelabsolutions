@@ -45,7 +45,10 @@ const ENV = {
   OPENAI_TOKEN: 'sk-openai-test',
   AI_BUDGET: MEM_KV,
   ANTHROPIC_DAILY_BUDGET_USD: '1.00',
-  ANTHROPIC_REQUEST_BUDGET_USD: '0.20',\n  // El fallback KV existe solo para conservar estos tests del ledger legado.\n  // Producción exige AI_BUDGET_GUARD y falla cerrado sin él.\n  __TEST_ALLOW_KV_BUDGET: true,
+  ANTHROPIC_REQUEST_BUDGET_USD: '0.20',
+  // El fallback KV existe solo para conservar estos tests del ledger legado.
+  // Producción exige AI_BUDGET_GUARD y falla cerrado sin él.
+  __TEST_ALLOW_KV_BUDGET: true,
 };
 const OK_ORIGIN = 'https://dashboard.thelab.solutions';
 const HAIKU_BODY = JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 800, messages: [{ role: 'user', content: 'hola' }] });
