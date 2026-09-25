@@ -121,6 +121,6 @@ test('al migrar desde KV trata reservas antiguas como gasto para no regalar sald
   const usage=await guard.fetch(request('/usage',{
     date,budget_usd:1,request_budget_usd:.20,
   })).then(json);
-  assert.equal(usage.spent_usd,.95);
-  assert.equal(usage.remaining_usd,.05);
+  assert.ok(Math.abs(usage.spent_usd-.95)<1e-9);
+  assert.ok(Math.abs(usage.remaining_usd-.05)<1e-9);
 });
