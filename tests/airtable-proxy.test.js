@@ -27,7 +27,7 @@ const path = require('path');
 // de modo que TODO el módulo se inicializa igual que en Cloudflare.
 function cargarWorker() {
   const src = fs.readFileSync(path.join(__dirname, '..', 'airtable-proxy', 'src', 'worker.js'), 'utf8');
-  const body = src.replace('export default', 'const __wk =') + '\nreturn __wk;';
+  const body = src.replace('export class AiBudgetGuard', 'class AiBudgetGuard').replace('export default', 'const __wk =') + '\nreturn __wk;';
   return new Function(body)();
 }
 const worker = cargarWorker();
@@ -45,7 +45,7 @@ const ENV = {
   OPENAI_TOKEN: 'sk-openai-test',
   AI_BUDGET: MEM_KV,
   ANTHROPIC_DAILY_BUDGET_USD: '1.00',
-  ANTHROPIC_REQUEST_BUDGET_USD: '0.20',
+  ANTHROPIC_REQUEST_BUDGET_USD: '0.20',\n  // El fallback KV existe solo para conservar estos tests del ledger legado.\n  // Producción exige AI_BUDGET_GUARD y falla cerrado sin él.\n  __TEST_ALLOW_KV_BUDGET: true,
 };
 const OK_ORIGIN = 'https://dashboard.thelab.solutions';
 const HAIKU_BODY = JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 800, messages: [{ role: 'user', content: 'hola' }] });
