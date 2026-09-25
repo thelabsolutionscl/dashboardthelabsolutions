@@ -659,26 +659,34 @@ function printRun(live,now=Date.now()){
 function samePrintRun(a,b){
   return !!a&&!!b&&a.file===b.file&&Math.abs(num(a.startedAt)-num(b.startedAt))<120000;
 }
+function currentPrintRunMatches(reference,live,now=Date.now()){
+  if(!reference||!livePrintActive(live))return false;
+  const run=printRun(live,now);
+  if(reference.file&&run.file&&reference.file!==run.file)return false;
+  if((!reference.file||!run.file)&&Math.abs(num(reference.startedAt)-num(run.startedAt))<120000)return true;
+  if(samePrintRun(reference,run))return true;
+  const prevElapsed=Math.max(0,num(reference.elapsed)),prevProgress=Math.max(0,num(reference.progress));
+  const elapsedRestart=prevElapsed>=60&&run.elapsed+45<prevElapsed;
+  const progressRestart=prevProgress>=4&&run.progress+3<prevProgress;
+  return !(elapsedRestart&&progressRestart);
+}
 // "Saltar esta impresión" dura toda la ejecución actual. La identidad tolera
 // telemetría inestable, filename vacío momentáneo y pausas. Solo se abre de
 // nuevo cuando existe evidencia real de otro archivo o de un reinicio.
 function ignoredPrintMatches(ignored,live,now=Date.now()){
-  if(!ignored||ignored.clearedAt||!livePrintActive(live))return false;
+  if(!ignored||ignored.clearedAt||!currentPrintRunMatches(ignored,live,now))return false;
   const run=printRun(live,now),ignoredAt=Math.max(0,num(ignored.ignoredAt));
-  if(ignored.file&&run.file&&ignored.file!==run.file)return false;
-  if(samePrintRun(ignored,run))return true;
-  const prevElapsed=Math.max(0,num(ignored.elapsed)),prevProgress=Math.max(0,num(ignored.progress));
-  const elapsedRestart=prevElapsed>=60&&run.elapsed+45<prevElapsed;
+  const prevProgress=Math.max(0,num(ignored.progress));
   const progressRestart=prevProgress>=4&&run.progress+3<prevProgress;
   const startedAfterSkip=ignoredAt>0&&run.startedAt>ignoredAt+30000;
-  if(progressRestart&&(elapsedRestart||startedAfterSkip))return false;
+  if(progressRestart&&startedAfterSkip)return false;
   return true;
 }
 function linkedLiveJob(machineId,live,now=Date.now()){
   const run=printRun(live,now);
   return data().jobs.find(j=>{
     if(j.archived||j.machineId!==machineId||j.status!=='imprimiendo')return false;
-    if(j.livePrintRun)return samePrintRun(j.livePrintRun,run);
+    if(j.livePrintRun)return currentPrintRunMatches(j.livePrintRun,live,now);
     return !!run.file&&filenameMatchScore(j,live.filename)>=50&&
       !!Date.parse(j.startedAt)&&Math.abs(Date.parse(j.startedAt)-run.startedAt)<120000;
   })||null;
@@ -2776,7 +2784,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,livePrintActive,liveProgressPct,printRun,samePrintRun,ignoredPrintMatches,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,livePrintActive,liveProgressPct,printRun,samePrintRun,currentPrintRunMatches,ignoredPrintMatches,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 // El monitor también arranca cuando el usuario trabaja en otras secciones.
