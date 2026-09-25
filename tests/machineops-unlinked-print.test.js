@@ -51,10 +51,17 @@ test('un skip viejo expira como red de seguridad si no se observó el fin',()=>{
   store.ignoredPrints={};
 });
 
-test('el código limpia el skip al observar un estado terminal real',()=>{
+test('el código cierra el skip con tombstone al observar un estado terminal real',()=>{
   const transition=extract('handlePrinterTransition');
   assert.match(transition,/\['complete','cancelled','error','shutdown'\]\.includes\(s\.state\)/);
-  assert.match(transition,/delete data\(\)\.ignoredPrints\[m\.id\]/);
+  assert.match(transition,/clearIgnoredPrint\(m\.id,'terminal:'\+s\.state\)/);
+});
+
+test('un tombstone no oculta una impresión nueva',()=>{
+  store.ignoredPrints.m1={clearedAt:now,reason:'terminal:complete'};
+  status.m1.elapsed=25;status.m1.progress=4;status.m1.lastSeenAt=now+1000;
+  assert.equal(functions.unlinkedPrints(now+1000).length,1);
+  store.ignoredPrints={};status.m1.elapsed=300;status.m1.progress=54;status.m1.lastSeenAt=now-1000;
 });
 
 test('un trabajo vinculado a la misma ejecución oculta el aviso; uno antiguo no',()=>{
