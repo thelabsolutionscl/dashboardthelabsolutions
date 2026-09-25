@@ -4,13 +4,27 @@ const adapter=require('../js/machineops-storage-adapter.js');
 const t=adapter._test;
 
 test('splitPayload separa dominios y meta',()=>{
-  const src={version:4,updatedAt:123,jobs:[{id:'j1'}],spools:[{id:'s1'}],automation:{enabled:true}};
+  const src={version:5,updatedAt:123,jobs:[{id:'j1'}],spools:[{id:'s1'}],ignoredPrints:{'k1-2':{file:'pieza',ignoredAt:100}},automation:{enabled:true}};
   const out=t.splitPayload(src);
   assert.equal(out.fragments.length,t.DOMAINS.length);
   const jobs=out.fragments.find(x=>x.domain==='jobs');
   assert.equal(jobs.name,'MACHINE_OPS_V3:jobs');
   assert.deepEqual(JSON.parse(jobs.notes).data,[{id:'j1'}]);
   assert.equal(JSON.parse(out.meta.notes).updatedAt,123);
+  const ignored=out.fragments.find(x=>x.domain==='ignoredPrints');
+  assert.ok(ignored,'ignoredPrints debe ser un dominio durable independiente');
+  assert.deepEqual(JSON.parse(ignored.notes).data,{'k1-2':{file:'pieza',ignoredAt:100}});
+  assert.ok(JSON.parse(out.meta.notes).domains.includes('ignoredPrints'));
+});
+
+test('composePayload recupera skips desde el dominio V3 y no desde un legacy obsoleto',()=>{
+  const records=[
+    {fields:{Name:'MACHINE_OPS_V2',Notes:JSON.stringify({version:5,updatedAt:10,ignoredPrints:{'k1-2':{file:'viejo',ignoredAt:10}}})}},
+    {fields:{Name:'MACHINE_OPS_V3:ignoredPrints',Notes:JSON.stringify({schema:3,domain:'ignoredPrints',writtenAt:30,data:{'k1-2':{file:'pieza',ignoredAt:30}}})}},
+    {fields:{Name:'MACHINE_OPS_V3:meta',Notes:JSON.stringify({schema:3,domain:'meta',writtenAt:31,version:5,updatedAt:31,domains:t.DOMAINS})}},
+  ];
+  const out=t.composePayload(records);
+  assert.deepEqual(out.data.ignoredPrints,{'k1-2':{file:'pieza',ignoredAt:30}});
 });
 
 test('composePayload migra desde legacy y sobrepone V3 confirmado',()=>{
