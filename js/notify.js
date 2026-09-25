@@ -590,7 +590,8 @@ function _mailRelevantAccounts(){
   }catch(e){return[];}
 }
 function _mailHasPass(email){try{return!!localStorage.getItem('thelab_mail_pass_'+email);}catch(e){return false;}}
-async function _mailCheckAccount(email,{baseline=false}={}){
+async function _mailCheckAccount(email,opts){
+  const baseline=!!opts?.baseline;
   if(!_mailHasPass(email)||typeof MAIL==='undefined'||typeof MAIL.postAs!=='function')return{attempted:false,ok:false};
   const data=await MAIL.postAs(email,{action:'check'});
   if(data?.error)return{attempted:true,ok:false,error:data.error};
