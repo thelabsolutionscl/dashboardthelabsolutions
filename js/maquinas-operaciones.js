@@ -725,8 +725,8 @@ function refreshUnlinkedPrintAlerts(){
   return unlinkedPrints();
 }
 function skipUnlinkedPrint(machineId){
-  const live=_printerStatus[machineId]||{};
-  if(!livePrintActive(live)){toast('La impresión ya no está activa','info');refreshUnlinkedPrintAlerts();return false;}
+  const evidence=liveEvidence(machineId),live=evidence.live;
+  if(!evidence.known||!livePrintActive(live)){toast('La impresión ya no está activa o la telemetría está vencida','info');refreshUnlinkedPrintAlerts();return false;}
   const at=Date.now();data().ignoredPrints[machineId]={...printRun(live,at),ignoredAt:at,updatedAt:at};
   persist('Impresión sin trabajo saltada',{render:false});refreshUnlinkedPrintAlerts();return true;
 }
