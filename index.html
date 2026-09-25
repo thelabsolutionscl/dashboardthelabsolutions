@@ -8073,17 +8073,24 @@ function _fetchAllCore(){
     airtableFetch('Facturas',1000)
   ]);
 }
-async function _retryCriticalCore(res,loader){
+async function _retryCriticalCore(res,loader,attempts=3){
   const out=(res||[]).slice();
   for(const i of _CRITICAL_CORE_INDEXES){
     if(out[i]?.status==='fulfilled') continue;
     const [table,max]=_CORE_TABLES[i];
-    try{
-      const value=await (loader?loader(table,max,i):airtableFetch(table,max));
-      out[i]={status:'fulfilled',value};
-    }catch(e){
-      out[i]={status:'rejected',reason:e};
+    let lastErr=out[i]?.reason;
+    for(let attempt=1;attempt<=attempts;attempt++){
+      try{
+        const value=await (loader?loader(table,max,i):airtableFetch(table,max));
+        out[i]={status:'fulfilled',value};
+        break;
+      }catch(e){
+        lastErr=e;
+        out[i]={status:'rejected',reason:e};
+        if(attempt<attempts) await new Promise(r=>setTimeout(r,450*attempt));
+      }
     }
+    if(out[i]?.status!=='fulfilled') out[i]={status:'rejected',reason:lastErr||new Error('No se pudo cargar '+table)};
   }
   return out;
 }
@@ -8134,7 +8141,7 @@ function _rebuildCotizacionesById(){
 // convención que el resto de prefs: thelab_*_<username>). En el arranque se
 // hidrata el state y se pinta de inmediato; loadAllData() refresca en segundo
 // plano. No se cachea en modo demo (datos sintéticos que igual se regeneran).
-const _DATA_CACHE_VERSION=2;
+const _DATA_CACHE_VERSION=3; // invalida snapshots previos que pudieron quedar parciales
 function _dataCacheKey(){const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;return(u&&u.username)?'thelab_datacache_'+u.username:null;}
 function _saveDataCache(){
   if(window._DEMO_MODE) return;
