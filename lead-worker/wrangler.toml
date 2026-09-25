@@ -64,6 +64,8 @@ WA_DIGEST_HOUR = "9"
 # cuando la persona no escribió al número en las últimas 24 h. Vacío = solo texto.
 WA_TEMPLATE_NAME = ""
 WA_TEMPLATE_LANG = "es"
+# Versión de la Graph API de Meta. Cada versión dura ~2 años; v25.0 hasta 2028.
+WA_GRAPH_VERSION = "v25.0"
 
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL

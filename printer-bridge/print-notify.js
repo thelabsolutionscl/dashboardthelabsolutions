@@ -7,11 +7,15 @@
  * dashboard esté abierto. Cada POLL_MS consulta print_stats de TODAS las
  * impresoras del registry —también las que se lanzaron desde la pantalla o
  * Creality Print, no solo las de la cola— y cuando detecta una transición
- * avisa al lead-worker (POST /notify/printer), que la manda a Gustavo por WATI.
+ * avisa al lead-worker (POST /notify/printer), que la manda a Gustavo por
+ * WhatsApp (API de Meta).
  *
- *   printing/paused → complete           = impresión finalizada
- *   printing/paused → error | Klipper caído = impresión con error
- *   printing → paused con mensaje        = pausa con aviso (p. ej. errores "key" de Creality)
+ *   printing/paused → complete                 = impresión finalizada
+ *   printing/paused → standby con avance ≥98 % = finalizada (firmware que resetea al terminar)
+ *   printing/paused → error | Klipper caído    = impresión con error
+ *   printing/paused → standby a medias         = interrumpida (corte de luz, reinicio)
+ *   printing → paused con mensaje              = pausa con aviso (p. ej. errores "key" de Creality)
+ *   imprimiendo y sin respuesta ≥ 10 min       = sin conexión mientras imprimía
  *
  * Se activa solo si hay URL y clave: variables PRINT_NOTIFY_URL / PRINT_NOTIFY_KEY
  * (Linux: /etc/thelab-farm.env) o el archivo <FARM_DATA_DIR>/print-notify-config.json
@@ -33,6 +37,8 @@ const FILE_CFG = readConfig();
 const NOTIFY_URL = String(process.env.PRINT_NOTIFY_URL || FILE_CFG.url || '').trim();
 const NOTIFY_KEY = String(process.env.PRINT_NOTIFY_KEY || FILE_CFG.key || '').trim();
 const ACTIVE = ['printing', 'paused'];
+const OFFLINE_MS = Math.max(2 * 60_000, Number(process.env.PRINT_NOTIFY_OFFLINE_MS || 10 * 60_000));
+const PENDING_MAX_AGE_MS = 6 * 3600 * 1000; // un aviso de hace más de 6 h ya no sirve
 
 function isPrivateIp(ip) {
   const m = String(ip || '').match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -51,12 +57,40 @@ function detectPrintEvent(prev, cur) {
   if (st === 'complete') return { state: 'complete', message: '' };
   if (st === 'error') return { state: 'error', message: cur.message || 'Klipper reportó error' };
   if (klipperDown) return { state: 'error', message: cur.klipperMessage || `Klipper ${cur.klipper}` };
+  if (st === 'standby') {
+    // Algunos firmwares resetean print_stats al terminar y entre dos lecturas
+    // se pierde el "complete": el avance de la lectura anterior lo distingue.
+    if (Number(prev.progress) >= 0.98) return { state: 'complete', message: '' };
+    return { state: 'error', message: 'La impresión se interrumpió a medias (reinicio de la impresora o corte de luz).' };
+  }
   if (was === 'printing' && st === 'paused' && cur.message) return { state: 'paused', message: cur.message };
   return null;
 }
 
+// Una lectura de la máquina → { ev, next }: el evento a avisar (o null) y el
+// estado a recordar. `cur` null = la impresora no respondió.
+function nextPrinterState(prev, cur, now = Date.now()) {
+  if (!cur) {
+    if (!prev || !ACTIVE.includes(prev.state)) return { ev: null, next: prev };
+    const offlineSince = prev.offlineSince || now;
+    if (!prev.offlineNotified && now - offlineSince >= OFFLINE_MS) {
+      return {
+        ev: { state: 'offline', message: `Sin respuesta hace ${Math.round((now - offlineSince) / 60000)} min. Revisa la luz y la red de la impresora.` },
+        next: { ...prev, offlineSince, offlineNotified: true },
+      };
+    }
+    return { ev: null, next: { ...prev, offlineSince } };
+  }
+  return {
+    ev: detectPrintEvent(prev, cur),
+    next: { state: cur.state, filename: cur.filename, durationSec: cur.durationSec, totalSec: cur.totalSec, progress: cur.progress, at: now },
+  };
+}
+
 function machineName(m) {
-  return String(m.name || m.alias || m.nombre || m.hostname || m.ip || 'impresora');
+  const base = String(m.name || m.alias || m.nombre || m.hostname || m.ip || 'impresora').trim();
+  const num = String(m.num || '').trim();
+  return num && !base.includes('#' + num) ? `${base} #${num}` : base;
 }
 
 function getJson(ip, pathname, timeout = 4000) {
@@ -72,7 +106,7 @@ function getJson(ip, pathname, timeout = 4000) {
 }
 
 async function readPrinter(ip) {
-  const d = await getJson(ip, '/printer/objects/query?print_stats&webhooks');
+  const d = await getJson(ip, '/printer/objects/query?print_stats&webhooks&virtual_sdcard');
   const st = d?.result?.status;
   if (!st) {
     // Con Klipper en shutdown/error Moonraker no responde objects/query, pero
@@ -80,15 +114,16 @@ async function readPrinter(ip) {
     const info = (await getJson(ip, '/printer/info'))?.result;
     const k = String(info?.state || '').toLowerCase();
     if (!['shutdown', 'error'].includes(k)) return null;
-    return { state: '', filename: '', message: '', durationSec: 0, totalSec: 0, klipper: k, klipperMessage: String(info.state_message || '').trim() };
+    return { state: '', filename: '', message: '', durationSec: 0, totalSec: 0, progress: 0, klipper: k, klipperMessage: String(info.state_message || '').trim() };
   }
-  const ps = st.print_stats || {}, wh = st.webhooks || {};
+  const ps = st.print_stats || {}, wh = st.webhooks || {}, sd = st.virtual_sdcard || {};
   return {
     state: String(ps.state || '').toLowerCase(),
     filename: String(ps.filename || ''),
     message: String(ps.message || '').trim(),
     durationSec: Math.round(Number(ps.print_duration || 0)),
     totalSec: Math.round(Number(ps.total_duration || 0)),
+    progress: Number(sd.progress || 0),
     klipper: String(wh.state || '').toLowerCase(),
     klipperMessage: String(wh.state_message || '').trim(),
   };
@@ -125,28 +160,30 @@ async function tick() {
   if (busy) return;
   busy = true;
   try {
+    const now = Date.now();
     for (const m of machines()) {
       if (!isPrivateIp(m.ip)) continue;
       const id = String(m.id || m.ip);
-      const cur = await readPrinter(m.ip);
-      if (!cur) continue; // offline: conserva el último estado conocido
       const prev = last[id];
-      const ev = detectPrintEvent(prev, cur);
+      const { ev, next } = nextPrinterState(prev, await readPrinter(m.ip), now);
       if (ev) {
-        const filename = cur.filename || prev.filename || '';
+        const filename = (ev.state !== 'offline' && next?.filename) || prev.filename || '';
         pending.push({
           eventId: `${id}|${filename}|${ev.state}|${prev.totalSec || 0}`,
           machine: machineName(m), state: ev.state, filename, message: ev.message,
-          durationSec: cur.durationSec || prev.durationSec || 0,
+          durationSec: (ev.state !== 'offline' && next?.durationSec) || prev.durationSec || 0,
+          ts: now,
         });
       }
-      last[id] = { state: cur.state, filename: cur.filename, durationSec: cur.durationSec, totalSec: cur.totalSec, at: Date.now() };
+      if (next) last[id] = next;
     }
     saveState();
-    // Reintenta los que fallaron; el Worker deduplica por eventId.
-    const queue = pending.slice(-20); pending = [];
+    // Reintenta los que fallaron (el Worker deduplica por eventId) y descarta
+    // los que ya son viejos.
+    const queue = pending.filter(p => now - p.ts < PENDING_MAX_AGE_MS).slice(-20); pending = [];
     for (const p of queue) {
-      if (!(await postNotify(p))) pending.push(p);
+      const { ts, ...payload } = p;
+      if (!(await postNotify(payload))) pending.push(p);
       else console.log(`[print-notify] ${p.state} ${p.machine} ${p.filename}`);
     }
   } catch (e) {
@@ -166,4 +203,4 @@ function start() {
   return true;
 }
 
-module.exports = { detectPrintEvent, machineName, start };
+module.exports = { detectPrintEvent, nextPrinterState, machineName, start };

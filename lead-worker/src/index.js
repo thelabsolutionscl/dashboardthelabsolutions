@@ -2596,7 +2596,7 @@ async function retryDeadLetters(env) {
       await env.RL.delete(k.name);
       continue;
     }
-    const { norm, agente, evento, source, campaign } = item;
+    const { norm, agente, evento, source, campaign, reason } = item;
     try {
       let clienteId = await airtableFindCliente(env, {
         email: norm.email,
@@ -2628,8 +2628,11 @@ async function retryDeadLetters(env) {
         })
       );
       await env.RL.delete(k.name); // recuperado → fuera del buffer
-      // El lead no avisó al entrar (cayó al buffer): avisa ahora que quedó en el CRM.
-      await waNotify(env, "lead", mensajeLead(norm, source, { recurrente }), { dedupKey: clienteId, ttl: 3600 }).catch(() => {});
+      // Si cayó al buffer antes de crear el Cliente, nunca avisó: avisa ahora.
+      // (Si solo falló Agent_Queue, el aviso ya salió al entrar el lead.)
+      if (!String(reason || "").startsWith("Agent_Queue")) {
+        await waNotify(env, "lead", mensajeLead(norm, source, { recurrente }), { dedupKey: clienteId, ttl: 3600 }).catch(() => {});
+      }
     } catch (_) {
       /* sigue en buffer para el próximo intento */
     }
@@ -2653,15 +2656,19 @@ async function handleNotify(request, env, pathname, cors) {
     const personas = [...new Set(Object.values(WA_RUTAS).flat())];
     const persona = String(body.persona || "").toLowerCase();
     if (!personas.includes(persona)) return json({ ok: false, error: `persona debe ser: ${personas.join(", ")}` }, 400, cors);
-    const res = await waSend(env, waPhone(env, persona), {
+    const { texto, ...res } = await waSend(env, waPhone(env, persona), {
       titulo: "Prueba de avisos The Lab",
       lineas: ["Si lees esto, los avisos del dashboard por WhatsApp funcionan. ✅"],
     });
-    return json({ persona, ...res }, res.ok ? 200 : 502, cors);
+    if (res.via === "texto-sin-ventana") {
+      res.aviso = `Meta aceptó el mensaje, pero ${persona} no ha escrito al número en las últimas 24 h ` +
+        "y aún no hay plantilla: si no llega, que escriba \"hola\" al número y se le entrega.";
+    }
+    return json({ persona, ...res }, res.ok ? 200 : res.skipped ? 503 : 502, cors);
   }
   const state = String(body.state || "").toLowerCase();
-  if (!["complete", "error", "paused"].includes(state)) {
-    return json({ ok: false, error: "state debe ser complete | error | paused" }, 400, cors);
+  if (!["complete", "error", "paused", "offline"].includes(state)) {
+    return json({ ok: false, error: "state debe ser complete | error | paused | offline" }, 400, cors);
   }
   const ev = {
     machine: String(body.machine || "").slice(0, 80),
@@ -2672,7 +2679,10 @@ async function handleNotify(request, env, pathname, cors) {
   };
   const dedupKey = String(body.eventId || `${ev.machine}|${ev.filename}|${state}`).slice(0, 300);
   const res = await waNotify(env, "impresora", mensajeImpresora(ev), { dedupKey, ttl: 12 * 3600 });
-  return json({ ok: res.every((r) => r.ok || r.skipped), res }, 200, cors);
+  // 502 solo si el aviso se perdería (ni enviado ni en pendientes): así el
+  // farm-controller lo reintenta. Sin WhatsApp configurado no hay nada que reintentar.
+  const perdido = res.some((r) => !r.ok && !r.skipped && !r.pendiente);
+  return json({ ok: !perdido, res }, perdido ? 502 : 200, cors);
 }
 
 function corsHeaders(origin, env) {
