@@ -706,19 +706,20 @@ function renderUnlinkedPrints(){
   if(typeof document==='undefined'||!document.body)return;
   let el=document.getElementById('mopsGlobalUnlinked');
   if(!el){el=document.createElement('aside');el.id='mopsGlobalUnlinked';el.className='mops-global-unlinked';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','false');document.body.appendChild(el);}
-  const rows=unlinkedPrints();el.hidden=!rows.length;
+  const rows=unlinkedPrints(),previousScroll=el.scrollTop;el.hidden=!rows.length;
   el.innerHTML=rows.map(m=>{
     const live=_printerStatus[m.id]||{},paused=live.state==='paused';
     return `<div class="mops-global-unlinked-row"><div><b>⚠ Impresión sin trabajo asignado · ${esc(machineLabel(m.id))}</b><small>${esc(live.filename||'Archivo sin identificar')} · ${Math.round(liveProgressPct(live))}% completado${paused?' · PAUSADA':''}</small></div><div class="mops-global-unlinked-actions"><button type="button" class="btn btn-primary btn-sm" data-machine="${esc(m.id)}" data-action="assign">Asignar existente</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="create">Crear trabajo</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="skip">Saltar esta impresión</button></div></div>`;
   }).join('');
+  if(previousScroll>0)el.scrollTop=previousScroll;
   if(!el.dataset.bound){el.dataset.bound='1';el.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;if(button.dataset.action==='assign')openUnlinkedAssignment(button.dataset.machine);else if(button.dataset.action==='create')openJobFromLive(button.dataset.machine);else skipUnlinkedPrint(button.dataset.machine);});}
 }
 function refreshUnlinkedPrintAlerts(){
-  const refresh=()=>{
-    renderUnlinkedPrints();
-    try{renderIntelligence();updateNavCounts();}catch(_){}
-  };
-  refresh();
+  // El estado global se refresca una vez; los pases diferidos solo reconstruyen
+  // la pila flotante por si otro render del dashboard ocurrió en el mismo frame.
+  renderUnlinkedPrints();
+  try{renderIntelligence();updateNavCounts();}catch(_){}
+  const refresh=()=>renderUnlinkedPrints();
   if(typeof requestAnimationFrame==='function')requestAnimationFrame(refresh);
   if(typeof setTimeout==='function')setTimeout(refresh,180);
   return unlinkedPrints();
