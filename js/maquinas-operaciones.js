@@ -601,15 +601,15 @@ function ignoredPrintMatches(ignored,live,now=Date.now()){
   if(!ignored||!live||live.state!=='printing')return false;
   const run=printRun(live,now);
   if(!ignored.file||ignored.file!==run.file)return false;
+  const ignoredAt=Math.max(0,num(ignored.ignoredAt));
+  // Red de seguridad para un dashboard que estuvo cerrado entre dos ejecuciones
+  // idénticas y nunca alcanzó a observar el estado terminal.
+  if(ignoredAt&&now-ignoredAt>24*3600*1000)return false;
   if(samePrintRun(ignored,run))return true;
   const prevElapsed=Math.max(0,num(ignored.elapsed)),prevProgress=Math.max(0,num(ignored.progress));
   const elapsedRestart=prevElapsed>=300&&run.elapsed+180<prevElapsed;
   const progressRestart=prevProgress>=20&&run.progress+15<prevProgress;
   if(elapsedRestart&&progressRestart)return false;
-  const ignoredAt=Math.max(0,num(ignored.ignoredAt));
-  // Red de seguridad para un dashboard que estuvo cerrado entre dos ejecuciones
-  // idénticas y nunca alcanzó a observar el estado terminal.
-  if(ignoredAt&&now-ignoredAt>24*3600*1000)return false;
   return true;
 }
 function linkedLiveJob(machineId,live,now=Date.now()){
