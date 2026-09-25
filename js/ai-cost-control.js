@@ -72,6 +72,15 @@ function ensureStyle(){
   .ai-cost-sources{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
   .ai-cost-chip{font-size:9px;color:var(--text2);padding:5px 7px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02)}
   .ai-cost-policy{margin-top:10px;padding-top:9px;border-top:1px solid var(--border);font-size:9.5px;color:var(--text3);display:flex;gap:10px;flex-wrap:wrap}
+  #aiCostGlobalAlert{position:fixed;top:66px;right:16px;z-index:100000;display:none;align-items:center;gap:8px;max-width:min(420px,calc(100vw - 28px));padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(18,18,18,.96);box-shadow:0 12px 34px rgba(0,0,0,.32);font-size:10px;font-weight:700;color:var(--text);backdrop-filter:blur(10px)}
+  #aiCostGlobalAlert.notice{display:flex;border-color:rgba(255,176,32,.45)}
+  #aiCostGlobalAlert.alert{display:flex;border-color:rgba(255,128,32,.62)}
+  #aiCostGlobalAlert.critical{display:flex;border-color:rgba(255,88,103,.8);box-shadow:0 12px 36px rgba(255,88,103,.13)}
+  #aiCostGlobalAlert .ai-cost-global-pct{font-size:13px;font-weight:900}
+  #aiCostGlobalAlert.notice .ai-cost-global-pct{color:#ffb020}
+  #aiCostGlobalAlert.alert .ai-cost-global-pct{color:#ff8a20}
+  #aiCostGlobalAlert.critical .ai-cost-global-pct{color:#ff5867}
+  @media(max-width:700px){#aiCostGlobalAlert{top:58px;left:10px;right:10px;max-width:none}}
   @media(max-width:900px){.ai-cost-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-cost-grid .ai-cost-kpi:last-child{grid-column:1/-1}}
   `;
   (d.head||d.documentElement).appendChild(s);
@@ -98,7 +107,30 @@ function sourceHtml(server,local){
   return Object.entries(src).sort((a,b)=>b[1].cost-a[1].cost).slice(0,10)
     .map(([k,v])=>`<span class="ai-cost-chip">${esc(k)} · ${v.requests} · ${money(v.cost)}</span>`).join('');
 }
+function globalAlertLevel(server){
+  const budget=Math.max(0,Number(server?.budget_usd)||0);
+  const used=Math.max(0,Number(server?.used_usd)||0);
+  const pct=budget?Math.min(999,Math.round(used/budget*100)):0;
+  if(pct>=90)return{pct,level:'critical',label:'CRÍTICO'};
+  if(pct>=75)return{pct,level:'alert',label:'ALERTA'};
+  if(pct>=50)return{pct,level:'notice',label:'AVISO'};
+  return null;
+}
+function paintGlobalAlert(server,error){
+  const d=target?.document;if(!d)return;
+  let el=d.getElementById('aiCostGlobalAlert');
+  if(!el){el=d.createElement('div');el.id='aiCostGlobalAlert';el.setAttribute('role','alert');(d.body||d.documentElement).appendChild(el);}
+  const lvl=!error&&server?.configured?globalAlertLevel(server):null;
+  if(!lvl){el.className='';el.style.display='none';el.textContent='';return;}
+  const used=Number(server.used_usd)||0,budget=Number(server.budget_usd)||0,remaining=Math.max(0,Number(server.remaining_usd)||0);
+  el.className=lvl.level;
+  el.style.display='flex';
+  el.innerHTML=`<span class="ai-cost-global-pct">${lvl.pct}%</span><span>${lvl.label} CONSUMO IA · ${money(used)} de ${money(budget)} · quedan ${money(remaining)}</span>`;
+  el.title='Alerta global del presupuesto Anthropic protegido por el Proxy Worker';
+}
+
 function paint(server,error){
+  paintGlobalAlert(server,error);
   const card=mount();if(!card)return;
   const local=localSummary();
   const budget=Number(server?.budget_usd)||0;
@@ -141,5 +173,5 @@ function install(root){
   return true;
 }
 function status(){return{installed,busy,local:localSummary()};}
-return{install,refresh,status,_test:{localSummary,money,sourceHtml}};
+return{install,refresh,status,_test:{localSummary,money,sourceHtml,globalAlertLevel}};
 });
