@@ -43,10 +43,11 @@ Los tokens viejos ya estuvieron publicados en el HTML, así que hay que rotarlos
    (`cd airtable-proxy && npx wrangler secret put AIRTABLE_TOKEN`) y recién
    después revocar el antiguo. El secret `AIRTABLE` del repo se sigue usando
    solo para el backup semanal (workflow `weekly.yml`, server-side) — actualízalo también.
-2. **Anthropic**: crear una key nueva en <https://console.anthropic.com/>,
-   `npx wrangler secret put ANTHROPIC_TOKEN`, revocar la antigua. El secret
-   `CLAUDE` del repo ya no lo lee el deploy. Actualizar también
-   `ANTHROPIC_API_KEY` del lead-worker si utiliza la misma clave antes de revocarla.
+2. **Anthropic**: crear una key exclusiva del workspace del dashboard en <https://console.anthropic.com/>,
+   guardarla únicamente como `ANTHROPIC_TOKEN` del `airtable-proxy` y revocar cualquier
+   key anterior o compartida con Claude Code. El navegador y el `lead-worker` no
+   almacenan una API key Anthropic: el lead-worker recibe `AI_PROXY_KEY` desde el
+   secret de GitHub `PROXY_KEY` y pasa por el mismo hard cap del proxy.
 3. Relanzar el deploy (pestaña Actions → Deploy Dashboard → Run workflow).
 
 ## Cómo verificar
