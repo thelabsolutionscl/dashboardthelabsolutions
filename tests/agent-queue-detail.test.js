@@ -47,3 +47,19 @@ test('cada tarea muestra sus datos y resultado sin procesarse al abrirla',()=>{
   assert.equal(row.hidden,true);
   assert.equal(cell.innerHTML,'');
 });
+
+
+test('la cola usa nombre legible aunque el ID histórico ya no exista en Clientes',()=>{
+  const context=vm.createContext({
+    state:{clientes:[],clientesById:{},clientesByIdRec:{}},
+    escapeHtml:value=>String(value),
+    document:{getElementById:()=>null,querySelector:()=>null}
+  });
+  vm.runInContext(source,context);
+  const empresa=vm.runInContext(`_aqEntityName({'Entidad':'Cliente','ID entidad':'recViejo','Input JSON':'{"company":"Fever"}'})`,context);
+  const nombre=vm.runInContext(`_aqEntityName({'Entidad':'Cliente','ID entidad':'recOtro','Input JSON':'{"name":"Sebastián Lucio"}'})`,context);
+  const sinNombre=vm.runInContext(`_aqEntityName({'Entidad':'Cliente','ID entidad':'recSinDato','Input JSON':'{}'})`,context);
+  assert.equal(empresa,'Fever');
+  assert.equal(nombre,'Sebastián Lucio');
+  assert.equal(sinNombre,'Cliente sin nombre');
+});

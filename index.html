@@ -12663,8 +12663,26 @@ function toggleAgentQueueDetail(recordId){
 }
 function _aqEntityName(f){
   const id=f['ID entidad'];
-  const cliente=(state.clientes||[]).find(c=>c.id===id);
-  return cliente?.fields?.Empresa||cliente?.fields?.Contacto||[f.Entidad,id].filter(Boolean).join(' ')||'—';
+  const byRec=(state.clientesByIdRec||{})[id];
+  const cliente=byRec||(state.clientes||[]).find(c=>c.id===id);
+  const mapped=(state.clientesById||{})[id];
+  const direct=cliente?.fields?.Empresa||cliente?.fields?.Contacto||mapped;
+  if(direct&&direct!=='—'&&direct!=='(cliente)') return direct;
+
+  // Algunos ítems históricos apuntan a IDs de cliente que ya no están en el
+  // snapshot actual del CRM. El payload original de la cola conserva el nombre.
+  let input={};
+  try{input=JSON.parse(f['Input JSON']||'{}')||{};}catch(_){}
+  const fallback=[
+    input.company,input.empresa,input.companyName,input.company_name,input.organization,
+    input.business,input.negocio,input.name,input.nombre,input.fullName,input.full_name,
+    input.contact,input.contacto,input.email
+  ].find(v=>typeof v==='string'&&v.trim());
+  if(fallback) return fallback.trim();
+
+  const entidad=String(f.Entidad||'').trim();
+  if(entidad&&!/^cliente(?:\s+rec[a-z0-9]+)?$/i.test(entidad)) return entidad;
+  return 'Cliente sin nombre';
 }
 function _aqDetailBlock(title,value,empty){
   return `<section class="aq-detail-block"><h4>${title}</h4><pre>${escapeHtml(String(value||empty))}</pre></section>`;
