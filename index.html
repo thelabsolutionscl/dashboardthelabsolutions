@@ -18293,7 +18293,6 @@ function initDashboard(){
   _seed('google_drive_client_id',_DEFAULTS.GOOGLE_CLIENT_ID);
   _seed('sii_worker_url',_DEFAULTS.SII_WORKER_URL);
   if(!_isPlaceholder(_DEFAULTS.SII_WORKER_URL)&&_isPlaceholder(localStorage.getItem('sii_cfg'))) localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL}));
-  _seed('anthropic_key',_DEFAULTS.ANTHROPIC_KEY);
   initDates();
   fillCatSelects();
   const _noRealToken=_isPlaceholder(lsGet('airtable_token'))&&!_proxyCfg();
