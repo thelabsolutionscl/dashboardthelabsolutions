@@ -617,11 +617,21 @@ function renderUnlinkedPrints(){
   }).join('');
   if(!el.dataset.bound){el.dataset.bound='1';el.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;if(button.dataset.action==='assign')openUnlinkedAssignment(button.dataset.machine);else if(button.dataset.action==='create')openJobFromLive(button.dataset.machine);else skipUnlinkedPrint(button.dataset.machine);});}
 }
+function refreshUnlinkedPrintAlerts(){
+  const refresh=()=>{
+    renderUnlinkedPrints();
+    try{renderIntelligence();updateNavCounts();}catch(_){}
+  };
+  refresh();
+  if(typeof requestAnimationFrame==='function')requestAnimationFrame(refresh);
+  if(typeof setTimeout==='function')setTimeout(refresh,180);
+  return unlinkedPrints();
+}
 function skipUnlinkedPrint(machineId){
   const live=_printerStatus[machineId]||{};
   if(live.state!=='printing')return;
   data().ignoredPrints[machineId]=printRun(live);
-  persist('Impresión sin trabajo saltada',{render:false});renderUnlinkedPrints();renderIntelligence();
+  persist('Impresión sin trabajo saltada',{render:false});refreshUnlinkedPrintAlerts();
 }
 function openUnlinkedAssignment(machineId){
   const m=getMachine(machineId),live=_printerStatus[machineId]||{};
@@ -643,7 +653,7 @@ function assignUnlinkedPrint(){
   job.machineId=machineId;job.status='imprimiendo';job.livePrintRun=printRun(live);job.liveFilename=live.filename||'';
   job.startedAt=new Date(job.livePrintRun.startedAt).toISOString();job.updatedAt=nowIso();
   delete data().ignoredPrints[machineId];persist('Impresión vinculada a trabajo existente',{render:false});
-  closeUnlinkedAssignment();renderUnlinkedPrints();renderAll();toast(`Impresión asignada a ${job.name}`,'success');
+  closeUnlinkedAssignment();renderAll();refreshUnlinkedPrintAlerts();toast(`Impresión asignada a ${job.name}`,'success');
 }
 const ACTIONABLE_CONNECTION_JOB_STATES=new Set(['en_cola','imprimiendo','queued','retry','checking','uploading','uploaded','started','printing','paused']);
 function connectivityAlertDecision(machine,stateNow,offlineForMs,jobs=[],offlineThresholdMs=120000){
@@ -1601,7 +1611,7 @@ function saveJob(){
   }
   if(idx>=0)data().jobs[idx]=j;else data().jobs.push(j);
   audit(idx>=0?'Trabajo actualizado':boundLive?'Trabajo creado desde impresión en vivo':'Trabajo creado',j.machineId,`${j.name} · ${orderLabel(j.pedidoId)}`);
-  writeLocal();scheduleRemote();closeJob();renderAll();renderUnlinkedPrints();
+  writeLocal();scheduleRemote();closeJob();renderAll();refreshUnlinkedPrintAlerts();
   toast(idx>=0?'Trabajo actualizado ✓':boundLive?'Trabajo creado y vinculado a la impresión ✓':'Trabajo creado ✓','success');
 }
 function planOne(id,silent=false,loads=null){
@@ -2664,7 +2674,7 @@ const api={
   saveSafetyConfig,recordSafetyManual,refreshSafety,renderSafety,canAutoStart,
   openScanner,closeScanner,submitScan,handleScan,clearScanMachine,printEntityLabel,
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
-  renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,openUnlinkedAssignment,skipUnlinkedPrint,assignUnlinkedPrint,renderUnlinkedPrints,checkBridgeHealth,saveIntelligenceConfig,
+  renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,openUnlinkedAssignment,skipUnlinkedPrint,assignUnlinkedPrint,renderUnlinkedPrints,refreshUnlinkedPrintAlerts,checkBridgeHealth,saveIntelligenceConfig,
   openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
