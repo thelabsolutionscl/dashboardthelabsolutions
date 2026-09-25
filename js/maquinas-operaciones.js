@@ -686,7 +686,11 @@ function linkedLiveJob(machineId,live,now=Date.now()){
   const run=printRun(live,now);
   return data().jobs.find(j=>{
     if(j.archived||j.machineId!==machineId||j.status!=='imprimiendo')return false;
-    if(j.livePrintRun)return currentPrintRunMatches(j.livePrintRun,live,now);
+    if(j.livePrintRun){
+      const ref=j.livePrintRun;
+      if(ref.file&&run.file&&ref.file!==run.file)return false;
+      return Math.abs(num(ref.startedAt)-num(run.startedAt))<120000;
+    }
     return !!run.file&&filenameMatchScore(j,live.filename)>=50&&
       !!Date.parse(j.startedAt)&&Math.abs(Date.parse(j.startedAt)-run.startedAt)<120000;
   })||null;
