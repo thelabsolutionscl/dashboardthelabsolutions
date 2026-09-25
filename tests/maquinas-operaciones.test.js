@@ -580,3 +580,35 @@ test('la ficha de fiabilidad usa muestra real y no accede a propiedades score in
   assert.match(open,/reliability\.completion/);
   assert.match(open,/reliability\.history\.total/);
 });
+
+
+test('Asignación recomendada permite crear, editar y eliminar trabajos',()=>{
+  const start=OPS.indexOf('function renderIntelligence(){');
+  const end=OPS.indexOf('\n// La configuración de automatización',start);
+  assert.ok(start>=0&&end>start,'renderIntelligence debe existir');
+  const render=OPS.slice(start,end);
+  assert.match(render,/MachineOps\.openJob\(''\).*\+ Crear trabajo/);
+  assert.match(render,/MachineOps\.openJob\('\$\{job\.id\}'\).*Editar/);
+  assert.match(render,/MachineOps\.deletePlanningJob\('\$\{job\.id\}'\).*Eliminar/);
+  assert.match(render,/MachineOps\.applyRecommendation\('\$\{job\.id\}'\).*Asignar/);
+  assert.match(CSS,/\.mops-rec-actions\{/);
+  assert.match(CSS,/\.mops-intel-head-actions\{/);
+});
+
+test('eliminar desde recomendaciones es seguro y durable',()=>{
+  const canDelete=loadOps().jobCanBeDeleted;
+  assert.equal(canDelete({status:'pendiente',archived:false}),true);
+  assert.equal(canDelete({status:'planificado',archived:false}),true);
+  assert.equal(canDelete({status:'imprimiendo',archived:false}),false,'una impresión activa nunca se elimina');
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'farm-1',controllerState:'queued'}),false,'una ejecución pendiente del Controller no se elimina');
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'farm-1',controllerState:'completed'}),true,'un Controller terminal ya no bloquea la eliminación');
+  const start=OPS.indexOf('function deletePlanningJob(id){');
+  const end=OPS.indexOf('\nfunction archiveJob',start);
+  assert.ok(start>=0&&end>start,'deletePlanningJob debe existir');
+  const del=OPS.slice(start,end);
+  assert.match(del,/confirm\(/,'eliminar requiere confirmación');
+  assert.match(del,/j\.archived=true/);
+  assert.match(del,/j\.status='archivado'/);
+  assert.match(del,/j\.deletedAt=nowIso\(\)/);
+  assert.match(del,/persist\('Trabajo eliminado desde asignación recomendada'\)/);
+});
