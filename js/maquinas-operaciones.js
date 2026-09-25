@@ -2656,8 +2656,10 @@ function bootGlobalPrintAlerts(){
     if(allowed.includes('maquinas'))api.startGlobalMonitoring();
   },2000);
 }
-if(document.readyState==='complete')bootGlobalPrintAlerts();
-else window.addEventListener('load',bootGlobalPrintAlerts,{once:true});
+if(typeof document!=='undefined'){
+  if(document.readyState==='complete')bootGlobalPrintAlerts();
+  else window.addEventListener('load',bootGlobalPrintAlerts,{once:true});
+}
 
 // Integraciones con el monitor existente sin duplicar la lógica Moonraker.
 if(typeof initMaquinas==='function'){
