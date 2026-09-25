@@ -36,6 +36,237 @@ function cors(origin) {
   return { 'Access-Control-Allow-Origin': allow, ...CORS_BASE };
 }
 
+
+/**
+ * Contador de costo Anthropic con serialización real.
+ *
+ * KV se mantiene únicamente para migrar el saldo del día del guard anterior.
+ * Todas las decisiones nuevas de presupuesto pasan por UNA instancia de este
+ * Durable Object, evitando el read -> modify -> write concurrente de KV.
+ */
+export class AiBudgetGuard {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this._queue = Promise.resolve();
+  }
+
+  fetch(request) {
+    // Una sola cola por Durable Object: reserva/reconciliación/lectura nunca
+    // observan el mismo saldo en paralelo.
+    const run = this._queue.then(() => this._handle(request));
+    this._queue = run.catch(() => {});
+    return run;
+  }
+
+  async _handle(request) {
+    if (request.method !== 'POST') return this._json({ error: 'Method not allowed' }, 405);
+    let payload = {};
+    try { payload = await request.json(); }
+    catch (_) { return this._json({ error: 'Invalid budget payload' }, 400); }
+
+    const url = new URL(request.url);
+    const date = String(payload.date || aiChileDate()).slice(0, 10);
+    const budget = Math.max(0.05, Number(payload.budget_usd) || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT);
+    const perRequest = Math.max(0.01, Number(payload.request_budget_usd) || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT);
+    const maxConcurrent = Math.max(1, Math.min(4, Number(payload.max_concurrent) || 2));
+    const loaded = await this._load(date);
+    const row = loaded.row;
+
+    if (url.pathname === '/usage') {
+      return this._json(this._snapshot(date, budget, perRequest, row));
+    }
+
+    if (url.pathname === '/reserve') {
+      const estimate = Math.max(0, Number(payload.estimated_request_usd) || 0);
+      const source = sanitizeAiSource(payload.source || 'dashboard');
+      const model = String(payload.model || '');
+
+      if (estimate > perRequest) {
+        const snap = this._snapshot(date, budget, perRequest, row);
+        return this._json({
+          ok: false, status: 429, error: 'AI request exceeds per-request cost limit',
+          budget_usd: budget, used_usd: snap.used_usd, estimated_request_usd: estimate,
+        });
+      }
+
+      const active = Object.keys(row.reservations || {}).length;
+      if (active >= maxConcurrent) {
+        const snap = this._snapshot(date, budget, perRequest, row);
+        return this._json({
+          ok: false, status: 429, error: 'Too many concurrent AI requests',
+          budget_usd: budget, used_usd: snap.used_usd, estimated_request_usd: estimate,
+        });
+      }
+
+      const snap = this._snapshot(date, budget, perRequest, row);
+      if (snap.used_usd + estimate > budget) {
+        return this._json({
+          ok: false, status: 429, error: 'Daily AI budget reached',
+          budget_usd: budget, used_usd: snap.used_usd, estimated_request_usd: estimate,
+        });
+      }
+
+      const reservationId = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+        ? globalThis.crypto.randomUUID()
+        : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
+      row.reservations = row.reservations || {};
+      row.reservations[reservationId] = {
+        estimate, source, model, at: new Date().toISOString(),
+      };
+      row.requests = Math.max(0, Number(row.requests) || 0) + 1;
+      row.by_source = row.by_source || {};
+      const src = row.by_source[source] || { requests: 0, spent_usd: 0 };
+      src.requests = Math.max(0, Number(src.requests) || 0) + 1;
+      src.spent_usd = Math.max(0, Number(src.spent_usd) || 0);
+      row.by_source[source] = src;
+      row.updated_at = new Date().toISOString();
+      await this._save(loaded.key, row);
+
+      return this._json({
+        ok: true, date, reservation_id: reservationId, source, estimate, model,
+        budget_usd: budget, used_usd: snap.used_usd, estimated_request_usd: estimate,
+      });
+    }
+
+    if (url.pathname === '/release') {
+      const reservationId = String(payload.reservation_id || '');
+      row.reservations = row.reservations || {};
+      row.finalized = row.finalized || {};
+      if (!row.finalized[reservationId]) {
+        delete row.reservations[reservationId];
+        row.finalized[reservationId] = { kind: 'release', at: new Date().toISOString() };
+      }
+      row.last_release_reason = String(payload.reason || 'no_usage').slice(0, 80);
+      row.updated_at = new Date().toISOString();
+      await this._save(loaded.key, row);
+      return this._json({ ok: true });
+    }
+
+    if (url.pathname === '/reconcile') {
+      const reservationId = String(payload.reservation_id || '');
+      row.reservations = row.reservations || {};
+      row.finalized = row.finalized || {};
+
+      // Idempotencia: un waitUntil repetido o una entrega duplicada no cobra dos veces.
+      if (row.finalized[reservationId]) return this._json({ ok: true, already_finalized: true });
+
+      const reservation = row.reservations[reservationId] || null;
+      const actual = Math.max(0, Number(payload.actual_usd) || 0);
+      const source = sanitizeAiSource((reservation && reservation.source) || payload.source || 'dashboard');
+      delete row.reservations[reservationId];
+
+      row.spent_usd = Math.max(0, Number(row.spent_usd) || 0) + actual;
+      row.by_source = row.by_source || {};
+      const src = row.by_source[source] || { requests: 0, spent_usd: 0 };
+      src.spent_usd = Math.max(0, Number(src.spent_usd) || 0) + actual;
+      src.requests = Math.max(0, Number(src.requests) || 0);
+      row.by_source[source] = src;
+      row.finalized[reservationId] = { kind: 'reconcile', at: new Date().toISOString() };
+      row.updated_at = new Date().toISOString();
+      await this._save(loaded.key, row);
+      return this._json({ ok: true, actual_usd: actual });
+    }
+
+    return this._json({ error: 'Unknown budget operation' }, 404);
+  }
+
+  async _load(date) {
+    const key = 'anthropic-budget:' + date;
+    let row = await this.state.storage.get(key);
+
+    // Primer acceso después del deploy: migra el saldo KV del día de forma
+    // conservadora. Las reservas agregadas antiguas se consideran ya gastadas,
+    // así el cambio de guard NO regala presupuesto adicional a mitad del día.
+    if (!row || typeof row !== 'object') {
+      row = { spent_usd: 0, requests: 0, by_source: {}, reservations: {}, finalized: {} };
+      try {
+        const legacyRaw = this.env && this.env.AI_BUDGET ? await this.env.AI_BUDGET.get(key) : null;
+        const legacy = legacyRaw ? JSON.parse(legacyRaw) : null;
+        if (legacy && typeof legacy === 'object') {
+          row.spent_usd = Math.max(0, Number(legacy.spent_usd) || 0) +
+            Math.max(0, Number(legacy.reserved_usd) || 0);
+          row.requests = Math.max(0, Number(legacy.requests) || 0);
+          row.by_source = {};
+          for (const [name, value] of Object.entries(legacy.by_source || {})) {
+            row.by_source[sanitizeAiSource(name)] = {
+              requests: Math.max(0, Number(value && value.requests) || 0),
+              spent_usd: Math.max(0, Number(value && value.spent_usd) || 0) +
+                Math.max(0, Number(value && value.reserved_usd) || 0),
+            };
+          }
+          row.migrated_from_kv = true;
+          row.migrated_at = new Date().toISOString();
+        }
+      } catch (_) {}
+    }
+
+    row.reservations = row.reservations || {};
+    row.finalized = row.finalized || {};
+    row.by_source = row.by_source || {};
+
+    const now = Date.now();
+    let dirty = false;
+    for (const [id, reservation] of Object.entries(row.reservations)) {
+      const at = Date.parse(reservation && reservation.at || '');
+      if (!Number.isFinite(at) || now - at > AI_RESERVATION_STALE_MS) {
+        delete row.reservations[id];
+        dirty = true;
+      }
+    }
+    for (const [id, finalized] of Object.entries(row.finalized)) {
+      const at = Date.parse(finalized && finalized.at || '');
+      if (!Number.isFinite(at) || now - at > 24 * 60 * 60 * 1000) {
+        delete row.finalized[id];
+        dirty = true;
+      }
+    }
+    if (dirty) {
+      row.recovered_stale_reservation_at = new Date().toISOString();
+      row.updated_at = row.recovered_stale_reservation_at;
+    }
+    if (dirty || row.migrated_from_kv) await this._save(key, row);
+    return { key, row };
+  }
+
+  async _save(key, row) {
+    await this.state.storage.put(key, row);
+  }
+
+  _snapshot(date, budget, perRequest, row) {
+    let reserved = 0;
+    const bySource = {};
+    for (const [name, src] of Object.entries(row.by_source || {})) {
+      bySource[name] = {
+        requests: Math.max(0, Number(src && src.requests) || 0),
+        spent_usd: Math.max(0, Number(src && src.spent_usd) || 0),
+        reserved_usd: 0,
+      };
+    }
+    for (const reservation of Object.values(row.reservations || {})) {
+      const estimate = Math.max(0, Number(reservation && reservation.estimate) || 0);
+      reserved += estimate;
+      const source = sanitizeAiSource(reservation && reservation.source || 'dashboard');
+      bySource[source] = bySource[source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+      bySource[source].reserved_usd += estimate;
+    }
+    const spent = Math.max(0, Number(row.spent_usd) || 0);
+    return {
+      configured: true, atomic: true, date, budget_usd: budget, request_budget_usd: perRequest,
+      spent_usd: spent, reserved_usd: reserved, used_usd: spent + reserved,
+      remaining_usd: Math.max(0, budget - spent - reserved),
+      requests: Math.max(0, Number(row.requests) || 0),
+      by_source: bySource, updated_at: row.updated_at || null,
+    };
+  }
+
+  _json(data, status = 200) {
+    return new Response(JSON.stringify(data), {
+      status, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
@@ -227,10 +458,43 @@ function estimateAiRequestUsd(payload) {
   const outputTokens = Math.max(0, Number(payload?.max_tokens) || 0);
   return (inputTokens * p.input + outputTokens * p.output) / 1000000;
 }
+
+async function aiBudgetGuardCall(env, pathname, payload) {
+  if (!env.AI_BUDGET_GUARD) throw new Error('AI budget Durable Object unavailable');
+  const id = env.AI_BUDGET_GUARD.idFromName('anthropic-global-budget');
+  const stub = env.AI_BUDGET_GUARD.get(id);
+  const response = await stub.fetch('https://ai-budget.internal' + pathname, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+  if (!response.ok) throw new Error('AI budget guard HTTP ' + response.status);
+  return response.json();
+}
+
 async function readAiBudget(env) {
   const budget = Math.max(0.05, Number(env.ANTHROPIC_DAILY_BUDGET_USD || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT));
   const perRequest = Math.max(0.01, Number(env.ANTHROPIC_REQUEST_BUDGET_USD || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT));
-  const key = 'anthropic-budget:' + aiChileDate();
+  const guardDate = aiChileDate();
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      return await aiBudgetGuardCall(env, '/usage', {
+        date: guardDate, budget_usd: budget, request_budget_usd: perRequest,
+      });
+    } catch (_) {
+      return { configured: false, atomic: false, date: guardDate, budget_usd: budget,
+        request_budget_usd: perRequest, spent_usd: 0, reserved_usd: 0, used_usd: 0,
+        remaining_usd: 0, requests: 0, by_source: {} };
+    }
+  }
+  // Solo las pruebas unitarias pueden usar el ledger KV legado. Producción falla
+  // cerrado si el Durable Object no está enlazado.
+  if (!env.__TEST_ALLOW_KV_BUDGET) {
+    return { configured: false, atomic: false, date: guardDate, budget_usd: budget,
+      request_budget_usd: perRequest, spent_usd: 0, reserved_usd: 0, used_usd: 0,
+      remaining_usd: 0, requests: 0, by_source: {} };
+  }
+  const key = 'anthropic-budget:' + guardDate;
   if (!env.AI_BUDGET) {
     return { configured: false, date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
       spent_usd: 0, reserved_usd: 0, used_usd: 0, remaining_usd: 0, requests: 0, by_source: {} };
@@ -262,8 +526,25 @@ async function readAiBudget(env) {
   };
 }
 async function reserveAiBudget(env, payload, source) {
-  const snap = await readAiBudget(env);
   const estimate = estimateAiRequestUsd(payload);
+  const budget = Math.max(0.05, Number(env.ANTHROPIC_DAILY_BUDGET_USD || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT));
+  const perRequest = Math.max(0.01, Number(env.ANTHROPIC_REQUEST_BUDGET_USD || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT));
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      return await aiBudgetGuardCall(env, '/reserve', {
+        date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
+        max_concurrent: 2, estimated_request_usd: estimate, source, model: payload && payload.model,
+      });
+    } catch (_) {
+      return { ok: false, status: 503, error: 'AI cost guard unavailable',
+        budget_usd: budget, used_usd: 0, estimated_request_usd: estimate };
+    }
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET) {
+    return { ok: false, status: 503, error: 'AI cost guard unavailable',
+      budget_usd: budget, used_usd: 0, estimated_request_usd: estimate };
+  }
+  const snap = await readAiBudget(env);
   if (!snap.configured) return { ok: false, status: 503, error: 'AI cost guard unavailable', budget_usd: snap.budget_usd, used_usd: 0, estimated_request_usd: estimate };
   if (estimate > snap.request_budget_usd) return { ok: false, status: 429, error: 'AI request exceeds per-request cost limit', budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
   if (snap.used_usd + estimate > snap.budget_usd) return { ok: false, status: 429, error: 'Daily AI budget reached', budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
@@ -308,7 +589,18 @@ async function parseAnthropicUsage(response) {
   } catch (_) { return null; }
 }
 async function releaseAiReservation(env, reservation, reason) {
-  if (!env.AI_BUDGET || !reservation?.ok) return;
+  if (!reservation?.ok) return;
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      await aiBudgetGuardCall(env, '/release', {
+        date: reservation.date || aiChileDate(),
+        reservation_id: reservation.reservation_id || '',
+        reason: String(reason || 'no_usage').slice(0, 80),
+      });
+    } catch (_) {}
+    return;
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET || !env.AI_BUDGET) return;
   let row = {};
   try { row = JSON.parse((await env.AI_BUDGET.get(reservation.key)) || '{}'); } catch (_) {}
   row.reserved_usd = Math.max(0, (Number(row.reserved_usd) || 0) - reservation.estimate);
@@ -322,7 +614,27 @@ async function releaseAiReservation(env, reservation, reason) {
   await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
 }
 async function reconcileAiBudget(env, reservation, response) {
-  if (!env.AI_BUDGET || !reservation?.ok) return;
+  if (!reservation?.ok) return;
+  if (env.AI_BUDGET_GUARD) {
+    if (!response || !response.ok) {
+      await releaseAiReservation(env, reservation, 'upstream_http_' + (response?.status || 'unknown'));
+      return;
+    }
+    const parsedAtomic = await parseAnthropicUsage(response);
+    // Un 2xx sin usage conserva su reserva; el guard la vence a los 2 min.
+    if (!parsedAtomic) return;
+    const actualAtomic = aiCostUsd(parsedAtomic.model || reservation.model, parsedAtomic.usage);
+    try {
+      await aiBudgetGuardCall(env, '/reconcile', {
+        date: reservation.date || aiChileDate(),
+        reservation_id: reservation.reservation_id || '',
+        actual_usd: actualAtomic,
+        source: reservation.source || 'dashboard',
+      });
+    } catch (_) {}
+    return;
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET || !env.AI_BUDGET) return;
   // Un 4xx/5xx es un rechazo confirmado por Anthropic: no hubo una generación
   // facturable que justifique mantener la reserva. Liberarla permite reintentar
   // después de recargar créditos o resolver un rate limit.
