@@ -80,6 +80,13 @@ test('móvil usa un único dueño de scroll para modales ordinarios',()=>{
   assert.match(OP,/\.modal-overlay:not\(#clienteDetalleModal\)>\.modal-card\{overflow-y:auto/);
 });
 
+test('el topbar móvil no solapa el logo y alinea correo campana y menú',()=>{
+  assert.match(CSS,/@media\(max-width:768px\)\{[\s\S]*?\.logo\{[^}]*flex:1 1 0[^}]*overflow:hidden[^}]*height:44px[^}]*align-items:center/);
+  assert.match(CSS,/@media\(max-width:768px\)\{[\s\S]*?\.logo img\{[^}]*max-width:100%[^}]*max-height:24px[^}]*object-fit:contain/);
+  assert.match(CSS,/\.topbar-right #mailBtn,\.topbar-right #notifBtn,\.mobile-menu-btn:not\(#mobilePlusBtn\)\{[^}]*width:44px[^}]*height:44px[^}]*align-items:center[^}]*justify-content:center/);
+  assert.match(CSS,/#notifBtnWrap\{[^}]*width:44px[^}]*height:44px[^}]*display:flex[^}]*align-items:center[^}]*justify-content:center/);
+});
+
 test('la legibilidad y los targets móviles tienen un piso explícito',()=>{
   assert.match(CSS,/--text3:#8a8a8a/);
   assert.match(CSS,/\.notif-btn\{[^}]*min-width:44px[^}]*min-height:44px/);
