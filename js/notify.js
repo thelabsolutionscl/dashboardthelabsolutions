@@ -8,6 +8,7 @@ const NOTIFY={
   items:[],
   _hist:[],
   _priority:[],
+  _priorityOwner:'',
   _seq:0,
   _filter:'todas',
 
@@ -68,6 +69,7 @@ const NOTIFY={
   _priorityKey(){return this._priorityPrefix+(this.persona()||'otro');},
   loadPriority(){
     try{
+      this._priorityOwner=this.persona()||'otro';
       const rows=JSON.parse(localStorage.getItem(this._priorityKey())||'[]');
       const min=Date.now()-7*86400000;
       this._priority=(Array.isArray(rows)?rows:[]).filter(x=>x&&Date.parse(x.time||0)>=min).slice(0,20);
@@ -76,6 +78,7 @@ const NOTIFY={
   savePriority(){try{localStorage.setItem(this._priorityKey(),JSON.stringify(this._priority.slice(0,20)));}catch(e){}},
   priority(kind,title,sub,action,opts={}){
     const me=this.persona(),personas=Array.isArray(opts.personas)?opts.personas:[];
+    if((this._priorityOwner||'otro')!==(me||'otro'))this.loadPriority();
     if(personas.length&&(!me||!personas.includes(me)))return false;
     const key=String(opts.key||'');
     if(key&&this._priority.some(x=>x.key===key))return false;
@@ -576,7 +579,7 @@ function _mailRelevantAccounts(){
 }
 function _mailHasPass(email){try{return!!localStorage.getItem('thelab_mail_pass_'+email);}catch(e){return false;}}
 async function _mailCheckAccount(email,{baseline=false}={}){
-  if(!_mailHasPass(email)||!MAIL?.postAs)return{attempted:false,ok:false};
+  if(!_mailHasPass(email)||typeof MAIL==='undefined'||typeof MAIL.postAs!=='function')return{attempted:false,ok:false};
   const data=await MAIL.postAs(email,{action:'check'});
   if(data?.error)return{attempted:true,ok:false,error:data.error};
   const unseen=Math.max(0,Number(data?.unseen)||0),prev=Number.isFinite(_mailLastByAccount[email])?_mailLastByAccount[email]:-1;
