@@ -102,7 +102,7 @@ let _simAbort = false;
 // el margen quedaba apretado (44 líneas × ~40 tokens + resumen) y si el modelo se
 // ponía verboso cortaba a media línea, perdiendo perfiles Y el bloque de resumen
 // sin que nadie se enterara.
-function _simMaxTokens(nPerfiles){ return Math.min(8000, nPerfiles*70 + 600); }
+function _simMaxTokens(nPerfiles){ return Math.min(4000, nPerfiles*70 + 600); }
 
 // Devuelve {texto, truncado}. `truncado` es la señal de que la respuesta se cortó
 // por techo de tokens: sin ella, una respuesta parcial se procesa como completa.
@@ -116,19 +116,12 @@ async function _simClaude(system, user, maxTokens){
   }
   const body = JSON.stringify({model:SIM_MODEL, max_tokens:maxTokens||3000, system:[{type:'text',text:String(system||''),cache_control:{type:'ephemeral'}}], messages:[{role:'user', content:user}]});
   const px = (typeof _proxyCfg === 'function') ? _proxyCfg() : null;
-  let r;
-  if(px){
-    r = await _claudeHttp(px.url+'/anthropic/v1/messages', {method:'POST', headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'simulacion'}, body});
-  }else{
-    if(typeof _claudeDirectAllowed==='function'&&!_claudeDirectAllowed()) throw new Error('Proxy IA requerido: la simulación no hará llamadas directas sin presupuesto');
-    const k = (typeof getAnthropicKey === 'function') ? getAnthropicKey() : '';
-    if(!k) throw new Error('Sin acceso a la IA — configura el proxy para continuar');
-    r = await _claudeHttp('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':k.replace(/[^\x20-\x7E]/g,'').trim(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:new Blob([body],{type:'application/json'})
-    });
-  }
+  if(!px) throw new Error('Proxy IA requerido: la simulación está bloqueada para evitar consumo fuera del presupuesto');
+  const r = await _claudeHttp(px.url+'/anthropic/v1/messages', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'simulacion'},
+    body
+  });
   if(!r.ok){const e = await r.json().catch(()=>({})); throw new Error(e.error?.message || `IA error ${r.status}`);}
   const j = await r.json();
   if(typeof _recordClaudeUsage==='function') _recordClaudeUsage(j,'simulacion');
@@ -139,7 +132,7 @@ async function _simClaude(system, user, maxTokens){
 }
 
 function simHasIA(){
-  try{ return typeof hasClaudeAccess === 'function' ? hasClaudeAccess() : !!(_proxyCfg() || getAnthropicKey()); }
+  try{ return typeof hasClaudeAccess === 'function' ? hasClaudeAccess() : !!(typeof _proxyCfg==='function'&&_proxyCfg()); }
   catch(e){ return false; }
 }
 
