@@ -135,26 +135,38 @@ const NOTIFY={
     try{known=new Set(JSON.parse(localStorage.getItem(this._alertKeysKey)||'[]'));}catch(e){known=new Set();}
     const current=new Set();
     const tabMap={'pedido-atrasado':'pedidos','pago-pendiente':'pedidos','pedido-urgente':'pedidos','cot-vencida':'cotizaciones','cot-por-vencer':'cotizaciones','cot-sin-enviar':'cotizaciones','cliente-bloqueado':'cotizaciones','factura-vencida':'clientes','cliente-inactivo':'clientes','proveedor-bloqueado':'proveedores','proveedor-sin-cobertura':'proveedores'};
+    // Deduplicación PERSONAL: una alerta vista/descartada por Gustavo no puede
+    // consumir la de Nicanor. Guardamos solo las claves activas; si una alerta
+    // se resuelve y más adelante reaparece, volverá a notificarse.
+    const persona=this.persona?.()||'',personalStoreKey='thelab_priority_alert_keys_v1_'+(persona||'otro');
+    let personalKnown;try{personalKnown=new Set(JSON.parse(localStorage.getItem(personalStoreKey)||'[]'));}catch(e){personalKnown=new Set();}
+    const personalCurrent=new Set();
     let nuevasCriticas=0;
     alertas.forEach(a=>{
       const key=a.type+':'+a.id;
       current.add(key);
-      if(known.has(key)) return;
       const plain=String(a.msg||'').replace(/<[^>]*>/g,'');
       const shortMsg=plain.length>70?plain.slice(0,70)+'…':plain;
+      const isQuote=a.type==='cot-sin-enviar'&&persona==='nicanor';
+      const isOrder=(a.type==='pedido-atrasado'||a.type==='pedido-urgente')&&persona==='gustavo';
+      if(isQuote||isOrder){
+        const personalKey='personal:'+key;personalCurrent.add(personalKey);
+        if(!personalKnown.has(personalKey)){
+          if(isQuote)this.priority('quote','Recordatorio de envío de cotización',shortMsg,'cotizaciones',{key:personalKey,personas:['nicanor'],tone:a.sev===3?'danger':'warning'});
+          if(isOrder)this.priority('order','Recordatorio de vencimiento de pedido',shortMsg,'pedidos',{key:personalKey,personas:['gustavo'],tone:a.type==='pedido-atrasado'?'danger':'warning'});
+        }
+      }
+      if(known.has(key)) return;
       this.add('warning',shortMsg,
         a.sev===3?'Crítico':a.sev===2?'Advertencia':'Info',
         tabMap[a.type]||a.tab||'overview',{silent:true,key});
-      if(typeof this.priority==='function'){
-        if(a.type==='cot-sin-enviar')this.priority('quote','Recordatorio de envío de cotización',shortMsg,'cotizaciones',{key:'personal:'+key,personas:['nicanor'],tone:a.sev===3?'danger':'warning'});
-        if(a.type==='pedido-atrasado'||a.type==='pedido-urgente')this.priority('order','Recordatorio de vencimiento de pedido',shortMsg,'pedidos',{key:'personal:'+key,personas:['gustavo'],tone:a.type==='pedido-atrasado'?'danger':'warning'});
-      }
       if(a.sev===3){
         nuevasCriticas++;
         this._sendWhatsApp(shortMsg);
       }
     });
     try{localStorage.setItem(this._alertKeysKey,JSON.stringify([...current]));}catch(e){}
+    try{localStorage.setItem(personalStoreKey,JSON.stringify([...personalCurrent]));}catch(e){}
     if(nuevasCriticas>0) toast(`⚠ ${nuevasCriticas} alerta${nuevasCriticas>1?'s':''} crítica${nuevasCriticas>1?'s':''} nueva${nuevasCriticas>1?'s':''}`,'error');
   },
 
