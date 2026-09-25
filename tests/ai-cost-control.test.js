@@ -18,14 +18,19 @@ test('AGENTES muestra control de gasto sin ejecutar modelos',()=>{
   assert.match(BOOT,/load\('js\/ai-cost-control\.js','control de consumo IA'\)/);
 });
 
-test('proxy aplica presupuesto diario y por solicitud en KV',()=>{
+test('proxy aplica presupuesto diario atómico y por solicitud',()=>{
   assert.match(PROXY,/ANTHROPIC_DAILY_BUDGET_USD_DEFAULT = 1\.00/);
   assert.match(PROXY,/ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT = 0\.20/);
-  assert.match(PROXY,/reserveAiBudget\(env, payload, source\)/);
+  assert.match(PROXY,/export class AiBudgetGuard/,'el ledger debe vivir en un Durable Object');
+  assert.match(PROXY,/this\._queue = Promise\.resolve\(\)/,'las mutaciones del ledger deben serializarse');
+  assert.match(PROXY,/env\.AI_BUDGET_GUARD/,'producción debe usar el guard atómico');
+  assert.match(PROXY,/max_concurrent: 2/,'también limita ráfagas simultáneas');
   assert.match(PROXY,/code: 'AI_BUDGET_LIMIT'/);
   assert.match(PROXY,/\/anthropic\/usage/);
   assert.match(PROXY_CONF,/ANTHROPIC_DAILY_BUDGET_USD = "1\.00"/);
-  assert.match(PROXY_CONF,/binding = "AI_BUDGET"/);
+  assert.match(PROXY_CONF,/name = "AI_BUDGET_GUARD"/);
+  assert.match(PROXY_CONF,/new_sqlite_classes = \["AiBudgetGuard"\]/);
+  assert.match(PROXY_CONF,/binding = "AI_BUDGET"/,'KV se conserva solo para migrar el saldo previo del día');
 });
 
 test('auto-proceso de leads queda apagado y acotado si se reactiva',()=>{
