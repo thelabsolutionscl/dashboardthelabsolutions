@@ -66,12 +66,32 @@ function isLeadRecord(record){
   if(f['Validado']===false)return true;
   return !['Cliente activo','Cliente inactivo','Inactivo'].includes(String(f['Etapa venta']||''));
 }
-function leadQueueCount(){
+function leadQueueRows(){
   try{
     let rows=Array.isArray(target?.state?.clientes)?target.state.clientes:[];
     if(typeof target?.isVendorMode==='function'&&target.isVendorMode()&&typeof target?.vendorOwnsRecord==='function')rows=rows.filter(r=>target.vendorOwnsRecord(r));
-    return rows.filter(isLeadRecord).length;
-  }catch(_){return 0;}
+    return rows.filter(isLeadRecord);
+  }catch(_){return[];}
+}
+function leadQueueCount(){return leadQueueRows().length;}
+function syncLeadPriority(rows){
+  try{
+    if(!target?.state?.loaded||!target?.NOTIFY?.priority)return;
+    const persona=target.NOTIFY.persona?.()||'';if(!['nicanor','gustavo'].includes(persona))return;
+    const storage=target.localStorage;if(!storage)return;
+    const key='thelab_lead_seen_v2_'+persona,ids=rows.map(r=>String(r?.id||'')).filter(Boolean);
+    let knownRaw=storage.getItem(key);
+    if(knownRaw===null){storage.setItem(key,JSON.stringify(ids.slice(-500)));return;}
+    let known=[];try{known=JSON.parse(knownRaw||'[]');}catch(_){known=[];}
+    const seen=new Set(Array.isArray(known)?known:[]);
+    rows.filter(r=>r?.id&&!seen.has(String(r.id))).forEach(r=>{
+      const f=r.fields||{},empresa=f['Empresa']||f['Razón social']||f['Cliente']||'Lead sin empresa';
+      const contacto=f['Contacto']||f['Nombre contacto']||'',origen=f['Origen lead']||f['Origen']||'';
+      target.NOTIFY.priority('lead','Nuevo lead',[empresa,contacto,origen].filter(Boolean).join(' · '),'clientes',{key:'lead:'+r.id,personas:['nicanor','gustavo'],tone:'info'});
+      seen.add(String(r.id));
+    });
+    storage.setItem(key,JSON.stringify([...seen].slice(-500)));
+  }catch(_){}
 }
 function mailUnreadCount(){
   try{
@@ -120,7 +140,8 @@ function render(){
   if(!target?.document)return{};
   ensureStyle();bellHost();
   const state=buildState(notifyItems(),farmAlerts(),driftAlerts());
-  const leads=leadQueueCount();
+  const leadRows=leadQueueRows();syncLeadPriority(leadRows);
+  const leads=leadRows.length;
   // CLIENTES usa una burbuja propia: su número representa exactamente los leads
   // aún no validados, no una mezcla con otras notificaciones del módulo.
   target.document.querySelectorAll?.('.dashboard-lead-queue-badge').forEach(b=>b.remove());
@@ -184,5 +205,5 @@ function install(root){
   timer=root.setInterval?.(()=>{if(!root.document.hidden)tick();},5000)||null;return true;
 }
 function status(){return{installed,lastState:lastState||{},leadQueue:leadQueueCount(),mailUnread:mailUnreadCount(),hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth,hasFarmDrift:!!target?.FarmDrift};}
-return{install,render,status,_test:{moduleForItem,buildState,rank,isLeadRecord,mailUnreadCount}};
+return{install,render,status,_test:{moduleForItem,buildState,rank,isLeadRecord,leadQueueRows,mailUnreadCount}};
 });
