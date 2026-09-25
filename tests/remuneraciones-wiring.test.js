@@ -59,8 +59,27 @@ test('el rol comercial tiene acceso explícito y los registros se filtran por ve
 test('la vista distingue ventas finalizadas, pipeline y pedidos en proceso', () => {
   assert.match(SOURCE, /['"]Despachado['"],['"]Completado['"]/);
   assert.match(SOURCE, /['"]Solicitada['"],['"]Enviada['"]/);
-  assert.match(SOURCE, /Pedidos en Proceso/);
+  assert.match(SOURCE, /Comisión en Proceso \(3\.5%\)/);
+  assert.match(SOURCE, /procComision=Math\.round\(procNeto\*TASA\)/);
   assert.match(SOURCE, /Comisión Ganada \(3\.5%\)/);
+});
+
+test('un pedido sin vendedor hereda el propietario desde su cotización vinculada', () => {
+  const start=INDEX.indexOf('function vendorOwnsRecord(r){');
+  const end=INDEX.indexOf('\n// ─',start);
+  assert.ok(start>=0&&end>start,'vendorOwnsRecord debe existir');
+  const body=INDEX.slice(start,end);
+  assert.match(body,/f\['Cotizaciones'\]/,'debe revisar el vínculo del pedido con Cotizaciones');
+  assert.match(body,/state\.cotizacionesById/,'debe resolver la cotización vinculada');
+  assert.match(body,/cot\?\.fields\?\.\['Vendedor'\]/,'debe heredar el vendedor de la cotización');
+});
+
+test('pedidos en proceso muestran comisión estimada separada de la ganada', () => {
+  assert.match(INDEX,/const procNeto=enProceso\.reduce/);
+  assert.match(INDEX,/const procComision=Math\.round\(procNeto\*TASA\)/);
+  assert.match(INDEX,/Comisión en Proceso \(3\.5%\)/);
+  assert.match(INDEX,/\$\{enProceso\.length\} pedido/);
+  assert.match(INDEX,/neto \$\{formatCLP\(procNeto\)\}/);
 });
 
 test('la liquidación y configuración de sueldo están implementadas', () => {
