@@ -50,8 +50,8 @@ Dashboard (index.html) → tab Agentes → "Cola de Agentes"
 6. Registra la ejecución en **Agent_Log**.
 
 ## 3. Procesar leads
-- **Manual (hoy):** dashboard abierto + key de Anthropic cargada → botón Procesar.
-- **Automático (opcional):** en el Worker, `AUTO_PROCESS_LEADS=true` + `ANTHROPIC_API_KEY`
+- **Manual (hoy):** dashboard abierto + Proxy Worker configurado → botón Procesar.
+- **Automático (opcional):** en el Worker, `AUTO_PROCESS_LEADS=true` + `AI_PROXY_KEY`
   → el lead queda pre-scoreado sin intervención (el dashboard solo lo revisa).
 
 ## 4. Probar con el Worker
