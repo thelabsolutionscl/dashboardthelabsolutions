@@ -7131,10 +7131,18 @@ function _pedidosVisibles(){
 function vendorOwnsRecord(r){
   if(!isVendorMode()) return true;
   const vid=currentVendorId();if(!vid) return false;
-  if((r.fields['Vendedor']||'').toLowerCase().trim()===vid) return true;
-  // Fallback: check associated client's Vendedor (for records created before field existed)
-  const clienteId=Array.isArray(r.fields['Cliente'])?r.fields['Cliente'][0]:r.fields['Cliente'];
-  if(clienteId){const cli=state.clientes.find(x=>x.id===clienteId);if(cli&&(cli.fields['Vendedor']||'').toLowerCase().trim()===vid) return true;}
+  const f=(r&&r.fields)||{};
+  if(String(f['Vendedor']||'').toLowerCase().trim()===vid) return true;
+  // Si un pedido quedó sin Vendedor pero nació de una cotización asignada,
+  // conserva la propiedad comercial desde ese vínculo explícito.
+  const cotIds=Array.isArray(f['Cotizaciones'])?f['Cotizaciones']:(f['Cotizaciones']?[f['Cotizaciones']]:[]);
+  if(cotIds.some(id=>{
+    const cot=state.cotizacionesById?.[id]||(state.cotizaciones||[]).find(x=>x.id===id);
+    return String(cot?.fields?.['Vendedor']||'').toLowerCase().trim()===vid;
+  })) return true;
+  // Fallback histórico: cliente asignado al vendedor.
+  const clienteId=Array.isArray(f['Cliente'])?f['Cliente'][0]:f['Cliente'];
+  if(clienteId){const cli=state.clientes.find(x=>x.id===clienteId);if(cli&&String(cli.fields['Vendedor']||'').toLowerCase().trim()===vid) return true;}
   return false;
 }
 // ─────────────────────────────────────────────────────────────
@@ -11606,6 +11614,8 @@ function renderRemuneraciones(){
 
   // --- En proceso (pedidos no despachados, no cancelados) ---
   const enProceso=state.pedidos.filter(p=>{const est=p.fields['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(est);}).filter(_remOwnsRecord);
+  const procNeto=enProceso.reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
+  const procComision=Math.round(procNeto*TASA);
 
   // --- Pipeline cotizaciones activas (Solicitada / Enviada) ---
   const pipeline=(state.cotizaciones||[]).filter(c=>['Solicitada','Enviada'].includes(c.fields['Estado cotización']||'')).filter(_remOwnsRecord);
@@ -11638,9 +11648,9 @@ function renderRemuneraciones(){
       <div class="kpi-sub">${pipeline.length} cotiz. activas · neto ${formatCLP(pipeNeto)}</div>
     </div>
     <div class="kpi-card" style="cursor:default;border-color:rgba(251,146,60,0.4);background:rgba(251,146,60,0.06)">
-      <div class="kpi-label" style="color:#fb923c">Pedidos en Proceso</div>
-      <div class="kpi-value" style="color:#fb923c">${enProceso.length}</div>
-      <div class="kpi-sub">en producción / confirmados</div>
+      <div class="kpi-label" style="color:#fb923c">Comisión en Proceso (3.5%)</div>
+      <div class="kpi-value" style="color:#fb923c;font-size:18px">${formatCLP(procComision)}</div>
+      <div class="kpi-sub">${enProceso.length} pedido${enProceso.length!==1?'s':''} · neto ${formatCLP(procNeto)}</div>
     </div>`;
 
   remRenderLiquidacion(totalNeto,totalComision);
