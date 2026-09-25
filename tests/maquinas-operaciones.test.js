@@ -292,12 +292,10 @@ test('estado visual de sync se actualiza sin exigir un rerender completo',()=>{
 test('un en_cola local sin Controller ni G-code no se presenta como listo ni bloquea archivar',()=>{
   assert.match(OPS,/staleLocalQueue=j\.status==='en_cola'&&!p\.gcodeReady&&!j\.farmJobId&&!j\.executionId/);
   assert.match(OPS,/PREPARACIÓN INCOMPLETA/);
-  const start=OPS.indexOf('function archiveJob(id){');
-  const end=OPS.indexOf('\nfunction renderMaterials',start);
-  assert.ok(start>=0&&end>start,'archiveJob debe existir');
-  const archive=OPS.slice(start,end);
-  assert.match(archive,/j\.status==='imprimiendo'\|\|\(j\.status==='en_cola'&&\(j\.farmJobId\|\|j\.executionId\)\)/);
-  assert.doesNotMatch(archive,/\['imprimiendo','en_cola'\]\.includes/);
+  const canDelete=loadOps().jobCanBeDeleted;
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'',executionId:''}),true,'una cola puramente local debe poder archivarse/eliminarse');
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'farm-1',controllerState:'queued'}),false,'una cola durable activa no puede archivarse/eliminarse');
+  assert.equal(canDelete({status:'imprimiendo',archived:false}),false,'una impresión activa nunca puede archivarse/eliminarse');
 });
 
 test('tarjeta de ejecución permite subir G-code de OrcaSlicer sin modo Experto',()=>{
@@ -579,4 +577,36 @@ test('la ficha de fiabilidad usa muestra real y no accede a propiedades score in
   assert.doesNotMatch(open,/reliability\.score/);
   assert.match(open,/reliability\.completion/);
   assert.match(open,/reliability\.history\.total/);
+});
+
+
+test('Asignación recomendada permite crear, editar y eliminar trabajos',()=>{
+  const start=OPS.indexOf('function renderIntelligence(){');
+  const end=OPS.indexOf('\n// La configuración de automatización',start);
+  assert.ok(start>=0&&end>start,'renderIntelligence debe existir');
+  const render=OPS.slice(start,end);
+  assert.match(render,/MachineOps\.openJob\(''\).*\+ Crear trabajo/);
+  assert.match(render,/MachineOps\.openJob\('\$\{job\.id\}'\).*Editar/);
+  assert.match(render,/MachineOps\.deletePlanningJob\('\$\{job\.id\}'\).*Eliminar/);
+  assert.match(render,/MachineOps\.applyRecommendation\('\$\{job\.id\}'\).*Asignar/);
+  assert.match(CSS,/\.mops-rec-actions\{/);
+  assert.match(CSS,/\.mops-intel-head-actions\{/);
+});
+
+test('eliminar desde recomendaciones es seguro y durable',()=>{
+  const canDelete=loadOps().jobCanBeDeleted;
+  assert.equal(canDelete({status:'pendiente',archived:false}),true);
+  assert.equal(canDelete({status:'planificado',archived:false}),true);
+  assert.equal(canDelete({status:'imprimiendo',archived:false}),false,'una impresión activa nunca se elimina');
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'farm-1',controllerState:'queued'}),false,'una ejecución pendiente del Controller no se elimina');
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'farm-1',controllerState:'completed'}),true,'un Controller terminal ya no bloquea la eliminación');
+  const start=OPS.indexOf('function deletePlanningJob(id){');
+  const end=OPS.indexOf('\nfunction archiveJob',start);
+  assert.ok(start>=0&&end>start,'deletePlanningJob debe existir');
+  const del=OPS.slice(start,end);
+  assert.match(del,/confirm\(/,'eliminar requiere confirmación');
+  assert.match(del,/j\.archived=true/);
+  assert.match(del,/j\.status='archivado'/);
+  assert.match(del,/j\.deletedAt=nowIso\(\)/);
+  assert.match(del,/persist\('Trabajo eliminado desde asignación recomendada'\)/);
 });
