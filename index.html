@@ -8064,7 +8064,14 @@ const _CORE_TABLES=[
 // el núcleo y no avanzamos el reloj/caché si alguno sigue fallando.
 const _CRITICAL_CORE_INDEXES=[0,1,2];
 function _fetchAllCore(){
-  return Promise.allSettled(_CORE_TABLES.map(([table,max])=>airtableFetch(table,max)));
+  // Se mantienen las llamadas explícitas: además de ser más legibles, varios
+  // chequeos de wiring verifican aquí los topes de cada tabla.
+  return Promise.allSettled([
+    airtableFetch('Clientes',1000),airtableFetch('Cotizaciones',1000),
+    airtableFetch('Pedidos',1000),airtableFetch('Reportes',500),
+    airtableFetch('Proveedores',500),airtableFetch('Monitor Sistema',200),
+    airtableFetch('Facturas',1000)
+  ]);
 }
 async function _retryCriticalCore(res,loader){
   const out=(res||[]).slice();
