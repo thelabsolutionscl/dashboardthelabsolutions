@@ -53,3 +53,13 @@ test('la alerta permite crear un trabajo nuevo desde la impresión en curso',()=
   assert.match(source,/Crear trabajo para impresión en curso/);
   assert.match(source,/Trabajo creado y vinculado a la impresión ✓/);
 });
+
+
+test('resolver una alerta vuelve a escanear inmediatamente y después del repintado',()=>{
+  assert.match(source,/function refreshUnlinkedPrintAlerts\(\)/);
+  assert.match(source,/requestAnimationFrame\(refresh\)/);
+  assert.match(source,/setTimeout\(refresh,180\)/);
+  assert.match(source,/Impresión sin trabajo saltada'[\s\S]*?refreshUnlinkedPrintAlerts\(\)/);
+  assert.match(source,/Impresión vinculada a trabajo existente'[\s\S]*?refreshUnlinkedPrintAlerts\(\)/);
+  assert.match(source,/Trabajo creado y vinculado a la impresión ✓'[\s\S]*?refreshUnlinkedPrintAlerts\(\)/);
+});
