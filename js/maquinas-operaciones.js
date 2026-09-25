@@ -644,7 +644,9 @@ async function evaluatePreflightLive(job,machine){
 function alertRow(key,machineId,severity,title,detail,action=''){
   return{key,machineId,severity,title,detail,action,at:Date.now()};
 }
-function livePrintActive(live){return !!live&&['printing','paused'].includes(String(live.state||''));}
+function livePrintActive(live){
+  return !!live&&['printing','paused'].includes(String(live.state||''));
+}
 function liveProgressPct(live){
   // _printerStatus ya normaliza virtual_sdcard.progress a 0..100. No volver a
   // multiplicar valores <=1: hacerlo convertía 0,4% en 40% y 1% en 100%.
