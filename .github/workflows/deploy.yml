@@ -120,7 +120,7 @@ jobs:
             if [ "$code" != 200 ]; then cat /tmp/pages-old-status; exit 1; fi
             state=$(python3 -c 'import json; print(json.load(open("/tmp/pages-old-status")).get("status", ""))')
             echo "Estado del deploy anterior: ${state}"
-            if [[ "$state" =~ ^(canceled|cancelled|failed|succeed)$ ]]; then ready=1; break; fi
+            if [[ "$state" =~ (canceled|cancelled|failed|succeed|succeeded)$ ]]; then ready=1; break; fi
             sleep 5
           done
           if [ "$ready" != 1 ]; then echo 'Pages aún retiene el deploy anterior'; exit 1; fi
