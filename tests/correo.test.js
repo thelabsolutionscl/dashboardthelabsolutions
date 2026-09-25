@@ -325,13 +325,15 @@ test('un mensaje abierto queda leído también en la copia local', () => {
 });
 
 test('el aviso de correo nuevo no se muere para siempre tras una racha de errores', () => {
-  // Antes: 10 errores seguidos (10 min de caída, o una racha del WAF que
-  // bloquea de forma intermitente) detenían el polling hasta recargar la
-  // página, y el único rastro era un console.warn.
+  // El polling ahora recorre las cuentas relevantes de cada persona, pero
+  // conserva la degradación/recovery de cadencia cuando el servidor falla.
   const chk = cuerpo('async function _mailCheck(', NOTIFY);
   assert.doesNotMatch(chk, /_mailPollTimer=null/, 'no puede quedarse sin temporizador');
-  assert.match(chk, /_mailPollCadencia\(true, data\.error\)/, 'baja la cadencia');
+  assert.match(chk, /_mailRelevantAccounts\(\)/, 'revisa las cuentas personales asignadas');
+  assert.match(chk, /_mailPollCadencia\(true,/, 'baja la cadencia si todas las consultas fallan');
   assert.match(chk, /_mailPollCadencia\(false\)/, 'y la recupera al primer acierto');
+  const account = cuerpo('async function _mailCheckAccount(', NOTIFY);
+  assert.match(account, /NOTIFY\.priority\('mail','Nuevo correo electrónico'/, 'genera la tarjeta global del correo nuevo');
   const cad = cuerpo('function _mailPollCadencia(', NOTIFY);
   assert.match(cad, /if\(_mailPollLento===lento\) return;/, 'sin rearmar el intervalo en cada vuelta');
   assert.match(cad, /setInterval\(_mailCheck, lento\?_POLL_LENTO:_POLL_INTERVAL\)/);
@@ -340,14 +342,15 @@ test('el aviso de correo nuevo no se muere para siempre tras una racha de errore
 });
 
 test('no se pueden armar dos temporizadores de correo a la vez', () => {
-  // El guard miraba _mailPollTimer, que no existe hasta 4 s después: dos
-  // llamadas dentro de esos 4 s (arranque + abrir Correo) dejaban DOS
-  // intervalos consultando, justo lo que el hosting pidió evitar.
+  // El guard sigue impidiendo dos intervalos, ahora haciendo baseline de la
+  // cuenta personal y hola@ antes de empezar a avisar.
   const fn = cuerpo('function startMailPolling(', NOTIFY);
   assert.match(fn, /if\(_mailPollTimer \|\| _mailPollArmando\) return;/);
   assert.match(fn, /_mailPollArmando=true;/);
+  assert.match(fn, /_mailRelevantAccounts\(\)/);
+  assert.match(fn, /_mailCheckAccount\(email,\{baseline:true\}\)/, 'no avisa correos antiguos al arrancar');
+  assert.match(fn, /accounts\.some\(_mailHasPass\)/, 'solo arma polling si hay al menos una casilla configurada');
   assert.match(fn, /finally\{ _mailPollArmando=false; \}/, 'y se libera aunque falle');
-  assert.match(fn, /if\(!MAIL\.getMailPass \|\| !MAIL\.getMailPass\(\)\) return;/, 'sin clave no consulta');
 });
 
 test('con la clave rechazada no se sigue pidiendo la bandeja', () => {
