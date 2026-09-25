@@ -733,16 +733,20 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .topbar-nav{display:none;}
   .global-search{display:none;}
   .icon-dock{display:none;}
-  .topbar-right{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:0;order:1;}
+  .topbar-right{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-left:0;order:1;height:44px;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
   .user-chip{display:none!important;}
-  /* Menú móvil (hamburguesa) alineado al extremo derecho, después de correos y notificaciones. */
-  .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;margin-left:10px;order:2;}
+  /* Topbar móvil: los tres accesos comparten exactamente la misma caja y eje. */
+  .topbar-right #mailBtn,.topbar-right #notifBtn,.mobile-menu-btn:not(#mobilePlusBtn){width:44px;min-width:44px;height:44px;min-height:44px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border2);border-radius:10px;background:rgba(255,255,255,.015);line-height:1;}
+  .topbar-right #mailBtn svg,.topbar-right #notifBtn svg{display:block;width:20px;height:20px;}
+  #notifBtnWrap{width:44px;height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:center;margin-right:0;}
+  /* Menú móvil al extremo derecho, con la misma medida de correo/campana. */
+  .mobile-menu-btn:not(#mobilePlusBtn){margin-left:8px;order:2;}
   #nuevoDropdown{display:none!important;}
-  .logo img{height:18px;}
-  .logo{flex:0 1 auto;min-width:0;margin-right:auto;order:0;}
+  /* El logo puede encogerse: antes la imagen desbordaba su flex-item y quedaba debajo de los botones. */
+  .logo{flex:1 1 0;min-width:0;margin-right:8px;order:0;overflow:hidden;height:44px;display:flex;align-items:center;}
+  .logo img{display:block;width:auto;max-width:100%;height:auto;max-height:24px;object-fit:contain;object-position:left center;}
   .topbar-kai-btn{margin-left:0;margin-right:0;}
-  #notifBtnWrap{margin-right:0;}
   .main{padding:14px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));}
   /* Sin dock inferior: la navegación vive en el drawer lateral (hamburguesa). */
   .mobile-bottom-dock{display:none!important;}
