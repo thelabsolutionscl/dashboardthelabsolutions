@@ -390,6 +390,32 @@ test('sincronización conserva la versión más nueva de cada registro',()=>{
   assert.equal(ops.mergeData(local,remote).maintenanceProfiles.K1.nozzle,333);
 });
 
+test('sincronización de skips conserva la marca más nueva por impresora',()=>{
+  const ops=loadOps();
+  const local=ops.defaultData(),remote=ops.defaultData();
+  local.updatedAt=100;
+  local.ignoredPrints['k1-2']={file:'pieza',ignoredAt:5000,elapsed:200,progress:40};
+  remote.updatedAt=999999;
+  remote.ignoredPrints={};
+  const merged=ops.mergeData(local,remote);
+  assert.equal(merged.ignoredPrints['k1-2'].ignoredAt,5000,'un snapshot remoto más nuevo no debe borrar un skip local');
+
+  remote.ignoredPrints['k1-2']={file:'pieza',ignoredAt:7000,elapsed:250,progress:50};
+  assert.equal(ops.mergeData(local,remote).ignoredPrints['k1-2'].ignoredAt,7000,'gana la marca por impresora más reciente');
+
+  local.ignoredPrints['k1-2']={clearedAt:9000,reason:'terminal:complete'};
+  assert.equal(ops.mergeData(local,remote).ignoredPrints['k1-2'].clearedAt,9000,'un tombstone reciente impide resucitar un skip viejo');
+});
+
+test('un skip local pendiente se vuelve a subir aunque el remoto tenga updatedAt global mayor',()=>{
+  const ops=loadOps();
+  const local=ops.defaultData(),remote=ops.defaultData();
+  local.updatedAt=100;
+  remote.updatedAt=100000;
+  local.ignoredPrints['e5-6']={file:'medallas',ignoredAt:5000,elapsed:1200,progress:55};
+  assert.equal(ops._localNeedsRemotePush(local,remote),true);
+});
+
 test('Máquinas excluye pedidos terminados y conserva el vínculo del calendario',()=>{
   assert.match(INDEX,/const _MAQ_ESTADOS_ACTIVOS=\['Confirmado','En producción','En cola'\]/);
   assert.match(INDEX,/\{name:'pedido_id',type:'singleLineText'\}/);
