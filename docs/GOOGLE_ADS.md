@@ -326,7 +326,7 @@ automático** (botones Aprobar/Rechazar).
    `WORKER_PUBLIC_URL=<URL pública del worker>`, `ADS_AUTOPILOT_EMAIL=<tu correo>`.
 2. Secrets: `npx wrangler secret put ADS_APPROVAL_SECRET` (clave larga aleatoria)
    y, si cambiaste el secret del Script 1, `ADS_SCRIPT_SECRET`.
-   Requiere además `ANTHROPIC_API_KEY` y `RESEND_API_KEY` ya configurados.
+   Requiere además `AI_PROXY_KEY` (la misma `PROXY_KEY` del proxy; Actions la sincroniza) y `RESEND_API_KEY` ya configurados.
 3. `npx wrangler deploy`.
 4. Probar sin esperar al lunes:
    `curl -X POST <worker>/ads/autopilot/run -H "X-Autopilot-Key: <ADS_APPROVAL_SECRET>"`.

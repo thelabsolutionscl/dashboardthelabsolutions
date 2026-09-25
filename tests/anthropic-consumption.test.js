@@ -34,10 +34,12 @@ test('ambos análisis Ads dejan que runAgentInline agregue contexto una sola vez
   assert.doesNotMatch(line,/buildAgentContext/);
 });
 
-test('deploy no lee ni interpola la clave Anthropic',()=>{
+test('deploy web no tiene placeholder ni fallback de key Anthropic',()=>{
   const deploy=read('.github/workflows/deploy.yml');
-  assert.doesNotMatch(deploy,/secrets\.CLAUDE|\$\{ANTHROPIC_KEY\}/);
-  assert.ok(deploy.includes("sed -i 's|%%ANTHROPIC_KEY%%||g' index.html"));
+  assert.doesNotMatch(deploy,/secrets\.CLAUDE|ANTHROPIC_KEY|%%ANTHROPIC_KEY%%/);
+  assert.doesNotMatch(html,/ANTHROPIC_KEY:'%%ANTHROPIC_KEY%%'/);
+  assert.doesNotMatch(html,/https:\/\/api\.anthropic\.com/);
+  assert.doesNotMatch(html,/function _callClaudeRaw|function _claudeDirectAllowed/);
 });
 
 test('red caída no reintenta una generación de resultado desconocido',async()=>{
@@ -66,17 +68,33 @@ test('la política central reserva Sonnet para razonamiento y acota cada salida'
   assert.equal(sandbox.agentAiPolicy('NEWSLETTER_AGENT').model,'claude-haiku-4-5');
 });
 
-test('el lead worker solo acepta Haiku/Sonnet y limita el autopilot de Ads',()=>{
+test('el lead worker solo acepta Haiku/Sonnet y usa el proxy central',()=>{
   const worker=read('lead-worker/src/index.js');
   assert.match(worker,/const CLAUDE_ALLOWED_MODELS = new Set/);
   assert.doesNotMatch(worker,/CLAUDE_ALLOWED_MODELS[\s\S]{0,180}["']claude-opus/);
   assert.match(worker,/ADS_AUTOPILOT_MODEL \|\| "claude-sonnet-4-6"/);
   assert.match(worker,/maxTokens: 900/);
-  assert.match(worker,/workerAiBudgetAllowed/);
-  assert.match(worker,/AI_DAILY_BUDGET_USD \|\| "0\.50"/);
+  assert.match(worker,/env\.AI_PROXY_URL/);
+  assert.match(worker,/env\.AI_PROXY_KEY/);
+  assert.match(worker,/X-App-Key/);
   assert.match(worker,/cache_control: \{ type: "ephemeral" \}/);
+  assert.doesNotMatch(worker,/https:\/\/api\.anthropic\.com|ANTHROPIC_API_KEY|workerAiBudgetAllowed/);
 });
 
+
+test('navegador, KAI y simulación no tienen salida directa a Anthropic',()=>{
+  const kai=read('js/kai.js');
+  const sim=read('js/simulacion.js');
+  const slicer=read('js/slicer3d.js');
+  for(const src of [html,kai,sim]){
+    assert.doesNotMatch(src,/https:\/\/api\.anthropic\.com/);
+    assert.doesNotMatch(src,/anthropic-dangerous-direct-browser-access|x-api-key/);
+  }
+  assert.doesNotMatch(kai,/anthropic_key|getAnthropicKey|_claudeDirectAllowed/);
+  assert.doesNotMatch(sim,/getAnthropicKey|_claudeDirectAllowed/);
+  assert.doesNotMatch(slicer,/getAnthropicKey|showAnthropicModal/);
+  assert.match(sim,/Math\.min\(4000, nPerfiles\*70 \+ 600\)/);
+});
 
 test('contexto dinámico y llamadas duplicadas quedan acotados',()=>{
   assert.match(html,/const _CLAUDE_INFLIGHT=new Map\(\)/);

@@ -88,7 +88,7 @@ const SIM_LINEAS = {
 const SIM_MODEL = 'claude-haiku-4-5';
 const SIM_USD_CLP = 980;   // referencia para mostrar el costo estimado; ajústalo si el dólar se mueve fuerte
 const SIM_MAX_CONCEPTOS = 10; // evita corridas accidentales de 25 prompts grandes
-const SIM_CONCURRENCIA = 2;   // menos ráfagas simultáneas y menor riesgo de 429
+const SIM_CONCURRENCIA = 1;   // el proxy permite una sola solicitud Anthropic simultánea
 
 let _simRun = null;        // corrida en curso o recién terminada
 let _simBusy = false;
@@ -97,12 +97,12 @@ let _simAbort = false;
 // ── ACCESO A LA IA ─────────────────────────────────────────────
 // Reusa el proxy que ya existe (airtable-proxy expone /anthropic/v1/messages), así
 // la API key no sale al navegador. No usa callClaude() del index porque ese está
-// fijo en max_tokens 1500 y una corrida de 44 perfiles no cabe en eso.
+// tiene un techo general de 1400; esta herramienta usa hasta 4000, siempre por el mismo proxy.
 // Techo de salida según el tamaño del panel. Antes era 3000 fijo: con 44 perfiles
 // el margen quedaba apretado (44 líneas × ~40 tokens + resumen) y si el modelo se
 // ponía verboso cortaba a media línea, perdiendo perfiles Y el bloque de resumen
 // sin que nadie se enterara.
-function _simMaxTokens(nPerfiles){ return Math.min(8000, nPerfiles*70 + 600); }
+function _simMaxTokens(nPerfiles){ return Math.min(4000, nPerfiles*70 + 600); }
 
 // Devuelve {texto, truncado}. `truncado` es la señal de que la respuesta se cortó
 // por techo de tokens: sin ella, una respuesta parcial se procesa como completa.
@@ -116,19 +116,12 @@ async function _simClaude(system, user, maxTokens){
   }
   const body = JSON.stringify({model:SIM_MODEL, max_tokens:maxTokens||3000, system:[{type:'text',text:String(system||''),cache_control:{type:'ephemeral'}}], messages:[{role:'user', content:user}]});
   const px = (typeof _proxyCfg === 'function') ? _proxyCfg() : null;
-  let r;
-  if(px){
-    r = await _claudeHttp(px.url+'/anthropic/v1/messages', {method:'POST', headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'simulacion'}, body});
-  }else{
-    if(typeof _claudeDirectAllowed==='function'&&!_claudeDirectAllowed()) throw new Error('Proxy IA requerido: la simulación no hará llamadas directas sin presupuesto');
-    const k = (typeof getAnthropicKey === 'function') ? getAnthropicKey() : '';
-    if(!k) throw new Error('Sin acceso a la IA — configura el proxy para continuar');
-    r = await _claudeHttp('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':k.replace(/[^\x20-\x7E]/g,'').trim(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:new Blob([body],{type:'application/json'})
-    });
-  }
+  if(!px) throw new Error('Proxy IA requerido: la simulación está bloqueada para evitar consumo fuera del presupuesto');
+  const r = await _claudeHttp(px.url+'/anthropic/v1/messages', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'simulacion'},
+    body
+  });
   if(!r.ok){const e = await r.json().catch(()=>({})); throw new Error(e.error?.message || `IA error ${r.status}`);}
   const j = await r.json();
   if(typeof _recordClaudeUsage==='function') _recordClaudeUsage(j,'simulacion');
@@ -139,7 +132,7 @@ async function _simClaude(system, user, maxTokens){
 }
 
 function simHasIA(){
-  try{ return typeof hasClaudeAccess === 'function' ? hasClaudeAccess() : !!(_proxyCfg() || getAnthropicKey()); }
+  try{ return typeof hasClaudeAccess === 'function' ? hasClaudeAccess() : !!(typeof _proxyCfg==='function'&&_proxyCfg()); }
   catch(e){ return false; }
 }
 
@@ -337,7 +330,7 @@ function initSimulacion(){
   simEstimar();
   renderSimHistorial();
   const av = document.getElementById('simAviso');
-  if(av && !simHasIA()) av.textContent = 'Sin acceso a la IA — configura el proxy o la API key en Mi cuenta para poder correr el panel.';
+  if(av && !simHasIA()) av.textContent = 'Sin acceso a la IA — configura el Proxy Worker en Mi cuenta para poder correr el panel.';
 }
 
 // Último contexto puesto automáticamente. Sirve para distinguir "el usuario no lo
@@ -379,7 +372,7 @@ function simEstimar(){
 // ── CORRIDA ────────────────────────────────────────────────────
 async function simCorrer(){
   if(_simBusy) return;
-  if(!simHasIA()){ toast('Sin acceso a la IA — configúralo en Mi cuenta','error'); return; }
+  if(!simHasIA()){ toast('Sin acceso a la IA — configura el Proxy Worker en Mi cuenta','error'); return; }
   const base = _simParseConceptos(document.getElementById('simConceptos')?.value);
   if(!base.length){ toast('Escribe al menos un concepto','error'); return; }
   const precios = _simParseBarrido(document.getElementById('simBarrido')?.value);
@@ -406,7 +399,7 @@ async function simCorrer(){
   const progreso = (msg)=>{ const p = document.getElementById('simProgreso'); if(p) p.textContent = msg; };
   progreso(`0 de ${conceptos.length} conceptos…`);
 
-  // Cola con concurrencia acotada: 25 llamadas en paralelo se comen el rate limit.
+  // Cola serial: el hard cap central permite una sola llamada Anthropic simultánea.
   let cursor = 0;
   async function worker(){
     while(cursor < conceptos.length && !_simAbort){
@@ -421,7 +414,7 @@ async function simCorrer(){
         // reintento con el doble de techo: casi siempre el problema era el corte.
         if(r.truncado || p.votos.length < perfiles.length * SIM_COBERTURA_MIN/100){
           reintentos++;
-          const r2 = await _simClaude(SIM_SYSTEM, prompt, Math.min(8000, tope*2));
+          const r2 = await _simClaude(SIM_SYSTEM, prompt, Math.min(4000, tope*2));
           const p2 = _simParse(r2.texto, perfiles);
           if(p2.votos.length > p.votos.length){ r = r2; p = p2; }
         }

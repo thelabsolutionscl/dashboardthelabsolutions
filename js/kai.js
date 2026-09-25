@@ -496,7 +496,7 @@ CAPACIDADES Y REGLAS:
     return 'ok';
   }
 
-  // ─── Ask Claude (reuses dashboard's key + endpoint) ───
+  // ─── Ask Claude (solo Proxy Worker protegido) ───
   async function ask(userText){
     if(JV.busy) return;                       // re-entrada: bloquea durante toda la llamada (también en streaming)
     JV.busy=true; JV.thinking=true; setState('thinking');
@@ -535,24 +535,12 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
     const to=setTimeout(()=>{ timedOut=true; try{ctrl.abort();}catch(e){} },60000);
 
     try{
-      // Con proxy configurado, la key de Anthropic vive en el Worker (streaming pasa igual)
+      // Claude sólo puede salir por el Proxy Worker con presupuesto server-side.
       const px = (typeof window._proxyCfg==='function') ? window._proxyCfg() : null;
-      if(!px && typeof window._claudeDirectAllowed==='function' && !window._claudeDirectAllowed()){
+      if(!px){
         clearTimeout(to); JV.ctrl=null; popUser();
         $typ.classList.remove('jvs-cursor');
-        $typ.textContent='Proxy IA requerido: KAI no hará llamadas directas sin presupuesto.';
-        $typ.parentElement.className='jvs-msg jvs-e';
-        JV.busy=false; JV.thinking=false; setState('idle'); return;
-      }
-      // reuse dashboard's stored Anthropic key sólo en desarrollo local
-      let key = (typeof window.getAnthropicKey==='function') ? window.getAnthropicKey() : null;
-      if(!key){ key = localStorage.getItem('anthropic_key'); }
-      // Strip non-printable-ASCII chars that break fetch headers (ISO-8859-1 enforcement)
-      if(key) key = key.replace(/[^\x20-\x7E]/g,'').trim();
-      if(!px && (!key||key.startsWith('%%')||key==='undefined')){
-        clearTimeout(to); JV.ctrl=null; popUser();
-        $typ.classList.remove('jvs-cursor');
-        $typ.textContent='No hay API Key configurada. Configúrala desde el dashboard (botón de ajustes) y vuelve a intentar.';
+        $typ.textContent='Proxy IA requerido: KAI está bloqueado para evitar consumo fuera del presupuesto.';
         $typ.parentElement.className='jvs-msg jvs-e';
         JV.busy=false; JV.thinking=false; setState('idle'); return;
       }
@@ -574,14 +562,13 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
         const reqBody=new Blob([JSON.stringify({ model:kaiModel, max_tokens:kaiMaxTokens, stream:true, system:SYS_BLOCKS(), tools:KAI_TOOLS, messages:convo })],{type:'application/json'});
         const RETRY=[429]; let r=null;
         for(let attempt=0; attempt<2 && !timedOut; attempt++){
-          r=await fetch(px ? px.url+'/anthropic/v1/messages' : 'https://api.anthropic.com/v1/messages',{ method:'POST', signal:ctrl.signal,
-            headers: px ? {'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'kai'}
-                        : {'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}, body:reqBody });
+          r=await fetch(px.url+'/anthropic/v1/messages',{ method:'POST', signal:ctrl.signal,
+            headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'kai'}, body:reqBody });
           if(r.ok || !RETRY.includes(r.status) || attempt===1) break;
           $typ.textContent='Esperando límite de la IA…';
           await new Promise(res=>setTimeout(res,900));
         }
-        if(!r.ok){ const e=await r.json().catch(()=>({})); if(r.status===401){ localStorage.removeItem('anthropic_key'); sessionStorage.removeItem('anthropic_key'); } throw new Error(e.error?.message||('API '+r.status)); }
+        if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e.error?.message||e.error||('Proxy IA '+r.status)); }
         const reader=r.body.getReader(); const decoder=new TextDecoder();
         let buf='', text='', stopReason=''; const blocks={}; let inTok=0,outTok=0,usageMeta={};
         while(true){

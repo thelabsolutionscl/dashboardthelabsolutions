@@ -82,15 +82,12 @@ test('un error de credenciales no se reintenta', async () => {
   assert.equal(intentos, 1);
 });
 
-test('los dos caminos hacia Claude pasan por el helper', () => {
-  // Con proxy la clave vive en el Worker; sin él va directo. Ninguno puede
-  // quedarse con el fetch pelado.
-  const proxy = bloque(HTML, 'async function _callClaudeViaProxy', 'async function _callClaudeRaw');
-  const directo = bloque(HTML, 'async function _callClaudeRaw', '// ── HELPERS');
-  assert.match(proxy, /_claudeHttp\(px\.url/, 'la ruta por proxy debe usarlo');
-  assert.match(directo, /_claudeHttp\('https:\/\/api\.anthropic\.com/, 'la ruta directa también');
+test('Claude tiene un solo camino: el proxy protegido', () => {
+  const proxy = bloque(HTML, 'async function _callClaudeViaProxy', '// ── HELPERS');
+  assert.match(proxy, /_claudeHttp\(px\.url/, 'la ruta por proxy usa el helper con timeout');
   assert.doesNotMatch(proxy, /await fetch\(px\.url/, 'sin fetch pelado');
-  assert.doesNotMatch(directo, /await fetch\('https:\/\/api\.anthropic/, 'sin fetch pelado');
+  assert.doesNotMatch(HTML, /https:\/\/api\.anthropic\.com/, 'el navegador no conoce el endpoint directo');
+  assert.doesNotMatch(HTML, /async function _callClaudeRaw|function _claudeDirectAllowed/);
 });
 
 test('el correo automático al lead no lleva texto generado por IA', () => {
@@ -170,10 +167,9 @@ test('los modelos y topes siguen una política de costo explícita', () => {
 });
 
 
-test('producción no puede saltarse el presupuesto del proxy con una key local',()=>{
-  const call=bloque(HTML,'function _claudeDirectAllowed','const CLAUDE_MODELS=');
-  assert.match(call,/localhost/);
-  assert.match(call,/127\.0\.0\.1/);
-  assert.match(call,/if\(!_claudeDirectAllowed\(\)\)throw new Error/);
-  assert.match(call,/Proxy IA requerido/);
+test('ni producción ni localhost pueden saltarse el presupuesto con una key local',()=>{
+  const call=bloque(HTML,'function hasClaudeAccess','const CLAUDE_MODELS=');
+  assert.match(call,/window\._DEMO_MODE\|\|_proxyCfg\(\)/);
+  assert.match(call,/if\(!px\)throw new Error\('Proxy IA requerido/);
+  assert.doesNotMatch(call,/getAnthropicKey|localhost|127\.0\.0\.1|_callClaudeRaw/);
 });

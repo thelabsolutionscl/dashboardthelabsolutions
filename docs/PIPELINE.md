@@ -99,9 +99,9 @@ infiere: `gclid` → `google_ads`, `li_fat_id` → `linkedin`, si no → `web`.
   `Lead Score`, `Estado=Completado`, `Acción sugerida` → actualiza el Cliente
   (`Lead Score IA`, `Servicio interés`, `Próxima acción IA`, `Resumen IA`) → loguea
   en `Agent_Log`.
-- **Automático (opcional)**: con `AUTO_PROCESS_LEADS=true` + `ANTHROPIC_API_KEY` en
+- **Automático (opcional)**: con `AUTO_PROCESS_LEADS=true` + `AI_PROXY_KEY` en
   el Worker, el lead se pre-scorea server-side al instante (`processLeadAgent`), con
-  tope diario de costo (`AUTO_PROCESS_DAILY_CAP`, default 200/día).
+  tope de cantidad (`AUTO_PROCESS_DAILY_CAP`) y hard cap central del proxy.
 
 ### Paso 6 — De lead a venta
 Lead scoreado → `QUOTE_AGENT` cotiza → `ONBOARDING_AGENT` da la bienvenida si

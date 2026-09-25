@@ -48,7 +48,7 @@ con un log y el lead sigue igual).
 
 Secretos (`npx wrangler secret put NOMBRE`):
 `AIRTABLE_TOKEN`, `PUBLIC_LEAD_KEY`, `GOOGLE_ADS_WEBHOOK_KEY`, `LINKEDIN_WEBHOOK_KEY`,
-`TURNSTILE_SECRET` (opc.), `ANTHROPIC_API_KEY` (opc., si `AUTO_PROCESS_LEADS=true`),
+`TURNSTILE_SECRET` (opc.), `AI_PROXY_KEY` (misma `PROXY_KEY` del dashboard; GitHub Actions la sincroniza),
 `PORTAL_SECRET` y `PORTAL_ADMIN_KEY` (portal del cliente).
 
 ## Canario del formulario web (diario, 07:17 UTC)
@@ -92,7 +92,7 @@ npx wrangler secret put GOOGLE_ADS_WEBHOOK_KEY
 npx wrangler secret put LINKEDIN_WEBHOOK_KEY
 npx wrangler secret put PORTAL_SECRET       # firma los links del portal
 npx wrangler secret put PORTAL_ADMIN_KEY    # mismo valor que el secret PORTAL_ADMIN_KEY de GitHub
-# opcionales: TURNSTILE_SECRET, ANTHROPIC_API_KEY
+# opcionales: TURNSTILE_SECRET, AI_PROXY_KEY
 npx wrangler deploy
 ```
 (Opcional) rate-limit: `npx wrangler kv namespace create LEADS_RL`, pegar el id en `wrangler.toml`

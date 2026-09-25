@@ -40,7 +40,7 @@ La única prueba que manda son prototipos reales con fotos y botón de compra.
    Lámpara colgante de acrílico translúcido | 79900
    ```
    El precio es opcional pero sin él no se evalúa la objeción de precio, que suele
-   ser la más informativa. Máximo 25 conceptos por corrida.
+   ser la más informativa. Máximo 10 conceptos/combinaciones por corrida.
 5. Opcional: **Barrido de precio**. Escribe hasta 5 precios separados por coma
    (`34900, 49900, 79900`) y cada concepto se evalúa una vez por precio,
    ignorando el precio propio de su línea. Arriba del ranking aparece una **curva
@@ -102,13 +102,16 @@ todo y el panel deja de discriminar. Por eso el sistema:
 Si algún día el panel empieza a aprobar todo, el primer lugar donde mirar es
 `SIM_SYSTEM`.
 
-**Reusa el proxy que ya existe.** Las llamadas van por `airtable-proxy`
-(`/anthropic/v1/messages`), que ya guarda `ANTHROPIC_TOKEN` como secret. Sin infra
-nueva ni secrets nuevos. Sin proxy configurado cae a la API key local, igual que el
-resto del dashboard.
+**Reusa exclusivamente el proxy que ya existe.** Las llamadas van por
+`airtable-proxy` (`/anthropic/v1/messages`), que guarda `ANTHROPIC_TOKEN`
+server-side y aplica el hard cap global. Si el proxy no está configurado, la
+simulación queda bloqueada: no existe fallback a una API key local.
 
-**No usa `callClaude()` del index** porque ese está fijo en `max_tokens: 1500` y
-una corrida de 44 perfiles no cabe.
+**No usa `callClaude()` del index** porque el formato de 44 perfiles puede
+necesitar más que el techo general de 1.400 tokens. La ruta propia sigue pasando
+por el mismo proxy y nunca pide más de 4.000 tokens de salida; el reintento por
+respuesta incompleta también respeta ese techo y las corridas se ejecutan de una
+en una.
 
 ---
 

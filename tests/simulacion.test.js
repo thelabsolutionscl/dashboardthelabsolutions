@@ -263,11 +263,12 @@ test('la advertencia sobre estética está en pantalla, no solo en los docs', ()
   assert.match(panel, /no mide estética/i);
 });
 
-test('el módulo no hornea claves ni llama a Anthropic sin pasar por el proxy', () => {
+test('el módulo no hornea claves ni tiene fallback directo a Anthropic', () => {
   assert.ok(!/sk-ant-/.test(SRC), 'no puede haber API keys en el código');
-  const directas = [...SRC.matchAll(/api\.anthropic\.com/g)].length;
-  assert.equal(directas, 1, 'solo el fallback sin proxy puede llamar directo a Anthropic');
-  assert.match(SRC, /_proxyCfg/, 'debe intentar el proxy primero');
+  assert.equal([...SRC.matchAll(/api\.anthropic\.com/g)].length, 0, 'nunca llama directo a Anthropic');
+  assert.doesNotMatch(SRC, /getAnthropicKey|_claudeDirectAllowed|x-api-key/);
+  assert.match(SRC, /if\(!px\) throw new Error\('Proxy IA requerido/, 'sin proxy debe fallar cerrado');
+  assert.match(SRC, /X-App-Key/, 'la única salida IA usa el proxy autenticado');
 });
 
 test('la documentación existe y advierte los límites', () => {
@@ -308,10 +309,16 @@ test('el corte de cobertura tolera que falte algún perfil suelto', () => {
 });
 
 test('_simMaxTokens da margen suficiente para el panel completo', () => {
-  // 44 líneas de ~40 tokens + resumen. 3000 (el valor viejo) quedaba corto.
+  // 44 líneas + resumen: supera el techo viejo de 3000 pero nunca el hard cap de 4000.
   assert.ok(S._simMaxTokens(44) > 3000, 'el techo viejo de 3000 era el que provocaba el truncado');
-  assert.ok(S._simMaxTokens(44) <= 8000);
+  assert.ok(S._simMaxTokens(44) <= 4000, 'el proxy no admite más de 4000 tokens de salida');
   assert.ok(S._simMaxTokens(16) < S._simMaxTokens(44), 'medio panel necesita menos techo');
+});
+
+test('la simulación respeta la concurrencia única y el retry de 4000 tokens', () => {
+  assert.match(SRC, /const SIM_CONCURRENCIA = 1/);
+  assert.match(SRC, /Math\.min\(4000, tope\*2\)/);
+  assert.doesNotMatch(SRC, /Math\.min\(8000, tope\*2\)/);
 });
 
 test('_simClaude detecta el truncado por max_tokens', () => {

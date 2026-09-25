@@ -9,8 +9,8 @@ const ANTHROPIC_ALLOWED_MODELS = new Set([
   'claude-sonnet-4-6',
 ]);
 const ANTHROPIC_MAX_OUTPUT_TOKENS = 4000;
-const ANTHROPIC_DAILY_BUDGET_USD_DEFAULT = 1.00;
-const ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT = 0.20;
+const ANTHROPIC_DAILY_BUDGET_USD_DEFAULT = 0.50;
+const ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT = 0.10;
 // Una reserva representa una llamada en curso. El cliente corta las llamadas a los 60 s,
 // así que cualquier reserva de más de 2 min es huérfana y no debe bloquear el día.
 const AI_RESERVATION_STALE_MS = 2 * 60 * 1000;
@@ -69,7 +69,7 @@ export class AiBudgetGuard {
     const date = String(payload.date || aiChileDate()).slice(0, 10);
     const budget = Math.max(0.05, Number(payload.budget_usd) || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT);
     const perRequest = Math.max(0.01, Number(payload.request_budget_usd) || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT);
-    const maxConcurrent = Math.max(1, Math.min(4, Number(payload.max_concurrent) || 2));
+    const maxConcurrent = Math.max(1, Math.min(4, Number(payload.max_concurrent) || 1));
     const loaded = await this._load(date);
     const row = loaded.row;
 
@@ -538,7 +538,7 @@ async function reserveAiBudget(env, payload, source) {
     try {
       return await aiBudgetGuardCall(env, '/reserve', {
         date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
-        max_concurrent: 2, estimated_request_usd: estimate, source, model: payload && payload.model,
+        max_concurrent: 1, estimated_request_usd: estimate, source, model: payload && payload.model,
       });
     } catch (_) {
       return { ok: false, status: 503, error: 'AI cost guard unavailable',

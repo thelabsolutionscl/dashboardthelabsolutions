@@ -51,6 +51,12 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: lead-worker
+          # El lead-worker no recibe una key Anthropic. Solo recibe la clave del
+          # proxy ya usada por el dashboard y toda IA pasa por su hard cap.
+          secrets: |
+            AI_PROXY_KEY
+        env:
+          AI_PROXY_KEY: ${{ secrets.PROXY_KEY }}
 
   deploy-proxy:
     runs-on: ubuntu-latest
