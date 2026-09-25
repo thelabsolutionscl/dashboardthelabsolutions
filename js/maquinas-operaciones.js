@@ -125,6 +125,26 @@ function mergeRows(a,b){
   });
   return [...map.values()];
 }
+function ignoredPrintStamp(entry){
+  if(!entry||typeof entry!=='object')return 0;
+  return Math.max(num(entry.clearedAt),num(entry.ignoredAt),num(entry.updatedAt),num(entry.lastSeenAt));
+}
+function mergeIgnoredPrints(localMap,remoteMap){
+  const local=localMap&&typeof localMap==='object'&&!Array.isArray(localMap)?localMap:{};
+  const remote=remoteMap&&typeof remoteMap==='object'&&!Array.isArray(remoteMap)?remoteMap:{};
+  const out={};
+  for(const machineId of new Set([...Object.keys(local),...Object.keys(remote)])){
+    const l=local[machineId],r=remote[machineId];
+    if(!l){if(r)out[machineId]=r;continue;}
+    if(!r){out[machineId]=l;continue;}
+    out[machineId]=ignoredPrintStamp(r)>ignoredPrintStamp(l)?r:l;
+  }
+  return out;
+}
+function clearIgnoredPrint(machineId,reason=''){
+  if(!machineId)return;
+  data().ignoredPrints[machineId]={clearedAt:Date.now(),reason:String(reason||'resuelto')};
+}
 function mergeData(local,remote){
   const l=normalizeData(local),r=normalizeData(remote);
   const remoteIsNewer=num(r.updatedAt)>num(l.updatedAt);
@@ -139,7 +159,9 @@ function mergeData(local,remote){
     incidents:mergeRows(l.incidents,r.incidents).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,300),
     audit:mergeRows(l.audit,r.audit).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,500),
     alertAcks:remoteIsNewer?r.alertAcks:l.alertAcks,
-    ignoredPrints:remoteIsNewer?r.ignoredPrints:l.ignoredPrints,
+    // Los skips se resuelven por impresora, no por snapshot global. Así un
+    // cambio remoto no relacionado no puede borrar todos los "Saltar".
+    ignoredPrints:mergeIgnoredPrints(l.ignoredPrints,r.ignoredPrints),
     bedClearAcks:remoteIsNewer?r.bedClearAcks:l.bedClearAcks,
     automation:remoteIsNewer?r.automation:l.automation,
     costConfig:remoteIsNewer?r.costConfig:l.costConfig,
@@ -182,6 +204,11 @@ function _localNeedsRemotePush(local,remote){
   const l=_remoteSnapshot(local),r=_remoteSnapshot(remote);
   for(const key of ['jobs','spools','qa','workflows','profiles','safetyReadings','incidents','audit']){
     if(_rowsNeedRemotePush(l[key],r[key]))return true;
+  }
+  // Si este navegador tiene un skip/tombstone más reciente, debe empujarlo
+  // aunque otro equipo haya actualizado después cualquier otro dominio.
+  for(const [machineId,entry] of Object.entries(l.ignoredPrints||{})){
+    if(ignoredPrintStamp(entry)>ignoredPrintStamp((r.ignoredPrints||{})[machineId]))return true;
   }
   return num(l.updatedAt)>num(r.updatedAt);
 }
@@ -598,7 +625,7 @@ function samePrintRun(a,b){
 // continúe imprimiendo. Solo se considera una ejecución nueva si cambia el
 // archivo o hay evidencia fuerte de reinicio (progreso Y elapsed retroceden).
 function ignoredPrintMatches(ignored,live,now=Date.now()){
-  if(!ignored||!live||live.state!=='printing')return false;
+  if(!ignored||ignored.clearedAt||!live||live.state!=='printing')return false;
   const run=printRun(live,now);
   if(!ignored.file||ignored.file!==run.file)return false;
   const ignoredAt=Math.max(0,num(ignored.ignoredAt));
@@ -674,7 +701,7 @@ function assignUnlinkedPrint(){
   if(linkedLiveJob(machineId,live)){toast('La impresión ya tiene un trabajo vinculado','info');closeUnlinkedAssignment();renderUnlinkedPrints();return;}
   job.machineId=machineId;job.status='imprimiendo';job.livePrintRun=printRun(live);job.liveFilename=live.filename||'';
   job.startedAt=new Date(job.livePrintRun.startedAt).toISOString();job.updatedAt=nowIso();
-  delete data().ignoredPrints[machineId];persist('Impresión vinculada a trabajo existente',{render:false});
+  clearIgnoredPrint(machineId,'trabajo-existente');persist('Impresión vinculada a trabajo existente',{render:false});
   closeUnlinkedAssignment();renderAll();refreshUnlinkedPrintAlerts();toast(`Impresión asignada a ${job.name}`,'success');
 }
 const ACTIONABLE_CONNECTION_JOB_STATES=new Set(['en_cola','imprimiendo','queued','retry','checking','uploading','uploaded','started','printing','paused']);
@@ -1628,7 +1655,7 @@ function saveJob(){
     const live=typeof _printerStatus!=='undefined'?_printerStatus[liveDraft.machineId]||{}:{},run=printRun(live);
     if(live.state==='printing'&&liveEvidence(liveDraft.machineId).known&&samePrintRun(liveDraft.run,run)){
       j.status='imprimiendo';j.livePrintRun=run;j.liveFilename=live.filename||liveDraft.filename||j.gcodeFile;
-      j.startedAt=new Date(run.startedAt).toISOString();j.gcodeFile=j.gcodeFile||j.liveFilename;delete data().ignoredPrints[liveDraft.machineId];boundLive=true;
+      j.startedAt=new Date(run.startedAt).toISOString();j.gcodeFile=j.gcodeFile||j.liveFilename;clearIgnoredPrint(liveDraft.machineId,'trabajo-creado');boundLive=true;
     }
   }
   if(idx>=0)data().jobs[idx]=j;else data().jobs.push(j);
@@ -2280,8 +2307,8 @@ function handlePrinterTransition(m,s,previous){
   // Un skip termina únicamente cuando la impresión termina de verdad. No lo
   // limpiamos por estados transitorios/offline para evitar que una intermitencia
   // haga reaparecer el aviso durante la misma pieza.
-  if(data().ignoredPrints?.[m.id]&&['complete','cancelled','error','shutdown'].includes(s.state)){
-    delete data().ignoredPrints[m.id];data().updatedAt=Date.now();writeLocal();scheduleRemote();
+  if(data().ignoredPrints?.[m.id]&&!data().ignoredPrints[m.id].clearedAt&&['complete','cancelled','error','shutdown'].includes(s.state)){
+    clearIgnoredPrint(m.id,'terminal:'+s.state);data().updatedAt=Date.now();writeLocal();scheduleRemote();
   }
   if(s.state==='printing'&&previous!=='printing'&&data().bedClearAcks?.[m.id]){
     delete data().bedClearAcks[m.id];writeLocal();scheduleRemote();
@@ -2710,7 +2737,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,printRun,samePrintRun,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,printRun,samePrintRun,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 // El monitor también arranca cuando el usuario trabaja en otras secciones.
