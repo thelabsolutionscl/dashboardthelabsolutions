@@ -202,6 +202,19 @@ test('recompra abre un borrador y espera el envío confirmado antes de salir de 
   assert.ok(success >= 0 && mark > success, 'la recompra solo desaparece al confirmar el envío de correo');
 });
 
+test('post-entrega prioriza el enlace directo de Google sobre el worker NPS', () => {
+  const msg = functionSource('_pdMsg', AGENTS);
+  const reviewAt = msg.indexOf('if(rev)');
+  const npsAt = msg.indexOf('if(nps)');
+  assert.ok(reviewAt >= 0 && npsAt > reviewAt, 'Google debe tener prioridad cuando hay enlace configurado');
+  assert.match(msg, /reseña en Google/);
+  assert.match(msg, /\$\{rev\}/, 'el mensaje debe incluir el enlace directo guardado');
+  const usesNps = functionSource('_pdUsesNps', AGENTS);
+  assert.match(usesNps, /!_pdReviewUrl\(\).*_npsLink\(p\)/, 'NPS solo se usa si falta el link de Google');
+  assert.match(functionSource('pdWhatsApp', AGENTS), /_pdUsesNps\(p\)/);
+  assert.match(functionSource('pdEmail', AGENTS), /_pdUsesNps\(p\)/);
+});
+
 test('los envíos de correo se previsualizan antes de salir', () => {
   // pdEmail abría el envío directo; ahora debe dejar un borrador editable en
   // Correos. Enviar sin poder revisar fue un problema real reportado.
