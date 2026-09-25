@@ -38,3 +38,15 @@ ANTHROPIC_REQUEST_BUDGET_USD = "0.20"
 [[kv_namespaces]]
 binding = "AI_BUDGET"
 id = "c148848321344f60939fa71a51d050c6"
+
+
+# Guard atómico: todas las reservas Anthropic del dashboard pasan por una sola
+# instancia coordinada. KV queda enlazado únicamente para migrar el saldo legado
+# del día al primer acceso.
+[[durable_objects.bindings]]
+name = "AI_BUDGET_GUARD"
+class_name = "AiBudgetGuard"
+
+[[migrations]]
+tag = "v1-anthropic-budget-atomic"
+new_sqlite_classes = ["AiBudgetGuard"]
