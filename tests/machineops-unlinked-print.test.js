@@ -45,3 +45,11 @@ test('un trabajo vinculado a la misma ejecución oculta el aviso; uno antiguo no
   store.jobs[0].livePrintRun={...run,startedAt:run.startedAt-600000};
   assert.equal(functions.unlinkedPrints(now).length,1);
 });
+
+
+test('la alerta permite crear un trabajo nuevo desde la impresión en curso',()=>{
+  assert.match(source,/data-action="create">Crear trabajo<\/button>/);
+  assert.match(source,/function openJobFromLive\(machineId\)/);
+  assert.match(source,/Crear trabajo para impresión en curso/);
+  assert.match(source,/Trabajo creado y vinculado a la impresión ✓/);
+});

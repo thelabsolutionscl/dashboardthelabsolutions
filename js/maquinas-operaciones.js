@@ -613,9 +613,9 @@ function renderUnlinkedPrints(){
   const rows=unlinkedPrints();el.hidden=!rows.length;
   el.innerHTML=rows.map(m=>{
     const live=_printerStatus[m.id]||{};
-    return `<div class="mops-global-unlinked-row"><div><b>⚠ Impresión sin trabajo asignado · ${esc(machineLabel(m.id))}</b><small>${esc(live.filename||'Archivo sin identificar')} · ${Math.round(num(live.progress))}% completado</small></div><div class="mops-global-unlinked-actions"><button type="button" class="btn btn-primary btn-sm" data-machine="${esc(m.id)}" data-action="assign">Asignar trabajo</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="skip">Saltar esta impresión</button></div></div>`;
+    return `<div class="mops-global-unlinked-row"><div><b>⚠ Impresión sin trabajo asignado · ${esc(machineLabel(m.id))}</b><small>${esc(live.filename||'Archivo sin identificar')} · ${Math.round(num(live.progress))}% completado</small></div><div class="mops-global-unlinked-actions"><button type="button" class="btn btn-primary btn-sm" data-machine="${esc(m.id)}" data-action="assign">Asignar existente</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="create">Crear trabajo</button><button type="button" class="btn btn-ghost btn-sm" data-machine="${esc(m.id)}" data-action="skip">Saltar esta impresión</button></div></div>`;
   }).join('');
-  if(!el.dataset.bound){el.dataset.bound='1';el.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;if(button.dataset.action==='assign')openUnlinkedAssignment(button.dataset.machine);else skipUnlinkedPrint(button.dataset.machine);});}
+  if(!el.dataset.bound){el.dataset.bound='1';el.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(!button)return;if(button.dataset.action==='assign')openUnlinkedAssignment(button.dataset.machine);else if(button.dataset.action==='create')openJobFromLive(button.dataset.machine);else skipUnlinkedPrint(button.dataset.machine);});}
 }
 function skipUnlinkedPrint(machineId){
   const live=_printerStatus[machineId]||{};
@@ -627,10 +627,10 @@ function openUnlinkedAssignment(machineId){
   const m=getMachine(machineId),live=_printerStatus[machineId]||{};
   if(!m||live.state!=='printing'||!liveEvidence(machineId).known){toast('La impresión ya no está activa o la telemetría está vencida','error');renderUnlinkedPrints();return;}
   let modal=document.getElementById('mopsAssignLiveModal');
-  if(!modal){modal=document.createElement('div');modal.id='mopsAssignLiveModal';modal.className='mops-assign-live-backdrop';document.body.appendChild(modal);modal.addEventListener('click',event=>{if(event.target===modal||event.target.closest('[data-close]'))closeUnlinkedAssignment();else if(event.target.closest('[data-confirm]'))assignUnlinkedPrint();});}
+  if(!modal){modal=document.createElement('div');modal.id='mopsAssignLiveModal';modal.className='mops-assign-live-backdrop';document.body.appendChild(modal);modal.addEventListener('click',event=>{if(event.target===modal||event.target.closest('[data-close]'))closeUnlinkedAssignment();else if(event.target.closest('[data-create]'))openJobFromLive(modal.dataset.machine);else if(event.target.closest('[data-confirm]'))assignUnlinkedPrint();});}
   const candidates=data().jobs.filter(j=>!j.archived&&['pendiente','planificado','en_cola'].includes(j.status)&&!j.farmJobId&&!j.executionId&&modelCanRun(m.modelo,j));
   modal.dataset.machine=machineId;
-  modal.innerHTML=`<div class="mops-assign-live-card" role="dialog" aria-modal="true" aria-label="Asignar impresión en curso"><h3>Asignar impresión en curso</h3><p><b>${esc(machineLabel(machineId))}</b> · ${esc(live.filename||'Archivo sin identificar')}</p><label for="mopsAssignLiveJob">Trabajo existente</label><select id="mopsAssignLiveJob"><option value="">Selecciona un trabajo…</option>${candidates.map(j=>`<option value="${esc(j.id)}">${esc(j.name)} · ${esc(orderLabel(j.pedidoId)||'sin pedido')}${filenameMatchScore(j,live.filename)>=50?' · coincide con archivo':''}</option>`).join('')}</select>${!candidates.length?'<p>No hay trabajos compatibles pendientes. Crea uno desde Máquinas y vuelve a asignarlo.</p>':''}<div class="mops-assign-live-actions"><button type="button" class="btn btn-ghost btn-sm" data-close>Cancelar</button><button type="button" class="btn btn-primary btn-sm" data-confirm ${candidates.length?'':'disabled'}>Asignar a esta impresión</button></div></div>`;
+  modal.innerHTML=`<div class="mops-assign-live-card" role="dialog" aria-modal="true" aria-label="Asignar impresión en curso"><h3>Asignar impresión en curso</h3><p><b>${esc(machineLabel(machineId))}</b> · ${esc(live.filename||'Archivo sin identificar')}</p><label for="mopsAssignLiveJob">Trabajo existente</label><select id="mopsAssignLiveJob"><option value="">Selecciona un trabajo…</option>${candidates.map(j=>`<option value="${esc(j.id)}">${esc(j.name)} · ${esc(orderLabel(j.pedidoId)||'sin pedido')}${filenameMatchScore(j,live.filename)>=50?' · coincide con archivo':''}</option>`).join('')}</select>${!candidates.length?'<p>No hay trabajos compatibles pendientes. Crea uno desde Máquinas y vuelve a asignarlo.</p>':''}<div class="mops-assign-live-actions"><button type="button" class="btn btn-ghost btn-sm" data-close>Cancelar</button><button type="button" class="btn btn-ghost btn-sm" data-create>Crear trabajo nuevo</button><button type="button" class="btn btn-primary btn-sm" data-confirm ${candidates.length?'':'disabled'}>Asignar existente</button></div></div>`;
   modal.hidden=false;modal.querySelector('select')?.focus();
 }
 function closeUnlinkedAssignment(){const modal=document.getElementById('mopsAssignLiveModal');if(modal)modal.hidden=true;}
@@ -1524,7 +1524,9 @@ function fillJobSelects(job={}){
 function input(id){return document.getElementById(id);}
 function inputVal(id){return input(id)?.value??'';}
 function setVal(id,v){const el=input(id);if(el)el.value=v??'';}
+let _liveJobDraft=null;
 function openJob(id=''){
+  if(id)_liveJobDraft=null;
   const j=id?data().jobs.find(x=>x.id===id):null;
   const base=j||{id:'',qty:1,unitsPerBed:1,cycles:1,minutesPerCycle:60,material:'PLA',nozzle:'0.4',priority:'normal',status:'pendiente',compatibleModels:[]};
   setText('mopsJobModalTitle',j?'Editar trabajo':'Nuevo trabajo de impresión');
@@ -1534,7 +1536,24 @@ function openJob(id=''){
   setVal('mopsJobPriority',base.priority);setVal('mopsJobFile',base.gcodeFile);setVal('mopsJobNotes',base.notes);fillJobSelects(base);
   input('mopsJobValidation').style.display='none';input('mopsJobModal').style.display='flex';
 }
-function closeJob(){input('mopsJobModal').style.display='none';}
+function closeJob(){const modal=input('mopsJobModal');if(modal)modal.style.display='none';_liveJobDraft=null;}
+function openJobFromLive(machineId){
+  const m=getMachine(machineId),live=typeof _printerStatus!=='undefined'?_printerStatus[machineId]||{}:{};
+  if(!m||live.state!=='printing'||!liveEvidence(machineId).known){toast('La impresión ya no está activa o la telemetría está vencida','error');renderUnlinkedPrints();return false;}
+  if(linkedLiveJob(machineId,live)){toast('La impresión ya tiene un trabajo vinculado','info');renderUnlinkedPrints();return false;}
+  closeUnlinkedAssignment();
+  openJob('');
+  const filename=String(live.filename||'Impresión sin nombre');
+  _liveJobDraft={machineId,run:printRun(live),filename,openedAt:Date.now()};
+  setText('mopsJobModalTitle','Crear trabajo para impresión en curso');
+  setVal('mopsJobName',filename.replace(/\.(gcode|gco|3mf)$/i,''));
+  setVal('mopsJobMachine',machineId);
+  setVal('mopsJobFile',filename);
+  setVal('mopsJobMinutes',Math.max(1,Math.round((num(live.elapsed)+num(live.eta))/60)||60));
+  document.querySelectorAll('#mopsJobModels input').forEach(box=>{box.checked=box.value===m.modelo;});
+  input('mopsJobName')?.focus();
+  return true;
+}
 function updateJobCycles(){
   const qty=Math.max(1,num(inputVal('mopsJobQty'),1)),per=Math.max(1,num(inputVal('mopsJobBedQty'),1));
   setVal('mopsJobCycles',Math.ceil(qty/per));
@@ -1571,9 +1590,19 @@ function validateJob(j){
 function saveJob(){
   const j=collectJob(),errors=validateJob(j),box=input('mopsJobValidation');
   if(errors.length){box.style.display='block';box.innerHTML=`<div class="mops-alert danger">⚠ <span>${errors.map(esc).join('<br>')}</span></div>`;return;}
-  const idx=data().jobs.findIndex(x=>x.id===j.id);if(idx>=0)data().jobs[idx]=j;else data().jobs.push(j);
-  audit(idx>=0?'Trabajo actualizado':'Trabajo creado',j.machineId,`${j.name} · ${orderLabel(j.pedidoId)}`);
-  writeLocal();scheduleRemote();closeJob();renderAll();toast(idx>=0?'Trabajo actualizado ✓':'Trabajo creado ✓','success');
+  const idx=data().jobs.findIndex(x=>x.id===j.id),liveDraft=idx<0?_liveJobDraft:null;
+  let boundLive=false;
+  if(liveDraft&&j.machineId===liveDraft.machineId){
+    const live=typeof _printerStatus!=='undefined'?_printerStatus[liveDraft.machineId]||{}:{},run=printRun(live);
+    if(live.state==='printing'&&liveEvidence(liveDraft.machineId).known&&samePrintRun(liveDraft.run,run)){
+      j.status='imprimiendo';j.livePrintRun=run;j.liveFilename=live.filename||liveDraft.filename||j.gcodeFile;
+      j.startedAt=new Date(run.startedAt).toISOString();j.gcodeFile=j.gcodeFile||j.liveFilename;delete data().ignoredPrints[liveDraft.machineId];boundLive=true;
+    }
+  }
+  if(idx>=0)data().jobs[idx]=j;else data().jobs.push(j);
+  audit(idx>=0?'Trabajo actualizado':boundLive?'Trabajo creado desde impresión en vivo':'Trabajo creado',j.machineId,`${j.name} · ${orderLabel(j.pedidoId)}`);
+  writeLocal();scheduleRemote();closeJob();renderAll();renderUnlinkedPrints();
+  toast(idx>=0?'Trabajo actualizado ✓':boundLive?'Trabajo creado y vinculado a la impresión ✓':'Trabajo creado ✓','success');
 }
 function planOne(id,silent=false,loads=null){
   const j=data().jobs.find(x=>x.id===id);if(!j)return null;
@@ -2626,7 +2655,7 @@ function startGlobalMonitoring(){
 }
 
 const api={
-  init,startGlobalMonitoring,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,selectJobGcode,uploadJobGcode,cancelJobGcodeUpload,syncRemoteNow,remoteSyncStatus,
+  init,startGlobalMonitoring,showView,goToSection,renderAll,renderPlanning,setGanttFilter,setGanttFamily,openJob,openJobFromLive,closeJob,updateJobCycles,saveJob,planOne,autoPlan,enqueueJob,startJob,startExistingFile,archiveJob,selectJobGcode,uploadJobGcode,cancelJobGcodeUpload,syncRemoteNow,remoteSyncStatus,
   openPreflight,closePreflight,confirmPreflight,
   openSpool,closeSpool,saveSpool,markSpoolEmpty,reconcileSpools,openQA,closeQA,toggleQAFailure,prefillQA,saveQA,
   renderPostProduction,advancePost,blockPost,
