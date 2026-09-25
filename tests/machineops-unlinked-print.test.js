@@ -132,6 +132,7 @@ test('la auditoría alinea la alerta interna con el botón Saltar real',()=>{
   assert.match(source,/if\(key\.startsWith\('unlinked-'\)\)return skipUnlinkedPrint/);
   assert.match(source,/row\.key\.startsWith\('unlinked-'\)\?'Saltar':'Atendida'/);
   assert.match(source,/const rows=\[\],active=activeJobs\(\),unlinkedIds=new Set\(unlinkedPrints\(now\)/);
+  assert.match(source,/row\.key\.startsWith\('unlinked-'\)\|\|!data\(\)\.alertAcks\[row\.key\]/);
 });
 
 test('la creación y asignación aceptan impresión pausada',()=>{
