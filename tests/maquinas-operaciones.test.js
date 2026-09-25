@@ -292,12 +292,10 @@ test('estado visual de sync se actualiza sin exigir un rerender completo',()=>{
 test('un en_cola local sin Controller ni G-code no se presenta como listo ni bloquea archivar',()=>{
   assert.match(OPS,/staleLocalQueue=j\.status==='en_cola'&&!p\.gcodeReady&&!j\.farmJobId&&!j\.executionId/);
   assert.match(OPS,/PREPARACIÓN INCOMPLETA/);
-  const start=OPS.indexOf('function archiveJob(id){');
-  const end=OPS.indexOf('\nfunction renderMaterials',start);
-  assert.ok(start>=0&&end>start,'archiveJob debe existir');
-  const archive=OPS.slice(start,end);
-  assert.match(archive,/j\.status==='imprimiendo'\|\|\(j\.status==='en_cola'&&\(j\.farmJobId\|\|j\.executionId\)\)/);
-  assert.doesNotMatch(archive,/\['imprimiendo','en_cola'\]\.includes/);
+  const canDelete=loadOps().jobCanBeDeleted;
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'',executionId:''}),true,'una cola puramente local debe poder archivarse/eliminarse');
+  assert.equal(canDelete({status:'en_cola',archived:false,farmJobId:'farm-1',controllerState:'queued'}),false,'una cola durable activa no puede archivarse/eliminarse');
+  assert.equal(canDelete({status:'imprimiendo',archived:false}),false,'una impresión activa nunca puede archivarse/eliminarse');
 });
 
 test('tarjeta de ejecución permite subir G-code de OrcaSlicer sin modo Experto',()=>{
