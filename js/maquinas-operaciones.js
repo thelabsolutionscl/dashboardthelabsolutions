@@ -125,6 +125,33 @@ function mergeRows(a,b){
   });
   return [...map.values()];
 }
+function stampValue(value){
+  if(value===null||value===undefined||value==='')return 0;
+  const parsed=Date.parse(value);return Number.isFinite(parsed)?parsed:num(value);
+}
+function mergeAlertAcks(localMap,remoteMap){
+  const local=localMap&&typeof localMap==='object'&&!Array.isArray(localMap)?localMap:{};
+  const remote=remoteMap&&typeof remoteMap==='object'&&!Array.isArray(remoteMap)?remoteMap:{};
+  const out={};
+  for(const key of new Set([...Object.keys(local),...Object.keys(remote)]))out[key]=Math.max(num(local[key]),num(remote[key]));
+  return out;
+}
+function bedClearStamp(entry){
+  if(!entry||typeof entry!=='object')return 0;
+  return Math.max(stampValue(entry.clearedAt),stampValue(entry.updatedAt));
+}
+function mergeBedClearAcks(localMap,remoteMap){
+  const local=localMap&&typeof localMap==='object'&&!Array.isArray(localMap)?localMap:{};
+  const remote=remoteMap&&typeof remoteMap==='object'&&!Array.isArray(remoteMap)?remoteMap:{};
+  const out={};
+  for(const machineId of new Set([...Object.keys(local),...Object.keys(remote)])){
+    const l=local[machineId],r=remote[machineId];
+    if(!l){if(r)out[machineId]=r;continue;}
+    if(!r){out[machineId]=l;continue;}
+    out[machineId]=bedClearStamp(r)>bedClearStamp(l)?r:l;
+  }
+  return out;
+}
 function ignoredPrintStamp(entry){
   if(!entry||typeof entry!=='object')return 0;
   return Math.max(num(entry.clearedAt),num(entry.ignoredAt),num(entry.updatedAt),num(entry.lastSeenAt));
@@ -158,11 +185,11 @@ function mergeData(local,remote){
     safetyReadings:mergeRows(l.safetyReadings,r.safetyReadings).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,200),
     incidents:mergeRows(l.incidents,r.incidents).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,300),
     audit:mergeRows(l.audit,r.audit).sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0)).slice(0,500),
-    alertAcks:remoteIsNewer?r.alertAcks:l.alertAcks,
-    // Los skips se resuelven por impresora, no por snapshot global. Así un
-    // cambio remoto no relacionado no puede borrar todos los "Saltar".
+    // Acks operacionales se fusionan por clave/máquina. Un cambio remoto no
+    // relacionado no puede revivir una alerta o volver a bloquear una cama.
+    alertAcks:mergeAlertAcks(l.alertAcks,r.alertAcks),
     ignoredPrints:mergeIgnoredPrints(l.ignoredPrints,r.ignoredPrints),
-    bedClearAcks:remoteIsNewer?r.bedClearAcks:l.bedClearAcks,
+    bedClearAcks:mergeBedClearAcks(l.bedClearAcks,r.bedClearAcks),
     automation:remoteIsNewer?r.automation:l.automation,
     costConfig:remoteIsNewer?r.costConfig:l.costConfig,
     safetyConfig:remoteIsNewer?r.safetyConfig:l.safetyConfig,
@@ -209,6 +236,12 @@ function _localNeedsRemotePush(local,remote){
   // aunque otro equipo haya actualizado después cualquier otro dominio.
   for(const [machineId,entry] of Object.entries(l.ignoredPrints||{})){
     if(ignoredPrintStamp(entry)>ignoredPrintStamp((r.ignoredPrints||{})[machineId]))return true;
+  }
+  for(const [key,at] of Object.entries(l.alertAcks||{})){
+    if(num(at)>num((r.alertAcks||{})[key]))return true;
+  }
+  for(const [machineId,entry] of Object.entries(l.bedClearAcks||{})){
+    if(bedClearStamp(entry)>bedClearStamp((r.bedClearAcks||{})[machineId]))return true;
   }
   return num(l.updatedAt)>num(r.updatedAt);
 }
@@ -2737,7 +2770,7 @@ const api={
   openTech,closeTech,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
-  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,printRun,samePrintRun,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
+  _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,printRun,samePrintRun,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
 };
 window.MachineOps=api;
 // El monitor también arranca cuando el usuario trabaja en otras secciones.
