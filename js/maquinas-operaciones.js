@@ -585,10 +585,32 @@ function alertRow(key,machineId,severity,title,detail,action=''){
   return{key,machineId,severity,title,detail,action,at:Date.now()};
 }
 function printRun(live,now=Date.now()){
-  return{file:fileKey(live?.filename),startedAt:now-Math.max(0,num(live?.elapsed))*1000};
+  const elapsed=Math.max(0,num(live?.elapsed)),progress=Math.max(0,Math.min(100,num(live?.progress)));
+  return{file:fileKey(live?.filename),startedAt:now-elapsed*1000,elapsed,progress,lastSeenAt:num(live?.lastSeenAt)};
 }
 function samePrintRun(a,b){
   return !!a&&!!b&&a.file===b.file&&Math.abs(num(a.startedAt)-num(b.startedAt))<120000;
+}
+// "Saltar esta impresión" debe mantenerse durante TODA la ejecución aunque
+// Moonraker/WS entregue un elapsed momentáneamente distinto. Antes dependíamos
+// casi solo de startedAt estimado; una variación >2 min hacía reaparecer la
+// misma alerta una y otra vez. Para un skip, el archivo sigue silenciado mientras
+// continúe imprimiendo. Solo se considera una ejecución nueva si cambia el
+// archivo o hay evidencia fuerte de reinicio (progreso Y elapsed retroceden).
+function ignoredPrintMatches(ignored,live,now=Date.now()){
+  if(!ignored||!live||live.state!=='printing')return false;
+  const run=printRun(live,now);
+  if(!ignored.file||ignored.file!==run.file)return false;
+  const ignoredAt=Math.max(0,num(ignored.ignoredAt));
+  // Red de seguridad para un dashboard que estuvo cerrado entre dos ejecuciones
+  // idénticas y nunca alcanzó a observar el estado terminal.
+  if(ignoredAt&&now-ignoredAt>24*3600*1000)return false;
+  if(samePrintRun(ignored,run))return true;
+  const prevElapsed=Math.max(0,num(ignored.elapsed)),prevProgress=Math.max(0,num(ignored.progress));
+  const elapsedRestart=prevElapsed>=300&&run.elapsed+180<prevElapsed;
+  const progressRestart=prevProgress>=20&&run.progress+15<prevProgress;
+  if(elapsedRestart&&progressRestart)return false;
+  return true;
 }
 function linkedLiveJob(machineId,live,now=Date.now()){
   const run=printRun(live,now);
@@ -603,7 +625,7 @@ function unlinkedPrints(now=Date.now()){
   return (typeof MAQUINAS!=='undefined'?MAQUINAS:[]).filter(m=>{
     const evidence=liveEvidence(m.id,now),live=evidence.live;
     return evidence.known&&live.state==='printing'&&!linkedLiveJob(m.id,live,now)&&
-      !samePrintRun(data().ignoredPrints[m.id],printRun(live,now));
+      !ignoredPrintMatches(data().ignoredPrints[m.id],live,now);
   });
 }
 function renderUnlinkedPrints(){
@@ -630,7 +652,7 @@ function refreshUnlinkedPrintAlerts(){
 function skipUnlinkedPrint(machineId){
   const live=_printerStatus[machineId]||{};
   if(live.state!=='printing')return;
-  data().ignoredPrints[machineId]=printRun(live);
+  data().ignoredPrints[machineId]={...printRun(live),ignoredAt:Date.now()};
   persist('Impresión sin trabajo saltada',{render:false});refreshUnlinkedPrintAlerts();
 }
 function openUnlinkedAssignment(machineId){
@@ -2255,6 +2277,12 @@ function handlePrinterTransition(m,s,previous){
     watch.progress=progress;watch.lastSeenAt=Date.now();
   }else{watch.progress=null;watch.unchangedAt=Date.now();}
   watch.state=s.state;_telemetryWatch[m.id]=watch;
+  // Un skip termina únicamente cuando la impresión termina de verdad. No lo
+  // limpiamos por estados transitorios/offline para evitar que una intermitencia
+  // haga reaparecer el aviso durante la misma pieza.
+  if(data().ignoredPrints?.[m.id]&&['complete','cancelled','error','shutdown'].includes(s.state)){
+    delete data().ignoredPrints[m.id];data().updatedAt=Date.now();writeLocal();scheduleRemote();
+  }
   if(s.state==='printing'&&previous!=='printing'&&data().bedClearAcks?.[m.id]){
     delete data().bedClearAcks[m.id];writeLocal();scheduleRemote();
   }
