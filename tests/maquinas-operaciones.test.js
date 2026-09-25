@@ -416,6 +416,34 @@ test('un skip local pendiente se vuelve a subir aunque el remoto tenga updatedAt
   assert.equal(ops._localNeedsRemotePush(local,remote),true);
 });
 
+test('sincronización de alertas y camas conserva la entrada más reciente por clave',()=>{
+  const ops=loadOps(),local=ops.defaultData(),remote=ops.defaultData();
+  local.updatedAt=10;remote.updatedAt=1000;
+  local.alertAcks['unlinked-k1-2']=5000;
+  remote.alertAcks['offline-k1-1']=6000;
+  local.bedClearAcks['k1-2']={signature:'pieza|100|complete',clearedAt:'2026-09-24T20:00:00.000Z'};
+  remote.bedClearAcks['k1-3']={signature:'otra|200|complete',clearedAt:'2026-09-24T20:01:00.000Z'};
+  const merged=ops.mergeData(local,remote);
+  assert.equal(merged.alertAcks['unlinked-k1-2'],5000);
+  assert.equal(merged.alertAcks['offline-k1-1'],6000);
+  assert.equal(merged.bedClearAcks['k1-2'].signature,'pieza|100|complete');
+  assert.equal(merged.bedClearAcks['k1-3'].signature,'otra|200|complete');
+  assert.equal(ops._localNeedsRemotePush(local,remote),true,'ack/cama local más reciente debe volver a subirse aunque el snapshot global remoto sea más nuevo');
+});
+
+test('alerta de impresión terminada respeta cama ya liberada y unlinked se calcula una sola vez',()=>{
+  assert.match(OPS,/stateNow==='complete'&&!bedIsCleared\(machine\.id\)/);
+  assert.match(OPS,/unlinkedIds=new Set\(unlinkedPrints\(now\)\.map\(m=>m\.id\)\)/);
+  assert.doesNotMatch(OPS,/unlinkedPrints\(now\)\.some\(/);
+});
+
+test('telemetría de progreso no vuelve a escalar porcentajes pequeños',()=>{
+  const ops=loadOps();
+  assert.equal(ops.liveProgressPct({progressRaw:1,progress:1}),1);
+  assert.equal(ops.liveProgressPct({progressRaw:.4,progress:0}),.4);
+  assert.equal(ops.livePrintActive({state:'paused'}),true);
+});
+
 test('Máquinas excluye pedidos terminados y conserva el vínculo del calendario',()=>{
   assert.match(INDEX,/const _MAQ_ESTADOS_ACTIVOS=\['Confirmado','En producción','En cola'\]/);
   assert.match(INDEX,/\{name:'pedido_id',type:'singleLineText'\}/);

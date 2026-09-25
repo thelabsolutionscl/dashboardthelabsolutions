@@ -19,7 +19,7 @@ const SCHEMA=3;
 const TABLE='Monitor Sistema';
 const DOMAINS=[
   'jobs','spools','qa','workflows','profiles','safetyReadings','incidents','audit',
-  'alertAcks','bedClearAcks','automation','costConfig','safetyConfig','maintenanceProfiles'
+  'alertAcks','ignoredPrints','bedClearAcks','automation','costConfig','safetyConfig','maintenanceProfiles'
 ];
 const META_DOMAIN='meta';
 const hashes=new Map();
