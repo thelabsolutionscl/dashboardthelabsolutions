@@ -526,7 +526,7 @@ function updateTabTitle(unseen,email){
   let total=Math.max(0,Number(unseen)||0);
   try{
     if(typeof MAIL!=='undefined'&&typeof MAIL.setAccountUnseen==='function'){
-      total=MAIL.setAccountUnseen(total,email);
+      total=email?MAIL.setAccountUnseen(total,email):MAIL.setAccountUnseen(total);
     }
   }catch(e){}
   document.title = total>0 ? `(${total}) ${_BASE_TITLE}` : _BASE_TITLE;
