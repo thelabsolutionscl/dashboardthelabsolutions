@@ -1923,7 +1923,8 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
   // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
   if (
     env.AUTO_PROCESS_LEADS === "true" &&
-    env.ANTHROPIC_API_KEY &&
+    env.AI_PROXY_URL &&
+    env.AI_PROXY_KEY &&
     queueId &&
     (await autoProcessAllowed(env))
   ) {
@@ -2026,47 +2027,28 @@ const CLAUDE_ALLOWED_MODELS = new Set([
   "claude-sonnet-4-6",
 ]);
 
-const CLAUDE_COSTS = {
-  haiku: { input: 1, output: 5 },
-  sonnet: { input: 3, output: 15 },
-};
-function estimateWorkerAiCost(model, system, user, maxTokens) {
-  const p = String(model || "").includes("haiku") ? CLAUDE_COSTS.haiku : CLAUDE_COSTS.sonnet;
-  // 3 chars/token es deliberadamente conservador para reservar presupuesto antes
-  // de llamar a la API; el costo real normalmente será menor.
-  const inputTokens = Math.ceil((String(system || "").length + String(user || "").length) / 3);
-  return (inputTokens * p.input + Number(maxTokens || 0) * p.output) / 1e6;
-}
-async function workerAiBudgetAllowed(env, estimatedUsd) {
-  if (!env.RL) return false;
-  const daily = Math.max(0.05, Number(env.AI_DAILY_BUDGET_USD || "0.50"));
-  const key = `ai-budget:${today()}`;
-  let row = {};
-  try { row = JSON.parse((await env.RL.get(key)) || "{}"); } catch (_) {}
-  const used = Math.max(0, Number(row.reserved_usd) || 0);
-  if (used + estimatedUsd > daily) return false;
-  await env.RL.put(key, JSON.stringify({
-    reserved_usd: used + estimatedUsd,
-    requests: (Number(row.requests) || 0) + 1,
-    updated_at: new Date().toISOString(),
-  }), { expirationTtl: 172800 });
-  return true;
-}
-
 async function callClaude(env, system, user, opts = {}) {
+  // Única salida Anthropic del lead-worker: el mismo Proxy Worker del dashboard.
+  // Así comparte allowlist, presupuesto atómico, hard cap por solicitud y
+  // concurrencia; este Worker nunca posee una API key de Anthropic.
+  const proxyUrl = String(env.AI_PROXY_URL || "").replace(/\/+$/, "");
+  const proxyKey = String(env.AI_PROXY_KEY || "");
+  if (!proxyUrl || !proxyKey) {
+    throw new Error("Proxy IA protegido no configurado; la tarea quedó sin ejecutar");
+  }
+
   const requestedModel = opts.model || env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
   const model = CLAUDE_ALLOWED_MODELS.has(requestedModel) ? requestedModel : "claude-haiku-4-5-20251001";
   const maxTokens = Math.max(128, Math.min(1200, Number(opts.maxTokens) || 600));
-  const estimatedUsd = estimateWorkerAiCost(model, system, user, maxTokens);
-  if (!(await workerAiBudgetAllowed(env, estimatedUsd))) {
-    throw new Error("Presupuesto diario de IA alcanzado; la tarea quedó sin ejecutar para evitar gasto adicional");
-  }
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const source = String(opts.source || "lead-worker").toLowerCase().replace(/[^a-z0-9_.-]/g, "").slice(0, 48) || "lead-worker";
+
+  const r = await fetch(proxyUrl + "/anthropic/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
+      "Origin": "https://dashboard.thelab.solutions",
+      "X-App-Key": proxyKey,
+      "X-AI-Agent": source,
     },
     body: JSON.stringify({
       model,
@@ -2076,12 +2058,13 @@ async function callClaude(env, system, user, opts = {}) {
     }),
   });
   if (!r.ok) {
-    const e = await r.text().catch(() => "");
-    throw new Error(`Anthropic ${r.status}: ${e.slice(0, 300)}`);
+    const e = await r.json().catch(() => ({}));
+    const detail = e?.error?.message || e?.error || e?.code || ("HTTP " + r.status);
+    throw new Error("Proxy IA " + r.status + ": " + String(detail).slice(0, 300));
   }
   const data = await r.json();
-  // Metadatos de consumo en los logs del Worker, sin PII ni contenido del lead.
-  console.info('[anthropic-usage]', JSON.stringify({id:data.id,model:data.model,usage:data.usage,source:'lead-worker'}));
+  // Observabilidad local; la conciliación y el cobro viven en airtable-proxy.
+  console.info("[anthropic-usage]", JSON.stringify({ id: data.id, model: data.model, usage: data.usage, source }));
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 
@@ -3105,7 +3088,7 @@ async function adsAutopilotRun(env, { force = false } = {}) {
   if (!force && env.ADS_AUTOPILOT !== "true") return { skipped: "ADS_AUTOPILOT desactivado" };
   if (!env.ADS_ENDPOINT) return { skipped: "falta ADS_ENDPOINT" };
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return { skipped: "falta Airtable" };
-  if (!env.ANTHROPIC_API_KEY) return { skipped: "falta ANTHROPIC_API_KEY" };
+  if (!env.AI_PROXY_URL || !env.AI_PROXY_KEY) return { skipped: "falta proxy IA protegido" };
 
   const cfg = await apLoadConfig(env);
   if (cfg.enabled === false && !force) return { skipped: "kill-switch en Monitor Sistema" };
