@@ -24,8 +24,8 @@ const deps={num,clamp,fileKey,data:()=>store,_printerStatus:status,MAQUINAS:[{id
   liveEvidence:(id,t)=>({known:t-status[id].lastSeenAt<60000,live:status[id]})};
 const names=Object.keys(deps);
 const functions=new Function(...names,[
-  extract('livePrintActive'),extract('liveProgressPct'),extract('printRun'),extract('samePrintRun'),extract('ignoredPrintMatches'),extract('linkedLiveJob'),extract('unlinkedPrints'),
-  'return {livePrintActive,liveProgressPct,printRun,samePrintRun,ignoredPrintMatches,linkedLiveJob,unlinkedPrints};',
+  extract('livePrintActive'),extract('liveProgressPct'),extract('printRun'),extract('samePrintRun'),extract('currentPrintRunMatches'),extract('ignoredPrintMatches'),extract('linkedLiveJob'),extract('unlinkedPrints'),
+  'return {livePrintActive,liveProgressPct,printRun,samePrintRun,currentPrintRunMatches,ignoredPrintMatches,linkedLiveJob,unlinkedPrints};',
 ].join('\n'))(...names.map(n=>deps[n]));
 
 test('detecta una impresión activa sin trabajo y no usa telemetría vencida',()=>{
@@ -95,6 +95,16 @@ test('un trabajo vinculado a la misma ejecución oculta el aviso; uno antiguo no
   assert.equal(functions.unlinkedPrints(now).length,1);
 });
 
+
+test('un trabajo ya vinculado no se pierde si Moonraker vacía filename momentáneamente',()=>{
+  status.m1={state:'printing',filename:'pieza.gcode',elapsed:300,progress:54,progressRaw:54,lastSeenAt:now-1000};
+  store.ignoredPrints={};
+  const run=functions.printRun(status.m1,now);
+  store.jobs=[{id:'j-live',machineId:'m1',status:'imprimiendo',gcodeFile:'pieza.gcode',livePrintRun:run}];
+  status.m1.filename='';status.m1.elapsed=310;status.m1.progress=55;status.m1.progressRaw=55;status.m1.lastSeenAt=now+10000;
+  assert.equal(functions.unlinkedPrints(now+10000).length,0);
+  store.jobs=[];
+});
 
 test('la alerta permite crear un trabajo nuevo desde la impresión en curso',()=>{
   assert.match(source,/data-action="create">Crear trabajo<\/button>/);
