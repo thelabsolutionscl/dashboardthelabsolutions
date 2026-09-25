@@ -780,7 +780,10 @@ function buildSmartAlerts(now=Date.now()){
     try{getMaintAlerts(machine).forEach(a=>rows.push(alertRow('maint-'+machine.id+'-'+a.key,machine.id,a.hours>=a.threshold?'critical':'warning','Mantención '+(a.hours>=a.threshold?'vencida':'próxima'),`${a.label}: ${Math.round(a.hours)}/${a.threshold} h`,'machine:'+machine.id)));}catch(_){ }
   });
   const ttl=4*3600000;
-  return rows.filter(row=>!data().alertAcks[row.key]||now-num(data().alertAcks[row.key])>ttl).sort((a,b)=>({critical:0,warning:1,info:2}[a.severity]-({critical:0,warning:1,info:2}[b.severity])));
+  // Las impresiones sin trabajo no usan el ack genérico de 4 h: su única
+  // fuente de verdad es vincular/crear/saltar la ejecución actual.
+  return rows.filter(row=>row.key.startsWith('unlinked-')||!data().alertAcks[row.key]||now-num(data().alertAcks[row.key])>ttl)
+    .sort((a,b)=>({critical:0,warning:1,info:2}[a.severity]-({critical:0,warning:1,info:2}[b.severity])));
 }
 function machineAlertsFor(machineId){return buildSmartAlerts().filter(a=>a.machineId===machineId);}
 
