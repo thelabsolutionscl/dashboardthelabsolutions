@@ -2265,14 +2265,17 @@ function handlePrinterTransition(m,s,previous){
   if(['printing','paused'].includes(previous)&&s.state==='complete'){
     const j=data().jobs.find(x=>x.machineId===m.id&&!x.archived&&x.status==='imprimiendo');
     if(j){j.status='qa';j.completedAt=nowIso();j.actualMinutes=j.startedAt?Math.max(1,Math.round((Date.now()-Date.parse(j.startedAt))/60000)):jobMinutes(j);j.completedCycles=num(j.cycles,1);j.updatedAt=nowIso();persist('Impresión terminada; QA pendiente');}
+    try{if(typeof NOTIFY!=='undefined'&&NOTIFY.priority)NOTIFY.priority('printer','Impresión finalizada · '+machineLabel(m.id),s.filename||j?.name||'Retirar pieza y confirmar cama libre','maquinas',{key:'printer-complete:'+m.id+':'+String(printRun(s).startedAt||'')+':'+fileKey(s.filename||j?.gcodeFile||''),personas:['gustavo'],tone:'success'});}catch(_){}
   }
   if(['printing','paused'].includes(previous)&&s.state==='cancelled'){
     const j=data().jobs.find(x=>x.machineId===m.id&&!x.archived&&x.status==='imprimiendo');if(j){j.status='fallido';j.completedAt=nowIso();j.actualMinutes=j.startedAt?Math.max(1,Math.round((Date.now()-Date.parse(j.startedAt))/60000)):jobMinutes(j);j.updatedAt=nowIso();}
     if(data().automation.autoIncident)addIncident({machineId:m.id,jobId:j?.id||'',type:'cancelled',note:`Cancelación detectada${s.filename?' · '+s.filename:''}`,source:'telemetry'});
     persist('Cancelación detectada por telemetría');
   }
-  if(['printing','paused'].includes(previous)&&['error','shutdown'].includes(s.state)&&data().automation.autoIncident){
-    const j=data().jobs.find(x=>x.machineId===m.id&&!x.archived&&x.status==='imprimiendo');addIncident({machineId:m.id,jobId:j?.id||'',type:'electrical',note:s.klMsg||'Firmware o impresora detenida durante la producción',source:'telemetry'});persist('Falla de impresora detectada por telemetría');
+  if(['printing','paused'].includes(previous)&&['error','shutdown'].includes(s.state)){
+    const j=data().jobs.find(x=>x.machineId===m.id&&!x.archived&&x.status==='imprimiendo');
+    if(data().automation.autoIncident){addIncident({machineId:m.id,jobId:j?.id||'',type:'electrical',note:s.klMsg||'Firmware o impresora detenida durante la producción',source:'telemetry'});persist('Falla de impresora detectada por telemetría');}
+    try{if(typeof NOTIFY!=='undefined'&&NOTIFY.priority)NOTIFY.priority('printer','Impresión con error · '+machineLabel(m.id),s.klMsg||s.filename||j?.name||'Revisa la impresora','maquinas',{key:'printer-error:'+m.id+':'+String(printRun(s).startedAt||'')+':'+fileKey(s.filename||j?.gcodeFile||''),personas:['gustavo'],tone:'danger'});}catch(_){}
   }
   if(reconcileStalePrintingJobs()){
     data().updatedAt=Date.now();writeLocal();scheduleRemote();renderAll();
