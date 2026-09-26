@@ -54,7 +54,10 @@ test('dashboard reintenta drift con token largo contra bridges anteriores',()=>{
   const machines=read('js/maquinas.js');
   assert.match(adapter,/function longToken\(\)/);
   assert.match(adapter,/r\.status===403&&lt&&lt!==t/);
+  assert.match(adapter,/function scopeSnapshot\(d\)/);
+  assert.match(adapter,/const fleet=activeFleet\(\)/);
   assert.match(machines,/function getPrinterTunnelLongToken\(\)/);
+  assert.match(machines,/function getPrinterFleetForDrift\(\)/);
 });
 
 test('backend no persiste texto de configs, sólo hashes/metadatos',()=>{
