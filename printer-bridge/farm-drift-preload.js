@@ -111,6 +111,7 @@ async function hashConfigBundle(ip){
 function versionFromPrinterInfo(data){const r=data?.result||data||{};return String(r.software_version||r.klipper_version||'');}
 function versionFromServerInfo(data){const r=data?.result||data||{};return String(r.moonraker_version||r.software_version||'');}
 function machineName(m){return String(m?.nombre||m?.name||m?.hostname||m?.id||'');}
+function isTransientScanError(msg){return /timeout|EHOSTDOWN|ECONNREFUSED|ENETUNREACH|socket hang up|unreachable/i.test(String(msg||''));}
 async function scanMachine(machine,now=Date.now()){
   const base={machineId:String(machine?.id||''),name:machineName(machine),ip:String(machine?.ip||''),scannedAt:now,status:'unreachable',klipperVersion:'',moonrakerVersion:'',configHash:'',fileCount:0,files:{},error:''};
   if(!base.machineId)return{...base,error:'machineId ausente'};
@@ -149,7 +150,7 @@ function displayMachineName(reg,fallback,id){
 function publicMachine(id,reg=null){
   const current=store.current[id]||null,baseline=store.baselines[id]||null,cmp=compareSnapshot(current,baseline);
   const fallback=current?.name||baseline?.name||id;
-  return{machineId:id,name:displayMachineName(reg,fallback,id),ip:reg?.ip||current?.ip||baseline?.ip||'',state:cmp.state,reasons:cmp.reasons,changes:cmp.changes,current:current?{scannedAt:current.scannedAt,status:current.status,klipperVersion:current.klipperVersion,moonrakerVersion:current.moonrakerVersion,configHash:current.configHash,fileCount:current.fileCount,error:current.error}:null,baseline:baseline?{approvedAt:baseline.approvedAt,klipperVersion:baseline.klipperVersion,moonrakerVersion:baseline.moonrakerVersion,configHash:baseline.configHash,fileCount:baseline.fileCount}:null};
+  return{machineId:id,name:displayMachineName(reg,fallback,id),ip:reg?.ip||current?.ip||baseline?.ip||'',state:cmp.state,reasons:cmp.reasons,changes:cmp.changes,current:current?{scannedAt:current.scannedAt,status:current.status,klipperVersion:current.klipperVersion,moonrakerVersion:current.moonrakerVersion,configHash:current.configHash,fileCount:current.fileCount,error:current.error,lastProbeAt:current.lastProbeAt||0,lastProbeError:current.lastProbeError||''}:null,baseline:baseline?{approvedAt:baseline.approvedAt,klipperVersion:baseline.klipperVersion,moonrakerVersion:baseline.moonrakerVersion,configHash:baseline.configHash,fileCount:baseline.fileCount}:null};
 }
 function snapshot(){
   const registered=registryMachines(),byId=Object.fromEntries(registered.map(m=>[String(m.id),m]));
@@ -169,7 +170,14 @@ async function scanAll(machineId=''){
     const machines=registryMachines().filter(m=>!machineId||String(m.id)===String(machineId));
     if(machineId&&!machines.length)throw new Error('máquina no encontrada en registry');
     const results=await mapLimit(machines,3,m=>scanMachine(m));
-    results.forEach(s=>{store.current[s.machineId]=s;});await persist();return snapshot();
+    results.forEach(s=>{
+      const prev=store.current[s.machineId];
+      // Un corte momentáneo de Wi‑Fi/LAN no debe destruir una lectura válida.
+      // Conservamos el último snapshot OK y registramos el fallo transitorio aparte.
+      if(s.status!=='ok'&&prev?.status==='ok'&&isTransientScanError(s.error)){
+        store.current[s.machineId]={...prev,lastProbeAt:s.scannedAt,lastProbeError:s.error};
+      }else store.current[s.machineId]=s;
+    });await persist();return snapshot();
   })();
   if(machineId)return work;
   scanPromise=work.finally(()=>{scanPromise=null;});return scanPromise;
