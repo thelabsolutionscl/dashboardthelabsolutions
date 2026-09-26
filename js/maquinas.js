@@ -180,6 +180,16 @@ function getPrinterTunnelToken(){
   return _getPrinterTunnelLongToken();
 }
 function getPrinterTunnelLongToken(){return _getPrinterTunnelLongToken();}
+function getPrinterFleetForDrift(){
+  try{
+    return (MAQUINAS||[]).filter(m=>m&&m.id).map(m=>{
+      const num=m.numG??m.num,name=String(m.nombre||m.modelo||m.id);
+      const label=(num!==undefined&&num!==null&&String(num)!==''&&!/#\\s*\\d+/.test(name))?name+' #'+num:name;
+      let ip='';try{ip=typeof getPrinterIp==='function'?String(getPrinterIp(m)||''):String(m.ip||'');}catch(_){ip=String(m.ip||'');}
+      return{id:String(m.id),name:label,ip};
+    });
+  }catch(_){return[];}
+}
 async function refreshPrinterTunnelSession(force=false){
   if(window._DEMO_MODE)return false;
   const longToken=_getPrinterTunnelLongToken(),base=getPrinterTunnel(),now=Date.now();
