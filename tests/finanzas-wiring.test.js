@@ -173,7 +173,18 @@ test('cobranza por correo registra la gestión solo después de una respuesta ex
   assert.match(register,/airtableWriteTolerant\(\s*['"]Clientes['"]\s*,\s*['"]PATCH['"]/);
 });
 
-test.todo('finVentasMerged debe incorporar Facturas de Airtable y usar el año/mes actual sin rótulos congelados en mayo de 2026');
+test('finVentasMerged usa facturas normalizadas para el año en curso y Overview no congela mayo',()=>{
+  const merged=functionBlock(FIN,'finVentasMerged');
+  const overview=functionBlock(FIN,'renderOverviewFinanzas');
+  const chart=functionBlock(FIN,'drawOvFinChart');
+  assert.match(merged,/finGetAllFacturas\s*\(\)/);
+  assert.match(merged,/currentYear/);
+  assert.match(merged,/_neto/);
+  assert.match(overview,/currentYear/);
+  assert.match(overview,/FIN_MESES/);
+  assert.doesNotMatch(overview,/Ene–May 2026/);
+  assert.match(chart,/now\.getMonth\(\)-off/);
+});
 test('finGetAllFacturas evita duplicar folios ya presentes en Airtable',()=>{
   const all=functionBlock(FIN,'finGetAllFacturas');
   assert.match(all,/foliosAT/);
