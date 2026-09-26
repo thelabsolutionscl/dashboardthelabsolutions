@@ -238,37 +238,51 @@ function finDrawChart(){
 
 /* ── Tabla de facturas ── */
 function finFacturasFromAirtable(){
-  return state.facturas
-    .filter(r=>r.fields['Total']>0||r.fields['Neto']>0)
+  return (state.facturas||[])
+    .filter(r=>r&&r.fields&&(Number(r.fields['Total'])>0||Number(r.fields['Neto'])>0))
     .map(r=>{
       const f=r.fields;
-      const fecha=f['Fecha']||'';
+      const fecha=f['Fecha']||f['Fecha Emisión']||'';
       const year=fecha.slice(0,4)||String(new Date().getFullYear());
-      const mes=String(parseInt(fecha.slice(5,7))||1).padStart(2,'0');
-      const neto=f['Neto']||0;
-      const iva=f['IVA']||0;
-      const exento=f['Exento']||0;
-      const total=f['Total']||0;
-      const porCobrar=f['Estado Pago']==='Cobrada'?0:total;
+      const mes=String(parseInt(fecha.slice(5,7),10)||1).padStart(2,'0');
+      const neto=Number(f['Neto'])||0;
+      const iva=Number(f['IVA'])||0;
+      const exento=Number(f['Exento'])||0;
+      const total=Number(f['Total'])||Math.max(0,neto+iva+exento);
+      const estado=String(f['Estado Pago']||'Pendiente').trim();
+      const estadoNorm=estado.toLowerCase();
+      const pagado=Math.max(0,Number(f['Monto Pagado']??f['Pagado']??f['Monto pagado'])||0);
+      const saldoExplicito=Number(f['Saldo Pendiente']??f['Saldo']??f['Por Cobrar']);
+      const cerrada=/^(cobrada|pagada|anulada|anulado|cancelada|cancelado|nota de cr[eé]dito)$/i.test(estado);
+      const porCobrar=cerrada?0:Math.max(0,Number.isFinite(saldoExplicito)?saldoExplicito:total-pagado);
       return{
         year,mes,
         nombre:f['Cliente']||'—',
         empresa:f['Cliente']||'—',
         item:f['Tipo DTE']||'DTE',
+        tipoDTE:f['Tipo DTE']||'DTE',
         cant:1,
         valor:neto||total,
         porCobrar,
-        fact:f['Folio']||'',
+        pagado:Math.min(total,pagado),
+        fact:String(f['Folio']||''),
         canal:'DTE',
-        cat:f['Estado Pago']||'Pendiente',
+        cat:estado,
+        estadoPago:estado,
         _neto:neto,_iva:iva,_exento:exento,_total:total,
         venc:f['Fecha Vencimiento']||null,fecha:fecha||null,
+        _source:'airtable',_recordId:r.id||null,
       };
     });
 }
 function finGetAllFacturas(){
   let local;try{local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){local=[];}
-  return [...FIN_FACTURAS_BASE,...local,...finFacturasFromAirtable()];
+  const airtable=finFacturasFromAirtable();
+  // Airtable es autoritativo para un DTE con folio. Si ese folio también existe
+  // en el histórico/local, se excluyen esas líneas para no duplicar total ni saldo.
+  const foliosAT=new Set(airtable.filter(r=>r.fact).map(r=>String(r.fact).trim()));
+  const legacy=[...FIN_FACTURAS_BASE,...local].filter(r=>!r.fact||!foliosAT.has(String(r.fact).trim()));
+  return [...legacy,...airtable];
 }
 function finVentasMerged(){
   const m={};
@@ -348,14 +362,20 @@ function finPlazoDefault(){const v=parseInt(localStorage.getItem('fin_plazo_defa
 function setFinPlazoDefault(v){const n=parseInt(v)||30;localStorage.setItem('fin_plazo_default',Math.max(0,Math.min(365,n)));try{finRenderCobrar();finRenderAging();}catch(e){}}
 // Vencimiento real de una factura: usa fecha explícita o plazo propio si existen; si no, el plazo por defecto
 function finVenc(r){
-  // Anclar a medianoche LOCAL (Chile). new Date('YYYY-MM-DD') se parsea como UTC,
-  // que en Chile (UTC-4/-3) cae ~20:00 del día ANTERIOR: los "días de mora" se
-  // adelantaban un día durante la tarde/noche (aging inflado, cobranza gatillada
-  // antes de tiempo, CSV descuadrado). El resto del repo ya ancla con 'T00:00:00'.
-  if(r&&r.venc){const d=new Date(String(r.venc).slice(0,10)+'T00:00:00');if(!isNaN(d))return d;}
-  const base=new Date(`${r.year}-${r.mes}-01T00:00:00`).getTime();
-  const plazo=(r&&r.plazoDias>0)?r.plazoDias:finPlazoDefault();
-  return new Date(base+plazo*86400000);
+  // Siempre anclar a medianoche local para evitar desfases UTC en Chile.
+  const parseLocal=v=>{
+    if(!v)return null;
+    const d=new Date(String(v).slice(0,10)+'T00:00:00');
+    return Number.isFinite(d.getTime())?d:null;
+  };
+  const explicita=parseLocal(r&&r.venc);
+  if(explicita)return explicita;
+  // Si no existe fecha de vencimiento, el plazo corre desde la fecha REAL de emisión,
+  // no desde el primer día del mes.
+  const emision=parseLocal(r&&r.fecha);
+  const base=emision||parseLocal(`${r.year}-${r.mes}-01`);
+  const plazo=(r&&r.plazoDias>=0)?Number(r.plazoDias):finPlazoDefault();
+  return new Date(base.getTime()+plazo*86400000);
 }
 function finRenderCobrar(){
   if(window.OP)OP.collections();
@@ -661,9 +681,16 @@ function cobWhatsApp(empresa){
   const g=_cobGrupos().find(x=>x.empresa===empresa); if(!g){toast('Sin datos de esa empresa','error');return;}
   const cli=_cobCliente(empresa);
   const phone=cli?_getClienteWAPhone(cli):'';
+  if(!phone){toast('El cliente no tiene WhatsApp registrado','error');return;}
   const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
-  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_cobMsg(g,nombre,_cobToques(empresa)+1)),'_blank');
-  cobRegistrar(empresa,'WhatsApp',true);
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(_cobMsg(g,nombre,_cobToques(empresa)+1)),'_blank');
+  // Abrir wa.me no confirma que el usuario haya pulsado Enviar.
+  // Se pide confirmación explícita antes de avanzar la secuencia de cobranza.
+  setTimeout(()=>{
+    if(confirm('¿El mensaje de cobranza se envió efectivamente por WhatsApp?')){
+      cobRegistrar(empresa,'WhatsApp',true);
+    }
+  },500);
 }
 async function cobEmail(empresa,btn){
   const g=_cobGrupos().find(x=>x.empresa===empresa); if(!g){toast('Sin datos de esa empresa','error');return;}
@@ -735,7 +762,7 @@ async function finPlanCobranzaIA(){
 function finRenderAging(){
   const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
   const filterVal=document.getElementById('fin-aging-filter')?.value||'all';
-  const hoy=Date.now();
+  const hoy=new Date();hoy.setHours(0,0,0,0);
   const buckets={b0:0,b30:0,b60:0,b90:0};
   let sumTotal=0;
   const rows=[];
@@ -743,15 +770,15 @@ function finRenderAging(){
     const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
     const cobrar=r.porCobrar||tot;
     sumTotal+=cobrar;
-    const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
+    const rawDias=Math.floor((hoy.getTime()-finVenc(r).getTime())/86400000);
+    const dias=Math.max(0,rawDias);
     let tramo,tramoLabel,tramoColor;
-    if(dias<=30){buckets.b0+=cobrar;tramo='0';tramoLabel='Corriente';tramoColor='var(--accent3)';}
-    else if(dias<=60){buckets.b30+=cobrar;tramo='31';tramoLabel='31–60 días';tramoColor='var(--warn)';}
-    else if(dias<=90){buckets.b60+=cobrar;tramo='61';tramoLabel='61–90 días';tramoColor='var(--accent2)';}
-    else{buckets.b90+=cobrar;tramo='91';tramoLabel='+90 días';tramoColor='var(--danger)';}
-    if(filterVal==='all'||filterVal===tramo) rows.push({r,tot,cobrar,dias,tramoLabel,tramoColor});
+    if(rawDias<=0){buckets.b0+=cobrar;tramo='0';tramoLabel='Por vencer';tramoColor='var(--accent3)';}
+    else if(rawDias<=30){buckets.b30+=cobrar;tramo='31';tramoLabel='1–30 días';tramoColor='var(--warn)';}
+    else if(rawDias<=60){buckets.b60+=cobrar;tramo='61';tramoLabel='31–60 días';tramoColor='var(--accent2)';}
+    else{buckets.b90+=cobrar;tramo='91';tramoLabel=rawDias<=90?'61–90 días':'+90 días';tramoColor='var(--danger)';}
+    if(filterVal==='all'||filterVal===tramo) rows.push({r,tot,cobrar,dias:rawDias<=0?0:dias,tramoLabel,tramoColor});
   });
-  // KPIs
   const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   setText('fin-ag-total',clp(sumTotal));
   setText('fin-ag-cnt',`${data.length} facturas`);
@@ -759,23 +786,21 @@ function finRenderAging(){
   setText('fin-ag-b30',clp(buckets.b30));
   setText('fin-ag-b60',clp(buckets.b60));
   setText('fin-ag-b90',clp(buckets.b90));
-  // Barra visual
   const barEl=document.getElementById('fin-ag-bar');
-  if(barEl&&sumTotal>0){
-    const segs=[
-      {v:buckets.b0,c:'var(--accent3)'},
-      {v:buckets.b30,c:'var(--warn)'},
-      {v:buckets.b60,c:'var(--accent2)'},
-      {v:buckets.b90,c:'var(--danger)'}
-    ].filter(s=>s.v>0);
-    barEl.innerHTML=segs.map(s=>`<div style="flex:${s.v};background:${s.c};min-width:4px"></div>`).join('');
+  if(barEl){
+    if(sumTotal>0){
+      const segs=[
+        {v:buckets.b0,c:'var(--accent3)'},{v:buckets.b30,c:'var(--warn)'},
+        {v:buckets.b60,c:'var(--accent2)'},{v:buckets.b90,c:'var(--danger)'}
+      ].filter(x=>x.v>0);
+      barEl.innerHTML=segs.map(x=>`<div style="flex:${x.v};background:${x.c};min-width:4px"></div>`).join('');
+    }else barEl.innerHTML='';
   }
-  // Tabla
   let html='';
   rows.sort((a,b)=>b.dias-a.dias).forEach(({r,tot,cobrar,dias,tramoLabel,tramoColor})=>{
     html+=`<tr>
       <td><div style="font-weight:600">${escapeHtml(r.nombre||'—')}</div><div style="font-size:10px;color:var(--text3)">${escapeHtml(r.empresa||'')}</div></td>
-      <td style="font-size:11px">${escapeHtml(r.item||r.fact||'—')}</td>
+      <td style="font-size:11px">${escapeHtml(r.fact?('Factura '+r.fact):(r.item||'—'))}</td>
       <td style="text-align:right">${clp(tot)}</td>
       <td style="text-align:right;color:var(--danger);font-weight:700">${clp(cobrar)}</td>
       <td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:${tramoColor};font-weight:700">${dias}</td>
