@@ -285,13 +285,27 @@ function finGetAllFacturas(){
   return [...legacy,...airtable];
 }
 function finVentasMerged(){
+  // Histórico cerrado hasta 2025. Para el año en curso, Facturas/Airtable es
+  // la fuente de verdad: evita sumar FIN_VENTAS + DTE + ventas locales dos veces.
+  const now=new Date(),currentYear=now.getFullYear();
+  const years=[...new Set([...Object.keys(FIN_VENTAS).map(Number),currentYear])].sort((a,b)=>a-b);
   const m={};
-  [2022,2023,2024,2025,2026].forEach(y=>{m[y]=[...FIN_VENTAS[y]];});
-  let _fvLocal;try{_fvLocal=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){_fvLocal=[];}
-  _fvLocal.forEach(r=>{
-    const y=parseInt(r.year,10),mi=(parseInt(r.mes,10)||1)-1;
-    if(m[y])m[y][mi]=(m[y][mi]||0)+r.valor*r.cant;
-  });
+  years.forEach(y=>{m[y]=(y===currentYear)?Array(12).fill(0):[...(FIN_VENTAS[y]||Array(12).fill(0))];});
+  if(currentYear===2026){
+    // Facturas históricas 2026 sin DTE equivalente en Airtable siguen siendo válidas.
+    // finGetAllFacturas ya elimina por folio cualquier duplicado reemplazado por Airtable.
+    finGetAllFacturas().filter(r=>Number(r.year)===currentYear).forEach(r=>{
+      const mi=(parseInt(r.mes,10)||1)-1;
+      const neto=Number(r._neto!=null?r._neto:(Number(r.valor)||0)*(Number(r.cant)||1))||0;
+      m[currentYear][mi]+=neto;
+    });
+  }else{
+    // Mantener compatibilidad si la app cruza de año antes de migrar el histórico.
+    finGetAllFacturas().filter(r=>Number(r.year)===currentYear).forEach(r=>{
+      const mi=(parseInt(r.mes,10)||1)-1;
+      m[currentYear][mi]+=Number(r._neto!=null?r._neto:(Number(r.valor)||0)*(Number(r.cant)||1))||0;
+    });
+  }
   return m;
 }
 function finRenderFacturas(){
@@ -970,7 +984,8 @@ function finToggleKPI(n,e){
 /* ── KPIs dinámicos ── */
 function finInitKPIs(){
   const VM=finVentasMerged();
-  const v26=VM[2026];
+  const currentYear=new Date().getFullYear();
+  const v26=VM[currentYear]||Array(12).fill(0);
   const v25=VM[2025];
   const tot26=v26.reduce((a,b)=>a+b,0);
   const meses26=v26.filter(v=>v>0).length||1;
@@ -1006,7 +1021,9 @@ function finInitKPIs(){
   // Actualizar label record dinámicamente
   const lbl6=document.getElementById('fin-k6-label');
   if(lbl6)lbl6.textContent='Record — Año '+recordYear;
-  setKPI(1,fmt(tot26),'Ene–May 2026');
+  const lastMonth=Math.max(0,...v26.map((v,i)=>v>0?i:-1));
+  const ytdLabel=(FIN_MESES[0]||'Ene')+'–'+(FIN_MESES[lastMonth]||FIN_MESES[new Date().getMonth()])+' '+currentYear;
+  setKPI(1,fmt(tot26),ytdLabel);
   setKPI(2,fmt(avg26),(varAvg>=0?'↑':'↓')+Math.abs(varAvg)+'% vs 2025');
   setKPI(3,fmt(cobrar),'Neto: '+fmt(cobrarNeto));
   setKPI(4,fmt(deudaPrest),'Al '+lastPrestamo.fecha);
@@ -1103,31 +1120,16 @@ function finDrawCanalDonut(){
 
 /* ── Resumen anual dinámico ── */
 function finRenderResumenAnual(){
-  const tb=document.getElementById('fin-resumen-anual-body');
-  if(!tb)return;
-  const anos=[2022,2023,2024,2025,2026];
-  const VM=finVentasMerged();
-  const totales=anos.map(y=>VM[y].reduce((a,b)=>a+b,0));
-  const maxTot=Math.max(...totales)||1;
-  const meses={2022:7,2023:12,2024:12,2025:12,2026:5};
+  const tb=document.getElementById('fin-resumen-anual-body');if(!tb)return;
+  const VM=finVentasMerged(),anos=Object.keys(VM).map(Number).sort((a,b)=>a-b),currentYear=new Date().getFullYear();
+  const totales=anos.map(y=>VM[y].reduce((a,b)=>a+b,0)),maxTot=Math.max(...totales)||1;
   const badges={2022:'badge-gray',2023:'badge-yellow',2024:'badge-orange',2025:'badge-orange',2026:'badge-green'};
-  let html='';
-  anos.forEach((y,i)=>{
-    const tot=totales[i];
-    const avg=Math.round(tot/meses[y]);
-    const prev=i>0?totales[i-1]:null;
-    const varPct2=prev?Math.round((tot/prev-1)*100):null;
-    const barW=Math.round((tot/maxTot)*100);
-    const isRecord=y===2024;
-    html+=`<tr style="${isRecord?'background:rgba(255,170,0,0.06)':''}">
-      <td><span class="badge ${badges[y]}">${y}${y===2022||y===2026?' *':''}</span></td>
-      <td style="font-weight:${isRecord?700:400}">${clp(tot)}</td>
-      <td style="font-size:11px">${clp(avg)}</td>
-      <td>${varPct2!==null?`<span class="badge ${varPct2>=0?'badge-green':'badge-red'}">${varPct2>=0?'+':''}${varPct2}%</span>`:'<span class="badge badge-gray">—</span>'}</td>
-      <td style="min-width:80px"><div style="height:5px;border-radius:3px;background:rgba(255,255,255,0.06)"><div style="height:100%;width:${barW}%;background:${isRecord?'#ffaa00':'rgba(0,212,204,0.7)'};border-radius:3px"></div></div></td>
-    </tr>`;
-  });
-  tb.innerHTML=html;
+  const recordYear=anos[totales.indexOf(maxTot)];
+  tb.innerHTML=anos.map((y,i)=>{
+    const tot=totales[i],activeMonths=VM[y].filter(v=>v>0).length||1,denom=y===currentYear?activeMonths:12,avg=Math.round(tot/denom);
+    const prev=i>0?totales[i-1]:null,varPct2=prev?Math.round((tot/prev-1)*100):null,barW=Math.round((tot/maxTot)*100),isRecord=y===recordYear;
+    return `<tr style="${isRecord?'background:rgba(255,170,0,0.06)':''}"><td><span class="badge ${badges[y]||'badge-green'}">${y}${y===currentYear?' *':''}</span></td><td style="font-weight:${isRecord?700:400}">${clp(tot)}</td><td style="font-size:11px">${clp(avg)}</td><td>${varPct2!==null?`<span class="badge ${varPct2>=0?'badge-green':'badge-red'}">${varPct2>=0?'+':''}${varPct2}%</span>`:'<span class="badge badge-gray">—</span>'}</td><td style="min-width:80px"><div style="height:5px;border-radius:3px;background:rgba(255,255,255,0.06)"><div style="height:100%;width:${barW}%;background:${isRecord?'#ffaa00':'rgba(0,212,204,0.7)'};border-radius:3px"></div></div></td></tr>`;
+  }).join('');
 }
 
 /* ── Top clientes ── */
@@ -1464,74 +1466,44 @@ function ovSyncAdsKPIs(data){
 
 /* ── Overview Finanzas snapshot ── */
 function renderOverviewFinanzas(){
-  function fmt(n){
-    if(n>=1e9)return '$'+(n/1e9).toFixed(1)+'B';
-    if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';
-    return clp(n);
-  }
+  function fmt(n){if(n>=1e9)return '$'+(n/1e9).toFixed(1)+'B';if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';return clp(n);}
   function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
-
-  const VM=finVentasMerged();
-  const v26=VM[2026];
-  const v25=VM[2025];
-  const tot26=v26.reduce((a,b)=>a+b,0);
-  const meses26=v26.filter(v=>v>0).length||1;
-  const avg26=Math.round(tot26/meses26);
-  const avg25=Math.round(v25.reduce((a,b)=>a+b,0)/12);
-  const varAvg=avg25?Math.round((avg26/avg25-1)*100):0;
+  const VM=finVentasMerged(),currentYear=new Date().getFullYear();
+  const current=VM[currentYear]||Array(12).fill(0),prev=VM[currentYear-1]||Array(12).fill(0);
+  const tot=current.reduce((a,b)=>a+b,0);
+  const meses=current.filter(v=>v>0).length||1;
+  const avg=Math.round(tot/meses);
+  const avgPrev=Math.round(prev.reduce((a,b)=>a+b,0)/(prev.filter(v=>v>0).length||12));
+  const varAvg=avgPrev?Math.round((avg/avgPrev-1)*100):0;
   const allFacts=finGetAllFacturas();
   const cobrar=allFacts.filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
   const nFact=allFacts.filter(r=>r.porCobrar>0).length;
   const deuda=FIN_PRESTAMOS[FIN_PRESTAMOS.length-1].deuda;
-
-  set('ov-fin-v26', fmt(tot26));
-  set('ov-fin-v26s', 'Ene–May 2026 · '+meses26+' meses');
-  set('ov-fin-avg', fmt(avg26));
-  set('ov-fin-avgs', (varAvg>=0?'↑':'↓')+Math.abs(varAvg)+'% vs media 2025');
-  set('ov-fin-cobrar', fmt(cobrar));
-  set('ov-fin-cobras', nFact+' factura'+(nFact!==1?'s':'')+' pendiente'+(nFact!==1?'s':''));
-  set('ov-fin-deuda', fmt(deuda));
-  set('ov-fin-deudas', 'al '+FIN_PRESTAMOS[FIN_PRESTAMOS.length-1].fecha);
-
-  // Mini bar chart: últimos 8 meses (Oct 2025 – May 2026)
-  setTimeout(drawOvFinChart, 80);
+  const lastMonth=Math.max(0,...current.map((v,i)=>v>0?i:-1));
+  set('ov-fin-v26',fmt(tot));
+  set('ov-fin-v26s',`Ene–${FIN_MESES[lastMonth]||FIN_MESES[new Date().getMonth()]} ${currentYear} · ${meses} meses con facturación`);
+  set('ov-fin-avg',fmt(avg));
+  set('ov-fin-avgs',(varAvg>=0?'↑':'↓')+Math.abs(varAvg)+'% vs media '+(currentYear-1));
+  set('ov-fin-cobrar',fmt(cobrar));
+  set('ov-fin-cobras',nFact+' factura'+(nFact!==1?'s':'')+' pendiente'+(nFact!==1?'s':''));
+  set('ov-fin-deuda',fmt(deuda));
+  set('ov-fin-deudas','al '+FIN_PRESTAMOS[FIN_PRESTAMOS.length-1].fecha);
+  setTimeout(drawOvFinChart,80);
 }
 
 function drawOvFinChart(){
-  const canvas=document.getElementById('ov-fin-chart');
-  if(!canvas)return;
-  const ctx=canvas.getContext('2d');
-  const w=canvas.offsetWidth||canvas.parentElement?.clientWidth||400;
-  canvas.width=w; canvas.height=54;
-  ctx.clearRect(0,0,w,54);
-
-  // oct=9, nov=10, dic=11 de 2025; ene=0..may=4 de 2026
-  const VM=finVentasMerged();
-  const meses=[
-    {lbl:'Oct25',v:VM[2025][9],color:'rgba(255,107,53,0.7)'},
-    {lbl:'Nov25',v:VM[2025][10],color:'rgba(255,107,53,0.7)'},
-    {lbl:'Dic25',v:VM[2025][11],color:'rgba(255,107,53,0.7)'},
-    {lbl:'Ene26',v:VM[2026][0],color:'rgba(0,212,204,0.85)'},
-    {lbl:'Feb26',v:VM[2026][1],color:'rgba(0,212,204,0.85)'},
-    {lbl:'Mar26',v:VM[2026][2],color:'rgba(0,212,204,0.85)'},
-    {lbl:'Abr26',v:VM[2026][3],color:'rgba(0,212,204,0.85)'},
-    {lbl:'May26',v:VM[2026][4],color:'rgba(0,212,204,0.85)'},
-  ];
-  const maxV=Math.max(...meses.map(m=>m.v))||1;
-  const pad={t:4,b:16,l:2,r:2};
-  const ch=54-pad.t-pad.b;
-  const cw=w-pad.l-pad.r;
-  const bw=Math.floor(cw/meses.length)-3;
-  meses.forEach((m,i)=>{
-    if(!m.v)return;
-    const bh=Math.round((m.v/maxV)*ch);
-    const x=pad.l+i*(bw+3)+1;
-    const y=pad.t+ch-bh;
-    ctx.fillStyle=m.color;
-    ctx.beginPath();ctx.roundRect(x,y,bw,bh,2);ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,0.35)';
-    ctx.font='7px DM Sans';ctx.textAlign='center';
-    ctx.fillText(m.lbl,x+bw/2,54-2);
+  const canvas=document.getElementById('ov-fin-chart');if(!canvas)return;
+  const ctx=canvas.getContext('2d'),w=canvas.offsetWidth||canvas.parentElement?.clientWidth||400;
+  canvas.width=w;canvas.height=54;ctx.clearRect(0,0,w,54);
+  const VM=finVentasMerged(),now=new Date(),meses=[];
+  for(let off=7;off>=0;off--){
+    const d=new Date(now.getFullYear(),now.getMonth()-off,1),y=d.getFullYear(),mi=d.getMonth();
+    meses.push({lbl:(FIN_MESES[mi]||'').slice(0,3)+String(y).slice(-2),v:VM[y]?.[mi]||0,current:y===now.getFullYear()});
+  }
+  const maxV=Math.max(...meses.map(m=>m.v))||1,pad={t:4,b:16,l:2,r:2},ch=54-pad.t-pad.b,cw=w-pad.l-pad.r,bw=Math.floor(cw/meses.length)-3;
+  meses.forEach((m,i)=>{if(!m.v)return;const bh=Math.round((m.v/maxV)*ch),x=pad.l+i*(bw+3)+1,y=pad.t+ch-bh;
+    ctx.fillStyle=m.current?'rgba(0,212,204,0.85)':'rgba(255,107,53,0.7)';ctx.beginPath();ctx.roundRect(x,y,bw,bh,2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='7px DM Sans';ctx.textAlign='center';ctx.fillText(m.lbl,x+bw/2,52);
   });
 }
 
