@@ -18,12 +18,15 @@ server-side:
 
 - Airtable → `<worker>/<BASE_ID>/…` con header `X-App-Key`
 - Claude (agentes, KAI con streaming, slicer, resumen diario) → `<worker>/anthropic/v1/messages`
+- OpenAI (visión e imágenes) → solo rutas permitidas bajo `<worker>/openai/v1/...`
 
 El Worker exige `X-App-Key` **y** que el `Origin` sea el dashboard
 (`ALLOWED_ORIGINS`). Esto limita llamadas desde otros sitios en un navegador,
 pero NO autentica a un usuario: un cliente HTTP puede enviar ese Origin.
 La APP_KEY publicada en HTML no es un secreto. Hace falta autenticación real
-en el servidor y límites de consumo para protegerse de abuso externo.
+en el servidor para proteger datos por usuario/rol. Como contención inmediata,
+Claude y OpenAI tienen allowlists y comparten un hard cap global de IA; esto
+limita el impacto económico, pero NO reemplaza la autenticación server-side.
 
 ## Qué queda expuesto a propósito
 
@@ -31,7 +34,7 @@ en el servidor y límites de consumo para protegerse de abuso externo.
 |---|---|---|
 | `PROXY_KEY` | Alto si está publicada | Pendiente: autenticación de usuario server-side y cuotas; Origin no basta |
 | `BASE_ID` de Airtable | Ninguno sin token | — |
-| `OPENAI_KEY` | Medio | El proxy no cubre OpenAI (lo usa solo la visión GPT-4o de fichas). Recomendado: ponerle límite de gasto bajo en OpenAI, o borrar el secret `OPENAI` y pegar la key a mano en el dashboard (se guarda solo en tu navegador). |
+| `OPENAI_TOKEN` | Alto | Vive solo como secret del Worker. El dashboard no acepta ni persiste OpenAI keys; el proxy limita endpoints, modelos, tamaño/calidad y comparte el hard cap diario de IA. |
 | `GOOGLE_CLIENT_ID`, `SII_*`, `ADS_*` | Bajo | Son identificadores/URLs, no credenciales de datos |
 
 ## Pasos pendientes de una sola vez (recomendado)
@@ -48,19 +51,22 @@ Los tokens viejos ya estuvieron publicados en el HTML, así que hay que rotarlos
    key anterior o compartida con Claude Code. El navegador y el `lead-worker` no
    almacenan una API key Anthropic: el lead-worker recibe `AI_PROXY_KEY` desde el
    secret de GitHub `PROXY_KEY` y pasa por el mismo hard cap del proxy.
-3. Relanzar el deploy (pestaña Actions → Deploy Dashboard → Run workflow).
+3. **OpenAI**: mantener la key únicamente como `OPENAI_TOKEN` del `airtable-proxy`. El workflow ya no inyecta `secrets.OPENAI` en `index.html`; conviene rotar cualquier key que haya estado publicada antes de este cambio.
+4. Relanzar el deploy (pestaña Actions → Deploy Dashboard → Run workflow).
 
 ## Cómo verificar
 
 Tras el deploy, en el código fuente de <https://dashboard.thelab.solutions>:
 
-- buscar `pat` (token Airtable) y `sk-ant` → **no deben aparecer**
-- `curl https://<worker>/health` → `{"ok":true,"anthropic":true,"airtable":true}`
+- buscar `pat`, `sk-ant` y `sk-proj`/claves OpenAI → **no deben aparecer**
+- `curl https://<worker>/health` → debe informar solo booleanos de configuración, nunca secretos
+- desde el dashboard, `GET <worker>/openai/usage` debe responder sin ejecutar un modelo
 
 ## Sin proxy
 
-Claude queda **bloqueado deliberadamente** si el Proxy Worker no está
-configurado. No existe modo directo, fallback local ni formulario para guardar
-una API key Anthropic en el navegador, tampoco en localhost.
+Claude y OpenAI quedan **bloqueados deliberadamente** si el Proxy Worker no está
+configurado. No existe modo directo para claves de IA en el navegador.
 
 El fallback directo de Airtable es legado y requiere migración por separado.
+La prioridad P0 pendiente es sustituir APP_KEY/Origin por autenticación real de
+usuario en servidor y aplicar autorización por tabla, fila y campo.
