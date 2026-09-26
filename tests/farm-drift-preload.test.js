@@ -51,6 +51,12 @@ test('lectura fallida queda unknown, no drift',()=>{
   assert.equal(cmp.state,'unknown');
 });
 
+test('el preload acepta roles de sesiones efímeras emitidas por el controller',()=>{
+  globalThis.__TLS_FARM_ROLE_FOR_TOKEN__=token=>token==='drift-session-test'?'operator':'';
+  try{assert.equal(drift.roleForToken('drift-session-test'),'operator');}
+  finally{delete globalThis.__TLS_FARM_ROLE_FOR_TOKEN__;}
+});
+
 test('token maestro conserva rol admin',()=>{
   assert.equal(drift.roleForToken('drift-admin-test'),'admin');
   assert.equal(drift.roleForToken('incorrecto'),'');
