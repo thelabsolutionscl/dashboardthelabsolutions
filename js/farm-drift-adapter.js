@@ -10,9 +10,18 @@
 let target=null,installed=false,snapshot=null,lastSync=0,lastError='',syncing=null,timer=null;
 function base(){try{return typeof target?.getPrinterTunnel==='function'?String(target.getPrinterTunnel()||'').replace(/\/$/,''):'';}catch(_){return'';}}
 function token(){try{return typeof target?.getPrinterTunnelToken==='function'?String(target.getPrinterTunnelToken()||''):'';}catch(_){return'';}}
-function url(path){const b=base(),t=token();return b+path+(t?(path.includes('?')?'&':'?')+'bt='+encodeURIComponent(t):'');}
-async function readJson(r){let d=null;try{d=await r.json();}catch(_){}if(!r.ok)throw new Error((d&&d.error)||('HTTP '+r.status));return d||{};}
-async function request(path,options={}){if(!base()||!token())throw new Error('controller/token no disponible');const opts={cache:'no-store',signal:AbortSignal.timeout(options.timeout||12000),...options};delete opts.timeout;return readJson(await fetch(url(path),opts));}
+function longToken(){try{return typeof target?.getPrinterTunnelLongToken==='function'?String(target.getPrinterTunnelLongToken()||''):'';}catch(_){return'';}}
+function url(path,t=token()){const b=base();return b+path+(t?(path.includes('?')?'&':'?')+'bt='+encodeURIComponent(t):'');}
+async function readJson(r){let d=null;try{d=await r.json();}catch(_){}if(!r.ok){const err=new Error((d&&d.error)||('HTTP '+r.status));err.status=r.status;err.requiredRole=d&&d.requiredRole||'';throw err;}return d||{};}
+async function request(path,options={}){
+  const b=base(),t=token();if(!b||!t)throw new Error('controller/token no disponible');
+  const opts={cache:'no-store',signal:AbortSignal.timeout(options.timeout||12000),...options};delete opts.timeout;
+  let r=await fetch(url(path,t),opts);
+  // Compatibilidad con controllers anteriores: los preloads no conocían los tickets
+  // de /farm/session. Un 403 con ticket corto reintenta una vez con el secreto largo.
+  const lt=longToken();if(r.status===403&&lt&&lt!==t)r=await fetch(url(path,lt),opts);
+  return readJson(r);
+}
 function emit(){try{target?.dispatchEvent?.(new target.CustomEvent('farm-drift-updated',{detail:status()}));}catch(_){}try{render();}catch(_){}}
 function setSnapshot(d){snapshot=d||null;lastSync=Date.now();lastError='';emit();return snapshot;}
 async function refresh(force=false){if(!target||target._DEMO_MODE)return null;if(syncing)return syncing;if(!force&&Date.now()-lastSync<30000)return snapshot;syncing=(async()=>{try{const d=await request('/farm/drift');return setSnapshot(d.drift);}catch(e){lastError=e.message;emit();return null;}finally{syncing=null;}})();return syncing;}
