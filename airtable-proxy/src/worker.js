@@ -11,6 +11,19 @@ const ANTHROPIC_ALLOWED_MODELS = new Set([
 const ANTHROPIC_MAX_OUTPUT_TOKENS = 4000;
 const ANTHROPIC_DAILY_BUDGET_USD_DEFAULT = 0.50;
 const ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT = 0.10;
+
+// OpenAI comparte el MISMO presupuesto global diario que Anthropic. El objetivo
+// no es estimar la factura al centavo sino impedir que una credencial expuesta
+// pueda producir gasto ilimitado. Los importes son reservas conservadoras.
+const OPENAI_ALLOWED_CHAT_MODELS = new Set(['gpt-4o-mini']);
+const OPENAI_ALLOWED_IMAGE_MODELS = new Set(['gpt-image-1']);
+const OPENAI_MAX_CHAT_OUTPUT_TOKENS = 300;
+const OPENAI_ESTIMATED_COST_USD = {
+  chat: 0.01,
+  imageGenerationLow: 0.03,
+  imageEditLow: 0.08,
+};
+
 // Una reserva representa una llamada en curso. El cliente corta las llamadas a los 60 s,
 // así que cualquier reserva de más de 2 min es huérfana y no debe bloquear el día.
 const AI_RESERVATION_STALE_MS = 2 * 60 * 1000;
@@ -19,8 +32,11 @@ const ANTHROPIC_PRICES = {
   sonnet: { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
 };
 
-// Solo se aceptan peticiones desde estos orígenes (el dashboard). Así, si la
-// APP_KEY se filtrara (va horneada en el HTML público), no sirve desde otro sitio.
+// Solo se aceptan peticiones desde estos orígenes (el dashboard). Esto reduce
+// abuso desde otros sitios en un navegador, pero NO es autenticación de usuario:
+// APP_KEY puede estar en el cliente y un cliente HTTP puede falsificar Origin.
+// Por eso las rutas caras tienen allowlist + presupuesto y Airtable requiere una
+// futura capa de autorización server-side por usuario/rol.
 const ALLOWED_ORIGINS = [
   'https://dashboard.thelab.solutions',
   'https://thelabsolutionscl.github.io',
@@ -284,12 +300,10 @@ export default {
 
     // Allowlist de origen: solo se aceptan peticiones cuyo Origin esté en la lista.
     // Antes el chequeo era `if (origin && ...)`, así que una petición SIN header
-    // Origin (curl, un script, server-to-server) se lo saltaba por completo: con la
-    // APP_KEY —que va horneada en el HTML público— cualquiera podía leer/escribir
-    // Airtable o gastar créditos de Claude/OpenAI desde fuera del navegador. Todo
-    // cliente legítimo es un navegador en el dashboard, que SIEMPRE manda Origin
-    // (la petición lleva X-App-Key, un header que fuerza CORS y no se puede falsear
-    // desde otra página). /health queda libre más arriba para los monitores.
+    // Origin (curl, un script, server-to-server) se lo saltaba por completo. Exigir
+    // un Origin permitido bloquea abuso casual desde navegadores ajenos, pero no
+    // convierte APP_KEY en identidad: clientes HTTP pueden enviar ese header.
+    // /health queda libre más arriba para los monitores.
     if (!ALLOWED_ORIGINS.includes(origin)) {
       return json({ error: 'Forbidden origin' }, 403, CORS);
     }
@@ -379,26 +393,107 @@ export default {
     // No funciona como proxy Anthropic genérico: solo Messages está expuesto.
     if (url.pathname.startsWith('/anthropic/')) return json({ error: 'Anthropic endpoint not allowed' }, 404, CORS);
 
-    // ── OpenAI (visión + generación de imágenes de la ficha propuesta) ──
-    // La API key vive como secreto del Worker; el navegador NO puede llamar a
-    // api.openai.com directo (OpenAI no habilita CORS de navegador, a diferencia de
-    // Anthropic). El dashboard llama a:  <worker>/openai/v1/{chat/completions,images/generations,images/edits}
+    // ── OpenAI (visión + imágenes) ─────────────────────────────────────
+    // Nunca funciona como proxy genérico. Solo admite las tres operaciones que usa
+    // el dashboard, con modelos/parámetros acotados y el MISMO hard cap global de IA.
+    // Así, copiar APP_KEY no permite elegir modelos caros ni generar sin límite.
+    if (url.pathname === '/openai/usage') {
+      if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405, CORS);
+      return json(await readAiBudget(env), 200, CORS);
+    }
+
     if (url.pathname.startsWith('/openai/')) {
       if (!env.OPENAI_TOKEN) {
         return json({ error: 'Worker misconfigured: missing OPENAI_TOKEN secret' }, 500, CORS);
       }
+      if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, CORS);
+
+      let estimate = 0;
+      let source = 'openai';
+      const ct = request.headers.get('Content-Type') || '';
+      const clientSource = sanitizeAiSource(request.headers.get('X-AI-Agent') || '');
+
+      if (url.pathname === '/openai/v1/chat/completions') {
+        let payload;
+        try { payload = await readOpenAiJson(request); }
+        catch (_) { return json({ error: 'Invalid OpenAI JSON body' }, 400, CORS); }
+        if (!OPENAI_ALLOWED_CHAT_MODELS.has(payload?.model)) {
+          return json({ error: 'OpenAI chat model not allowed by cost policy' }, 403, CORS);
+        }
+        const maxTokens = Number(payload.max_tokens);
+        if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > OPENAI_MAX_CHAT_OUTPUT_TOKENS) {
+          return json({ error: `max_tokens must be between 1 and ${OPENAI_MAX_CHAT_OUTPUT_TOKENS}` }, 400, CORS);
+        }
+        if (payload.stream) return json({ error: 'Streaming is not allowed on this OpenAI route' }, 400, CORS);
+        estimate = OPENAI_ESTIMATED_COST_USD.chat;
+        source = clientSource || 'openai-chat';
+      } else if (url.pathname === '/openai/v1/images/generations') {
+        let payload;
+        try { payload = await readOpenAiJson(request); }
+        catch (_) { return json({ error: 'Invalid OpenAI image JSON body' }, 400, CORS); }
+        if (!OPENAI_ALLOWED_IMAGE_MODELS.has(payload?.model)) {
+          return json({ error: 'OpenAI image model not allowed by cost policy' }, 403, CORS);
+        }
+        if (Number(payload.n || 1) !== 1 || payload.size !== '1024x1024' || payload.quality !== 'low') {
+          return json({ error: 'OpenAI image generation must use n=1, 1024x1024, quality=low' }, 400, CORS);
+        }
+        estimate = OPENAI_ESTIMATED_COST_USD.imageGenerationLow;
+        source = clientSource || 'openai-image-generation';
+      } else if (url.pathname === '/openai/v1/images/edits') {
+        if (!ct.toLowerCase().includes('multipart/form-data')) {
+          return json({ error: 'OpenAI image edit requires multipart/form-data' }, 400, CORS);
+        }
+        let form;
+        try {
+          if (!request.clone || typeof request.clone !== 'function') throw new Error('clone unavailable');
+          form = await request.clone().formData();
+        } catch (_) {
+          return json({ error: 'Invalid OpenAI image edit body' }, 400, CORS);
+        }
+        const model = String(form.get('model') || '');
+        const n = Number(form.get('n') || 1);
+        const size = String(form.get('size') || '');
+        const quality = String(form.get('quality') || '');
+        const image = form.get('image');
+        if (!OPENAI_ALLOWED_IMAGE_MODELS.has(model)) {
+          return json({ error: 'OpenAI image model not allowed by cost policy' }, 403, CORS);
+        }
+        if (n !== 1 || size !== '1024x1024' || quality !== 'low') {
+          return json({ error: 'OpenAI image edit must use n=1, 1024x1024, quality=low' }, 400, CORS);
+        }
+        if (!image || typeof image.size !== 'number' || image.size > 6 * 1024 * 1024) {
+          return json({ error: 'OpenAI edit image is missing or exceeds 6 MB' }, 413, CORS);
+        }
+        estimate = OPENAI_ESTIMATED_COST_USD.imageEditLow;
+        source = clientSource || 'openai-image-edit';
+      } else {
+        return json({ error: 'OpenAI endpoint not allowed' }, 404, CORS);
+      }
+
+      const reservation = await reserveAiBudget(env, { model: 'openai-budget-envelope' }, source, estimate);
+      if (!reservation.ok) {
+        return json({
+          error: reservation.error,
+          code: 'AI_BUDGET_LIMIT',
+          budget_usd: reservation.budget_usd,
+          used_usd: reservation.used_usd,
+          estimated_request_usd: reservation.estimated_request_usd,
+        }, reservation.status || 429, CORS);
+      }
+
       const target = OPENAI_BASE + url.pathname.replace(/^\/openai/, '') + url.search;
       const headers = new Headers();
       headers.set('Authorization', 'Bearer ' + env.OPENAI_TOKEN);
-      // Preserva el Content-Type ORIGINAL: en images/edits es multipart/form-data con
-      // su boundary — forzarlo a JSON rompería el cuerpo. En el resto es application/json.
-      const ct = request.headers.get('Content-Type');
       if (ct) headers.set('Content-Type', ct);
       const upstream = await fetch(target, {
-        method: request.method,
+        method: 'POST',
         headers,
-        body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+        body: request.body,
       });
+      const accounting = finalizeEstimatedAiBudget(env, reservation, upstream.ok, 'openai_http_' + upstream.status).catch(() => {});
+      if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(accounting);
+      else await accounting;
+
       const respHeaders = new Headers(upstream.headers);
       Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
       return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
@@ -530,8 +625,10 @@ async function readAiBudget(env) {
     updated_at: row.updated_at || null,
   };
 }
-async function reserveAiBudget(env, payload, source) {
-  const estimate = estimateAiRequestUsd(payload);
+async function reserveAiBudget(env, payload, source, fixedEstimate = null) {
+  const estimate = Number.isFinite(Number(fixedEstimate)) && fixedEstimate !== null
+    ? Math.max(0, Number(fixedEstimate))
+    : estimateAiRequestUsd(payload);
   const budget = Math.max(0.05, Number(env.ANTHROPIC_DAILY_BUDGET_USD || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT));
   const perRequest = Math.max(0.01, Number(env.ANTHROPIC_REQUEST_BUDGET_USD || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT));
   if (env.AI_BUDGET_GUARD) {
@@ -664,6 +761,46 @@ async function reconcileAiBudget(env, reservation, response) {
   if (row.reserved_usd <= 1e-9) row.reserved_at = null;
   row.updated_at = new Date().toISOString();
   await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
+}
+
+async function finalizeEstimatedAiBudget(env, reservation, success, reason) {
+  if (!reservation?.ok) return;
+  if (!success) {
+    await releaseAiReservation(env, reservation, reason || 'upstream_error');
+    return;
+  }
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      await aiBudgetGuardCall(env, '/reconcile', {
+        date: reservation.date || aiChileDate(),
+        reservation_id: reservation.reservation_id || '',
+        actual_usd: reservation.estimate,
+        source: reservation.source || 'dashboard',
+      });
+    } catch (_) {}
+    return;
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET || !env.AI_BUDGET) return;
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(reservation.key)) || '{}'); } catch (_) {}
+  const actual = Math.max(0, Number(reservation.estimate) || 0);
+  row.spent_usd = Math.max(0, Number(row.spent_usd) || 0) + actual;
+  row.reserved_usd = Math.max(0, (Number(row.reserved_usd) || 0) - actual);
+  row.by_source = row.by_source || {};
+  const src = row.by_source[reservation.source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.spent_usd = Math.max(0, Number(src.spent_usd) || 0) + actual;
+  src.reserved_usd = Math.max(0, (Number(src.reserved_usd) || 0) - actual);
+  row.by_source[reservation.source] = src;
+  if (row.reserved_usd <= 1e-9) row.reserved_at = null;
+  row.updated_at = new Date().toISOString();
+  await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
+}
+
+async function readOpenAiJson(request) {
+  if (request && typeof request.clone === 'function') return request.clone().json();
+  if (typeof request.body === 'string') return JSON.parse(request.body);
+  if (request.body && typeof request.body.text === 'function') return JSON.parse(await request.body.text());
+  throw new Error('body unavailable');
 }
 
 async function readAnthropicJson(request) {
