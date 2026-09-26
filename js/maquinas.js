@@ -179,6 +179,7 @@ function getPrinterTunnelToken(){
   if(_printerTunnelSessionToken&&Date.now()<_printerTunnelSessionExpires-15000)return _printerTunnelSessionToken;
   return _getPrinterTunnelLongToken();
 }
+function getPrinterTunnelLongToken(){return _getPrinterTunnelLongToken();}
 async function refreshPrinterTunnelSession(force=false){
   if(window._DEMO_MODE)return false;
   const longToken=_getPrinterTunnelLongToken(),base=getPrinterTunnel(),now=Date.now();
