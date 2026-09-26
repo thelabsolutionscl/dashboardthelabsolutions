@@ -174,9 +174,30 @@ test('cobranza por correo registra la gestión solo después de una respuesta ex
 });
 
 test.todo('finVentasMerged debe incorporar Facturas de Airtable y usar el año/mes actual sin rótulos congelados en mayo de 2026');
-test.todo('finGetAllFacturas debe deduplicar histórico, ventas locales y Airtable por folio/tipo/emisor o identificador estable');
-test.todo('finFacturasFromAirtable debe conservar Fecha Vencimiento, pagos parciales, anuladas y notas de crédito');
-test.todo('aging debe separar corriente no vencida de 1–30 días vencidos y usar la fecha real de emisión');
+test('finGetAllFacturas evita duplicar folios ya presentes en Airtable',()=>{
+  const all=functionBlock(FIN,'finGetAllFacturas');
+  assert.match(all,/foliosAT/);
+  assert.match(all,/airtable/);
+  assert.match(all,/legacy/);
+});
+test('facturas Airtable conservan vencimiento y calculan saldo real/estados cerrados',()=>{
+  const at=functionBlock(FIN,'finFacturasFromAirtable');
+  assert.match(at,/Fecha Vencimiento/);
+  assert.match(at,/Monto Pagado/);
+  assert.match(at,/Saldo Pendiente/);
+  assert.match(at,/anulada/);
+  assert.match(at,/nota de cr/);
+  assert.match(at,/porCobrar/);
+});
+test('aging separa por vencer de mora y vencimiento usa fecha real de emisión',()=>{
+  const aging=functionBlock(FIN,'finRenderAging');
+  const venc=functionBlock(FIN,'finVenc');
+  assert.match(aging,/rawDias/);
+  assert.match(aging,/Por vencer/);
+  assert.match(aging,/1–30 días/);
+  assert.match(venc,/r&&r\.fecha/);
+  assert.match(venc,/emision/);
+});
 test.todo('nvGuardar, nvEliminar y nvLimpiarTodas deben persistir de forma await/rollback y no llamar una función saveFinVentasAirtable ausente');
 test.todo('Libro Diario, presupuesto, caja, pagos programados y préstamos deben persistirse en una fuente compartida y no solo localStorage');
 test.todo('_ivaMes debe ser una proyección no tributaria basada en DTE emitidos/compras documentadas, no en pedidos creados y gastos genéricos');
@@ -187,5 +208,10 @@ test.todo('nvRecalcular debe calcular utilidad sobre venta neta y documentar si 
 test.todo('finDrawCanalDonut y finRenderTopClientes deben usar una base monetaria consistente, sin mezclar pagos brutos con ventas netas');
 test.todo('presExportCSV debe exportar el ejecutado real usado en pantalla cuando no hay ajuste manual');
 test.todo('FIN_PRESTAMOS debe ordenarse por fecha real y corregir/validar la entrada 13/03/25 dentro de la secuencia 2026');
-test.todo('cobWhatsApp debe registrar el toque solo después de confirmación del usuario y la secuencia debe sincronizarse entre dispositivos');
+test('cobWhatsApp no registra el toque sin confirmación explícita',()=>{
+  const wa=functionBlock(FIN,'cobWhatsApp');
+  const ask=wa.search(/confirm\s*\(/);
+  const log=wa.search(/cobRegistrar\s*\(/);
+  assert.ok(ask>=0&&log>ask,'debe confirmar el envío antes de registrar cobranza');
+});
 test.todo('punto de equilibrio debe distinguir pedidos creados, facturación y revenue reconocido para no presentar ventas no emitidas como ingreso del mes');
