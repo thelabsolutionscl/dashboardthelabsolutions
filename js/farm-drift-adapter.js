@@ -10,11 +10,33 @@
 let target=null,installed=false,snapshot=null,lastSync=0,lastError='',syncing=null,timer=null;
 function base(){try{return typeof target?.getPrinterTunnel==='function'?String(target.getPrinterTunnel()||'').replace(/\/$/,''):'';}catch(_){return'';}}
 function token(){try{return typeof target?.getPrinterTunnelToken==='function'?String(target.getPrinterTunnelToken()||''):'';}catch(_){return'';}}
-function url(path){const b=base(),t=token();return b+path+(t?(path.includes('?')?'&':'?')+'bt='+encodeURIComponent(t):'');}
-async function readJson(r){let d=null;try{d=await r.json();}catch(_){}if(!r.ok)throw new Error((d&&d.error)||('HTTP '+r.status));return d||{};}
-async function request(path,options={}){if(!base()||!token())throw new Error('controller/token no disponible');const opts={cache:'no-store',signal:AbortSignal.timeout(options.timeout||12000),...options};delete opts.timeout;return readJson(await fetch(url(path),opts));}
+function longToken(){try{return typeof target?.getPrinterTunnelLongToken==='function'?String(target.getPrinterTunnelLongToken()||''):'';}catch(_){return'';}}
+function url(path,t=token()){const b=base();return b+path+(t?(path.includes('?')?'&':'?')+'bt='+encodeURIComponent(t):'');}
+async function readJson(r){let d=null;try{d=await r.json();}catch(_){}if(!r.ok){const err=new Error((d&&d.error)||('HTTP '+r.status));err.status=r.status;err.requiredRole=d&&d.requiredRole||'';throw err;}return d||{};}
+async function request(path,options={}){
+  const b=base(),t=token();if(!b||!t)throw new Error('controller/token no disponible');
+  const opts={cache:'no-store',signal:AbortSignal.timeout(options.timeout||12000),...options};delete opts.timeout;
+  let r=await fetch(url(path,t),opts);
+  // Compatibilidad con controllers anteriores: los preloads no conocían los tickets
+  // de /farm/session. Un 403 con ticket corto reintenta una vez con el secreto largo.
+  const lt=longToken();if(r.status===403&&lt&&lt!==t)r=await fetch(url(path,lt),opts);
+  return readJson(r);
+}
 function emit(){try{target?.dispatchEvent?.(new target.CustomEvent('farm-drift-updated',{detail:status()}));}catch(_){}try{render();}catch(_){}}
-function setSnapshot(d){snapshot=d||null;lastSync=Date.now();lastError='';emit();return snapshot;}
+function activeFleet(){try{return typeof target?.getPrinterFleetForDrift==='function'?target.getPrinterFleetForDrift():[];}catch(_){return[];}}
+function scopeSnapshot(d){
+  if(!d||!Array.isArray(d.machines))return d;
+  const fleet=activeFleet();if(!fleet.length)return d;
+  const byId=new Map(d.machines.filter(Boolean).map(m=>[String(m.machineId||''),m]));
+  const machines=fleet.map(f=>{
+    const hit=byId.get(String(f.id));
+    if(hit)return{...hit,name:f.name||hit.name,ip:f.ip||hit.ip||''};
+    return{machineId:String(f.id),name:f.name||String(f.id),ip:f.ip||'',state:'unknown',reasons:['sin escaneo actual'],changes:{added:[],removed:[],changed:[]},current:null,baseline:null};
+  });
+  const counts={clean:0,drift:0,unbaselined:0,unknown:0};machines.forEach(m=>{counts[m.state]=(counts[m.state]||0)+1;});
+  return{...d,summary:{...counts,total:machines.length},machines};
+}
+function setSnapshot(d){snapshot=scopeSnapshot(d)||null;lastSync=Date.now();lastError='';emit();return snapshot;}
 async function refresh(force=false){if(!target||target._DEMO_MODE)return null;if(syncing)return syncing;if(!force&&Date.now()-lastSync<30000)return snapshot;syncing=(async()=>{try{const d=await request('/farm/drift');return setSnapshot(d.drift);}catch(e){lastError=e.message;emit();return null;}finally{syncing=null;}})();return syncing;}
 async function probe(machineId=''){try{const d=await request('/farm/drift/probe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(machineId?{machineId}:{}),timeout:60000});return setSnapshot(d.drift);}catch(e){lastError=e.message;emit();throw e;}}
 async function approve(machineId){if(!machineId)return false;try{const d=await request('/farm/drift/baseline',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({machineId}),timeout:60000});setSnapshot(d.drift);return true;}catch(e){lastError=e.message;emit();throw e;}}

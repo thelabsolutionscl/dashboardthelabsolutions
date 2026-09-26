@@ -131,6 +131,10 @@ function roleForToken(token) {
   const session=sessionTokens.get(String(token||''));
   return session&&session.expiresAt>Date.now()?session.role:'';
 }
+// Los preloads se cargan antes que este módulo, pero resuelven roles en tiempo de petición.
+// Compartir el resolver canónico permite que acepten también tickets efímeros /farm/session.
+globalThis.__TLS_FARM_ROLE_FOR_TOKEN__ = roleForToken;
+
 function requireRole(req, res, minimum) {
   const role = roleForToken(tokenFromReq(req));
   if (!role || ROLE_RANK[role] < ROLE_RANK[minimum]) {

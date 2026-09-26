@@ -62,6 +62,12 @@ test('merge de historial deduplica por máquina/archivo/inicio/fin/resultado',()
   assert.equal(merged.filter(x=>x.machineId==='k1-01').length,1);
 });
 
+test('el preload acepta roles de sesiones efímeras emitidas por el controller',()=>{
+  globalThis.__TLS_FARM_ROLE_FOR_TOKEN__=token=>token==='production-session-test'?'operator':'';
+  try{assert.equal(store.roleForToken('production-session-test'),'operator');}
+  finally{delete globalThis.__TLS_FARM_ROLE_FOR_TOKEN__;}
+});
+
 test('roles del preload respetan viewer/operator/admin',()=>{
   assert.equal(store.roleForToken('production-admin-test'),'admin');
   assert.equal(store.roleForToken('incorrecto'),'');

@@ -46,7 +46,7 @@ No fue posible obtener una lectura completa. Esto no se interpreta como drift. L
 
 ## API
 
-Mismos roles/tokens del Farm Controller:
+Mismos roles/tokens del Farm Controller. Los tickets efímeros emitidos por `/farm/session` conservan el mismo rol y son válidos también en estas rutas:
 
 ```text
 GET    /farm/drift                   viewer
@@ -88,7 +88,7 @@ Muestra:
 - cambios de versión Klipper/Moonraker;
 - acción explícita para aprobar el estado actual.
 
-El badge de **MÁQUINAS** suma los casos de drift real como advertencias.
+El badge de **MÁQUINAS** suma los casos de drift real como advertencias. El panel se limita a las identidades presentes en el Farm Registry actual; fingerprints históricos que ya no pertenecen a una máquina registrada no inflan los contadores.
 
 ## Persistencia
 
