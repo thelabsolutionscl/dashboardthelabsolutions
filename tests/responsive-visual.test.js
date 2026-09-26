@@ -87,6 +87,11 @@ test('el topbar móvil no solapa el logo y alinea correo campana y menú',()=>{
   assert.match(CSS,/#notifBtnWrap\{[^}]*width:44px[^}]*height:44px[^}]*display:flex[^}]*align-items:center[^}]*justify-content:center/);
 });
 
+test('los badges del menú lateral móvil quedan centrados dentro de su fila',()=>{
+  assert.match(CSS,/\.mobile-tab-btn\{[^}]*position:relative[^}]*padding:12px 54px 12px 18px/);
+  assert.match(CSS,/\.mobile-tab-btn>\.dock-badge\{[^}]*top:50%[^}]*right:18px[^}]*transform:translateY\(-50%\)/);
+});
+
 test('la legibilidad y los targets móviles tienen un piso explícito',()=>{
   assert.match(CSS,/--text3:#8a8a8a/);
   assert.match(CSS,/\.notif-btn\{[^}]*min-width:44px[^}]*min-height:44px/);
