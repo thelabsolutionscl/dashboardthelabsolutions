@@ -54,7 +54,7 @@ const MASTER_TOKEN=loadOrCreateMasterToken();
 const TOKENS={admin:(process.env.BRIDGE_ADMIN_TOKEN||MASTER_TOKEN).trim(),operator:(process.env.BRIDGE_OPERATOR_TOKEN||'').trim(),viewer:(process.env.BRIDGE_VIEWER_TOKEN||'').trim()};
 const ROLE_RANK={viewer:1,operator:2,admin:3};
 function tokenFromReq(req){const u=new URL(req.url,'http://farm.local');return String(req.headers['x-bridge-token']||u.searchParams.get('bt')||'');}
-function roleForToken(token){if(TOKENS.admin&&safeEq(token,TOKENS.admin))return'admin';if(TOKENS.operator&&safeEq(token,TOKENS.operator))return'operator';if(TOKENS.viewer&&safeEq(token,TOKENS.viewer))return'viewer';return'';}
+function roleForToken(token){if(TOKENS.admin&&safeEq(token,TOKENS.admin))return'admin';if(TOKENS.operator&&safeEq(token,TOKENS.operator))return'operator';if(TOKENS.viewer&&safeEq(token,TOKENS.viewer))return'viewer';const shared=globalThis.__TLS_FARM_ROLE_FOR_TOKEN__;if(typeof shared==='function'){try{const role=shared(token);if(role)return role;}catch(_){}}return'';}
 function cors(req,res){const origin=String(req.headers.origin||'');if(!origin||ORIGIN==='*'||origin===ORIGIN){res.setHeader('Access-Control-Allow-Origin',origin||ORIGIN);res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,DELETE,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,X-Bridge-Token,Authorization');res.setHeader('Cache-Control','no-store');}
 function json(res,status,body){if(!res.headersSent)res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(body));}
 function requireRole(req,res,min){const role=roleForToken(tokenFromReq(req));if(!role||ROLE_RANK[role]<ROLE_RANK[min]){json(res,403,{ok:false,error:'forbidden',requiredRole:min});return'';}return role;}
@@ -141,12 +141,22 @@ function compareSnapshot(current,baseline){
   if(String(current.moonrakerVersion||'')!==String(baseline.moonrakerVersion||''))reasons.push('versión Moonraker cambió');
   return{state:reasons.length?'drift':'clean',reasons,changes};
 }
-function publicMachine(id){
+function displayMachineName(reg,fallback,id){
+  const base=String(reg?.nombre||reg?.name||fallback||id||'');
+  const num=reg?.numG??reg?.num;
+  return num!==undefined&&num!==null&&String(num)!==''&&!/#\\s*\\d+/.test(base)?base+' #'+num:base;
+}
+function publicMachine(id,reg=null){
   const current=store.current[id]||null,baseline=store.baselines[id]||null,cmp=compareSnapshot(current,baseline);
-  return{machineId:id,name:current?.name||baseline?.name||id,ip:current?.ip||baseline?.ip||'',state:cmp.state,reasons:cmp.reasons,changes:cmp.changes,current:current?{scannedAt:current.scannedAt,status:current.status,klipperVersion:current.klipperVersion,moonrakerVersion:current.moonrakerVersion,configHash:current.configHash,fileCount:current.fileCount,error:current.error}:null,baseline:baseline?{approvedAt:baseline.approvedAt,klipperVersion:baseline.klipperVersion,moonrakerVersion:baseline.moonrakerVersion,configHash:baseline.configHash,fileCount:baseline.fileCount}:null};
+  const fallback=current?.name||baseline?.name||id;
+  return{machineId:id,name:displayMachineName(reg,fallback,id),ip:reg?.ip||current?.ip||baseline?.ip||'',state:cmp.state,reasons:cmp.reasons,changes:cmp.changes,current:current?{scannedAt:current.scannedAt,status:current.status,klipperVersion:current.klipperVersion,moonrakerVersion:current.moonrakerVersion,configHash:current.configHash,fileCount:current.fileCount,error:current.error}:null,baseline:baseline?{approvedAt:baseline.approvedAt,klipperVersion:baseline.klipperVersion,moonrakerVersion:baseline.moonrakerVersion,configHash:baseline.configHash,fileCount:baseline.fileCount}:null};
 }
 function snapshot(){
-  const ids=new Set([...Object.keys(store.current),...Object.keys(store.baselines)]),machines=[...ids].map(publicMachine).sort((a,b)=>a.name.localeCompare(b.name));
+  const registered=registryMachines(),byId=Object.fromEntries(registered.map(m=>[String(m.id),m]));
+  // Si hay registry durable, sólo muestra identidades activas. Los snapshots viejos
+  // permanecen en drift.json como historial técnico, pero ya no inflan el panel.
+  const ids=registered.length?new Set(registered.map(m=>String(m.id))):new Set([...Object.keys(store.current),...Object.keys(store.baselines)]);
+  const machines=[...ids].map(id=>publicMachine(id,byId[id]||null)).sort((a,b)=>a.name.localeCompare(b.name));
   const counts={clean:0,drift:0,unbaselined:0,unknown:0};machines.forEach(m=>{counts[m.state]=(counts[m.state]||0)+1;});
   return{updatedAt:store.updatedAt,summary:{...counts,total:machines.length},machines};
 }
