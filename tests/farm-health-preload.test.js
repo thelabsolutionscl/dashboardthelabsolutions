@@ -58,6 +58,12 @@ test('snapshot de seguridad stale sólo alerta cuando puede haber trabajo desate
   assert.equal(long.some(a=>a.id==='safety:snapshot-stale'),true);
 });
 
+test('el preload acepta roles de sesiones efímeras emitidas por el controller',()=>{
+  globalThis.__TLS_FARM_ROLE_FOR_TOKEN__=token=>token==='health-session-test'?'operator':'';
+  try{assert.equal(health.roleForToken('health-session-test'),'operator');}
+  finally{delete globalThis.__TLS_FARM_ROLE_FOR_TOKEN__;}
+});
+
 test('roles del preload respetan token admin',()=>{
   assert.equal(health.roleForToken('health-admin-test'),'admin');
   assert.equal(health.roleForToken('malo'),'');
