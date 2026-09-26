@@ -58,3 +58,14 @@ test('lead-worker no posee key Anthropic y entra al mismo proxy protegido',()=>{
   assert.doesNotMatch(LEAD,/ANTHROPIC_API_KEY/);
   assert.match(DEPLOY_WORKERS,/AI_PROXY_KEY:\s*\$\{\{ secrets\.PROXY_KEY \}\}/);
 });
+
+test('OpenAI comparte el hard cap y no funciona como proxy genérico',()=>{
+  assert.match(PROXY,/OPENAI_ALLOWED_CHAT_MODELS = new Set\(\['gpt-4o-mini'\]\)/);
+  assert.match(PROXY,/OPENAI_ALLOWED_IMAGE_MODELS = new Set\(\['gpt-image-1'\]\)/);
+  assert.match(PROXY,/OPENAI_MAX_CHAT_OUTPUT_TOKENS = 300/);
+  assert.match(PROXY,/imageGenerationLow: 0\.03/);
+  assert.match(PROXY,/imageEditLow: 0\.08/);
+  assert.match(PROXY,/OpenAI endpoint not allowed/);
+  assert.match(PROXY,/reserveAiBudget\(env, \{ model: 'openai-budget-envelope' \}/);
+  assert.match(PROXY,/finalizeEstimatedAiBudget/);
+});
