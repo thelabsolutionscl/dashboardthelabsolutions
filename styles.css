@@ -131,9 +131,10 @@ body.kiosk{padding-left:0!important;}
 .mobile-nav-header img{height:18px;mix-blend-mode:screen;}
 .mobile-nav-close{background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:4px;line-height:1;}
 .mobile-nav-body{flex:1;overflow-y:auto;padding:10px 0;}
-.mobile-tab-btn{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:12px 18px;cursor:pointer;transition:all 0.15s;text-align:left;border-left:3px solid transparent;}
+.mobile-tab-btn{position:relative;display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:12px 54px 12px 18px;cursor:pointer;transition:all 0.15s;text-align:left;border-left:3px solid transparent;}
 .mobile-tab-btn:hover{background:var(--surface2);color:var(--text);}
 .mobile-tab-btn.active{background:rgba(0,212,204,0.08);color:var(--accent);border-left-color:var(--accent);font-weight:700;}
+.mobile-tab-btn>.dock-badge{top:50%;right:18px;transform:translateY(-50%);}
 /* ── Nav drag/reorder ── */
 .dock-btn.nav-dragging{opacity:0.3;filter:brightness(0.6);}
 .dock-btn.nav-drag-over::before{content:'';position:absolute;top:-3px;left:4px;right:4px;height:2px;background:var(--accent);border-radius:2px;box-shadow:0 0 6px var(--accent);}
