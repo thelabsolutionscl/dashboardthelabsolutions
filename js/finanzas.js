@@ -2212,13 +2212,6 @@ if(typeof document!=='undefined'){
 
 // ── SII / DTE ─────────────────────────────────────────────────
 function getSIICfg(){try{const c=JSON.parse(localStorage.getItem('sii_cfg')||'{}');return{webhookUrl:c.webhookUrl||_DEFAULTS.SII_WORKER_URL,rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};}catch(e){return{webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL};}}
-function siiHeaders(extra={}){
-  const h={...(extra||{})};
-  const raw=(typeof _DEFAULTS!=='undefined'&&_DEFAULTS.SII_WORKER_KEY)||'';
-  const key=raw&&!String(raw).startsWith('%%')?String(raw).trim():'';
-  if(key) h['X-Worker-Key']=key;
-  return h;
-}
 async function uploadCAF(tipo,input){
   const file=input.files[0];if(!file)return;
   const cfg=getSIICfg();
