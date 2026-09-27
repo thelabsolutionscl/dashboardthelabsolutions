@@ -21,8 +21,8 @@ cerrados.
 - CSV exporta los mismos `_neto/_iva/_total/_exento` normalizados que la tabla y
   neutraliza fórmulas de hoja de cálculo;
 - Facturas y ventas manuales escapan texto antes de insertarlo con `innerHTML`;
-- se agregó el `siiHeaders()` que faltaba para enviar `X-Worker-Key`;
-- el health SII consume la respuesta pública actual sin esperar que exponga el RUT;
+- se confirmó que `siiHeaders()` ya existía como helper global y que CAF/folios/DTE lo reutilizan;
+- el health SII se corrigió para consumir la respuesta pública actual sin esperar que exponga el RUT;
 - materializar un DTE usa upsert local por tipo+folio para no duplicar Facturas.
 
 **P0/P1 todavía abiertos:** secretos privilegiados en frontend estático, persistencia
