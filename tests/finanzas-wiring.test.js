@@ -209,13 +209,59 @@ test('aging separa por vencer de mora y vencimiento usa fecha real de emisión',
   assert.match(venc,/r&&r\.fecha/);
   assert.match(venc,/emision/);
 });
-test.todo('nvGuardar, nvEliminar y nvLimpiarTodas deben persistir de forma await/rollback y no llamar una función saveFinVentasAirtable ausente');
+test('ventas manuales no llaman persistencia inexistente y fallan sin corromper la UI',()=>{
+  const setLocal=functionBlock(FIN,'_finSetLocalVentas');
+  const save=functionBlock(FIN,'nvGuardar');
+  const del=functionBlock(FIN,'nvEliminar');
+  const clear=functionBlock(FIN,'nvLimpiarTodas');
+  assert.doesNotMatch(FIN,/saveFinVentasAirtable\s*\(/,'no debe quedar una llamada a una función inexistente');
+  assert.match(setLocal,/try\s*\{/);
+  assert.match(setLocal,/localStorage\.setItem\(['"]fin_ventas['"]/);
+  assert.match(setLocal,/return false/);
+  assert.match(save,/if\(!_finSetLocalVentas\(existing\)\) return/);
+  assert.match(del,/if\(!_finSetLocalVentas\(data\)\) return/);
+  assert.match(clear,/if\(!_finSetLocalVentas\(\[\]\)\) return/);
+});
+test.todo('ventas manuales deben migrar desde almacenamiento local a una fuente compartida, auditable y con rollback remoto');
 test.todo('Libro Diario, presupuesto, caja, pagos programados y préstamos deben persistirse en una fuente compartida y no solo localStorage');
 test.todo('_ivaMes debe ser una proyección no tributaria basada en DTE emitidos/compras documentadas, no en pedidos creados y gastos genéricos');
 test.todo('emitirDTE debe validar el cuerpo de respuesta, ser idempotente y reconciliar DTE externos que no lograron guardarse en Airtable');
 test.todo('uploadCAF y emisión SII deben usar autenticación servidor a servidor; el CAF no debe quedar protegido solo por una URL pública');
-test.todo('c3dCalcPieza debe distribuir extras flat una sola vez y no multiplicar extras unitarios dos veces por la cantidad');
-test.todo('nvRecalcular debe calcular utilidad sobre venta neta y documentar si el costo está neto o bruto');
+test('c3dCalcPieza distribuye extras del trabajo una sola vez',()=>{
+  const c3d=functionBlock(FIN,'c3dCalcPieza');
+  assert.match(c3d,/costoExtrasTrabajo/);
+  assert.match(c3d,/e\.costo\*extQty/);
+  assert.match(c3d,/\(costoMatUnit\+costoMaqUnit\)\*qty\+costoExtrasTrabajo/);
+  assert.doesNotMatch(c3d,/costoExtrasTrabajo\s*\)\s*\*\s*qty/);
+  assert.match(c3d,/costoUnit=Math\.round\(costoTotal\/qty\)/);
+});
+test('nvRecalcular calcula utilidad sobre venta neta, sin tratar IVA como margen',()=>{
+  const calc=functionBlock(FIN,'nvRecalcular');
+  assert.match(calc,/clp\(neto-costo\)/);
+  assert.doesNotMatch(calc,/clp\(tot-costo\)/);
+});
+test('exportarFinanzasCSV usa los mismos montos normalizados que Facturas y neutraliza fórmulas',()=>{
+  const csv=functionBlock(FIN,'exportarFinanzasCSV');
+  const cell=functionBlock(FIN,'_finCsvCell');
+  assert.match(csv,/r\._neto!=null/);
+  assert.match(csv,/r\._iva!=null/);
+  assert.match(csv,/r\._total!=null/);
+  assert.match(csv,/r\._exento/);
+  assert.match(cell,/\[=\+\\-@\]/);
+  assert.match(cell,/replace\(\/"\/g,['"]""['"]\)/);
+});
+
+test('tablas financieras escapan texto procedente de Airtable y ventas manuales',()=>{
+  const fact=functionBlock(FIN,'finRenderFacturasPage');
+  const manual=functionBlock(FIN,'finRenderNuevaLista');
+  for(const field of ['safeNombre','safeEmpresa','safeItem','safeCanal']) {
+    assert.match(fact,new RegExp(field),`facturas debe escapar ${field}`);
+    assert.match(manual,new RegExp(field),`ventas manuales debe escapar ${field}`);
+  }
+  assert.match(fact,/escapeHtml\(String\(r\.fact/);
+  assert.match(fact,/escapeHtml\(String\(r\.cat/);
+});
+
 test.todo('finDrawCanalDonut y finRenderTopClientes deben usar una base monetaria consistente, sin mezclar pagos brutos con ventas netas');
 test.todo('presExportCSV debe exportar el ejecutado real usado en pantalla cuando no hay ajuste manual');
 test.todo('FIN_PRESTAMOS debe ordenarse por fecha real y corregir/validar la entrada 13/03/25 dentro de la secuencia 2026');
