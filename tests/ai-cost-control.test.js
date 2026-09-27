@@ -13,7 +13,7 @@ const LEAD_CONF=fs.readFileSync('lead-worker/wrangler.toml','utf8');
 const DEPLOY_WORKERS=fs.readFileSync('.github/workflows/deploy-worker.yml','utf8');
 
 test('AGENTES muestra control de gasto sin ejecutar modelos',()=>{
-  assert.match(SRC,/Presupuesto y tokens de agentes/);
+  assert.match(SRC,/Presupuesto IA y consumo por agente/);
   assert.match(SRC,/anthropic\/usage/);
   assert.match(SRC,/claude_usage_v1/);
   assert.doesNotMatch(SRC,/\/anthropic\/v1\/messages/,'el panel nunca debe generar una llamada pagada');
