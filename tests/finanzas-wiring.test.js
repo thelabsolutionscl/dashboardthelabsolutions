@@ -43,7 +43,7 @@ test('las funciones críticas de Finanzas existen sin redefiniciones',()=>{
   [
     'finSwitchTab','finGetAllFacturas','finFacturasFromAirtable','finVentasMerged','finInitKPIs','finRenderFacturas','finRenderCobrar','finVenc','finRenderAging',
     'finRenderFlujoCaja','finPlanCobranzaIA','ldGuardar','ldGetAll','renderPresupuesto','_presEjecutadoReal','renderBreakEven','_puntoEquilibrio',
-    'emitirDTE','uploadCAF','checkFolios','siiHeaders','nvGuardar','nvEliminar','_finSetLocalVentas','c3dCalcPieza','c3dAplicarACot','qcalcCompute','qcalcApply',
+    'emitirDTE','uploadCAF','checkFolios','nvGuardar','nvEliminar','_finSetLocalVentas','c3dCalcPieza','c3dAplicarACot','qcalcCompute','qcalcApply',
     '_ventasVendedor','renderComisiones','_ivaMes','renderIvaMensual','renderArqueo','guardarArqueo'
   ].forEach(assertUniqueFunction);
 });
@@ -137,14 +137,13 @@ test('el flujo DTE valida receptor y monto antes de emitir y materializa una Fac
   assert.match(body,/loadAllDataSilent\s*\(/);
 });
 
-test('SII envía la clave del Worker en todas las rutas privadas y el health refleja auth',()=>{
-  const headers=functionBlock(FIN,'siiHeaders');
+test('SII reutiliza un único helper global de autenticación y el health refleja auth',()=>{
   const caf=functionBlock(FIN,'uploadCAF');
   const folios=functionBlock(FIN,'checkFolios');
   const dte=functionBlock(FIN,'emitirDTE');
   const health=functionBlock(FIN,'testSIIWorker');
-  assert.match(headers,/SII_WORKER_KEY/);
-  assert.match(headers,/X-Worker-Key/);
+  assert.equal(count(/function\s+siiHeaders\s*\(/g,SOURCE),1,'siiHeaders debe tener una sola definición global');
+  assert.match(SOURCE,/function\s+siiHeaders\s*\([\s\S]*X-Worker-Key/);
   assert.match(caf,/siiHeaders\s*\(/);
   assert.match(folios,/siiHeaders\s*\(/);
   assert.match(dte,/siiHeaders\s*\(/);
