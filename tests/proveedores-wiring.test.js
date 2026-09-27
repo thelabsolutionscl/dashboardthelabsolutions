@@ -182,20 +182,22 @@ test('diagnóstico: pedidos y OC deben enlazar proveedores por record ID', (t) =
   }
 });
 
-test('diagnóstico: el reintento de creación no debe duplicar registros', (t) => {
+test('crear proveedor solo reintenta tras rechazo de esquema confirmado', () => {
   const create = fn('createProveedor');
-  if (/airtableWrite\(['"]Proveedores['"]\s*,\s*['"]POST['"][\s\S]*catch[\s\S]*airtableWrite\(['"]Proveedores['"]\s*,\s*['"]POST['"]/.test(create)) {
-    t.todo('CRÍTICO: un timeout puede crear dos proveedores; usar idempotency key/upsert por RUT/email y reintentar solo rechazos de esquema confirmados');
-    return;
-  }
+  const guard = fn('_pvCanRetryCreateAfterError');
+  assert.match(guard, /422|UNKNOWN_FIELD_NAME/, 'el fallback exige una respuesta de esquema confirmada');
+  assert.match(guard, /timeout|network|failed to fetch|5\\d\\d/i, 'timeout/red/5xx deben quedar fuera del retry');
+  assert.match(create, /if\(!_pvCanRetryCreateAfterError\(e\)\) throw e;/);
+  assert.match(create, /try\{await refresh\(\);\}[\s\S]*catch\(refreshErr\)/, 'un fallo de refresh no puede volver a ejecutar POST');
+  assert.match(create, /finally\{[\s\S]*btn\.disabled=false/, 'el botón siempre se restaura');
 });
 
-test('diagnóstico: editar debe permitir limpiar campos', (t) => {
+test('editar permite limpiar campos vacíos en Airtable', () => {
   const edit = fn('saveEditProveedor');
-  if (/Object\.keys\(fields\)[\s\S]*delete fields\[k\]/.test(edit)) {
-    t.todo('borrar teléfono, notas, web o condiciones no persiste porque los valores vacíos se eliminan del PATCH');
-    return;
-  }
+  assert.doesNotMatch(edit, /Object\.keys\(fields\)[\s\S]*delete fields\[k\]/, 'no debe quitar vacíos del PATCH');
+  assert.match(edit, /'Teléfono':document\.getElementById\('epTelefono'\)\.value\|\|''/);
+  assert.match(edit, /'Notas':document\.getElementById\('epNotas'\)\.value\|\|''/);
+  assert.match(edit, /await airtableWrite\('Proveedores','PATCH',id,fields\)/);
 });
 
 test('diagnóstico: categorías no deben depender de localStorage', (t) => {
