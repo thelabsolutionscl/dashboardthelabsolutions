@@ -1,7 +1,7 @@
 name: Deploy Cloudflare Workers
 
-# Despliega automáticamente el lead-worker (Cloudflare Worker) cuando cambia su
-# código en main, para que producción no quede nunca desincronizada del repo.
+# Despliega automáticamente los Workers críticos cuando cambia su código en
+# main, para que producción no quede desincronizada del repo.
 # También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
 #
 # Requisito de una sola vez: crear el secreto CLOUDFLARE_API_TOKEN en
@@ -15,6 +15,7 @@ on:
     paths:
       - 'lead-worker/**'
       - 'airtable-proxy/**'
+      - 'sii-worker/**'
       - '.github/workflows/deploy-worker.yml'
   workflow_dispatch: {}
 
@@ -22,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-lead-worker
+  group: deploy-cloudflare-workers
   cancel-in-progress: true
 
 jobs:
@@ -83,3 +84,35 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: airtable-proxy
+
+
+  deploy-sii:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verificar credenciales críticas SII
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SII_KEY: ${{ secrets.SII_WORKER_KEY }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN no configurado — no se puede desplegar el Worker SII."
+            exit 1
+          fi
+          if [ -z "$SII_KEY" ]; then
+            echo "::error::SII_WORKER_KEY no configurado — se bloquea el deploy para no dejar el emisor tributario sin autenticación."
+            exit 1
+          fi
+
+      - name: Desplegar Worker SII cerrado
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: sii-worker
+          secrets: |
+            WORKER_KEY
+        env:
+          WORKER_KEY: ${{ secrets.SII_WORKER_KEY }}
