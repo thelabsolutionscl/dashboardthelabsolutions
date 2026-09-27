@@ -403,6 +403,11 @@ async function saveProvMotivo(id){
     toast('Error: '+e.message,'error');
   }
 }
+function _pvCanRetryCreateAfterError(err){
+  const msg=String(err?.message||err||'');
+  if(/timeout|timed out|network|failed to fetch|abort|\b5\d\d\b/i.test(msg)) return false;
+  return /\b422\b|UNKNOWN_FIELD_NAME|INVALID_MULTIPLE_CHOICE_OPTIONS|INVALID_VALUE_FOR_COLUMN|INVALID_RECORDS|INVALID_REQUEST_UNKNOWN/i.test(msg);
+}
 async function createProveedor(){
   const nombre=(document.getElementById('np-nombre')?.value||'').trim();
   const categorias=getPvSelectedCats('np');
@@ -437,25 +442,38 @@ async function createProveedor(){
   };
   Object.keys(fields).forEach(k=>{if(fields[k]===null||fields[k]==='') delete fields[k];});
   const refresh=async()=>{const pvRes=await airtableFetch('Proveedores',500);state.proveedores=pvRes.records||[];renderProveedores();};
+  const safeFields={'Nombre':fields['Nombre'],'Categoría':fields['Categoría']};
+  if(fields['Contacto']) safeFields['Contacto']=fields['Contacto'];
+  if(fields['Estado']) safeFields['Estado']=fields['Estado'];
+  let fallbackFields=[];
   try{
-    await airtableWrite('Proveedores','POST',null,fields);
-    toast(`✓ "${nombre}" creado`,'success');clearForm('proveedor');switchTab('proveedores');await refresh();
-  }catch(e){
-    // Retry with only safe fields to isolate if it's a field-name mismatch vs permissions
-    const safeFields={'Nombre':fields['Nombre'],'Categoría':fields['Categoría']};
-    if(fields['Contacto']) safeFields['Contacto']=fields['Contacto'];
-    if(fields['Estado']) safeFields['Estado']=fields['Estado'];
     try{
+      await airtableWrite('Proveedores','POST',null,fields);
+    }catch(e){
+      // Solo reintentar si Airtable CONFIRMÓ un rechazo de esquema (HTTP 422).
+      // Timeout/red/5xx son ambiguos: el primer POST pudo haberse creado y repetirlo
+      // generaría un proveedor duplicado.
+      if(!_pvCanRetryCreateAfterError(e)) throw e;
+      fallbackFields=Object.keys(fields).filter(k=>!(k in safeFields));
       await airtableWrite('Proveedores','POST',null,safeFields);
-      toast(`✓ "${nombre}" creado (algunos campos no existen aún en Airtable: ${Object.keys(fields).filter(k=>!safeFields[k]).join(', ')})`,'success');
-      clearForm('proveedor');switchTab('proveedores');await refresh();
-    }catch(e2){
-      const isPermission=e2.message.includes('403')||e2.message.includes('permissions')||e2.message.includes('model not found');
-      if(isPermission) toast(`🔑 Error escritura (${e2.message}) — abre el 🔑 modal → "Probar escritura" para diagnosticar`,'error');
-      else toast(`Error: ${e2.message}`,'error');
     }
+
+    toast(fallbackFields.length
+      ? `✓ "${nombre}" creado (campos omitidos por esquema: ${fallbackFields.join(', ')})`
+      : `✓ "${nombre}" creado`,'success');
+    clearForm('proveedor');switchTab('proveedores');
+    try{await refresh();}
+    catch(refreshErr){
+      toast('Proveedor creado, pero no se pudo refrescar la lista: '+refreshErr.message,'warning');
+    }
+  }catch(e){
+    const msg=String(e?.message||e||'');
+    const isPermission=/403|permissions|model not found|not authorized/i.test(msg);
+    if(isPermission) toast(`🔑 Error escritura (${msg}) — abre el 🔑 modal → "Probar escritura" para diagnosticar`,'error');
+    else toast(`Error: ${msg}`,'error');
+  }finally{
+    btn.disabled=false;btn.textContent='✚ Crear Proveedor';
   }
-  btn.disabled=false;btn.textContent='✚ Crear Proveedor';
 }
 function openEditProveedor(id){
   const p=state.proveedores.find(x=>x.id===id);if(!p) return;
@@ -514,7 +532,7 @@ async function saveEditProveedor(){
     'Productos':document.getElementById('epProductos').value||'',
     'Notas':document.getElementById('epNotas').value||''
   };
-  Object.keys(fields).forEach(k=>{if(fields[k]===null||fields[k]==='') delete fields[k];});
+  // En edición los vacíos son intencionales: Airtable usa ''/null para limpiar campos.
   try{
     await airtableWrite('Proveedores','PATCH',id,fields);
     const p=state.proveedores.find(x=>x.id===id);
