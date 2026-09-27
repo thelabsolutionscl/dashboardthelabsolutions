@@ -1,6 +1,6 @@
 /* js/ai-cost-control.js
- * Panel de control de gasto Anthropic en AGENTES.
- * Lee el presupuesto diario del proxy (KV) y el usage local de la sesión.
+ * Panel de control de gasto IA en AGENTES.
+ * Lee el presupuesto global server-side compartido por Claude/OpenAI y el usage Claude local de la sesión.
  * No ejecuta modelos ni agrega consumo de tokens.
  */
 (function(root,factory){
@@ -126,7 +126,7 @@ function paintGlobalAlert(server,error){
   el.className=lvl.level;
   el.style.display='flex';
   el.innerHTML=`<span class="ai-cost-global-pct">${lvl.pct}%</span><span>${lvl.label} CONSUMO IA · ${money(used)} de ${money(budget)} · quedan ${money(remaining)}</span>`;
-  el.title='Alerta global del presupuesto Anthropic protegido por el Proxy Worker';
+  el.title='Alerta global del presupuesto IA protegido por el Proxy Worker';
 }
 
 function paint(server,error){
@@ -141,7 +141,7 @@ function paint(server,error){
   card.innerHTML=`
     <div class="ai-cost-head">
       <div><div class="ai-cost-eyebrow">CONTROL DE CONSUMO IA</div>
-      <div class="ai-cost-title">Presupuesto y tokens de agentes</div>
+      <div class="ai-cost-title">Presupuesto IA y consumo por agente</div>
       <div class="ai-cost-sub">${server?.configured?'Control server-side activo · día Chile':error?'Proxy sin lectura de presupuesto: '+esc(error):'Sin proxy: mostrando sólo esta sesión'}</div></div>
       <button class="ai-cost-refresh" type="button" onclick="AICostControl.refresh(true)">↻ Actualizar</button>
     </div>
@@ -150,7 +150,7 @@ function paint(server,error){
       <div class="ai-cost-kpi good"><span>Presupuesto diario</span><strong>${server?money(budget):'—'}</strong></div>
       <div class="ai-cost-kpi ${cls}"><span>Disponible</span><strong>${server?money(remaining):'—'}</strong></div>
       <div class="ai-cost-kpi"><span>Solicitudes hoy</span><strong>${server?Number(server.requests||0).toLocaleString('es-CL'):local.requests}</strong></div>
-      <div class="ai-cost-kpi"><span>Tokens esta sesión</span><strong>${Math.round(local.tokens).toLocaleString('es-CL')}</strong></div>
+      <div class="ai-cost-kpi"><span>Tokens Claude · sesión</span><strong>${Math.round(local.tokens).toLocaleString('es-CL')}</strong></div>
     </div>
     ${server?`<div class="ai-cost-bar" title="${pct}% del presupuesto diario"><i style="width:${pct}%"></i></div>`:''}
     <div class="ai-cost-sources">${sourceHtml(server,local)||'<span class="ai-cost-chip">Sin consumo registrado todavía</span>'}</div>

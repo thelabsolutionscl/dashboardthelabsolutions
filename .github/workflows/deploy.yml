@@ -31,7 +31,6 @@ jobs:
       - name: Inject secrets into index.html
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}       # el secret se llama AIRTABLE
-          OPENAI_KEY: ${{ secrets.OPENAI }}             # el secret se llama OPENAI
           GOOGLE_CLIENT_ID: ${{ secrets.DRIVE }}        # el secret se llama DRIVE
           SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
           SII_WORKER_KEY: ${{ secrets.SII_WORKER_KEY }}   # clave del worker tributario (ver sii-worker)
@@ -49,15 +48,14 @@ jobs:
           PORTAL_ADMIN_KEY: ${{ secrets.PORTAL_ADMIN_KEY }}
         run: |
           # MODO PROXY (ver SECURITY.md): con PROXY_URL+PROXY_KEY configurados,
-          # Airtable y Claude salen por Workers. Anthropic NO tiene placeholder,
-          # fallback ni API key local en el HTML.
+          # Airtable, Claude y OpenAI salen por Workers. Ninguna API key de IA
+          # se inyecta en el HTML estático.
           if [ -n "${PROXY_URL}" ] && [ -n "${PROXY_KEY}" ]; then
             echo "Modo proxy activo: Claude sólo usa airtable-proxy."
           else
             sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
             echo "::warning::PROXY_URL/PROXY_KEY faltan — Claude quedará bloqueado."
           fi
-          sed -i "s|%%OPENAI_KEY%%|${OPENAI_KEY}|g" index.html
           sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
           # Portal del cliente: lo sirve el lead-worker. El dashboard solo necesita
           # su URL y PORTAL_ADMIN_KEY para pedir el link firmado de cada cliente.

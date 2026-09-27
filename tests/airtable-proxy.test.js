@@ -160,6 +160,65 @@ test('el proxy no expone otros endpoints de Anthropic', async () => {
   } finally { spy.restore(); }
 });
 
+// ── OpenAI: allowlist + presupuesto ─────────────────────────────────────
+
+test('OpenAI no expone endpoints genéricos aunque origen y clave sean válidos', async () => {
+  const spy=espiarFetch();
+  try{
+    const r=await worker.fetch(req('/openai/v1/models',{method:'POST',origin:OK_ORIGIN,key:ENV.APP_KEY}),ENV,undefined);
+    assert.equal(r.status,404);
+    assert.equal(spy.calls.length,0);
+  }finally{spy.restore();}
+});
+
+test('OpenAI bloquea modelos de chat fuera de política', async () => {
+  const spy=espiarFetch();
+  try{
+    const body=JSON.stringify({model:'gpt-5.6-sol',max_tokens:100,messages:[]});
+    const r=await worker.fetch(req('/openai/v1/chat/completions',{method:'POST',origin:OK_ORIGIN,key:ENV.APP_KEY,body}),ENV,undefined);
+    assert.equal(r.status,403);
+    assert.equal(spy.calls.length,0);
+  }finally{spy.restore();}
+});
+
+test('OpenAI bloquea generaciones que suban calidad o cantidad', async () => {
+  const spy=espiarFetch();
+  try{
+    const body=JSON.stringify({model:'gpt-image-1',prompt:'x',n:1,size:'1024x1024',quality:'high'});
+    const r=await worker.fetch(req('/openai/v1/images/generations',{method:'POST',origin:OK_ORIGIN,key:ENV.APP_KEY,body}),ENV,undefined);
+    assert.equal(r.status,400);
+    assert.equal(spy.calls.length,0);
+  }finally{spy.restore();}
+});
+
+test('OpenAI permitido consume del mismo presupuesto global de IA', async () => {
+  _kv.clear();
+  const spy=espiarFetch(200,JSON.stringify({data:[{b64_json:'AA=='}]}));
+  try{
+    const body=JSON.stringify({model:'gpt-image-1',prompt:'x',n:1,size:'1024x1024',quality:'low'});
+    const r=await worker.fetch(req('/openai/v1/images/generations',{
+      method:'POST',origin:OK_ORIGIN,key:ENV.APP_KEY,contentType:'application/json',body,aiAgent:'ficha'
+    }),ENV,undefined);
+    assert.equal(r.status,200);
+    assert.equal(spy.calls.length,1);
+    assert.match(spy.calls[0].url,/api\.openai\.com\/v1\/images\/generations/);
+    const date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago'}).format(new Date());
+    const row=JSON.parse(await MEM_KV.get('anthropic-budget:'+date));
+    assert.equal(row.by_source.ficha.requests,1);
+    assert.equal(row.spent_usd,0.03);
+    assert.equal(row.reserved_usd,0);
+  }finally{spy.restore();_kv.clear();}
+});
+
+test('OpenAI usage consulta el ledger sin ejecutar un modelo', async () => {
+  const spy=espiarFetch();
+  try{
+    const r=await worker.fetch(req('/openai/usage',{origin:OK_ORIGIN,key:ENV.APP_KEY}),ENV,undefined);
+    assert.equal(r.status,200);
+    assert.equal(spy.calls.length,0);
+  }finally{spy.restore();}
+});
+
 // ── Chequeos que ya existían y deben seguir en pie ──────────────────────
 
 test('Origin de otro sitio se rechaza aunque la clave sea válida', async () => {

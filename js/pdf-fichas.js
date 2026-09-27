@@ -393,50 +393,43 @@ function openFichaPropModal(cotId){
 
 function closeFichaPropModal(){document.getElementById('fichaPropModal').style.display='none';}
 function openIAConfigModal(){
-  const o=document.getElementById('iaOpenaiKey');if(o) o.value=localStorage.getItem('fp_openai_key')||'';
+  // Migración de seguridad: OpenAI ya no acepta claves en el navegador.
+  localStorage.removeItem('fp_openai_key');
+  const o=document.getElementById('iaOpenaiKey');
+  if(o){o.value='';o.disabled=true;o.placeholder='Gestionada por Proxy Worker';}
   document.getElementById('iaConfigModal').style.display='flex';
 }
 function closeIAConfigModal(){document.getElementById('iaConfigModal').style.display='none';}
 async function testIAKey(){
-  const key=(document.getElementById('iaOpenaiKey')?.value||'').trim();
   const res=document.getElementById('iaTestResult');
   if(!res) return;
-  if(!key){res.style.display='block';res.style.background='#fff3cd';res.style.color='#856404';res.innerHTML='⚠️ Ingresa una API key primero.';return;}
-  res.style.display='block';res.style.background='var(--surface2)';res.style.color='var(--text2)';res.innerHTML='🔄 Probando key...';
-  const lines=[];
-  // Test 1: chat completions (GPT-4o mini — barato)
+  localStorage.removeItem('fp_openai_key');
+  const px=(typeof _proxyCfg==='function')?_proxyCfg():null;
+  res.style.display='block';
+  if(!px){
+    res.style.background='#f8d7da';res.style.color='#721c24';
+    res.textContent='❌ Configura Proxy Worker. OpenAI está bloqueado sin proxy.';
+    return;
+  }
+  res.style.background='var(--surface2)';res.style.color='var(--text2)';
+  res.textContent='🔄 Verificando proxy sin generar contenido...';
   try{
-    const r=await _openaiFetch('/v1/chat/completions',{directKey:key,
-      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:5,messages:[{role:'user',content:'hi'}]})
-    });
-    if(r.ok) lines.push('✅ GPT-4o-mini: OK');
-    else{const e=await r.json();lines.push('❌ GPT-4o-mini: '+(e.error?.message||r.status));}
-  }catch(e){lines.push('❌ GPT-4o-mini: '+e.message);}
-  // Test 2: único modelo de imágenes autorizado por la política de costo
-  res.innerHTML='🔄 Probando generación de imágenes...';
-  try{
-    const r=await _openaiFetch('/v1/images/generations',{directKey:key,
-      body:JSON.stringify({model:'gpt-image-1',prompt:'a red apple on white background',n:1,size:'1024x1024',quality:'low'})
-    });
-    if(r.ok){lines.push('✅ gpt-image-1: OK — imágenes funcionan');}
-    else{const e=await r.json();lines.push('❌ gpt-image-1: '+(e.error?.message||r.status));}
-  }catch(e){lines.push('❌ Imágenes: '+e.message);}
-  const allOk=lines.every(l=>l.startsWith('✅'));
-  res.style.background=allOk?'#d4edda':'#f8d7da';
-  res.style.color=allOk?'#155724':'#721c24';
-  res.innerHTML=lines.join('<br>');
+    const r=await _openaiFetch('/usage',{method:'GET'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    res.style.background='#d4edda';res.style.color='#155724';
+    res.textContent='✅ OpenAI protegido por Proxy Worker · presupuesto IA activo'+
+      (Number.isFinite(Number(d.remaining_usd))?' · saldo interno US$'+Number(d.remaining_usd).toFixed(2):'');
+  }catch(e){
+    res.style.background='#f8d7da';res.style.color='#721c24';
+    res.textContent='❌ Proxy OpenAI no disponible: '+e.message;
+  }
 }
 function saveIAConfig(){
-  const o=document.getElementById('iaOpenaiKey');
-  const v=(o?.value||'').trim();
-  // Vaciar el campo y guardar tiene que BORRAR la key. Antes el if la dejaba
-  // intacta —seguía guardada y seguía usándose— y encima avisaba "Sin API key
-  // configurada": quien la quitaba de un computador prestado se iba creyendo
-  // que ya no estaba.
-  if(v) localStorage.setItem('fp_openai_key',v);
-  else localStorage.removeItem('fp_openai_key');
+  // Compatibilidad con el botón existente: nunca guarda secretos en localStorage.
+  localStorage.removeItem('fp_openai_key');
   closeIAConfigModal();
-  toast(v?'OpenAI key guardada ✓':'API key borrada de este navegador','success');
+  toast('OpenAI se gestiona únicamente por Proxy Worker','info');
 }
 
 // Reduce un data URL de imagen para que su base64 quepa HOLGADO en una celda de
@@ -493,20 +486,15 @@ function handleFPRawImage(evt,idx){
   reader.readAsDataURL(file);
 }
 
-// Llama a OpenAI vía el proxy Worker si está configurado (la key vive server-side y
-// evita el CORS del navegador: OpenAI NO habilita CORS directo, a diferencia de
-// Anthropic). Sin proxy, cae a la llamada directa con la key local (solo dev).
-// isForm=true para multipart (images/edits): el FormData fija su propio Content-Type.
-function _openaiFetch(path,{method='POST',body=null,isForm=false,directKey=null}={}){
+// OpenAI sale exclusivamente por el Worker: ninguna API key vive en el navegador.
+function _openaiFetch(path,{method='POST',body=null,isForm=false}={}){
   const px=(typeof _proxyCfg==='function')?_proxyCfg():null;
-  const headers=px?{'X-App-Key':px.key}:{'Authorization':'Bearer '+(directKey||getOpenAIKey())};
+  if(!px?.url||!px?.key) return Promise.reject(new Error('Proxy IA requerido'));
+  const headers={'X-App-Key':px.key,'X-AI-Agent':'openai-dashboard'};
   if(!isForm) headers['Content-Type']='application/json';
-  const url=(px?px.url+'/openai':'https://api.openai.com')+path;
-  return fetch(url,{method,headers,body});
+  return fetch(px.url.replace(/\/$/,'')+'/openai'+path,{method,headers,body});
 }
-// ¿Hay CÓMO llamar a OpenAI? (proxy configurado O key local) — las compuertas IA
-// deben preguntar esto, no si hay una key en el navegador.
-function _openaiAvailable(){return !!(getOpenAIKey()||(typeof _proxyCfg==='function'&&_proxyCfg()));}
+function _openaiAvailable(){return !!(typeof _proxyCfg==='function'&&_proxyCfg());}
 
 // Config de las 3 vistas: el prompt es EDITABLE por muestra (si una sale mal se
 // puede afinar y regenerar solo esa). El default está aquí; el editado se guarda
@@ -620,8 +608,11 @@ async function generarVistasIA(idx, onlyCampo){
     const toPngBlob=async(dataUrl)=>{
       const img=new Image();img.src=dataUrl;
       await new Promise(r=>{img.onload=r;img.onerror=r;});
-      const c=document.createElement('canvas');c.width=img.naturalWidth||512;c.height=img.naturalHeight||512;
-      c.getContext('2d').drawImage(img,0,0);
+      const iw=img.naturalWidth||512,ih=img.naturalHeight||512;
+      const scale=Math.min(1,1024/Math.max(iw,ih));
+      const c=document.createElement('canvas');
+      c.width=Math.max(1,Math.round(iw*scale));c.height=Math.max(1,Math.round(ih*scale));
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
       return await new Promise(r=>c.toBlob(r,'image/png'));
     };
     const removeBackground=_fpRemoveBg;
@@ -650,6 +641,7 @@ async function generarVistasIA(idx, onlyCampo){
             fd.append('model','gpt-image-1');
             fd.append('n','1');
             fd.append('size','1024x1024');
+            fd.append('quality','low');
             const r=await _openaiFetch('/v1/images/edits',{body:fd,isForm:true});
             if(r.ok){
               const d=await r.json();

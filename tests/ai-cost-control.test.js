@@ -13,7 +13,7 @@ const LEAD_CONF=fs.readFileSync('lead-worker/wrangler.toml','utf8');
 const DEPLOY_WORKERS=fs.readFileSync('.github/workflows/deploy-worker.yml','utf8');
 
 test('AGENTES muestra control de gasto sin ejecutar modelos',()=>{
-  assert.match(SRC,/Presupuesto y tokens de agentes/);
+  assert.match(SRC,/Presupuesto IA y consumo por agente/);
   assert.match(SRC,/anthropic\/usage/);
   assert.match(SRC,/claude_usage_v1/);
   assert.doesNotMatch(SRC,/\/anthropic\/v1\/messages/,'el panel nunca debe generar una llamada pagada');
@@ -57,4 +57,15 @@ test('lead-worker no posee key Anthropic y entra al mismo proxy protegido',()=>{
   assert.doesNotMatch(LEAD,/https:\/\/api\.anthropic\.com/);
   assert.doesNotMatch(LEAD,/ANTHROPIC_API_KEY/);
   assert.match(DEPLOY_WORKERS,/AI_PROXY_KEY:\s*\$\{\{ secrets\.PROXY_KEY \}\}/);
+});
+
+test('OpenAI comparte el hard cap y no funciona como proxy genérico',()=>{
+  assert.match(PROXY,/OPENAI_ALLOWED_CHAT_MODELS = new Set\(\['gpt-4o-mini'\]\)/);
+  assert.match(PROXY,/OPENAI_ALLOWED_IMAGE_MODELS = new Set\(\['gpt-image-1'\]\)/);
+  assert.match(PROXY,/OPENAI_MAX_CHAT_OUTPUT_TOKENS = 300/);
+  assert.match(PROXY,/imageGenerationLow: 0\.03/);
+  assert.match(PROXY,/imageEditLow: 0\.08/);
+  assert.match(PROXY,/OpenAI endpoint not allowed/);
+  assert.match(PROXY,/reserveAiBudget\(env, \{ model: 'openai-budget-envelope' \}/);
+  assert.match(PROXY,/finalizeEstimatedAiBudget/);
 });

@@ -1805,7 +1805,8 @@ function populateMobileConfig(){
   const at=document.getElementById('mbAirtableToken');
   if(at){const v=lsGet('airtable_token');at.value=v?'••••••••'+v.slice(-4):'';at.placeholder=v?'(guardado)':'patXXX...';at.onfocus=()=>{if(at.value.startsWith('••')){at.value='';at.placeholder='patXXX...';}};at.onblur=()=>{if(!at.value){const vv=lsGet('airtable_token');at.value=vv?'••••••••'+vv.slice(-4):'';at.placeholder=vv?'(guardado)':'patXXX...';}}}
   const oi=document.getElementById('mbOpenaiKey');
-  if(oi){const v=localStorage.getItem('fp_openai_key');oi.value='';oi.placeholder=v?'(guardada — escribe nueva para cambiar)':'sk-proj-...';}
+  localStorage.removeItem('fp_openai_key');
+  if(oi){oi.value='';oi.placeholder='Gestionada por Proxy Worker';oi.disabled=true;}
   const gc=document.getElementById('mbGoogleClientId');
   if(gc){const v=localStorage.getItem('google_drive_client_id')||'';gc.value=v?v.slice(0,12)+'…'+v.slice(-8):'';}
   const ds=document.getElementById('mbDriveStatus');
@@ -1834,20 +1835,16 @@ function clearMbAirtableToken(){
   toast('Token Airtable eliminado','info');
 }
 function saveMbOpenaiKey(){
-  const inp=document.getElementById('mbOpenaiKey');const v=(inp?.value||'').trim();
-  if(!v){
-    const existing=localStorage.getItem('fp_openai_key');
-    return toast(existing?'OpenAI Key ya está configurada':'Ingresa una API Key válida', existing?'info':'error');
-  }
-  if(v.startsWith('•'))return toast('Ingresa la key completa','error');
-  localStorage.setItem('fp_openai_key',v);
-  if(inp){inp.value='';inp.placeholder='(guardada — escribe nueva para cambiar)';}
-  toast('OpenAI Key guardada ✓','success');
+  localStorage.removeItem('fp_openai_key');
+  const inp=document.getElementById('mbOpenaiKey');
+  if(inp){inp.value='';inp.placeholder='Gestionada por Proxy Worker';inp.disabled=true;}
+  toast('OpenAI se gestiona únicamente por Proxy Worker','info');
 }
 function clearMbOpenaiKey(){
   localStorage.removeItem('fp_openai_key');
-  const inp=document.getElementById('mbOpenaiKey');if(inp){inp.value='';inp.placeholder='sk-proj-...';}
-  toast('OpenAI Key eliminada','info');
+  const inp=document.getElementById('mbOpenaiKey');
+  if(inp){inp.value='';inp.placeholder='Gestionada por Proxy Worker';inp.disabled=true;}
+  toast('No hay una OpenAI Key guardada en este navegador','info');
 }
 function saveMbGoogleClientId(){
   const inp=document.getElementById('mbGoogleClientId');const v=(inp?.value||'').trim();

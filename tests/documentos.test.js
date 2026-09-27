@@ -141,11 +141,14 @@ test('la fecha del documento se toma en hora de Chile', () => {
 
 // ── Llaves y trabajo que cuesta plata ───────────────────────────────────
 
-test('la API key de OpenAI se puede borrar de verdad', () => {
-  const fn = bloque('function saveIAConfig(');
-  assert.match(fn, /else localStorage\.removeItem\('fp_openai_key'\)/, 'vaciar el campo debe borrarla');
-  assert.doesNotMatch(fn, /toast\([^)]*Sin API key configurada/, 'no puede decir que no hay key mientras la guarda');
-  assert.match(fn, /borrada de este navegador/, 'y debe decir exactamente qué pasó');
+test('OpenAI nunca usa ni persiste una API key en el navegador', () => {
+  const fetchFn = bloque('function _openaiFetch(');
+  const saveFn = bloque('function saveIAConfig(');
+  assert.match(fetchFn, /Proxy IA requerido/, 'sin proxy debe fallar cerrado');
+  assert.match(fetchFn, /X-App-Key/, 'la salida debe ir por el proxy');
+  assert.doesNotMatch(fetchFn, /Authorization|api\.openai\.com|getOpenAIKey|directKey/, 'no debe existir fallback directo');
+  assert.match(saveFn, /localStorage\.removeItem\('fp_openai_key'\)/, 'debe purgar claves legadas');
+  assert.doesNotMatch(saveFn, /localStorage\.setItem\('fp_openai_key'/, 'nunca vuelve a guardar una key');
 });
 
 test('si las imágenes de la propuesta no caben, se avisa', () => {
