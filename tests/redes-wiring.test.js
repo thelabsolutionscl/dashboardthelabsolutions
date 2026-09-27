@@ -217,12 +217,13 @@ test('la suite lógica existente sigue siendo parte del contrato', () => {
   assert.match(DOCS, /Social_Metrics/);
 });
 
-test('diagnóstico: el webhook debe usar un secreto exclusivo', (t) => {
+test('el webhook social exige un secreto exclusivo', () => {
   const social = fn('handleSocial', WORKER);
-  if (/PUBLIC_LEAD_KEY/.test(social)) {
-    t.todo('CRÍTICO: eliminar fallback a PUBLIC_LEAD_KEY; SOCIAL_WEBHOOK_KEY debe ser obligatorio y rotatable');
-    return;
-  }
+  assert.match(social, /X-Social-Webhook-Key/);
+  assert.match(social, /SOCIAL_WEBHOOK_KEY/);
+  assert.doesNotMatch(social, /X-Public-Lead-Key|env\.PUBLIC_LEAD_KEY/);
+  assert.match(social, /Webhook social no configurado/);
+  assert.match(social, /503/);
 });
 
 test('diagnóstico: el webhook debe deduplicar eventos externos', (t) => {
