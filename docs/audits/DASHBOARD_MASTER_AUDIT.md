@@ -140,10 +140,10 @@ La utilidad ahora es venta neta menos costo. El IVA deja de inflar el margen.
 **Estado:** CORREGIDO EN ESTA RAMA.  
 La exportación reutiliza los montos normalizados de Airtable y neutraliza celdas que podrían convertirse en fórmulas al abrir el CSV.
 
-### P0-FIN-005 — Integración SII llamaba una función de headers inexistente
+### P1-FIN-005 — Health SII esperaba un RUT que el Worker ya no expone
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
-CAF, folios y emisión DTE ya comparten `siiHeaders()` y envían `X-Worker-Key`. El health se ajustó a la respuesta pública sin RUT. Sigue abierto P0-SEC-007: esa credencial maestra aún no debe terminar en un frontend estático.
+El helper global `siiHeaders()` ya existía y CAF/folios/DTE lo reutilizan. El bug real estaba en la pantalla de diagnóstico: esperaba `rut_emisor`, campo retirado del health público por seguridad. Ahora usa `rut_emisor_configurado`, `cert_loaded` y `auth` sin exigir datos sensibles. Sigue abierto P0-SEC-007: la credencial maestra del Worker no debe terminar en un frontend estático.
 
 ### P1-FIN-006 — DTE repetido podía duplicar la fila Facturas
 
