@@ -26,7 +26,7 @@ Cada bloque debe revisar cinco capas cuando apliquen:
 | 03 | Datos, Airtable, caché y sincronización | P0 | PENDIENTE | snapshots parciales, paginación, dedupe, rollback, conflictos |
 | 04 | Cotizaciones | P1 | PENDIENTE | cálculo, estados, aprobación→pedido, documentos, edición |
 | 05 | Pedidos | P1 | PENDIENTE | lifecycle, pagos, despacho, tarjetas/tabla, integridad de relaciones |
-| 06 | Finanzas y Facturas | P0/P1 | PENDIENTE | revenue, saldos, IVA, DTE, caja, idempotencia |
+| 06 | Finanzas y Facturas | P0/P1 | EN AUDITORÍA | revenue, saldos, IVA, DTE, caja, idempotencia |
 | 07 | Clientes / CRM / Recompras | P1 | PENDIENTE | ownership, historial, cadencias, acciones y trazabilidad |
 | 08 | Máquinas / granja / cámaras | P0/P1 | PENDIENTE | bridge, auth, telemetría, estados, recuperación, falsas alarmas |
 | 09 | Cola / trabajos / producción 3D | P1 | PENDIENTE | lifecycle durable, asignación, reimpresión, concurrencia |
@@ -119,6 +119,36 @@ La firma HMAC de confirmación/baja requiere `NEWSLETTER_SECRET` exclusivo. Se e
 El deploy todavía puede publicar credenciales con privilegios reales como `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` y la clave de acceso del Worker SII. Quitarlas sin una sesión server-side rompería funciones actuales; por eso no se considera resuelto con ofuscación o localStorage.
 
 **Objetivo final:** autenticar al usuario en backend y emitir permisos/tokens efímeros por capacidad. Ningún secreto maestro de portal, impresoras o tributación debe formar parte del HTML/JS público.
+
+### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`nvGuardar`, `nvEliminar` y `nvLimpiarTodas` llamaban una función inexistente después de mutar localStorage. El dato podía quedar guardado mientras la UI abortaba con una excepción. Ahora usan una única escritura local protegida y el mensaje declara que el dato queda en ese navegador. La migración a persistencia compartida sigue abierta.
+
+### P1-FIN-002 — Costeo 3D multiplicaba extras varias veces
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+Extras flat se aplican una vez por trabajo; extras unitarios se multiplican una sola vez por la cantidad indicada. El costo total se calcula antes de distribuir costo/venta unitaria.
+
+### P1-FIN-003 — Utilidad manual incluía IVA como ganancia
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La utilidad ahora es venta neta menos costo. El IVA deja de inflar el margen.
+
+### P1-FIN-004 — CSV no coincidía con la tabla de Facturas
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La exportación reutiliza los montos normalizados de Airtable y neutraliza celdas que podrían convertirse en fórmulas al abrir el CSV.
+
+### P0-FIN-005 — Integración SII llamaba una función de headers inexistente
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+CAF, folios y emisión DTE ya comparten `siiHeaders()` y envían `X-Worker-Key`. El health se ajustó a la respuesta pública sin RUT. Sigue abierto P0-SEC-007: esa credencial maestra aún no debe terminar en un frontend estático.
+
+### P1-FIN-006 — DTE repetido podía duplicar la fila Facturas
+
+**Estado:** MITIGADO EN ESTA RAMA.  
+Al materializar la respuesta del Worker se busca tipo DTE + folio en el estado autoritativo y se hace PATCH si existe. Falta idempotencia server-side y conciliación durable para cerrar completamente el riesgo.
 
 ## Backlog confirmado por pruebas TODO existentes
 
