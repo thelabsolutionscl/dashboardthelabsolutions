@@ -1537,10 +1537,15 @@ async function handleNewsletterUnsubscribe(request, env) {
 
 /* ── Newsletter: helpers de token HMAC (sin estado), página HTML y email ── */
 function nlSecret(env) {
-  return env.NEWSLETTER_SECRET || env.PUBLIC_LEAD_KEY || env.AIRTABLE_TOKEN || "thelab-newsletter";
+  // NEWSLETTER_SECRET firma confirmaciones y bajas. Nunca reutilizar una clave
+  // pública, Airtable ni un literal conocido: si falta, el flujo debe fallar
+  // cerrado en vez de producir tokens forjables.
+  return String(env.NEWSLETTER_SECRET || "").trim();
 }
 async function nlSign(env, purpose, email) {
-  return await hmacB64u(nlSecret(env), `${purpose}:${String(email).trim().toLowerCase()}`);
+  const secret = nlSecret(env);
+  if (!secret) throw new Error("NEWSLETTER_SECRET no configurado");
+  return await hmacB64u(secret, `${purpose}:${String(email).trim().toLowerCase()}`);
 }
 // HMAC-SHA256 en base64url — firma los tokens sin estado (newsletter y portal).
 async function hmacB64u(secret, msg) {
@@ -1664,12 +1669,14 @@ async function handleLinkedin(request, env, ctx, cors) {
  * marcada como lead, además crea Cliente + Agent_Queue (mismo pipeline).
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleSocial(request, env, ctx, cors) {
-  const provided =
-    request.headers.get("X-Social-Webhook-Key") ||
-    request.headers.get("X-Public-Lead-Key") ||
-    "";
-  const expected = env.SOCIAL_WEBHOOK_KEY || env.PUBLIC_LEAD_KEY;
-  if (!expected || !timingSafeEqual(provided, expected)) {
+  // El webhook puede crear interacciones, Clientes y tareas. PUBLIC_LEAD_KEY
+  // viaja en la web pública y jamás puede autorizar estas mutaciones.
+  const provided = request.headers.get("X-Social-Webhook-Key") || "";
+  const expected = String(env.SOCIAL_WEBHOOK_KEY || "").trim();
+  if (!expected) {
+    return json({ ok: false, error: "Webhook social no configurado" }, 503, cors);
+  }
+  if (!timingSafeEqual(provided, expected)) {
     return json({ ok: false, error: "No autorizado" }, 401, cors);
   }
 
