@@ -2212,6 +2212,13 @@ if(typeof document!=='undefined'){
 
 // ── SII / DTE ─────────────────────────────────────────────────
 function getSIICfg(){try{const c=JSON.parse(localStorage.getItem('sii_cfg')||'{}');return{webhookUrl:c.webhookUrl||_DEFAULTS.SII_WORKER_URL,rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};}catch(e){return{webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL};}}
+function siiHeaders(extra={}){
+  const h={...(extra||{})};
+  const raw=(typeof _DEFAULTS!=='undefined'&&_DEFAULTS.SII_WORKER_KEY)||'';
+  const key=raw&&!String(raw).startsWith('%%')?String(raw).trim():'';
+  if(key) h['X-Worker-Key']=key;
+  return h;
+}
 async function uploadCAF(tipo,input){
   const file=input.files[0];if(!file)return;
   const cfg=getSIICfg();
@@ -2340,12 +2347,18 @@ async function emitirDTE(){
         if(typeof ensureFacturasTable==='function') await ensureFacturasTable();
         const cid=p?(Array.isArray(p.fields['Cliente'])?p.fields['Cliente'][0]:p.fields['Cliente']):'';
         const venc=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
-        await airtableWrite('Facturas','POST',null,{
+        const facturaFields={
           'Cliente':razonSocial,'Cliente ID':cid||'','Tipo DTE':tipoDTE,'Folio':Number(dteNum)||0,
           'Fecha':hoyCL(),'Neto':neto,'IVA':iva,'Total':neto+iva,
           'Track ID':_trackId,'Estado SII':_recibido?(resp.estado_sii||resp.estado||'Enviado'):'Sin confirmar',
           'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
+        };
+        const facturaExistente=(state.facturas||[]).find(r=>{
+          const ff=r?.fields||{};
+          return String(ff['Tipo DTE']||'')===String(tipoDTE)&&String(ff['Folio']||'')===String(dteNum);
         });
+        if(facturaExistente?.id) await airtableWrite('Facturas','PATCH',facturaExistente.id,facturaFields);
+        else await airtableWrite('Facturas','POST',null,facturaFields);
         try{await loadAllDataSilent();}catch(e){}
       }catch(e){console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);}
       renderPedidos();
@@ -2401,8 +2414,12 @@ async function testSIIWorker(){
     const r=await fetch(url+'/health',{method:'GET'});
     const d=await r.json();
     if(r.ok){
-      if(sb){sb.style.color='var(--accent)';sb.innerHTML='✅ Worker activo — env: <strong>'+escapeHtml(d.sii_env||'?')+'</strong> | RUT: '+escapeHtml(d.rut_emisor||'?')+'<br>'+(d.cert_loaded?'🔐 Certificado cargado':'⚠ Certificado no cargado');}
-      toast('✅ Worker SII conectado','success');
+      const authOk=d.auth==='on';
+      const rutOk=d.rut_emisor_configurado===true;
+      if(sb){sb.style.color=authOk?'var(--accent)':'var(--danger)';sb.innerHTML='✅ Worker activo — env: <strong>'+escapeHtml(d.sii_env||'?')+'</strong>'
+        +' · RUT '+(rutOk?'configurado':'faltante')+' · '+(d.cert_loaded?'🔐 Certificado cargado':'⚠ Certificado no cargado')
+        +' · '+(authOk?'🔒 autenticación activa':'⛔ autenticación inactiva');}
+      toast(authOk?'✅ Worker SII conectado y protegido':'⚠ Worker SII responde, pero su autenticación no está activa',authOk?'success':'error');
     }else{
       if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ Error '+r.status+': '+JSON.stringify(d);}
       toast('Error: '+r.status,'error');
