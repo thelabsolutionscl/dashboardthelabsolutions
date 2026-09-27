@@ -2,6 +2,34 @@
 
 Fecha: 2026-08-02
 
+## Actualización 2026-09-26
+
+Esta auditoría se reabrió dentro del plan maestro. Parte de los hallazgos de agosto ya
+no describe el código actual.
+
+**Cerrado antes de esta pasada:** revenue del año en curso desde Facturas/Airtable,
+deduplicación del histórico por folio, vencimiento real y pagos parciales/estados
+cerrados.
+
+**Corregido en esta pasada:**
+
+- ventas manuales ya no llaman `saveFinVentasAirtable()` inexistente ni dejan el
+  flujo visual cortado; se declara explícitamente que siguen siendo locales;
+- utilidad manual usa venta neta menos costo, sin contar IVA como margen;
+- calculadora 3D distribuye extras flat una vez por trabajo y extras unitarios una
+  sola vez por cantidad;
+- CSV exporta los mismos `_neto/_iva/_total/_exento` normalizados que la tabla y
+  neutraliza fórmulas de hoja de cálculo;
+- Facturas y ventas manuales escapan texto antes de insertarlo con `innerHTML`;
+- se agregó el `siiHeaders()` que faltaba para enviar `X-Worker-Key`;
+- el health SII consume la respuesta pública actual sin esperar que exponga el RUT;
+- materializar un DTE usa upsert local por tipo+folio para no duplicar Facturas.
+
+**P0/P1 todavía abiertos:** secretos privilegiados en frontend estático, persistencia
+compartida de datos financieros hoy locales, IVA documental, idempotencia y
+conciliación DTE server-side, base monetaria uniforme en todos los reportes y
+semántica contable explícita del punto de equilibrio.
+
 ## Alcance
 
 Se revisó la sección `finanzas` y sus vínculos con:
