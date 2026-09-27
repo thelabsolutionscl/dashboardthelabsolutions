@@ -43,7 +43,7 @@ test('las funciones críticas de Finanzas existen sin redefiniciones',()=>{
   [
     'finSwitchTab','finGetAllFacturas','finFacturasFromAirtable','finVentasMerged','finInitKPIs','finRenderFacturas','finRenderCobrar','finVenc','finRenderAging',
     'finRenderFlujoCaja','finPlanCobranzaIA','ldGuardar','ldGetAll','renderPresupuesto','_presEjecutadoReal','renderBreakEven','_puntoEquilibrio',
-    'emitirDTE','uploadCAF','checkFolios','nvGuardar','nvEliminar','c3dCalcPieza','c3dAplicarACot','qcalcCompute','qcalcApply',
+    'emitirDTE','uploadCAF','checkFolios','siiHeaders','nvGuardar','nvEliminar','_finSetLocalVentas','c3dCalcPieza','c3dAplicarACot','qcalcCompute','qcalcApply',
     '_ventasVendedor','renderComisiones','_ivaMes','renderIvaMensual','renderArqueo','guardarArqueo'
   ].forEach(assertUniqueFunction);
 });
@@ -129,10 +129,28 @@ test('el flujo DTE valida receptor y monto antes de emitir y materializa una Fac
   assert.match(body,/totales/);
   assert.match(body,/await\s+fetch\s*\(/);
   assert.match(body,/airtableWrite\(\s*['"]Pedidos['"]\s*,\s*['"]PATCH['"]/);
+  assert.match(body,/facturaExistente/,'debe detectar tipo DTE + folio ya materializado');
+  assert.match(body,/airtableWrite\(\s*['"]Facturas['"]\s*,\s*['"]PATCH['"]/);
   assert.match(body,/airtableWrite\(\s*['"]Facturas['"]\s*,\s*['"]POST['"]/);
   assert.match(body,/Estado Pago/);
   assert.match(body,/Fecha Vencimiento/);
   assert.match(body,/loadAllDataSilent\s*\(/);
+});
+
+test('SII envía la clave del Worker en todas las rutas privadas y el health refleja auth',()=>{
+  const headers=functionBlock(FIN,'siiHeaders');
+  const caf=functionBlock(FIN,'uploadCAF');
+  const folios=functionBlock(FIN,'checkFolios');
+  const dte=functionBlock(FIN,'emitirDTE');
+  const health=functionBlock(FIN,'testSIIWorker');
+  assert.match(headers,/SII_WORKER_KEY/);
+  assert.match(headers,/X-Worker-Key/);
+  assert.match(caf,/siiHeaders\s*\(/);
+  assert.match(folios,/siiHeaders\s*\(/);
+  assert.match(dte,/siiHeaders\s*\(/);
+  assert.match(health,/rut_emisor_configurado/);
+  assert.match(health,/d\.auth\s*===\s*['"]on['"]/);
+  assert.doesNotMatch(health,/d\.rut_emisor\b/,'health público no debe esperar el RUT real');
 });
 
 test('las calculadoras trasladan costo y venta neta a la cotización',()=>{
@@ -225,7 +243,7 @@ test('ventas manuales no llaman persistencia inexistente y fallan sin corromper 
 test.todo('ventas manuales deben migrar desde almacenamiento local a una fuente compartida, auditable y con rollback remoto');
 test.todo('Libro Diario, presupuesto, caja, pagos programados y préstamos deben persistirse en una fuente compartida y no solo localStorage');
 test.todo('_ivaMes debe ser una proyección no tributaria basada en DTE emitidos/compras documentadas, no en pedidos creados y gastos genéricos');
-test.todo('emitirDTE debe validar el cuerpo de respuesta, ser idempotente y reconciliar DTE externos que no lograron guardarse en Airtable');
+test.todo('emitirDTE necesita idempotencia server-side por referencia y cola de reconciliación para DTE externos que no lograron guardarse en Airtable');
 test.todo('uploadCAF y emisión SII deben usar autenticación servidor a servidor; el CAF no debe quedar protegido solo por una URL pública');
 test('c3dCalcPieza distribuye extras del trabajo una sola vez',()=>{
   const c3d=functionBlock(FIN,'c3dCalcPieza');
