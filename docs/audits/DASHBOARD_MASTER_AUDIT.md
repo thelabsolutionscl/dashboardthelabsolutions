@@ -33,7 +33,7 @@ Cada bloque debe revisar cinco capas cuando apliquen:
 | 10 | Slicer / simulación / Visual AI | P1/P2 | PENDIENTE | fiabilidad, permisos, iframe, costo IA, errores |
 | 11 | Calendario / Drive / documentos | P1 | PENDIENTE | OAuth, sincronización, fechas, permisos, archivos |
 | 12 | Correo / notificaciones / WhatsApp | P0/P1 | PENDIENTE | remitentes, sanitización, tracking, rate limit, evidencia de envío |
-| 13 | Proveedores / compras / OC | P1 | PENDIENTE | lifecycle, precios, moneda/IVA, entregas, validación |
+| 13 | Proveedores / compras / OC | P1 | EN AUDITORÍA | lifecycle, precios, moneda/IVA, entregas, validación |
 | 14 | Equipo / remuneraciones | P1 | PENDIENTE | comisiones, metas, vigencia, disponibilidad, persistencia |
 | 15 | Web / SEO / Google Ads | P0/P1 | PENDIENTE | credenciales, mutaciones, rollback, métricas, secretos |
 | 16 | Redes sociales / newsletter | P1 | PENDIENTE | consentimiento, dedupe, métricas, enlaces, publicaciones |
@@ -79,6 +79,24 @@ Las pantallas de configuración purgan la clave legada y OpenAI queda administra
 
 **Estado:** CORREGIDO previamente; REQUIERE REGRESIÓN.  
 Ya existen cambios recientes para evitar cachear snapshots parciales y para reconstruir Pedidos desde Airtable. La auditoría de datos verificará que el mismo patrón se aplique a todas las tablas críticas.
+
+### P1-DATA-002 — Creación de proveedor podía duplicarse
+
+**Estado:** CORREGIDO.  
+El fallback de creación hacía un segundo POST después de cualquier error, incluso timeout o fallo posterior al alta. Ahora solo existe fallback cuando Airtable confirma un rechazo de esquema; red, timeout y 5xx no se reintentan como creación nueva. El refresco posterior está aislado de la mutación.
+
+### P1-DATA-003 — Editar proveedor no permitía borrar campos
+
+**Estado:** CORREGIDO.  
+El PATCH descartaba cadenas vacías/null y por eso teléfono, web, notas, condiciones u otros campos no podían limpiarse. En edición los valores vacíos se conservan para que Airtable pueda borrar el valor.
+
+### Riesgos abiertos en Proveedores
+
+- reemplazar relaciones por nombre por `recordId` estable;
+- numeración OC reservada de forma atómica en backend;
+- migrar precios/OC desde blobs completos a registros versionados;
+- configuración de categorías compartida en vez de localStorage;
+- trazabilidad de aprobación/rechazo con actor, fecha, evidencia e historial.
 
 ## Backlog confirmado por pruebas TODO existentes
 
