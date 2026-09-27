@@ -946,13 +946,17 @@ function finRenderNuevaLista(){
     const tot=neto+Math.round(neto*0.19);
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
     const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':'badge-gray';
+    const safeNombre=escapeHtml(String(r.nombre||'—'));
+    const safeEmpresa=escapeHtml(String(r.empresa||'—'));
+    const safeItem=escapeHtml(String(r.item||'—'));
+    const safeCanal=escapeHtml(String(r.canal||'—'));
     html+=`<tr>
-      <td>${mesNombre} ${r.year}</td>
-      <td style="font-weight:600">${r.nombre}</td>
-      <td>${r.empresa||'—'}</td>
-      <td>${r.item}</td>
+      <td>${mesNombre} ${escapeHtml(String(r.year||''))}</td>
+      <td style="font-weight:600">${safeNombre}</td>
+      <td>${safeEmpresa}</td>
+      <td>${safeItem}</td>
       <td style="color:var(--accent);font-weight:700">${clp(tot)}</td>
-      <td><span class="badge ${canalBadge}">${r.canal}</span></td>
+      <td><span class="badge ${canalBadge}">${safeCanal}</span></td>
       <td><button class="btn-mini btn-mini-red" onclick="nvEliminar(${idx})">✕</button></td>
     </tr>`;
   });
