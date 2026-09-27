@@ -80,10 +80,11 @@ id = "c148848321344f60939fa71a51d050c6"
 #   PUBLIC_LEAD_KEY         (clave compartida con la web — anti-bot básico)
 #   GOOGLE_ADS_WEBHOOK_KEY  (clave del webhook de Google Lead Form)
 #   LINKEDIN_WEBHOOK_KEY    (clave del webhook de LinkedIn vía Make/Zapier)
+#   SOCIAL_WEBHOOK_KEY      (OBLIGATORIO para /webhooks/social; nunca PUBLIC_LEAD_KEY)
 #   TURNSTILE_SECRET        (opcional — verificación Cloudflare Turnstile)
 #   AI_PROXY_KEY            (mismo valor que APP_KEY/PROXY_KEY del airtable-proxy; GitHub Actions lo sincroniza)
 #   RESEND_API_KEY          (opcional — auto-respuesta de leads + confirmación de newsletter)
-#   NEWSLETTER_SECRET       (opcional — firma tokens de confirmación/baja; si falta usa PUBLIC_LEAD_KEY)
+#   NEWSLETTER_SECRET       (OBLIGATORIO si se usa newsletter — secreto exclusivo para HMAC; sin fallback público)
 #   PORTAL_SECRET           (portal del cliente — firma los links de /portal. Ponlo:
 #                            sin él cae a NEWSLETTER_SECRET/AIRTABLE_TOKEN y rotar
 #                            ese token invalida todos los links ya enviados)

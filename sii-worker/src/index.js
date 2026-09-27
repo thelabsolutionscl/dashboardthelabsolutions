@@ -5,7 +5,7 @@ import { buildSignedEnvioDTE } from './dte-xml.js';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Worker-Key',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -29,12 +29,17 @@ export default {
     const url = new URL(request.url);
 
     // ── Autenticación ────────────────────────────────────────────────────
-    // Este worker EMITE documentos tributarios y administra folios (CAF): no
-    // debe quedar abierto. Se exige la clave en cuanto exista el secret
-    // WORKER_KEY; sin él, se sigue aceptando todo para no cortar la facturación
-    // en caliente (ver README: hay que configurarlo). /health queda libre para
-    // los monitores de uptime.
-    if (env.WORKER_KEY && url.pathname !== '/health') {
+    // Este worker EMITE documentos tributarios y administra folios (CAF).
+    // Cualquier ruta privada falla cerrada si WORKER_KEY no está configurada:
+    // una mala configuración nunca puede convertir el emisor en un endpoint
+    // público. /health queda libre para monitores y solo expone booleanos.
+    if (url.pathname !== '/health') {
+      if (!env.WORKER_KEY) {
+        return new Response(JSON.stringify({ error: 'Worker SII no configurado: falta WORKER_KEY' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...CORS },
+        });
+      }
       const key = request.headers.get('X-Worker-Key') || '';
       if (!timingSafeEqual(key, env.WORKER_KEY)) {
         return new Response(JSON.stringify({ error: 'No autorizado' }), {

@@ -162,12 +162,12 @@ test('diagnóstico: el envío directo debe crear Newsletter_Envios antes de envi
   }
 });
 
-test('diagnóstico: el secreto HMAC no debe caer a una clave pública o fija', (t) => {
+test('el secreto HMAC del newsletter es obligatorio y exclusivo', () => {
   const secret = block('function nlSecret(', 'async function nlSign', WORKER);
-  if (/PUBLIC_LEAD_KEY|thelab-newsletter|AIRTABLE_TOKEN/.test(secret)) {
-    t.todo('CRÍTICO: NEWSLETTER_SECRET debe ser obligatorio y exclusivo, sin fallback público, fijo ni reutilizado');
-    return;
-  }
+  const sign = block('async function nlSign(', '// HMAC-SHA256', WORKER);
+  assert.match(secret, /NEWSLETTER_SECRET/);
+  assert.doesNotMatch(secret, /PUBLIC_LEAD_KEY|thelab-newsletter|AIRTABLE_TOKEN/);
+  assert.match(sign, /if \(!secret\) throw new Error\(["']NEWSLETTER_SECRET no configurado["']\)/);
 });
 
 test('diagnóstico: la selección de destinatarios debe persistir junto a la campaña', (t) => {

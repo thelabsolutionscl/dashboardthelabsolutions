@@ -98,6 +98,28 @@ El PATCH descartaba cadenas vacías/null y por eso teléfono, web, notas, condic
 - configuración de categorías compartida en vez de localStorage;
 - trazabilidad de aprobación/rechazo con actor, fecha, evidencia e historial.
 
+### P0-SEC-004 — Worker SII podía quedar abierto por configuración
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+El Worker tributario emitía DTE y administraba CAF/folios, pero si `WORKER_KEY` faltaba aceptaba las rutas privadas. Ahora falla cerrado con 503 cuando falta la clave, mantiene únicamente `/health` público y CORS permite `X-Worker-Key`. El workflow de Cloudflare despliega `sii-worker` solo si existe `SII_WORKER_KEY`.
+
+### P0-SEC-005 — Webhook social aceptaba una clave pública
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`/webhooks/social` ya no acepta `PUBLIC_LEAD_KEY` ni cae a ella. `SOCIAL_WEBHOOK_KEY` es obligatorio; si falta, el endpoint responde 503 y no crea interacciones, clientes ni tareas.
+
+### P0-SEC-006 — Firma de newsletter reutilizaba secretos públicos o fijos
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La firma HMAC de confirmación/baja requiere `NEWSLETTER_SECRET` exclusivo. Se eliminaron los fallbacks a `PUBLIC_LEAD_KEY`, `AIRTABLE_TOKEN` y al literal conocido.
+
+### P0-SEC-007 — Credenciales privilegiadas aún horneadas en el frontend estático
+
+**Estado:** ABIERTO / arquitectura.  
+El deploy todavía puede publicar credenciales con privilegios reales como `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` y la clave de acceso del Worker SII. Quitarlas sin una sesión server-side rompería funciones actuales; por eso no se considera resuelto con ofuscación o localStorage.
+
+**Objetivo final:** autenticar al usuario en backend y emitir permisos/tokens efímeros por capacidad. Ningún secreto maestro de portal, impresoras o tributación debe formar parte del HTML/JS público.
+
 ## Backlog confirmado por pruebas TODO existentes
 
 La repo ya declara deuda técnica explícita que se incorpora a esta auditoría:

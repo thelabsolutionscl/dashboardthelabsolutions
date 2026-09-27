@@ -142,7 +142,11 @@ test('worker tributario cerrado con clave', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'sii-worker', 'src', 'index.js'), 'utf8');
   assert.match(src, /function timingSafeEqual/, 'la clave debe compararse en tiempo constante');
   assert.match(src, /X-Worker-Key/, 'debe leerse la clave de la cabecera');
-  assert.match(src, /status:\s*401/, 'sin clave válida debe responder 401');
+  assert.match(src, /Access-Control-Allow-Headers['"]:\s*['"][^'"]*X-Worker-Key/, 'CORS debe permitir enviar la clave desde el dashboard');
+  assert.match(src, /if \(!env\.WORKER_KEY\)/, 'sin secreto configurado debe fallar cerrado');
+  assert.match(src, /Worker SII no configurado: falta WORKER_KEY/, 'debe diagnosticar la configuración insegura');
+  assert.match(src, /status:\s*503/, 'sin WORKER_KEY no se puede emitir ni administrar CAF');
+  assert.match(src, /status:\s*401/, 'con clave incorrecta debe responder 401');
   assert.match(src, /url\.pathname\s*!==\s*'\/health'/, 'solo /health queda libre para los monitores');
   assert.doesNotMatch(src, /rut_emisor:\s*env\.RUT_EMISOR/, '/health no debe exponer el RUT del emisor');
 });
