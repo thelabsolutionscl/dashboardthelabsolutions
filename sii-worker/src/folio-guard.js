@@ -59,12 +59,21 @@ export class SiiFolioGuard {
     // Idempotencia durable por pedido y tipo de DTE (la instancia ya se separa
     // por tipo). /begin y /complete solo son invocados desde el Worker SII;
     // el navegador nunca puede llamar al Durable Object directamente.
-    const idemOp=op==='begin'||op==='complete';
+    const idemOp=op==='begin'||op==='complete'||op==='lookup';
     const pedidoId=String(body?.pedido_id||'');
     const fingerprint=String(body?.fingerprint||'');
     if(idemOp && (!/^rec[A-Za-z0-9]{5,}$/.test(pedidoId)||!/^[a-f0-9]{64}$/.test(fingerprint)))
       return reply({error:'Identificador de pedido o firma de documento inválidos'},400);
     const idemKey=idemOp?'emision:'+pedidoId:null;
+    if(op==='lookup'){
+      const current=await this.state.storage.get(idemKey);
+      if(!current)return reply({found:false});
+      if(current.fingerprint!==fingerprint)
+        return reply({error:'Ya existe una emisión para este pedido y tipo con contenido diferente; conciliar antes de emitir otra',code:'DTE_DOCUMENT_CONFLICT',folio:current.folio},409);
+      if(current.estado==='completado')
+        return reply({found:true,replayed:true,receipt:current.receipt,folio:current.folio});
+      return reply({error:'Emisión anterior no confirmada: verificar en SII antes de reintentar',code:'DTE_PENDING_RECONCILIATION',folio:current.folio},409);
+    }
     if(op==='complete'){
       const current=await this.state.storage.get(idemKey);
       if(!current||current.fingerprint!==fingerprint||current.folio!==Number(body.folio))

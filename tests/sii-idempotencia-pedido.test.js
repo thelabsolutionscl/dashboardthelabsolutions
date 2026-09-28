@@ -115,11 +115,11 @@ const end=workerSource.indexOf('// ── CAF',start);
 assert.ok(start>0&&end>start,'deben existir los helpers de emisión actuales');
 const emissionSource=workerSource.slice(start,end);
 function bootEmitter({noTrack=false,authError=false}={}){
-  const w=world();let uploads=0,tokens=0,signed=0;
+  const w=world();let uploads=0,tokens=0,signed=0,failAuth=authError;
   const deps={
     crypto:webcrypto,
     parsePFX:()=>({privateKey:{},certificate:{}}),
-    getSIIToken:async()=>{tokens++;if(authError)throw new Error('SII auth down');return 'token';},
+    getSIIToken:async()=>{tokens++;if(failAuth)throw new Error('SII auth down');return 'token';},
     buildSignedEnvioDTE:()=>{signed++;return '<EnvioDTE/>';},
     uploadDTE:async()=>{uploads++;return noTrack?{trackid:null,estado:'sin confirmación'}:{trackid:'sii-track-001',estado:'Enviado'};},
     validateEnvSecrets:()=>{},
@@ -139,7 +139,7 @@ function bootEmitter({noTrack=false,authError=false}={}){
     detalle:[{nombre:'Trofeo',cantidad:1,precio_unitario:1000}],
     totales:{neto:1000,iva:190,total:1190},observaciones:'Pedido PED-2026-041',
   };
-  return {emit,w,data,env:{},stats:()=>({uploads,tokens,signed})};
+  return {emit,w,data,env:{},setAuthError:v=>{failAuth=v;},stats:()=>({uploads,tokens,signed})};
 }
 test('el Worker recupera el mismo TrackID sin firmar ni subir el documento dos veces',async()=>{
   const x=bootEmitter();
@@ -157,6 +157,28 @@ test('el Worker recupera el mismo TrackID sin firmar ni subir el documento dos v
   assert.equal(x.stats().uploads,1);
   assert.equal(x.stats().signed,1);
   assert.equal(x.w.entries.get('last'),101);
+});
+test('un DTE ya confirmado se recupera aunque falle la autenticación SII posterior',async()=>{
+  const x=bootEmitter();
+  const initial=await (await x.emit({json:async()=>structuredClone(x.data)},x.env)).json();
+  x.setAuthError(true);
+  const recovered=await (await x.emit({json:async()=>structuredClone(x.data)},x.env)).json();
+  assert.equal(recovered.replayed,true);
+  assert.equal(recovered.trackid,initial.trackid);
+  assert.equal(recovered.dte_numero,initial.dte_numero);
+  assert.equal(x.stats().tokens,1,'no volver a consultar autenticación SII en replay');
+  assert.equal(x.stats().uploads,1,'no reenviar un documento al recuperar');
+});
+test('lookup no reserva folios y preserva estado pendiente ante reintento',async()=>{
+  const w=world();
+  const absent=await w.send('lookup',subject);
+  assert.equal(absent.found,false);
+  assert.equal(w.entries.has('last'),false);
+  await w.send('begin',subject);
+  const pending=await w.send('lookup',subject);
+  assert.equal(pending.status,409);
+  assert.equal(pending.code,'DTE_PENDING_RECONCILIATION');
+  assert.equal(w.entries.get('last'),101);
 });
 test('sin TrackID deja reserva pendiente y bloquea el siguiente intento',async()=>{
   const x=bootEmitter({noTrack:true});
