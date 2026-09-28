@@ -28,6 +28,30 @@ function spy(upstream=Response.json({trackid:'TRK123',recibido:true}, {status:20
   global.fetch=async(url,opts)=>{calls.push({url:String(url),opts});return upstream;};
   return calls;
 }
+test('Access login navigation requires signed identity and has a fixed return location',async()=>{
+  identity=null;
+  const noAuth=await worker.fetch(new Request('https://proxy.example.com/access/session'),ENV);
+  assert.equal(noAuth.status,503);
+  identity={email:'finance@example.com',role:'finance'};
+  const good=await worker.fetch(new Request('https://proxy.example.com/access/session'),ENV);
+  assert.equal(good.status,302);
+  assert.equal(good.headers.get('Location'),'https://dashboard.thelab.solutions/');
+  const bad=await worker.fetch(new Request('https://proxy.example.com/access/session?return=https://evil.example'),ENV);
+  assert.equal(bad.status,405);
+});
+test('Access session status reports only the verified identity',async()=>{
+  identity={email:'finance@example.com',role:'finance'};
+  const r=await worker.fetch(req('/access/me'),ENV);
+  assert.equal(r.status,200);
+  const body=await r.json();
+  assert.equal(body.authenticated,true);
+  assert.equal(body.role,'finance');
+  assert.equal(body.email,'finance@example.com');
+  identity=null;
+  const legacy=await worker.fetch(req('/access/me'),ENV);
+  assert.equal(legacy.status,200);
+  assert.deepEqual(await legacy.json(),{enabled:false,authenticated:false});
+});
 test('legacy APP_KEY alone cannot access SII, even if backend secret exists',async()=>{
   identity=null;const calls=spy();
   const r=await worker.fetch(req('/sii/emit','POST',{pedido_id:'recPedido123'}),ENV);
