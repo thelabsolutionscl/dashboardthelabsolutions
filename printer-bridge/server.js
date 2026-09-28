@@ -556,6 +556,8 @@ const server = http.createServer((req, res) => {
 // vivo sin sondear, eliminando las ráfagas de polling.
 server.on('upgrade', (req, clientSocket, head) => {
   const fail = () => { try { clientSocket.destroy(); } catch (e) {} };
+  const origin=String(req.headers.origin||'');
+  if(origin&&!ALLOW_ORIGINS.includes(origin))return fail();
   const qIdx = req.url.indexOf('?');
   const rawPath = qIdx === -1 ? req.url : req.url.slice(0, qIdx);
   const rawQuery = qIdx === -1 ? '' : req.url.slice(qIdx + 1);
@@ -610,11 +612,13 @@ server.listen(PORT, () => {
   console.log('─'.repeat(60));
   console.log('  The Lab Solutions — Printer Bridge');
   console.log(`  Escuchando en  : http://0.0.0.0:${PORT}`);
-  console.log(`  Token          : ${TOKEN}`);
+  // launchd/systemd persisten stdout: no dejar el secreto maestro en logs.
+  // En ejecución manual interactiva sí se muestra para el onboarding inicial.
+  console.log(`  Token          : ${process.stdout.isTTY ? TOKEN : '[oculto en logs; usa .bridge-token]'}`);
   console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
   console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
   console.log(`  Recuperación   : ${RECOVER_ENABLED ? `activa por SSH como ${SSH_USER} (${SSH_PASS ? 'contraseña' : SSH_KEY ? 'llave ' + SSH_KEY : 'llave por defecto'})` : 'APAGADA (BRIDGE_RECOVER=0)'}`);
-  console.log(`  CORS origin    : ${ALLOW_ORIGIN}`);
+  console.log(`  CORS origins   : ${ALLOW_ORIGINS.join(', ')}`);
   console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
   console.log('─'.repeat(60));
   startHeartbeat();
