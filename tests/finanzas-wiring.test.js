@@ -202,10 +202,10 @@ test('finVentasMerged usa facturas normalizadas para el año en curso y Overview
   assert.doesNotMatch(overview,/Ene–May 2026/);
   assert.match(chart,/now\.getMonth\(\)-off/);
 });
-test('finGetAllFacturas evita duplicar folios ya presentes en Airtable',()=>{
+test('finGetAllFacturas concilia por identidad DTE (año, tipo, folio)',()=>{
   const all=functionBlock(FIN,'finGetAllFacturas');
-  assert.match(all,/foliosAT/);
-  assert.match(all,/airtable/);
+  assert.match(all,/clavesAT/);
+  assert.match(all,/finClaveDocumento/);
   assert.match(all,/legacy/);
 });
 test('facturas Airtable conservan vencimiento y calculan saldo real/estados cerrados',()=>{

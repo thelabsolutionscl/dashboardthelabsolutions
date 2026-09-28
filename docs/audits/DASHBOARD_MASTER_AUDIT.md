@@ -188,6 +188,13 @@ El repositorio de GitHub es público y la workflow semanal subía `backup/*.json
 
 **Pendiente externo:** configurar un secreto aleatorio y estable `BACKUP_ENCRYPTION_KEY` en GitHub Actions, guardarlo fuera del repo, verificar una ejecución manual completa, y revisar/eliminar cualquier artefacto histórico en texto plano si existiera. No suponer que los artifacts históricos quedaron protegidos por cambiar la workflow.
 
+### P1-FIN-008 — Folio sin año/tipo ocultaba facturas legítimas
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+El agregador financiero comparaba solo `fact` (folio) para sustituir líneas históricas por DTE de Airtable. El mismo folio de otro año o de otro tipo de documento (por ejemplo factura 33 y nota de crédito 61) eliminaba ingresos o cobranzas legítimas. Se concilia por `año|tipo|folio`; los registros históricos sin tipo se interpretan como factura 33, no como cualquier otro DTE. Se conservan todos los ítems del mismo documento histórico hasta que Airtable tenga el mismo DTE real. Folios vacíos y fechas ausentes no participan en la conciliación. Si el DTE carece de fecha válida se mantiene visible, pero no se asigna ficticiamente a enero del año en curso.
+
+**Pruebas:** `tests/finanzas-dte-identidad.test.js` ejecuta las funciones financieras reales con documentos de años/tipos distintos, líneas múltiples, registros locales, fechas nulas y folios con ceros iniciales.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
