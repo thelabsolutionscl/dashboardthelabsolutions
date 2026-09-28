@@ -6,3 +6,8 @@ mail-api-config.php
 resend.key
 # Caché local de Wrangler (airtable-proxy, sii-worker, lead-worker)
 .wrangler/
+
+# Backups de CRM/restauraciones locales: contienen datos personales
+backup/
+backups-restaurados/
+*.decrypted.json

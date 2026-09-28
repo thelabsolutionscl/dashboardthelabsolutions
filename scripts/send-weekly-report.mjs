@@ -9,7 +9,11 @@ if (!apiKey || !to) {
   process.exit(0);
 }
 
+if (!fs.existsSync('backup/resumen.txt')) {
+  throw new Error('No se generó resumen del respaldo: revisar el job Backup Airtable');
+}
 const summary = fs.readFileSync('backup/resumen.txt', 'utf8').trim();
+const incomplete = !summary.startsWith('✓ RESPALDO COMPLETO');
 const date = new Date().toISOString().slice(0, 10);
 const html = '<div style="font-family:system-ui,Arial,sans-serif;line-height:1.55;white-space:pre-wrap">' +
   summary.replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])) +
@@ -25,7 +29,7 @@ const response = await fetch('https://api.resend.com/emails', {
     from,
     to: [to],
     reply_to: 'hola@thelab.solutions',
-    subject: '💾 Backup semanal CRM — ' + date,
+    subject: (incomplete ? '⚠ RESPALDO INCOMPLETO CRM — ' : '💾 Backup semanal CRM — ') + date,
     text: summary,
     html,
   }),

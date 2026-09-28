@@ -37,7 +37,9 @@ function extract(nombre) {
 const BODY = extract('getPagina') + '\n' + extract('fetchTable');
 
 // Respuesta fetch simulada.
-const ok = (records, offset) => ({ ok: true, status: 200, json: async () => ({ records, offset }) });
+const ok = (records, offset) => ({ ok: true, status: 200, json: async () => ({
+  records: records.map(r => ({ ...r, fields: r.fields || {} })), offset
+}) });
 const httpErr = (status) => ({ ok: false, status, text: async () => 'boom' });
 
 function montar(respuestas) {

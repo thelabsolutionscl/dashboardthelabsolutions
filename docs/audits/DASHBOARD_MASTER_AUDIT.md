@@ -41,7 +41,7 @@ Cada bloque debe revisar cinco capas cuando apliquen:
 | 18 | Navegación / UI / responsive | P2 | PENDIENTE | alineación, modales, densidad, consistencia TLS, móvil |
 | 19 | Accesibilidad | P2 | PENDIENTE | teclado, focus, contraste, roles, lectores |
 | 20 | Rendimiento / PWA / caché | P1/P2 | PENDIENTE | carga inicial, SW, stale data, polling, memoria |
-| 21 | CI/CD / backups / observabilidad | P0/P1 | PENDIENTE | tests, deploy, rollback, backups, alertas, recovery |
+| 21 | CI/CD / backups / observabilidad | P0/P1 | EN AUDITORÍA | tests, deploy, rollback, backups, alertas, recovery |
 
 ## Hallazgos confirmados al iniciar
 
@@ -175,6 +175,18 @@ Aunque el proxy estaba limitado a la base TLS, reenviaba `PATCH` y `DELETE` de m
 `/seo-fetch` validaba el primer hostname (thelab.solutions) pero usaba `redirect:follow` en el Worker. Si una URL del sitio redirigía fuera del dominio, el backend la seguía sin revalidar destino, abriendo una ruta de SSRF y lecturas no acotadas. Ahora se ejecutan hasta cuatro solicitudes con `redirect:manual`, se validan todos los destinos (HTTPS, host exacto, sin credenciales ni puertos no estándar), se bloquean destinos externos/internos y se rechaza cualquier cuerpo mayor de 2 MiB incluso sin `Content-Length`.
 
 **Regresión:** `tests/seo-proxy-ssrf.test.js` cubre redirecciones externas y a rangos privados, loop, respuesta pequeña legítima, cabecera grande y respuesta fragmentada grande.
+
+### P0-BACKUP-001 — Respaldo semanal no abarcaba toda la base y fallaba abierto
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+El script semanal tenía una lista fija de 11 tablas y guardaba un JSON aunque algunas fallaran, si al menos otra devolvía registros. Ahora descubre las tablas existentes a través de la API de metadata de Airtable y recorre cada página con validación estructural y de `offset`. Si falla el esquema, ejecuta un fallback histórico etiquetado **INCOMPLETO**; si falta cualquiera de las tablas críticas o cualquier lectura falla, guarda un rescate cifrado si hay datos, genera un resumen de incidencias y marca el workflow con fallo. Los artefactos de recuperaciones parciales nunca se presentan como copias completas.
+
+### P0-BACKUP-002 — Respaldo CRM en texto plano como artifact de repositorio público
+
+**Estado:** CONTENIDO EN CÓDIGO; PENDIENTE DE CONFIGURAR SECRETO.  
+El repositorio de GitHub es público y la workflow semanal subía `backup/*.json` sin cifrado. Los artefactos de repositorios públicos son accesibles a personas con lectura del repositorio; los archivos contienen datos sensibles de clientes. Ahora se requiere `BACKUP_ENCRYPTION_KEY` exclusivo, con 24+ caracteres, antes de leer/escribir la copia; cada backup se cifra en memoria con AES-256-GCM, clave scrypt, sal y nonce aleatorios. Solo se suben `backup/*.enc.json`, el resumen no se adjunta al artifact. Sin secret el job falla cerrado y solo deja resumen de bloqueo sin datos personales. Se incluye `scripts/decrypt-backup.mjs` para restauración privada local.
+
+**Pendiente externo:** configurar un secreto aleatorio y estable `BACKUP_ENCRYPTION_KEY` en GitHub Actions, guardarlo fuera del repo, verificar una ejecución manual completa, y revisar/eliminar cualquier artefacto histórico en texto plano si existiera. No suponer que los artifacts históricos quedaron protegidos por cambiar la workflow.
 
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
