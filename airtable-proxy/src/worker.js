@@ -46,6 +46,81 @@ const CORS_BASE = {
   'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,X-AI-Agent,anthropic-version,x-api-key',
   'Vary': 'Origin',
 };
+// Solo el bootstrap de esquemas que realmente usa TLS. Una APP_KEY visible
+// no debe poder borrar, renombrar ni inventar tablas/campos administrativos.
+// Al introducir otro campo legítimo, revisar esta lista en código y sus pruebas.
+const SCHEMA_BOOTSTRAP_TABLES = new Set(['Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Facturas','Inventario']);
+const SCHEMA_BOOTSTRAP_FIELDS = Object.freeze({
+  "cam": ["singleLineText"],
+  "Cliente": ["singleLineText"],
+  "Cliente ID": ["singleLineText"],
+  "color": ["singleLineText"],
+  "Consumo materiales": ["multilineText"],
+  "Costo mano de obra (CLP)": ["currency"],
+  "Costo material real (CLP)": ["currency"],
+  "Costo real total (CLP)": ["currency"],
+  "desc": ["singleLineText"],
+  "Detalle JSON": ["multilineText"],
+  "estado": ["singleLineText"],
+  "Estado Pago": ["singleLineText"],
+  "Estado SII": ["singleLineText"],
+  "Exento": ["number"],
+  "fecha": ["date"],
+  "Fecha": ["date"],
+  "Fecha de entrega": ["date"],
+  "Fecha límite cotización": ["date"],
+  "Fecha Vencimiento": ["date"],
+  "Ficha Propuesta": ["multilineText"],
+  "Ficha Tecnica": ["multilineText"],
+  "Folio": ["number"],
+  "Forma de pago": ["singleSelect"],
+  "Historial fechas calendario": ["multilineText"],
+  "hora_fin": ["singleLineText"],
+  "hora_inicio": ["singleLineText"],
+  "Horas máquina reales": ["number"],
+  "id": ["singleLineText"],
+  "ip": ["singleLineText"],
+  "IVA": ["number"],
+  "Máquina asignada": ["singleLineText"],
+  "maquina_id": ["singleLineText"],
+  "Material": ["singleLineText"],
+  "modelo": ["singleLineText"],
+  "N° Cotización": ["singleLineText"],
+  "N° Pedido": ["singleLineText"],
+  "Neto": ["number"],
+  "nombre": ["singleLineText"],
+  "notas": ["multilineText"],
+  "Notas": ["singleLineText"],
+  "num": ["number"],
+  "numG": ["number"],
+  "pedido_id": ["singleLineText"],
+  "persona_id": ["singleLineText"],
+  "print_hours": ["number"],
+  "Punto de reorden": ["number"],
+  "repuestos": ["multilineText"],
+  "Stock actual": ["number"],
+  "SUBTOTAL": ["currency"],
+  "tiempo": ["number"],
+  "Tiempo de producción": ["number"],
+  "Tiempo de producción máx": ["number"],
+  "tipo": ["singleLineText"],
+  "Tipo días producción": ["singleLineText"],
+  "Tipo DTE": ["singleLineText"],
+  "Total": ["number"],
+  "TOTAL CON IVA": ["currency"],
+  "Track ID": ["singleLineText"],
+  "ts": ["number"],
+  "Unidad": ["singleLineText"],
+});
+const SCHEMA_FIELD_TYPES = new Set(['singleLineText','multilineText','number','currency','date','singleSelect','multipleSelects','multipleRecordLinks','checkbox','url','email','phoneNumber','attachment','dateTime']);
+function schemaFieldAllowed(field) {
+  if (!field || typeof field.name !== 'string' || !SCHEMA_FIELD_TYPES.has(field.type)) return false;
+  const exact = SCHEMA_BOOTSTRAP_FIELDS[field.name];
+  if (exact) return exact.includes(field.type);
+  const item = /^(ITEM|UNIDADES|COSTO NETO|VALOR NETO)([1-9]|1[0-9]|20)$/.exec(field.name);
+  if (!item) return false;
+  return field.type === ({ITEM:'singleLineText', UNIDADES:'number', 'COSTO NETO':'currency', 'VALOR NETO':'currency'})[item[1]];
+}
 // Headers CORS reflejando el origen permitido (si no, el principal).
 function cors(origin) {
   const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
@@ -516,6 +591,412 @@ export default {
     }
     if (!['GET','POST','PATCH','DELETE'].includes(request.method)) {
       return json({ error: 'Method not allowed' }, 405, CORS);
+    }
+    // Endpoints de metadata: el dashboard lee todo el esquema y solo necesita
+    // altas explícitas de seis tablas/ciertos campos. La antigua ruta genérica
+    // dejaba hacer PATCH/DELETE del esquema de producción con APP_KEY pública.
+    if (path.startsWith(metaPrefix)) {
+      const tableList = metaPrefix + 'tables';
+      if (request.method === 'GET' && path === tableList) {
+        // La consulta de esquema es necesaria para detectar campos existentes.
+      } else if (request.method === 'POST') {
+        const createTable = path === tableList;
+        const fieldMatch = new RegExp('^' + tableList + '/(tbl[A-Za-z0-9]{14})/fields
+
+    const headers = new Headers();
+    headers.set('Authorization', 'Bearer ' + env.AIRTABLE_TOKEN);
+    const ct = request.headers.get('Content-Type');
+    if (ct) headers.set('Content-Type', ct);
+
+    const upstream = await fetch(target, {
+      method: request.method,
+      headers,
+      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+    });
+
+    const respHeaders = new Headers(upstream.headers);
+    Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
+
+    return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+  },
+};
+
+
+function sanitizeAiSource(value) {
+  return String(value || 'dashboard').toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 48) || 'dashboard';
+}
+function aiChileDate() {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date()); }
+  catch (_) { return new Date().toISOString().slice(0, 10); }
+}
+function aiPrice(model) {
+  return String(model || '').toLowerCase().includes('haiku') ? ANTHROPIC_PRICES.haiku : ANTHROPIC_PRICES.sonnet;
+}
+function aiCostUsd(model, usage) {
+  const p = aiPrice(model), u = usage || {}, n = (k) => Math.max(0, Number(u[k]) || 0);
+  return (n('input_tokens') * p.input +
+    n('output_tokens') * p.output +
+    n('cache_creation_input_tokens') * p.cacheWrite +
+    n('cache_read_input_tokens') * p.cacheRead) / 1000000;
+}
+function estimateAiRequestUsd(payload) {
+  const model = payload && payload.model;
+  const p = aiPrice(model);
+  const inputObj = { system: payload?.system || '', messages: payload?.messages || [], tools: payload?.tools || [] };
+  const chars = JSON.stringify(inputObj).length;
+  // 3 chars/token intentionally over-reserves versus the common ~4 chars/token.
+  const inputTokens = Math.ceil(chars / 3);
+  const outputTokens = Math.max(0, Number(payload?.max_tokens) || 0);
+  // Reserva al peor precio posible del input: el primer uso de prompt caching
+  // puede cobrarse como cache write, que es más caro que input normal.
+  // Con max_tokens como techo de salida, la reserva queda deliberadamente >=
+  // al costo facturable esperable de la solicitud.
+  const inputRate = Math.max(p.input, p.cacheWrite);
+  return (inputTokens * inputRate + outputTokens * p.output) / 1000000;
+}
+
+async function aiBudgetGuardCall(env, pathname, payload) {
+  if (!env.AI_BUDGET_GUARD) throw new Error('AI budget Durable Object unavailable');
+  const id = env.AI_BUDGET_GUARD.idFromName('anthropic-global-budget');
+  const stub = env.AI_BUDGET_GUARD.get(id);
+  const response = await stub.fetch('https://ai-budget.internal' + pathname, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+  if (!response.ok) throw new Error('AI budget guard HTTP ' + response.status);
+  return response.json();
+}
+
+async function readAiBudget(env) {
+  const budget = Math.max(0.05, Number(env.ANTHROPIC_DAILY_BUDGET_USD || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT));
+  const perRequest = Math.max(0.01, Number(env.ANTHROPIC_REQUEST_BUDGET_USD || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT));
+  const guardDate = aiChileDate();
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      return await aiBudgetGuardCall(env, '/usage', {
+        date: guardDate, budget_usd: budget, request_budget_usd: perRequest,
+      });
+    } catch (_) {
+      return { configured: false, atomic: false, date: guardDate, budget_usd: budget,
+        request_budget_usd: perRequest, spent_usd: 0, reserved_usd: 0, used_usd: 0,
+        remaining_usd: 0, requests: 0, by_source: {} };
+    }
+  }
+  // Solo las pruebas unitarias pueden usar el ledger KV legado. Producción falla
+  // cerrado si el Durable Object no está enlazado.
+  if (!env.__TEST_ALLOW_KV_BUDGET) {
+    return { configured: false, atomic: false, date: guardDate, budget_usd: budget,
+      request_budget_usd: perRequest, spent_usd: 0, reserved_usd: 0, used_usd: 0,
+      remaining_usd: 0, requests: 0, by_source: {} };
+  }
+  const key = 'anthropic-budget:' + guardDate;
+  if (!env.AI_BUDGET) {
+    return { configured: false, date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
+      spent_usd: 0, reserved_usd: 0, used_usd: 0, remaining_usd: 0, requests: 0, by_source: {} };
+  }
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(key)) || '{}'); } catch (_) {}
+  const spent = Math.max(0, Number(row.spent_usd) || 0);
+  let reserved = Math.max(0, Number(row.reserved_usd) || 0);
+  // Autorreparación: antes una respuesta 4xx/5xx de Anthropic podía dejar la reserva
+  // atrapada hasta 48 h. Eso hacía que, incluso después de recargar créditos,
+  // el dashboard siguiera respondiendo AI_BUDGET_LIMIT. Las reservas viejas no son gasto.
+  const reservationAt = Date.parse(row.reserved_at || row.updated_at || '');
+  if (reserved > 0 && (!Number.isFinite(reservationAt) || Date.now() - reservationAt > AI_RESERVATION_STALE_MS)) {
+    reserved = 0;
+    row.reserved_usd = 0;
+    row.by_source = row.by_source || {};
+    for (const src of Object.values(row.by_source)) if (src && typeof src === 'object') src.reserved_usd = 0;
+    row.reserved_at = null;
+    row.recovered_stale_reservation_at = new Date().toISOString();
+    row.updated_at = row.recovered_stale_reservation_at;
+    await env.AI_BUDGET.put(key, JSON.stringify(row), { expirationTtl: 172800 });
+  }
+  return {
+    configured: true, date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
+    spent_usd: spent, reserved_usd: reserved, used_usd: spent + reserved,
+    remaining_usd: Math.max(0, budget - spent - reserved),
+    requests: Math.max(0, Number(row.requests) || 0), by_source: row.by_source || {},
+    updated_at: row.updated_at || null,
+  };
+}
+async function reserveAiBudget(env, payload, source, fixedEstimate = null) {
+  const estimate = Number.isFinite(Number(fixedEstimate)) && fixedEstimate !== null
+    ? Math.max(0, Number(fixedEstimate))
+    : estimateAiRequestUsd(payload);
+  const budget = Math.max(0.05, Number(env.ANTHROPIC_DAILY_BUDGET_USD || ANTHROPIC_DAILY_BUDGET_USD_DEFAULT));
+  const perRequest = Math.max(0.01, Number(env.ANTHROPIC_REQUEST_BUDGET_USD || ANTHROPIC_REQUEST_BUDGET_USD_DEFAULT));
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      return await aiBudgetGuardCall(env, '/reserve', {
+        date: aiChileDate(), budget_usd: budget, request_budget_usd: perRequest,
+        max_concurrent: 1, estimated_request_usd: estimate, source, model: payload && payload.model,
+      });
+    } catch (_) {
+      return { ok: false, status: 503, error: 'AI cost guard unavailable',
+        budget_usd: budget, used_usd: 0, estimated_request_usd: estimate };
+    }
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET) {
+    return { ok: false, status: 503, error: 'AI cost guard unavailable',
+      budget_usd: budget, used_usd: 0, estimated_request_usd: estimate };
+  }
+  const snap = await readAiBudget(env);
+  if (!snap.configured) return { ok: false, status: 503, error: 'AI cost guard unavailable', budget_usd: snap.budget_usd, used_usd: 0, estimated_request_usd: estimate };
+  if (estimate > snap.request_budget_usd) return { ok: false, status: 429, error: 'AI request exceeds per-request cost limit', budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
+  if (snap.used_usd + estimate > snap.budget_usd) return { ok: false, status: 429, error: 'Daily AI budget reached', budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
+
+  const key = 'anthropic-budget:' + snap.date;
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(key)) || '{}'); } catch (_) {}
+  row.spent_usd = Math.max(0, Number(row.spent_usd) || 0);
+  row.reserved_usd = Math.max(0, Number(row.reserved_usd) || 0) + estimate;
+  row.requests = Math.max(0, Number(row.requests) || 0) + 1;
+  row.by_source = row.by_source || {};
+  const src = row.by_source[source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.requests = Math.max(0, Number(src.requests) || 0) + 1;
+  src.reserved_usd = Math.max(0, Number(src.reserved_usd) || 0) + estimate;
+  row.by_source[source] = src;
+  row.updated_at = new Date().toISOString();
+  row.reserved_at = row.updated_at;
+  await env.AI_BUDGET.put(key, JSON.stringify(row), { expirationTtl: 172800 });
+  return { ok: true, key, source, estimate, model: payload.model, budget_usd: snap.budget_usd, used_usd: snap.used_usd, estimated_request_usd: estimate };
+}
+async function parseAnthropicUsage(response) {
+  if (!response || !response.ok) return null;
+  const ct = response.headers.get('content-type') || '';
+  if (ct.includes('text/event-stream')) {
+    const txt = await response.text();
+    let model = '', usage = {};
+    for (const line of txt.split('\n')) {
+      const t = line.trim(); if (!t.startsWith('data:')) continue;
+      let ev; try { ev = JSON.parse(t.slice(5).trim()); } catch (_) { continue; }
+      if (ev.type === 'message_start' && ev.message) {
+        model = ev.message.model || model;
+        usage = { ...usage, ...(ev.message.usage || {}) };
+      } else if (ev.type === 'message_delta' && ev.usage) {
+        usage = { ...usage, ...ev.usage };
+      }
+    }
+    return Object.keys(usage).length ? { model, usage } : null;
+  }
+  try {
+    const j = await response.json();
+    return j && j.usage ? { model: j.model || '', usage: j.usage } : null;
+  } catch (_) { return null; }
+}
+async function releaseAiReservation(env, reservation, reason) {
+  if (!reservation?.ok) return;
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      await aiBudgetGuardCall(env, '/release', {
+        date: reservation.date || aiChileDate(),
+        reservation_id: reservation.reservation_id || '',
+        reason: String(reason || 'no_usage').slice(0, 80),
+      });
+    } catch (_) {}
+    return;
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET || !env.AI_BUDGET) return;
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(reservation.key)) || '{}'); } catch (_) {}
+  row.reserved_usd = Math.max(0, (Number(row.reserved_usd) || 0) - reservation.estimate);
+  row.by_source = row.by_source || {};
+  const src = row.by_source[reservation.source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.reserved_usd = Math.max(0, (Number(src.reserved_usd) || 0) - reservation.estimate);
+  row.by_source[reservation.source] = src;
+  if (row.reserved_usd <= 1e-9) row.reserved_at = null;
+  row.last_release_reason = String(reason || 'no_usage').slice(0, 80);
+  row.updated_at = new Date().toISOString();
+  await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
+}
+async function reconcileAiBudget(env, reservation, response) {
+  if (!reservation?.ok) return;
+  if (env.AI_BUDGET_GUARD) {
+    if (!response || !response.ok) {
+      await releaseAiReservation(env, reservation, 'upstream_http_' + (response?.status || 'unknown'));
+      return;
+    }
+    const parsedAtomic = await parseAnthropicUsage(response);
+    // Un 2xx sin usage conserva su reserva; el guard la vence a los 2 min.
+    if (!parsedAtomic) return;
+    const actualAtomic = aiCostUsd(parsedAtomic.model || reservation.model, parsedAtomic.usage);
+    try {
+      await aiBudgetGuardCall(env, '/reconcile', {
+        date: reservation.date || aiChileDate(),
+        reservation_id: reservation.reservation_id || '',
+        actual_usd: actualAtomic,
+        source: reservation.source || 'dashboard',
+      });
+    } catch (_) {}
+    return;
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET || !env.AI_BUDGET) return;
+  // Un 4xx/5xx es un rechazo confirmado por Anthropic: no hubo una generación
+  // facturable que justifique mantener la reserva. Liberarla permite reintentar
+  // después de recargar créditos o resolver un rate limit.
+  if (!response || !response.ok) {
+    await releaseAiReservation(env, reservation, 'upstream_http_' + (response?.status || 'unknown'));
+    return;
+  }
+  const parsed = await parseAnthropicUsage(response);
+  // Si un 2xx excepcional no trae usage, conservamos la reserva por seguridad;
+  // readAiBudget la recupera automáticamente si queda huérfana >2 min.
+  if (!parsed) return;
+  const actual = aiCostUsd(parsed.model || reservation.model, parsed.usage);
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(reservation.key)) || '{}'); } catch (_) {}
+  row.spent_usd = Math.max(0, Number(row.spent_usd) || 0) + actual;
+  row.reserved_usd = Math.max(0, (Number(row.reserved_usd) || 0) - reservation.estimate);
+  row.by_source = row.by_source || {};
+  const src = row.by_source[reservation.source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.spent_usd = Math.max(0, Number(src.spent_usd) || 0) + actual;
+  src.reserved_usd = Math.max(0, (Number(src.reserved_usd) || 0) - reservation.estimate);
+  row.by_source[reservation.source] = src;
+  if (row.reserved_usd <= 1e-9) row.reserved_at = null;
+  row.updated_at = new Date().toISOString();
+  await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
+}
+
+async function finalizeEstimatedAiBudget(env, reservation, success, reason) {
+  if (!reservation?.ok) return;
+  if (!success) {
+    await releaseAiReservation(env, reservation, reason || 'upstream_error');
+    return;
+  }
+  if (env.AI_BUDGET_GUARD) {
+    try {
+      await aiBudgetGuardCall(env, '/reconcile', {
+        date: reservation.date || aiChileDate(),
+        reservation_id: reservation.reservation_id || '',
+        actual_usd: reservation.estimate,
+        source: reservation.source || 'dashboard',
+      });
+    } catch (_) {}
+    return;
+  }
+  if (!env.__TEST_ALLOW_KV_BUDGET || !env.AI_BUDGET) return;
+  let row = {};
+  try { row = JSON.parse((await env.AI_BUDGET.get(reservation.key)) || '{}'); } catch (_) {}
+  const actual = Math.max(0, Number(reservation.estimate) || 0);
+  row.spent_usd = Math.max(0, Number(row.spent_usd) || 0) + actual;
+  row.reserved_usd = Math.max(0, (Number(row.reserved_usd) || 0) - actual);
+  row.by_source = row.by_source || {};
+  const src = row.by_source[reservation.source] || { requests: 0, spent_usd: 0, reserved_usd: 0 };
+  src.spent_usd = Math.max(0, Number(src.spent_usd) || 0) + actual;
+  src.reserved_usd = Math.max(0, (Number(src.reserved_usd) || 0) - actual);
+  row.by_source[reservation.source] = src;
+  if (row.reserved_usd <= 1e-9) row.reserved_at = null;
+  row.updated_at = new Date().toISOString();
+  await env.AI_BUDGET.put(reservation.key, JSON.stringify(row), { expirationTtl: 172800 });
+}
+
+async function readOpenAiJson(request) {
+  if (request && typeof request.clone === 'function') return request.clone().json();
+  if (typeof request.body === 'string') return JSON.parse(request.body);
+  if (request.body && typeof request.body.text === 'function') return JSON.parse(await request.body.text());
+  throw new Error('body unavailable');
+}
+
+async function readAnthropicJson(request) {
+  // Request real de Cloudflare: clone evita consumir el stream que luego se
+  // reenvía. El fallback string mantiene simples las pruebas unitarias.
+  if (request && typeof request.clone === 'function') return request.clone().json();
+  if (typeof request.body === 'string') return JSON.parse(request.body);
+  if (request.body && typeof request.body.text === 'function') return JSON.parse(await request.body.text());
+  throw new Error('body unavailable');
+}
+
+function json(data, status = 200, corsHeaders = cors('')) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  });
+}
+
+// ── Heartbeat hacia la tabla Automations ──────────────────────────────
+// Actualiza la fila ID="airtable-proxy" con Estado=Activo y la hora actual,
+// como máximo una vez cada 5 min (throttle por isolate). Totalmente opcional:
+// si la base/tabla no existen o el token no puede escribir, falla en silencio.
+let _lastBeat = 0;
+const HEARTBEAT_ID = 'airtable-proxy';
+const HEARTBEAT_TABLE = 'Automations';
+const HEARTBEAT_MIN_MS = 5 * 60 * 1000;
+
+async function heartbeat(env) {
+  const now = Date.now();
+  if (now - _lastBeat < HEARTBEAT_MIN_MS) return;
+  _lastBeat = now;
+
+  const base = env.HEARTBEAT_BASE || 'app1YtD74AqiPWQhy';
+  const auth = { Authorization: 'Bearer ' + env.AIRTABLE_TOKEN };
+  const tbl = `${AIRTABLE_BASE}/v0/${base}/${encodeURIComponent(HEARTBEAT_TABLE)}`;
+
+  // 1) Buscar la fila del proxy por su ID técnico
+  const q = `${tbl}?maxRecords=1&filterByFormula=${encodeURIComponent(`{ID}='${HEARTBEAT_ID}'`)}`;
+  const found = await fetch(q, { headers: auth });
+  if (!found.ok) return;
+  const data = await found.json();
+  const rec = data.records && data.records[0];
+  if (!rec) return;
+
+  // 2) Marcar como Activo con la hora actual; EjecucionesHoy con reseteo diario
+  const f = rec.fields || {};
+  const sameDay = f.UltimaEjecucion && new Date(f.UltimaEjecucion).toDateString() === new Date().toDateString();
+  const ej = (sameDay ? (Number(f.EjecucionesHoy) || 0) : 0) + 1;
+  await fetch(`${tbl}/${rec.id}`, {
+    method: 'PATCH',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: {
+        Estado: 'Activo',
+        UltimaEjecucion: new Date().toISOString(),
+        EjecucionesHoy: ej,
+        TareaActual: 'Proxy seguro Airtable + Claude operativo',
+      },
+      typecast: true,
+    }),
+  });
+}
+).exec(path);
+        if (!createTable && !fieldMatch) return json({ error: 'Schema operation not allowed' }, 403, CORS);
+        let body;
+        try { body = await readOpenAiJson(request); }
+        catch (_) { return json({ error: 'Invalid schema JSON' }, 400, CORS); }
+        if (createTable) {
+          if (!body || !SCHEMA_BOOTSTRAP_TABLES.has(body.name) ||
+            !Array.isArray(body.fields) || body.fields.length < 1 || body.fields.length > 30 ||
+            !body.fields.every(schemaFieldAllowed)) {
+            return json({ error: 'Schema table creation not allowed' }, 403, CORS);
+          }
+        } else if (!schemaFieldAllowed(body)) {
+          return json({ error: 'Schema field creation not allowed' }, 403, CORS);
+        }
+        // Comprobar el esquema del servidor ANTES de cualquier alta: evita
+        // duplicados en llamadas repetidas y valida que tblId corresponda a
+        // una tabla legítima de esta base. Si no se puede verificar, fail closed.
+        let meta;
+        try {
+          const check = await fetch(AIRTABLE_BASE + tableList, {
+            headers: { Authorization: 'Bearer ' + env.AIRTABLE_TOKEN }
+          });
+          if (!check.ok) return json({ error: 'Cannot verify schema' }, 502, CORS);
+          meta = await check.json();
+        } catch (_) { return json({ error: 'Cannot verify schema' }, 502, CORS); }
+        if (!meta || !Array.isArray(meta.tables)) return json({ error: 'Invalid schema' }, 502, CORS);
+        if (createTable) {
+          if (meta.tables.some(t => t.name === body.name)) return json({ error: 'Table already exists' }, 409, CORS);
+        } else {
+          const found = meta.tables.find(t => t.id === fieldMatch[1]);
+          if (!found || !['Cotizaciones','Pedidos','Maquinas','Maquinas_Eventos','Maquinas_Mant'].includes(found.name)) {
+            return json({ error: 'Schema table not allowed' }, 403, CORS);
+          }
+          if ((found.fields || []).some(f => f.name === body.name)) return json({ error: 'Field already exists' }, 409, CORS);
+        }
+      } else {
+        return json({ error: 'Schema operation not allowed' }, 403, CORS);
+      }
     }
     const target = AIRTABLE_BASE + path + url.search;
 
