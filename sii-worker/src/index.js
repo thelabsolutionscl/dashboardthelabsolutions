@@ -126,13 +126,18 @@ async function handleEmitDTE(request, env) {
   if(!/^rec[A-Za-z0-9]{5,}$/.test(String(data.pedido_id||'')))
     throw Object.assign(new Error('pedido_id es obligatorio y debe ser un record ID válido de Airtable'),{status:422});
 
-  // Primero autenticar con SII. La reserva irreversible del folio se realiza
-  // inmediatamente después y ANTES de firmar/subir el documento: dos requests
-  // simultáneos obtienen números distintos a través del Durable Object.
-  const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD || '');
-  const token = await getSIIToken(privateKey, certificate, env);
   const pedidoId=String(data.pedido_id);
   const fingerprint=await siiPayloadFingerprint(data);
+  // Consultar primero la reserva durable: recuperar un envío confirmado no
+  // debería depender de que el SII esté disponible en este momento.
+  const previous=await folioGuardCall(env,String(data.tipo_documento),'lookup',{
+    pedido_id:pedidoId,fingerprint,
+  });
+  if(previous.replayed)return ok({...previous.receipt,replayed:true});
+  // Para una emisión NUEVA sí autenticar ANTES de consumir el folio. Si otro
+  // equipo se adelantó entre lookup y begin, begin conserva la idempotencia.
+  const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD || '');
+  const token = await getSIIToken(privateKey, certificate, env);
   const reservation=await folioGuardCall(env,String(data.tipo_documento),'begin',{pedido_id:pedidoId,fingerprint});
   // Si se perdió la respuesta HTTP de una emisión CONFIRMADA, recuperar el
   // mismo TrackID/folio sin firmar ni subir nuevamente al SII.
