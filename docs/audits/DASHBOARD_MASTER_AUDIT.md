@@ -28,7 +28,7 @@ Cada bloque debe revisar cinco capas cuando apliquen:
 | 05 | Pedidos | P1 | EN AUDITORÍA | lifecycle, pagos, despacho, tarjetas/tabla, integridad de relaciones |
 | 06 | Finanzas y Facturas | P0/P1 | EN AUDITORÍA | revenue, saldos, IVA, DTE, caja, idempotencia |
 | 07 | Clientes / CRM / Recompras | P1 | EN AUDITORÍA | ownership, historial, cadencias, acciones y trazabilidad |
-| 08 | Máquinas / granja / cámaras | P0/P1 | PENDIENTE | bridge, auth, telemetría, estados, recuperación, falsas alarmas |
+| 08 | Máquinas / granja / cámaras | P0/P1 | EN AUDITORÍA | bridge, auth, telemetría, estados, recuperación, falsas alarmas |
 | 09 | Cola / trabajos / producción 3D | P1 | PENDIENTE | lifecycle durable, asignación, reimpresión, concurrencia |
 | 10 | Slicer / simulación / Visual AI | P1/P2 | PENDIENTE | fiabilidad, permisos, iframe, costo IA, errores |
 | 11 | Calendario / Drive / documentos | P1 | PENDIENTE | OAuth, sincronización, fechas, permisos, archivos |
@@ -274,6 +274,15 @@ Las eliminaciones individual y masiva ejecutaban DELETE sin comprobar relaciones
 Dos flujos de creación retiraban campos opcionales y repetían `POST Clientes` cuando el mensaje contenía “unknown”, incluso si provenía de un 5xx ambiguo. Ahora el fallback se habilita exclusivamente ante `HTTP 422` confirmado de campo/esquema desconocido. Timeout, red y 5xx no provocan una segunda alta. La misma detección estricta se aplica al fallback de Comuna de edición, aunque PATCH sea idempotente.
 
 **Pruebas:** `tests/clientes-integridad.test.js` ejecuta la semántica del bulk, la detección de dependencias remotas, borrado fail-closed y clasificación de errores 422/5xx.
+
+### P0-MAQ-001 — Bridge legado quedaba más expuesto que el Farm Controller
+
+**Estado:** CORREGIDO EN CÓDIGO; requiere que el bridge del taller esté actualizado para aplicar.  
+`printer-bridge/server.js` seguía siendo una ruta documentada de despliegue y tenía tres diferencias de seguridad respecto del Farm Controller: CORS por defecto `*`, comparación directa del token y `/restart` sin restricción de método. Ahora CORS permite por defecto solo `https://dashboard.thelab.solutions` (o la lista explícita de `BRIDGE_ALLOW_ORIGIN`), rechaza orígenes ajenos antes del preflight, compara el token con `crypto.timingSafeEqual` y exige POST para reiniciar. `/authcheck`, `/pubkey`, `/sshcheck` y `/healthz` quedan limitados a GET/HEAD.
+
+**Límite importante:** esto endurece el servicio, pero el token maestro sigue siendo una credencial privilegiada cuando se publica en el frontend. El Farm Controller moderno ya soporta roles y sesiones efímeras; la auditoría continuará migrando el navegador para minimizar el uso del token estático y separar viewer/operator/admin. No retirar el token actual hasta terminar esa migración porque rompería cámaras y WebSocket remotos.
+
+**Pruebas:** `tests/printer-bridge-hardening.test.js` cubre CORS, comparación en tiempo constante, métodos seguros y orden fail-closed.
 
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 

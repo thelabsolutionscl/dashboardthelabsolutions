@@ -37,7 +37,8 @@ const { execFile } = require('child_process');
 const keepAliveAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 64, maxFreeSockets: 16 });
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '8347', 10);
-const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
+const ALLOW_ORIGINS = String(process.env.BRIDGE_ALLOW_ORIGIN || 'https://dashboard.thelab.solutions')
+  .split(',').map(v=>v.trim()).filter(Boolean);
 // 1984 = go2rtc (cámaras WebRTC de las K2/K2 Plus; el dashboard consume su /api/frame.jpeg)
 const ALLOWED_PORTS = (process.env.BRIDGE_PORTS || '7125,8080,4408,4409,80,1984')
   .split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
@@ -342,13 +343,19 @@ async function recoverPrinter(ip) {
   return { ok: up, moonraker: up ? 'up' : 'down', steps };
 }
 
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+function setCors(req,res) {
+  const origin=String(req.headers.origin||'');
+  if(origin&&!ALLOW_ORIGINS.includes(origin))return false;
+  if(origin){res.setHeader('Access-Control-Allow-Origin',origin);res.setHeader('Vary','Origin');}
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Api-Key,X-Bridge-Token,Authorization');
-  // Sin exponerla, el navegador no puede leer X-Bridge-Error entre orígenes.
   res.setHeader('Access-Control-Expose-Headers', 'X-Bridge-Error');
   res.setHeader('Access-Control-Max-Age', '86400');
+  return true;
+}
+function tokenMatches(given){
+  const a=Buffer.from(String(given||'')),b=Buffer.from(String(TOKEN||''));
+  return a.length===b.length&&a.length>0&&crypto.timingSafeEqual(a,b);
 }
 
 // Todo lo que sale por aquí lo generó el bridge, no la impresora, y esa
@@ -362,7 +369,7 @@ function jsonError(res, code, msg) {
 }
 
 const server = http.createServer((req, res) => {
-  setCors(res);
+  if(!setCors(req,res)){jsonError(res,403,'origin no permitido');return;}
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   // Separar ruta y query SIN re-codificar (Moonraker usa params sin valor,
@@ -372,6 +379,7 @@ const server = http.createServer((req, res) => {
   const rawQuery = qIdx === -1 ? '' : req.url.slice(qIdx + 1);
 
   if (rawPath === '/healthz') {
+    if(req.method!=='GET'&&req.method!=='HEAD'){res.setHeader('Allow','GET, HEAD');jsonError(res,405,'method not allowed');return;}
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, uptime: Math.round(process.uptime()) }));
     return;
@@ -381,15 +389,17 @@ const server = http.createServer((req, res) => {
   const qParts = rawQuery ? rawQuery.split('&') : [];
   const btPart = qParts.find(p => p.startsWith('bt='));
   const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');
-  if (given !== TOKEN) { jsonError(res, 401, 'unauthorized'); return; }
+  if (!tokenMatches(given)) { jsonError(res, 401, 'unauthorized'); return; }
 
   // Token válido — endpoints de diagnóstico/control (no son proxy a impresora)
   if (rawPath === '/authcheck') {
+    if(req.method!=='GET'&&req.method!=='HEAD'){res.setHeader('Allow','GET, HEAD');jsonError(res,405,'method not allowed');return;}
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, ports: ALLOWED_PORTS }));
     return;
   }
   if (rawPath === '/restart') {
+    if(req.method!=='POST'){res.setHeader('Allow','POST');jsonError(res,405,'method not allowed');return;}
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, restarting: true }));
     console.log('Reinicio solicitado vía /restart — saliendo (launchd lo levanta de nuevo).');
@@ -397,6 +407,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (rawPath === '/pubkey') {
+    if(req.method!=='GET'&&req.method!=='HEAD'){res.setHeader('Allow','GET, HEAD');jsonError(res,405,'method not allowed');return;}
     const keys = bridgePublicKeys();
     // texto plano, una llave por línea: es un authorized_keys listo para usar
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -405,6 +416,7 @@ const server = http.createServer((req, res) => {
   }
   const mChk = rawPath.match(/^\/sshcheck\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
   if (mChk) {
+    if(req.method!=='GET'&&req.method!=='HEAD'){res.setHeader('Allow','GET, HEAD');jsonError(res,405,'method not allowed');return;}
     if (!isPrivateIp(mChk[1])) { jsonError(res, 403, 'solo IPs de red privada'); return; }
     sshCheck(mChk[1]).then(r => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); });
     return;
@@ -544,6 +556,8 @@ const server = http.createServer((req, res) => {
 // vivo sin sondear, eliminando las ráfagas de polling.
 server.on('upgrade', (req, clientSocket, head) => {
   const fail = () => { try { clientSocket.destroy(); } catch (e) {} };
+  const origin=String(req.headers.origin||'');
+  if(origin&&!ALLOW_ORIGINS.includes(origin))return fail();
   const qIdx = req.url.indexOf('?');
   const rawPath = qIdx === -1 ? req.url : req.url.slice(0, qIdx);
   const rawQuery = qIdx === -1 ? '' : req.url.slice(qIdx + 1);
@@ -552,7 +566,7 @@ server.on('upgrade', (req, clientSocket, head) => {
   // Auth: header X-Bridge-Token (no llega desde el navegador) o ?bt=
   const btPart = qParts.find(p => p.startsWith('bt='));
   const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');
-  if (given !== TOKEN) return fail();
+  if (!tokenMatches(given)) return fail();
 
   const m = rawPath.match(/^\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d{1,5}))?(\/.*)?$/);
   if (!m) return fail();
@@ -598,11 +612,13 @@ server.listen(PORT, () => {
   console.log('─'.repeat(60));
   console.log('  The Lab Solutions — Printer Bridge');
   console.log(`  Escuchando en  : http://0.0.0.0:${PORT}`);
-  console.log(`  Token          : ${TOKEN}`);
+  // launchd/systemd persisten stdout: no dejar el secreto maestro en logs.
+  // En ejecución manual interactiva sí se muestra para el onboarding inicial.
+  console.log(`  Token          : ${process.stdout.isTTY ? TOKEN : '[oculto en logs; usa .bridge-token]'}`);
   console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
   console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
   console.log(`  Recuperación   : ${RECOVER_ENABLED ? `activa por SSH como ${SSH_USER} (${SSH_PASS ? 'contraseña' : SSH_KEY ? 'llave ' + SSH_KEY : 'llave por defecto'})` : 'APAGADA (BRIDGE_RECOVER=0)'}`);
-  console.log(`  CORS origin    : ${ALLOW_ORIGIN}`);
+  console.log(`  CORS origins   : ${ALLOW_ORIGINS.join(', ')}`);
   console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
   console.log('─'.repeat(60));
   startHeartbeat();

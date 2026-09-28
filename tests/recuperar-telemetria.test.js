@@ -91,8 +91,8 @@ test('la ruta /recover exige POST, token, IP privada y no se solapa',()=>{
   assert.match(ruta,/isPrivateIp\(ip\)/,'nunca hacia internet');
   assert.match(ruta,/_recovering\.has\(ip\)/,'dos clics no pueden reiniciar Moonraker en pleno arranque');
   // El token se valida antes, para todas las rutas salvo /healthz
-  const auth=BRIDGE.indexOf("if (given !== TOKEN)");
-  assert.ok(auth!==-1&&auth<BRIDGE.indexOf('const mRec ='),'la ruta va después del control de token');
+  const auth=BRIDGE.indexOf("if (!tokenMatches(given))");
+  assert.ok(auth!==-1&&auth<BRIDGE.indexOf('const mRec ='),'la ruta va después del control de token timing-safe');
   const {priv}=bridgeApi();
   assert.equal(priv('192.168.100.7'),true);
   assert.equal(priv('8.8.8.8'),false);
@@ -177,7 +177,7 @@ test('el bridge publica su llave y sabe decir si puede entrar a una impresora',(
   const pub=functionSource(BRIDGE,'bridgePublicKeys');
   assert.match(pub,/\.pub/,'solo llaves públicas, jamás la privada');
   assert.doesNotMatch(pub,/id_ed25519'\)\]|readFileSync\(SSH_KEY\)/,'nunca leer el archivo de la llave privada');
-  assert.ok(BRIDGE.indexOf("if (given !== TOKEN)")<BRIDGE.indexOf("rawPath === '/pubkey'"),'/pubkey va detrás del token');
+  assert.ok(BRIDGE.indexOf("if (!tokenMatches(given))")<BRIDGE.indexOf("rawPath === '/pubkey'"),'/pubkey va detrás del token timing-safe');
   const chk=BRIDGE.slice(BRIDGE.indexOf('const mChk ='),BRIDGE.indexOf("if (rawPath === '/update'"));
   assert.match(chk,/isPrivateIp\(mChk\[1\]\)/,'sshcheck solo hacia la red privada');
   assert.match(chk,/writeHead\(200/,'responde 200: un 5xx no cruza el túnel');
