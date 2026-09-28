@@ -83,3 +83,46 @@ Migrar `emitirDTE`, la consulta de folios y la carga de CAF al puente
 `/sii/*` solo después de activar Access y probar la sesión con el
 frontend. El Worker fiscal sigue requiriendo su propia clave y las reservas
 durables existentes: el proxy no sustituye la protección idempotente.
+
+## Formulario de emisión conectado al puente Access (fase opt-in)
+
+Este cambio prepara el frontend y las rutas de sesión, sin activarlos
+automáticamente en la cuenta existente. Antes de habilitarlo, configurar
+en **airtable-proxy** los cuatro valores de Access descritos arriba, más
+`SII_WORKER_URL` y `SII_WORKER_KEY` como secretos del propio proxy. Proteger
+el hostname del proxy con Cloudflare Access y probar que las cookies funcionen
+desde `https://dashboard.thelab.solutions`.
+
+Tras configurar Cloudflare, habilitar en **GitHub → Settings → Secrets and
+variables → Actions → Variables** `SII_ACCESS_MODE=true`. No hacerlo antes
+de las comprobaciones previas: el próximo deploy de GitHub Pages pasará el
+formulario de Finanzas al proxy para emisión, consulta de folios y carga de
+CAF, y **dejará de insertar SII_WORKER_KEY en el HTML**. Si hay un error
+de sesión, red o configuración, el formulario falla cerrado, nunca vuelve al
+Worker fiscal directo. En la ventana de configuración SII aparece un botón
+para iniciar sesión en Access y la prueba de conexión muestra correo y rol;
+ya no se puede cambiar manualmente la URL fiscal protegida.
+
+### Pruebas previas obligatorias
+
+- Habilitar primero el proxy en Cloudflare y revisar el login desde el
+  navegador con una cuenta `finance` y otra `admin`. Desde el dominio del
+  dashboard, `GET /access/me` debe devolver una identidad con rol válido.
+- Proteger el hostname del proxy, incluidos `workers.dev` y dominios
+  alternativos cuando apliquen. En la app Access, configurar el bypass de
+  preflight **OPTIONS** o sus reglas CORS equivalentes; el proxy admite
+  únicamente los dos orígenes definidos en código y envía
+  `Access-Control-Allow-Credentials: true`.
+- Con el entorno SII de **certificación**, validar el acceso `finance`
+  a `POST /sii/emit` y `GET /sii/folio/:tipo`, acceso `admin` a
+  `PUT /sii/caf`, rechazo a `viewer/operator` y rechazo a usuarios
+  no autenticados. Concilia CAF/folios existentes ANTES de emitir.
+- Activar la variable de GitHub y verificar en el artefacto publicado que
+  el HTML carece del secreto SII; invalidar service workers y caches,
+  revisar las sesiones de todos los equipos y rotar la clave que estuvo
+  en la versión pública. Rotar el secreto en Worker fiscal y proxy
+  coordinadamente, nunca uno sin el otro.
+- Las claves `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` y la clave pública
+  compatible `APP_KEY` **siguen siendo otra tarea abierta**. No declarar el
+  dashboard protegido en su totalidad hasta migrar portal y máquinas y
+  retirar esas credenciales del frontend.
