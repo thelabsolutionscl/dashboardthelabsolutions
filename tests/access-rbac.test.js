@@ -63,7 +63,7 @@ test('tampering, wrong issuer, audience, algorithm and expiration are rejected',
     jwt({aud:['some-other-aud']}),
     jwt({exp:1}),
     jwt({email:'operador@example.com'},{alg:'none'}),
-    jwt().replace(/.$/,'x')
+    (()=>{const parts=jwt().split('.');parts[1]=b64({iss:cfg.ACCESS_TEAM_DOMAIN,aud:[cfg.ACCESS_AUD],exp:9999999999,email:'finanzas@example.com'});return parts.join('.');})()
   ]){
     await assert.rejects(()=>accessVerify(value,accessConfig(cfg)));
   }
