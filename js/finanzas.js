@@ -395,7 +395,11 @@ function finVenc(r){
   const emision=parseLocal(r&&r.fecha);
   const base=emision||parseLocal(`${r.year}-${r.mes}-01`);
   const plazo=(r&&r.plazoDias>=0)?Number(r.plazoDias):finPlazoDefault();
-  return new Date(base.getTime()+plazo*86400000);
+  // Sumar días de calendario, no períodos fijos de 24 h: en Chile el cambio
+  // de horario de verano puede adelantar o atrasar el vencimiento un día.
+  const vencimiento=new Date(base.getTime());
+  vencimiento.setDate(vencimiento.getDate()+plazo);
+  return vencimiento;
 }
 function finRenderCobrar(){
   if(window.OP)OP.collections();
