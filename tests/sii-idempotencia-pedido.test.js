@@ -110,7 +110,7 @@ test('la ruta de reserva legada sigue funcionando para consumidores sin pedido_i
   assert.equal(r.folio,101);
 });
 
-const start=workerSource.indexOf('async function siiPayloadFingerprint(');
+const start=workerSource.indexOf('function siiChileDate() {');
 const end=workerSource.indexOf('// ── CAF',start);
 assert.ok(start>0&&end>start,'deben existir los helpers de emisión actuales');
 const emissionSource=workerSource.slice(start,end);
