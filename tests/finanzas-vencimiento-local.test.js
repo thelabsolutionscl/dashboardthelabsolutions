@@ -75,9 +75,29 @@ test('la mora del propio día de vencimiento es 0 a cualquier hora simulada', ()
 
 // ── El código lo dice (independiente de la zona horaria) ─────────────────
 
-test('finVenc ancla ambas ramas a hora local con T00:00:00', () => {
+test('finVenc ancla vencimiento, emisión y mes a medianoche local', () => {
   const f = extract('finVenc');
-  assert.match(f, /`\$\{r\.year\}-\$\{r\.mes\}-01T00:00:00`/, 'base a medianoche local');
-  assert.match(f, /new Date\(String\(r\.venc\)\.slice\(0,10\)\+'T00:00:00'\)/, 'venc explícito a medianoche local');
-  assert.doesNotMatch(f, /new Date\(`\$\{r\.year\}-\$\{r\.mes\}-01`\)/, 'ya no parsea la base como UTC');
+  assert.match(f, /new Date\\(String\\(v\\)\\.slice\\(0,10\\)\\+'T00:00:00'\\)/, 'todas las fechas pasan por el parser local');
+  assert.match(f, /const explicita=parseLocal\\(r&&r\\.venc\\)/, 'vencimiento explícito local');
+  assert.match(f, /const emision=parseLocal\\(r&&r\\.fecha\\)/, 'fecha de emisión local');
+  assert.match(f, /const base=emision\\|\\|parseLocal\\(/, 'fallback del mes también es local');
+  assert.match(f, /vencimiento\\.setDate\\(vencimiento\\.getDate\\(\\)\\+plazo\\)/, 'días de calendario, sin sumar milisegundos');
+  assert.doesNotMatch(f, /new Date\\(`\\$\\{r\\.year\\}-\\$\\{r\\.mes\\}-01`\\)/, 'no parsea la base como UTC');
+});
+
+test('el vencimiento mantiene medianoche al cruzar cambios de horario de Chile', () => {
+  const {spawnSync} = require('node:child_process');
+  const snippet = `
+    const assert=require('node:assert/strict');
+    const finPlazoDefault=()=>30;
+    ${extract('finVenc')}
+    const finInvierno=finVenc({fecha:'2026-04-01',plazoDias:10});
+    const finVerano=finVenc({fecha:'2026-08-31',plazoDias:15});
+    assert.equal(finInvierno.getTime(),new Date(2026,3,11,0,0,0,0).getTime(),'cambio a hora de invierno');
+    assert.equal(finVerano.getTime(),new Date(2026,8,15,0,0,0,0).getTime(),'cambio a hora de verano');
+  `;
+  const run=spawnSync(process.execPath,['-e',snippet],{
+    env:{...process.env,TZ:'America/Santiago'},encoding:'utf8'
+  });
+  assert.equal(run.status,0,run.stderr||run.stdout||'falló la regresión DST');
 });
