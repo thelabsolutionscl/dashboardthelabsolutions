@@ -236,6 +236,17 @@ La UI usa el número real de Airtable, conserva el vínculo de contrato/mes incl
 
 **Límites:** otros sistemas con PAT directo que salten el proxy pueden seguir creando duplicados; también habría que unificar contratos que se hubieran creado manualmente bajo IDs distintos. Si un 422 confirma que `Notas pedido` no existe, se debe corregir el esquema en vez de omitir la identidad.
 
+### P0-SII-013 — Reintentar un pedido podía emitir dos DTE con distintos folios
+
+**Estado:** CORREGIDO EN CÓDIGO; VERIFICAR PRUEBAS Y DESPLIEGUE DEL WORKER SII.  
+`SiiFolioGuard` ya serializaba folios, pero un doble clic entre navegadores, una respuesta perdida o una sesión recargada podían gastar folios distintos para emitir el **mismo pedido y tipo de DTE**. Se agrega una reserva idempotente por `pedido_id` dentro del Durable Object correspondiente al tipo, ligada a una huella SHA-256 calculada en el servidor sobre el contenido completo del documento. El folio y la relación pedido→huella quedan en una transacción durable antes de firmar o subir el DTE. Un segundo intento idéntico mientras está pendiente responde HTTP 409 y obliga a conciliar; si ya existe TrackID confirmado, devuelve el mismo recibo con `replayed:true` **sin repetir el envío**. Una segunda solicitud distinta sobre el mismo pedido/tipo se bloquea con conflicto explícito. Si la autenticación del SII falla, no se consume ningún folio.
+
+La interfaz de Finanzas envía el ID real de Airtable del pedido, conserva la fecha del DTE original en una respuesta recuperada y relee Facturas del servidor antes de materializar el registro. Cuando recibe un replay sin factura aún visible, no arriesga un segundo POST de Facturas.
+
+**Límites operativos:** si el SII recibe el XML pero se pierde el TrackID, se conserva el estado pendiente y hace falta conciliación manual; nunca se reutiliza el folio. El guard cubre emisiones que envían `pedido_id`; integraciones antiguas sin él conservan la ruta de reserva legada y deben migrarse. Una segunda factura legítima del mismo tipo para el mismo pedido requiere identificarla como una operación nueva en un flujo futuro explícito, no eludir el control de idempotencia. `SII_WORKER_KEY` sigue pendiente de configuración para desplegar la protección en el Worker tributario.
+
+**Pruebas:** `tests/sii-idempotencia-pedido.test.js` prueba concurrencia, confirmación y replay, estados inciertos, conflictos de monto, transacciones y autenticación fallida.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
