@@ -425,7 +425,7 @@ export class CrmMutationGuard {
       const folio = Number(fields.Folio);
       const fecha = String(fields.Fecha || '').slice(0, 10);
       if (!/^(33|39|52|56|61)$/.test(tipo) || !Number.isSafeInteger(folio) ||
-          folio < 1 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(fecha) ||
+          folio < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
           !Number.isFinite(Date.parse(fecha + 'T12:00:00Z'))) {
         return this._json({ error: 'Factura requiere tipo, folio y fecha válidos' }, 422);
       }
