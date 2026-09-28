@@ -39,6 +39,20 @@ limita el impacto económico, pero NO reemplaza la autenticación server-side.
 | `GOOGLE_CLIENT_ID`, URLs e identificadores públicos de SII/Ads | Bajo | No autorizan operaciones por sí mismos |
 | `SII_WORKER_KEY`, `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` | Crítico | Todavía pueden quedar incrustados en HTML público; deben sustituirse por sesiones y permisos server-side antes de considerarse protegidos |
 
+## Guard de escritura transaccional de CRM
+
+La creación de registros `Pedidos` y `Cotizaciones` debe pasar por el
+`CrmMutationGuard` de Cloudflare. Se crea **una sola instancia global** usando
+`CRM_MUTATION_GUARD.idFromName('tls-crm-global')`, que serializa lectura
+completa y POST, verifica número y vínculo Cotizaciones→Pedidos y mantiene
+reservas durables ante resultados ambiguos. Sin binding, el proxy responde
+503 en lugar de permitir escritura fuera del guard.
+
+La migración a Cloudflare se declara como `v2-crm-mutation-guard` en
+`airtable-proxy/wrangler.toml`. No retirar esta binding en futuras versiones.
+Las escrituras hechas con otro PAT fuera del proxy no están cubiertas y
+deben eliminarse durante la migración a sesiones firmadas/RBAC.
+
 ## Control de metadata Airtable
 
 La lectura de tablas queda permitida para las comprobaciones de esquema. Las
