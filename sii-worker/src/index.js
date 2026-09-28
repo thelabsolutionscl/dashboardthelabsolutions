@@ -112,17 +112,27 @@ async function handleEmitDTE(request, env) {
   const reservation = await nextFolio(data.tipo_documento, env);
   const folio = reservation.folio, cafXml = reservation.caf_xml;
 
-  // Generar el DTE, firmarlo y envolverlo en un EnvioDTE listo para el SII
-  // (buildSignedEnvioDTE hace el DTE + TED, la carátula y firma cada Documento
-  //  y el SetDTE, y devuelve el XML completo que espera uploadDTE).
-  const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
-
-  // Subir al SII
-  const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
+  // Después de reservar, cualquier error debe devolver el número reservado
+  // para que Finanzas registre y CONCILIE el DTE. Antes un timeout devolvía solo
+  // HTTP 500: al recargar nadie sabía qué folio se había consumido.
+  let siiResult;
+  try {
+    const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
+    siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
+  } catch (e) {
+    console.error('[SII] folio reservado sin confirmación de envío:', folio, e&&e.message);
+    return ok({
+      dte_numero: folio, tipo_documento: data.tipo_documento,
+      trackid: null, estado_sii: 'Sin confirmar', recibido: false,
+      aviso: 'Se reservó el folio '+folio+' pero no se pudo confirmar el envío. '
+        + 'NO reintentes automáticamente. Revisa este folio en el portal del SII '
+        + 'y concilia el estado antes de generar un nuevo DTE.',
+      pdf_url: null,
+    });
+  }
 
   // El folio YA quedó reservado persistentemente en DO.storage antes del envío.
-  // Si el SII no responde o falla la red, NO se revierte: el resultado es
-  // ambiguo y se concilia en el portal tributario antes de intentar otro DTE.
+  // Sin TrackID, el resultado sigue siendo ambiguo: conciliar con SII.
   // Sin TrackID no hay constancia de que el SII haya recibido nada. Antes esto
   // se devolvía igual que un envío exitoso y el dashboard lo daba por emitido.
   const recibido = !!siiResult.trackid;
