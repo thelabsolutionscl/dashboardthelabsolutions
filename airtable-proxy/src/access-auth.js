@@ -112,6 +112,7 @@ function accessTable(path){
 function accessAllows(identity,method,path){
   if(identity.role==='admin')return true;
   const isWrite=method!=='GET'&&method!=='HEAD';
+  if(path==='/access/me')return method==='GET';
   // Privileged SII calls are never exposed to the legacy shared APP_KEY:
   // finance may emit/read status, only admin may upload CAF.
   if(path==='/sii/emit')return identity.role==='finance'&&method==='POST';

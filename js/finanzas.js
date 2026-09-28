@@ -2237,7 +2237,45 @@ if(typeof document!=='undefined'){
 }
 
 // ── SII / DTE ─────────────────────────────────────────────────
-function getSIICfg(){try{const c=JSON.parse(localStorage.getItem('sii_cfg')||'{}');return{webhookUrl:c.webhookUrl||_DEFAULTS.SII_WORKER_URL,rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};}catch(e){return{webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL};}}
+// Activated only after Cloudflare Access, SII proxy secrets and the browser
+// migration have all been tested. In this mode never call the legacy Worker
+// directly or read its shared secret from HTML/localStorage.
+function _siiAccessMode(){return '%%SII_ACCESS_MODE%%'==='true';}
+function _siiProxyConfig(){
+  const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!px?.url||!px?.key)throw new Error('Proxy seguro no configurado. No se enviará ningún DTE.');
+  const url=new URL(px.url);
+  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)
+    throw new Error('La URL del proxy seguro es inválida');
+  return {base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+}
+function _siiLoginUrl(){
+  try{return _siiProxyConfig().base+'/access/session';}catch(_){return '';}
+}
+async function _siiRequest(route,options={}){
+  if(!_siiAccessMode())throw new Error('La vía protegida SII todavía no está activa');
+  if(!/^\/(emit|caf|folio\/(33|39|52|56|61)|access\/me)$/.test(route))
+    throw new Error('Ruta SII no autorizada');
+  const proxy=_siiProxyConfig();
+  const endpoint=route==='/access/me'?route:'/sii'+route;
+  return fetch(proxy.base+endpoint,{
+    ...options,
+    credentials:'include',
+    redirect:'error',
+    headers:{...options.headers,'X-App-Key':proxy.key}
+  });
+}
+function getSIICfg(){
+  let c={};
+  try{c=JSON.parse(localStorage.getItem('sii_cfg')||'{}')||{};}catch(_){}
+  const secure=_siiAccessMode();
+  let url=secure?'':(c.webhookUrl||_DEFAULTS.SII_WORKER_URL);
+  if(secure)try{url=_siiProxyConfig().base+'/sii';}catch(_){}
+  return{webhookUrl:url,secureProxy:secure,
+    rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,
+    razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};
+}
+
 async function uploadCAF(tipo,input){
   const file=input.files[0];if(!file)return;
   const cfg=getSIICfg();
@@ -2246,7 +2284,7 @@ async function uploadCAF(tipo,input){
   if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳ Subiendo...';}
   try{
     const caf_xml=await file.text();
-    const r=await fetch(cfg.webhookUrl+'/caf',{method:'PUT',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({tipo_documento:tipo,caf_xml})});
+    const r=cfg.secureProxy?await _siiRequest('/caf',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo_documento:tipo,caf_xml})}):await fetch(cfg.webhookUrl+'/caf',{method:'PUT',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({tipo_documento:tipo,caf_xml})});
     const d=await r.json();
     if(r.ok){
       if(statusEl){statusEl.style.color='var(--accent)';statusEl.textContent='✅ Folios '+d.rango?.desde+'–'+d.rango?.hasta;}
@@ -2267,7 +2305,7 @@ async function checkFolios(tipo){
   const statusEl=document.getElementById('cafStatus'+tipo);
   if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳...';}
   try{
-    const r=await fetch(cfg.webhookUrl+'/folio/'+tipo,{headers:siiHeaders()});
+    const r=cfg.secureProxy?await _siiRequest('/folio/'+tipo):await fetch(cfg.webhookUrl+'/folio/'+tipo,{headers:siiHeaders()});
     const d=await r.json();
     if(r.ok){
       const disp=d.folios_disponibles;
@@ -2303,7 +2341,13 @@ function openDTEModal(pedidoId){
   if(dteNum&&btn){btn.textContent='🔎 Verificar / recuperar DTE';btn.style.opacity='0.85';}else if(btn){btn.style.opacity='1';}
   const cfg=getSIICfg();
   const sb=document.getElementById('dteSIIStatus');
-  if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='\u2705 Webhook configurado \u2014 emisor: <strong>'+escapeHtml(cfg.razonEmisor||cfg.rutEmisor||'Tu empresa')+'</strong>'+(dteNum?' &nbsp;&middot;&nbsp; <span style="color:var(--accent3)">DTE anterior: N\u00b0 '+escapeHtml(dteNum)+'</span>':'');}
+  if(cfg.secureProxy){
+    const login=_siiLoginUrl();
+    sb.style.color='var(--accent)';
+    sb.innerHTML='🔐 SII con sesión personal de Cloudflare Access.'+
+      (login?' <a href="'+escapeHtml(login)+'" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Iniciar sesión / renovar acceso</a>':' Configura el proxy seguro primero.')+
+      (dteNum?' · DTE anterior: N° '+escapeHtml(dteNum):'');
+  }else if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='\u2705 Webhook configurado \u2014 emisor: <strong>'+escapeHtml(cfg.razonEmisor||cfg.rutEmisor||'Tu empresa')+'</strong>'+(dteNum?' &nbsp;&middot;&nbsp; <span style="color:var(--accent3)">DTE anterior: N\u00b0 '+escapeHtml(dteNum)+'</span>':'');}
   else{sb.style.color='var(--text3)';sb.innerHTML='⚠ Sin configurar — <a href="#" onclick="openSIIConfigModal();event.preventDefault()" style="color:var(--accent)">configura el Worker SII</a>';}
   document.getElementById('dteModal').style.display='flex';
 }
@@ -2349,7 +2393,7 @@ async function emitirDTE(){
     observaciones:document.getElementById('dteObservaciones').value
   };
   try{
-    const r=await fetch(cfg.webhookUrl,{method:'POST',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
+    const r=cfg.secureProxy?await _siiRequest('/emit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}):await fetch(cfg.webhookUrl,{method:'POST',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
     if(!r.ok){
       const issue=await r.json().catch(()=>({}));
       const message=typeof issue.error==='string'?issue.error:'Verifica la configuración del Worker SII';
@@ -2366,7 +2410,7 @@ async function emitirDTE(){
     // por bueno sin que nadie del SII lo hubiera acusado.
     const _trackId=resp.trackid||resp.track_id||'';
     const _recibido=(resp.recibido!==false)&&!!_trackId;
-    const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
+    const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(!cfg.secureProxy&&dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
     if(dteNum){
       // El folio ya se consumió en el SII: si aquí falla el guardado, el número
       // queda solo en memoria y al recargar el pedido aparece sin DTE. Hay que
@@ -2450,6 +2494,18 @@ async function emitirDTE(){
 function openSIIConfigModal(){
   const cfg=getSIICfg();
   document.getElementById('siiWebhookUrl').value=cfg.webhookUrl||'';
+  const endpointInput=document.getElementById('siiWebhookUrl');
+  if(endpointInput){endpointInput.readOnly=!!cfg.secureProxy;
+    endpointInput.title=cfg.secureProxy?'La URL se administra desde la configuración segura del proxy':'';}
+  const host=document.getElementById('siiStatusBox')?.parentNode;
+  if(host&&cfg.secureProxy&&!document.getElementById('siiAccessLoginBtn')){
+    const btn=document.createElement('button');
+    btn.id='siiAccessLoginBtn';btn.type='button';
+    btn.textContent='🔐 Iniciar sesión en Cloudflare Access';
+    btn.onclick=()=>{const url=_siiLoginUrl();if(url)window.open(url,'_blank','noopener,noreferrer');else toast('Configura el proxy seguro primero','error');};
+    host.appendChild(btn);
+  }
+
   document.getElementById('siiRutEmisor').value=cfg.rutEmisor||'';
   document.getElementById('siiRazonEmisor').value=cfg.razonEmisor||'';
   const sb=document.getElementById('siiStatusBox');
@@ -2467,6 +2523,14 @@ function saveSIIConfig(){
   const rutEmisor=(document.getElementById('siiRutEmisor').value||'').trim();
   const razonEmisor=(document.getElementById('siiRazonEmisor').value||'').trim();
   if(!webhookUrl){toast('La URL del Worker es requerida','error');return;}
+  if(_siiAccessMode()){
+    if(webhookUrl!==_siiProxyConfig().base+'/sii'){
+      toast('La URL SII protegida la determina el proxy; no se puede cambiar aquí','error');return;
+    }
+    localStorage.setItem('sii_cfg',JSON.stringify({rutEmisor,razonEmisor}));
+    toast('Emisor SII guardado; la autenticación la administra Cloudflare Access','success');
+    closeSIIConfigModal();return;
+  }
   localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl,rutEmisor,razonEmisor}));
   toast('✓ Configuración SII guardada','success');
   const sb=document.getElementById('dteSIIStatus');
@@ -2478,6 +2542,21 @@ function saveSIIConfig(){
 async function testSIIWorker(){
   const url=(document.getElementById('siiWebhookUrl').value||'').trim();
   if(!url){toast('Ingresa la URL del Worker primero','error');return;}
+  if(_siiAccessMode()){
+    const sb=document.getElementById('siiStatusBox');
+    try{
+      const r=await _siiRequest('/access/me');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const who=await r.json();
+      if(sb){sb.style.color=who.authenticated?'var(--accent)':'var(--danger)';
+        sb.textContent=who.authenticated?'🔐 Sesión activa: '+who.email+' ('+who.role+')':'Acceso todavía no activado';}
+      toast(who.authenticated?'Acceso SII autenticado':'Activa Access antes de usar SII',who.authenticated?'success':'error');
+    }catch(e){
+      if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ Sesión no disponible: inicia sesión en Cloudflare Access';}
+      toast('Inicia sesión en Access para comprobar el SII: '+e.message,'error');
+    }
+    return;
+  }
   const sb=document.getElementById('siiStatusBox');
   if(sb){sb.style.color='var(--text3)';sb.textContent='⏳ Probando conexión...';}
   try{
