@@ -8,9 +8,10 @@ ahora eso incluía el token de Airtable y la API key de Anthropic.
 
 ## Modo proxy (activo automáticamente)
 
-El workflow `deploy.yml` detecta los secrets `PROXY_URL` + `PROXY_KEY` y, si
-existen, **deja de inyectar** `AIRTABLE_TOKEN` en el HTML.
-La API key de Anthropic **nunca se inyecta**, haya proxy o no.
+El workflow `deploy.yml` **exige** `PROXY_URL` + `PROXY_KEY`. Si falta
+cualquiera, el deploy se detiene sin publicar una nueva versión. La clave
+`AIRTABLE_TOKEN` ya no se pasa al job de GitHub Pages ni se inyecta como
+fallback en HTML público. La API key de Anthropic tampoco se inyecta.
 Los placeholders `%%…%%` quedan sin reemplazar, el cliente los neutraliza
 (nunca viajan como credencial) y todas las llamadas van por el Cloudflare
 Worker `airtable-proxy`, que guarda los tokens reales como secretos
@@ -35,7 +36,8 @@ limita el impacto económico, pero NO reemplaza la autenticación server-side.
 | `PROXY_KEY` | Alto si está publicada | Pendiente: autenticación de usuario server-side y cuotas; Origin no basta |
 | `BASE_ID` de Airtable | Ninguno sin token | — |
 | `OPENAI_TOKEN` | Alto | Vive solo como secret del Worker. El dashboard no acepta ni persiste OpenAI keys; el proxy limita endpoints, modelos, tamaño/calidad y comparte el hard cap diario de IA. |
-| `GOOGLE_CLIENT_ID`, `SII_*`, `ADS_*` | Bajo | Son identificadores/URLs, no credenciales de datos |
+| `GOOGLE_CLIENT_ID`, URLs e identificadores públicos de SII/Ads | Bajo | No autorizan operaciones por sí mismos |
+| `SII_WORKER_KEY`, `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` | Crítico | Todavía pueden quedar incrustados en HTML público; deben sustituirse por sesiones y permisos server-side antes de considerarse protegidos |
 
 ## Pasos pendientes de una sola vez (recomendado)
 
@@ -67,6 +69,9 @@ Tras el deploy, en el código fuente de <https://dashboard.thelab.solutions>:
 Claude y OpenAI quedan **bloqueados deliberadamente** si el Proxy Worker no está
 configurado. No existe modo directo para claves de IA en el navegador.
 
-El fallback directo de Airtable es legado y requiere migración por separado.
+El deploy de GitHub Pages ya no ofrece fallback directo de Airtable: cuando
+falta el proxy falla cerrado y preserva el sitio anteriormente publicado.
 La prioridad P0 pendiente es sustituir APP_KEY/Origin por autenticación real de
 usuario en servidor y aplicar autorización por tabla, fila y campo.
+El token del proxy y las claves administrativas de portal, tributación e impresoras
+tampoco deben publicarse en HTML; requieren una migración server-side controlada.

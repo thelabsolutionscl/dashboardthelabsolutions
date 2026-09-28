@@ -120,6 +120,13 @@ El deploy todavía puede publicar credenciales con privilegios reales como `PORT
 
 **Objetivo final:** autenticar al usuario en backend y emitir permisos/tokens efímeros por capacidad. Ningún secreto maestro de portal, impresoras o tributación debe formar parte del HTML/JS público.
 
+### P0-SEC-008 — Fallback de PAT Airtable en deploy
+
+**Estado:** CORREGIDO EN ESTA RAMA (contención).  
+GitHub Pages podía insertar `secrets.AIRTABLE` directamente en `index.html` si faltaba el proxy. `deploy.yml` ahora exige `PROXY_URL` y `PROXY_KEY`; sin ambos falla antes de publicar y no recibe el PAT como variable de entorno. Regresión: `tests/deploy-proxy-required.test.js`.
+
+**Límite de esta corrección:** el proxy todavía recibe un `APP_KEY` conocido por el navegador y otros secretos administrativos aún se inyectan en la versión estática. Se necesita autenticación real de usuario y migrar las funciones privilegiadas al backend para cerrar P0-SEC-001 y P0-SEC-007.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
