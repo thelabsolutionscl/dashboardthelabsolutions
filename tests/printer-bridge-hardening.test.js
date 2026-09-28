@@ -70,6 +70,22 @@ test('endpoints de lectura administrativos no aceptan mutaciones',()=>{
   }
 });
 
+test('WebSocket valida Origin y usa la misma comparación timing-safe',()=>{
+  const start=SRC.indexOf("server.on('upgrade'");
+  const end=SRC.indexOf('server.listen(',start);
+  const ws=SRC.slice(start,end);
+  assert.match(ws,/origin&&!ALLOW_ORIGINS\.includes\(origin\)/);
+  assert.match(ws,/!tokenMatches\(given\)/);
+  assert.doesNotMatch(ws,/given !== TOKEN/);
+});
+
+test('el token maestro no queda persistido en logs de launchd/systemd',()=>{
+  const listen=SRC.slice(SRC.indexOf('server.listen('),SRC.indexOf('// ── Latido'));
+  assert.match(listen,/process\.stdout\.isTTY \? TOKEN : '\[oculto en logs; usa \.bridge-token\]'/);
+  assert.match(listen,/ALLOW_ORIGINS\.join/,'el log no puede referenciar la constante CORS antigua');
+  assert.doesNotMatch(listen,/CORS origin\s+.*ALLOW_ORIGIN\}/);
+});
+
 test('origen no permitido se corta antes de OPTIONS y antes de autenticación',()=>{
   const serverPos=SRC.indexOf('const server = http.createServer');
   const section=SRC.slice(serverPos,serverPos+2200);
