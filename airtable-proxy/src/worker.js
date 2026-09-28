@@ -1,3 +1,4 @@
+import { accessAuthorize } from './access-auth.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
 const OPENAI_BASE = 'https://api.openai.com';
@@ -615,6 +616,25 @@ export default {
     if (!appKey || appKey !== env.APP_KEY) {
       return json({ error: 'Unauthorized' }, 403, CORS);
     }
+    // After configuration, the shared app key is only a compatibility check.
+    // Cloudflare Access signs each user's identity, and role decisions happen
+    // on the server; a forged Origin or copied APP_KEY cannot grant rights.
+    const authorized=await accessAuthorize(request,env,
+      url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')
+        ?url.pathname:'/v0'+url.pathname);
+    if(authorized.response){
+      const headers=new Headers(authorized.response.headers);
+      Object.entries(CORS).forEach(([k,v])=>headers.set(k,v));
+      return new Response(authorized.response.body,{status:authorized.response.status,headers});
+    }
+    if(authorized.identity&&request.method!=='GET'){
+      console.log('[Access audit]',JSON.stringify({
+        email:authorized.identity.email,role:authorized.identity.role,
+        method:request.method,path:url.pathname.slice(0,180),
+      }));
+    }
+
 
     if (url.pathname === '/anthropic/usage') {
       if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405, CORS);
