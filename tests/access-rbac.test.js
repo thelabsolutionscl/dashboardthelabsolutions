@@ -77,6 +77,15 @@ test('finance can write Facturas, operator and viewer cannot',async()=>{
   assert.equal(accessAllows({role:'operator'},'PATCH','/v0/app1YtD74AqiPWQhy/Pedidos/recABC123'),true);
   assert.equal(accessAllows({role:'operator'},'PATCH',path),false);
 });
+test('privileged SII bridge only permits finance emission/status and admin CAF',()=>{
+  assert.equal(accessAllows({role:'finance'},'POST','/sii/emit'),true);
+  assert.equal(accessAllows({role:'finance'},'GET','/sii/folio/33'),true);
+  assert.equal(accessAllows({role:'finance'},'PUT','/sii/caf'),false);
+  assert.equal(accessAllows({role:'operator'},'POST','/sii/emit'),false);
+  assert.equal(accessAllows({role:'viewer'},'GET','/sii/folio/33'),false);
+  assert.equal(accessAllows({role:'admin'},'PUT','/sii/caf'),true);
+  assert.equal(accessAllows({role:'finance'},'GET','/sii/folio/999'),false);
+});
 test('unknown tables, metadata and path aliases fail closed for non-admin',()=>{
   assert.equal(accessTable('/v0/app1YtD74AqiPWQhy/%46acturas'),'');
   assert.equal(accessTable('/v0/app1YtD74AqiPWQhy/tblABCDEFGHIJKLMN'),'');

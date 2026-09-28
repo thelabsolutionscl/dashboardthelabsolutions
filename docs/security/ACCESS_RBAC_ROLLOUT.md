@@ -60,3 +60,26 @@ del proxy permanece público, sin información personal.
 **Importante:** esta etapa no es una afirmación de seguridad de producción
 ni habilita el despliegue fiscal por sí sola. Requiere pruebas reales
 y reconciliación de CAF/folios del SII.
+
+## Puerta SII preparada (todavía no activa)
+
+El proxy expone un puente privilegiado SOLO cuando ya existe una identidad
+Cloudflare Access verificada. `POST /sii/emit` y
+`GET /sii/folio/:tipo` requieren `finance` o `admin`;
+`PUT /sii/caf` exige `admin`. Si no hay Access activo el puente responde
+503 aunque alguien conozca la `APP_KEY` pública. Todas las rutas SII
+desconocidas o que intenten redirecciones se rechazan.
+
+En la futura configuración única de secretos, guardar en Cloudflare
+`SII_WORKER_URL` como URL HTTPS del Worker oficial (dominio
+`.workers.dev` o `sii.thelab.solutions`) y `SII_WORKER_KEY` como
+secreto privado **solo del proxy**. No inyectar esta última al HTML al
+migrar el formulario. El servidor envía el header de autenticación al
+Worker fiscal; el navegador recibe únicamente la respuesta JSON. Una
+pérdida de respuesta es resultado incierto: no reenviar automáticamente,
+conciliar el folio primero.
+
+Migrar `emitirDTE`, la consulta de folios y la carga de CAF al puente
+`/sii/*` solo después de activar Access y probar la sesión con el
+frontend. El Worker fiscal sigue requiriendo su propia clave y las reservas
+durables existentes: el proxy no sustituye la protección idempotente.
