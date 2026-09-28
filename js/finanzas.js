@@ -2300,7 +2300,7 @@ function openDTEModal(pedidoId){
   document.getElementById('dteRutMsg').textContent='';
   const btn=document.getElementById('dteSubmitBtn');if(btn){btn.disabled=false;btn.textContent='📤 Emitir DTE';}
   const dteNum=f['DTE N°']||'';
-  if(dteNum&&btn){btn.textContent='📤 Emitir nuevo DTE';btn.style.opacity='0.85';}else if(btn){btn.style.opacity='1';}
+  if(dteNum&&btn){btn.textContent='🔎 Verificar / recuperar DTE';btn.style.opacity='0.85';}else if(btn){btn.style.opacity='1';}
   const cfg=getSIICfg();
   const sb=document.getElementById('dteSIIStatus');
   if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='\u2705 Webhook configurado \u2014 emisor: <strong>'+escapeHtml(cfg.razonEmisor||cfg.rutEmisor||'Tu empresa')+'</strong>'+(dteNum?' &nbsp;&middot;&nbsp; <span style="color:var(--accent3)">DTE anterior: N\u00b0 '+escapeHtml(dteNum)+'</span>':'');}
@@ -2334,6 +2334,7 @@ async function emitirDTE(){
   const iva=Math.round(neto*0.19);
   const payload={
     tipo_documento:document.getElementById('dteTipoDoc').value,
+    pedido_id:pedidoId, // idempotencia por recordId del pedido + tipo (durable en Worker)
     referencia:document.getElementById('dteRefPedido').value,
     emisor:{rut:cfg.rutEmisor||'',razon_social:cfg.razonEmisor||''},
     receptor:{rut:formatRUT(rut),razon_social:razonSocial,giro:document.getElementById('dteGiro').value,email:document.getElementById('dteEmail').value},
@@ -2343,7 +2344,13 @@ async function emitirDTE(){
   };
   try{
     const r=await fetch(cfg.webhookUrl,{method:'POST',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
-    if(!r.ok) throw new Error(`HTTP ${r.status} — verifica la URL del webhook`);
+    if(!r.ok){
+      const issue=await r.json().catch(()=>({}));
+      const message=typeof issue.error==='string'?issue.error:'Verifica la configuración del Worker SII';
+      const e=new Error(`HTTP ${r.status}: ${message}`);
+      e.code=issue.code||'';e.folio=issue.folio||null;
+      throw e;
+    }
     let resp={};try{resp=await r.json();}catch(e){}
     const dteNum=resp.dte_numero||resp.folio||resp.numero||resp.id||'';
     const tipoDTE=document.getElementById('dteTipoDoc').value;
@@ -2365,21 +2372,51 @@ async function emitirDTE(){
       try{
         if(typeof ensureFacturasTable==='function') await ensureFacturasTable();
         const cid=p?(Array.isArray(p.fields['Cliente'])?p.fields['Cliente'][0]:p.fields['Cliente']):'';
-        const venc=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
+        // La fecha pertenece a la emisión ORIGINAL, incluso si se recuperó
+        // el resultado semanas después de perder la respuesta HTTP.
+        const fechaDoc=resp.fecha_emision||hoyCL();
+        const vencDate=new Date(fechaDoc+'T12:00:00');
+        vencDate.setDate(vencDate.getDate()+30); // días civiles, no bloques 24h (DST Chile)
+        const venc=vencDate.getFullYear()+'-'+String(vencDate.getMonth()+1).padStart(2,'0')+'-'+String(vencDate.getDate()).padStart(2,'0');
         const facturaFields={
           'Cliente':razonSocial,'Cliente ID':cid||'','Tipo DTE':tipoDTE,'Folio':Number(dteNum)||0,
-          'Fecha':hoyCL(),'Neto':neto,'IVA':iva,'Total':neto+iva,
+          'Fecha':fechaDoc,'Neto':neto,'IVA':iva,'Total':neto+iva,
           'Track ID':_trackId,'Estado SII':_recibido?(resp.estado_sii||resp.estado||'Enviado'):'Sin confirmar',
           'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
         };
-        const facturaExistente=(state.facturas||[]).find(r=>{
+        // El Worker puede devolver exactamente el mismo DTE a otro navegador.
+        // Usar Airtable como fuente de verdad antes de crear Factura: la lista
+        // en memoria de este equipo puede estar vieja o aún sin sincronizar.
+        // Si no podemos comprobarla, NO hacer un POST a ciegas.
+        const facturasRemotas=await airtableFetch('Facturas',1000);
+        state.facturas=_mergeRecords(state.facturas||[],facturasRemotas.records);
+        const facturaExistente=facturasRemotas.records.find(r=>{
           const ff=r?.fields||{};
-          return String(ff['Tipo DTE']||'')===String(tipoDTE)&&String(ff['Folio']||'')===String(dteNum);
+          return String(ff['Tipo DTE']||'')===String(tipoDTE)&&
+            String(ff['Folio']||'')===String(dteNum)&&
+            String(ff['Fecha']||'').slice(0,4)===String(fechaDoc).slice(0,4);
         });
-        if(facturaExistente?.id) await airtableWrite('Facturas','PATCH',facturaExistente.id,facturaFields);
-        else await airtableWrite('Facturas','POST',null,facturaFields);
+        if(facturaExistente?.id){
+          // Recuperar un TrackID no debe devolver a "Pendiente" una factura
+          // que ya fue pagada ni pisar el vencimiento renegociado por cobranza.
+          const updateFields={...facturaFields};
+          delete updateFields['Estado Pago'];
+          delete updateFields['Fecha Vencimiento'];
+          await airtableWrite('Facturas','PATCH',facturaExistente.id,updateFields);
+        }else if(resp.replayed){
+          // Puede existir una creación en curso desde el navegador original.
+          // Un segundo POST ahora produciría dos facturas para un solo DTE.
+          toast('DTE recuperado del SII. Factura aún no registrada: concilia el folio antes de crearla.','info');
+        }else{
+          const saved=await airtableWrite('Facturas','POST',null,facturaFields);
+          if(saved?.id)state.facturas=_mergeRecords(state.facturas,[saved]);
+        }
         try{await loadAllDataSilent();}catch(e){}
-      }catch(e){console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);}
+      }catch(e){
+        console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);
+        toast('⚠ DTE N° '+dteNum+' recibido, pero no se pudo sincronizar Facturas: '+e.message+
+          '. Concilia el documento en Facturas antes de reintentar.','error');
+      }
       renderPedidos();
     }
     if(_recibido){
@@ -2393,7 +2430,15 @@ async function emitirDTE(){
       const _sb=document.getElementById('dteSIIStatus');
       if(_sb){_sb.style.color='var(--danger)';_sb.textContent='\u26a0 Sin confirmaci\u00f3n del SII'+(dteNum?' \u2014 folio '+dteNum:'')+'. No reemitas sin revisar el portal.';}
     }
-  }catch(e){toast('Error al emitir DTE: '+e.message,'error');}
+  }catch(e){
+    if(e.code==='DTE_PENDING_RECONCILIATION'||e.code==='DTE_DOCUMENT_CONFLICT'){
+      const message='⚠ Emisión detenida'+(e.folio?' — folio '+e.folio:'')+
+        ': '+e.message+'. Verifica el documento en el portal SII antes de iniciar otro.';
+      const status=document.getElementById('dteSIIStatus');
+      if(status){status.style.color='var(--danger)';status.textContent=message;}
+      toast(message,'error');
+    }else toast('Error al emitir DTE: '+e.message,'error');
+  }
   btn.disabled=false;btn.textContent='📤 Emitir DTE';
 }
 function openSIIConfigModal(){

@@ -81,6 +81,24 @@ después retirar del deploy las credenciales administrativas y rotarlas.
 No borrar hoy las claves del frontend sin una ruta compatible: rompería
 facturación, portal o controles de taller.
 
+## Idempotencia DTE por pedido
+
+El frontend de Finanzas envía `pedido_id` con cada `/emit`.
+`SiiFolioGuard` usa una reserva durable por ID de pedido en el DO del
+respectivo tipo de DTE, con huella SHA-256 generada por el servidor.
+`begin` conserva la identidad y el folio juntos en una transacción;
+`complete` persiste el recibo únicamente después de obtener TrackID.
+Cuando se repite una emisión ya confirmada se devuelve el mismo folio y
+TrackID con `replayed:true`, sin volver a invocar el SII.
+
+Una emisión anterior sin confirmación NO se reenvía automáticamente, ni
+siquiera con otro monto: debe conciliarse en el portal SII y resolver el
+estado en el backend. El modo legado sin `pedido_id` queda para integraciones
+previas y no tiene esta protección. La clave `SII_WORKER_KEY` sigue pendiente
+en GitHub y el deploy de ese Worker continúa bloqueado hasta configurarla.
+Antes de activar producción, ensayar primero en el entorno de certificación
+de SII y reconciliar folios/CAF con el estado real.
+
 ## Emisión SII y migración de folios (pendiente de una sola vez)
 
 Se introduce `FOLIO_GUARD`, un Durable Object independiente para serializar

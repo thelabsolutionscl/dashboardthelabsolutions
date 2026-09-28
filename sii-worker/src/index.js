@@ -91,10 +91,28 @@ export default {
 
     } catch (e) {
       console.error('[SII Worker]', e.message);
-      return err(e.message, Number.isInteger(e.status)?e.status:500);
+      return err(e.message, Number.isInteger(e.status)?e.status:500,
+        e.code?{code:e.code,...(Number.isSafeInteger(e.folio)?{folio:e.folio}:{})}:{});
     }
   },
 };
+
+// La firma se calcula en el Worker sobre el contenido real que se enviará,
+// nunca se confía en un hash provisto por el navegador. Excluimos pedido_id,
+// que representa la identidad de la operación y no forma parte del DTE.
+function siiChileDate() {
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Santiago',
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const pick=type=>parts.find(p=>p.type===type)?.value;
+  return pick('year')+'-'+pick('month')+'-'+pick('day');
+}
+
+async function siiPayloadFingerprint(data) {
+  const {pedido_id, ...documento}=data;
+  const bytes=new TextEncoder().encode(JSON.stringify(documento));
+  const digest=await crypto.subtle.digest('SHA-256',bytes);
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+}
 
 // ── Emitir DTE ───────────────────────────────────────────────────────────────
 
@@ -103,13 +121,26 @@ async function handleEmitDTE(request, env) {
 
   const data = await request.json().catch(() => { throw new Error('Body inválido — se espera JSON'); });
   validatePayload(data);
+  if(data.pedido_id&&!/^rec[A-Za-z0-9]{5,}$/.test(String(data.pedido_id)))
+    throw Object.assign(new Error('pedido_id debe ser un record ID válido de Airtable'),{status:400});
 
   // Primero autenticar con SII. La reserva irreversible del folio se realiza
   // inmediatamente después y ANTES de firmar/subir el documento: dos requests
   // simultáneos obtienen números distintos a través del Durable Object.
   const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD || '');
   const token = await getSIIToken(privateKey, certificate, env);
-  const reservation = await nextFolio(data.tipo_documento, env);
+  const pedidoId=data.pedido_id?String(data.pedido_id):'';
+  const fingerprint=pedidoId?await siiPayloadFingerprint(data):'';
+  // Compatible con integraciones anteriores sin pedido_id: siguen usando
+  // reserva normal. El dashboard ya envía el ID Airtable del pedido.
+  const reservation=pedidoId
+    ?await folioGuardCall(env,String(data.tipo_documento),'begin',{pedido_id:pedidoId,fingerprint})
+    :await nextFolio(data.tipo_documento, env);
+  // Si se perdió la respuesta HTTP de una emisión CONFIRMADA, recuperar el
+  // mismo TrackID/folio sin firmar ni subir nuevamente al SII.
+  if(reservation.replayed){
+    return ok({...reservation.receipt,replayed:true});
+  }
   const folio = reservation.folio, cafXml = reservation.caf_xml;
 
   // Generar el DTE, firmarlo y envolverlo en un EnvioDTE listo para el SII
@@ -126,10 +157,11 @@ async function handleEmitDTE(request, env) {
   // Sin TrackID no hay constancia de que el SII haya recibido nada. Antes esto
   // se devolvía igual que un envío exitoso y el dashboard lo daba por emitido.
   const recibido = !!siiResult.trackid;
-
-  return ok({
+  const receipt={
     dte_numero: folio,
     tipo_documento: data.tipo_documento,
+    // Fecha de la primera emisión en Chile, no la fecha del replay posterior.
+    fecha_emision: siiChileDate(),
     trackid: siiResult.trackid,
     estado_sii: siiResult.estado,
     glosa_sii: siiResult.glosa || '',
@@ -138,10 +170,23 @@ async function handleEmitDTE(request, env) {
       : 'El SII no devolvió TrackID: no hay constancia de que haya recibido el envío. '
       + `El folio ${folio} queda consumido para no arriesgar un número repetido. `
       + 'Revisa en el portal del SII antes de volver a emitir.',
-    pdf_url: null,  // Generación de PDF requiere paso adicional con tu proveedor
-  });
-}
+    pdf_url: null,
+  };
+  if(recibido&&pedidoId){
+    try{
+      await folioGuardCall(env,String(data.tipo_documento),'complete',{
+        pedido_id:pedidoId,fingerprint,folio,receipt,
+      });
+    }catch(e){
+      // El SII ya entregó TrackID, pero la confirmación durable falló.
+      // Bloquear el reintento y hacer conciliación manual, no emitir otro folio.
+      throw Object.assign(new Error('SII confirmó TrackID, pero falló guardar la confirmación del folio '
+        +folio+'. No reemitir: conciliar en el SII.'),{status:503});
+    }
+  }
 
+  return ok({...receipt,replayed:false});
+}
 // ── CAF ───────────────────────────────────────────────────────────────────────
 
 async function handleCafUpload(request, env) {
@@ -180,7 +225,8 @@ async function folioGuardCall(env, tipo, op, payload = {}) {
     body:JSON.stringify({op,tipo,...payload})
   });
   const data = await result.json().catch(()=>({}));
-  if (!result.ok) throw Object.assign(new Error(data.error || 'Error de guardia de folios'), { status: result.status });
+  if (!result.ok) throw Object.assign(new Error(data.error || 'Error de guardia de folios'),
+    { status: result.status,code:data.code,folio:data.folio });
   return data;
 }
 
@@ -242,8 +288,8 @@ function ok(data) {
   });
 }
 
-function err(msg, status = 400) {
-  return new Response(JSON.stringify({ error: msg }), {
+function err(msg, status = 400, extra = {}) {
+  return new Response(JSON.stringify({ error: msg,...extra }), {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   });
