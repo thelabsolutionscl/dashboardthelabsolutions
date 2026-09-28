@@ -56,18 +56,37 @@ function kvFalso(inicial = {}) {
 
 const CAF = (d, h) => `<?xml version="1.0"?><AUTORIZACION><CAF version="1.0"><DA><RE>77499554-4</RE><TD>33</TD><RNG><D>${d}</D><H>${h}</H></RNG></DA></CAF></AUTORIZACION>`;
 
-// handleCafUpload real, con el KV falso.
+// handleCafUpload real, con el DO + KV falsos: el contador es durable.
+const GUARD=fs.readFileSync(path.join(RAIZ,'sii-worker','src','folio-guard.js'),'utf8');
+const SiiFolioGuard=new Function(GUARD.replace('export class SiiFolioGuard','class SiiFolioGuard')+'\nreturn SiiFolioGuard;')();
+const _guardByKv=new WeakMap();
 async function subirCaf(kv, tipo, cafXml) {
-  const fn = bloque('async function handleCafUpload(');
-  const mod = new Function('env', 'request', 'err', 'ok', 'parseCafRange', `${fn}\nreturn handleCafUpload(request, env);`);
-  let salida = null;
-  return await mod(
-    { FOLIOS_KV: kv },
-    { json: async () => ({ tipo_documento: tipo, caf_xml: cafXml }) },
-    (msg, status) => (salida = { error: msg, status }),
-    (data) => (salida = data),
-    parseCafRange
-  ).then(() => salida);
+  let guard=_guardByKv.get(kv);
+  if(!guard){
+    const mem=new Map();
+    const state={storage:{get:async k=>mem.get(k),put:async(k,v)=>{mem.set(k,v);}}};
+    guard=new SiiFolioGuard(state,{FOLIOS_KV:kv});
+    _guardByKv.set(kv,guard);
+  }
+  const fn=bloque('async function handleCafUpload(');
+  const call=async(_,tipo,op,payload)=>{
+    const response=await guard.fetch(new Request('https://internal/',{
+      method:'POST',body:JSON.stringify({op,tipo,...payload})
+    }));
+    const json=await response.json();
+    if(!response.ok)throw Object.assign(new Error(json.error),{status:response.status});
+    return json;
+  };
+  const mod=new Function('env','request','err','ok','parseCafRange','folioGuardCall',fn+'\nreturn handleCafUpload(request, env);');
+  let salida=null;
+  await mod(
+    {FOLIOS_KV:kv,FOLIO_GUARD:guard},
+    {json:async()=>({tipo_documento:tipo,caf_xml:cafXml})},
+    (msg,status)=>(salida={error:msg,status}),
+    data=>(salida=data),
+    parseCafRange,call
+  );
+  return salida;
 }
 
 // ── El rango del CAF ────────────────────────────────────────────────────
@@ -122,15 +141,14 @@ test('un CAF ilegible no se guarda ni toca el contador', async () => {
 
 // ── Consumir el folio ───────────────────────────────────────────────────
 
-test('la condición muerta se fue y el folio se consume siempre que se llegó a enviar', () => {
-  // uploadDTE LANZA en -11 y -1, así que esa condición nunca podía ser falsa.
-  assert.match(AUTH, /if \(estado === '-11'\) throw new Error/);
-  assert.match(AUTH, /if \(estado === '-1'\)\s+throw new Error/);
+test('el folio se reserva en DO antes de firmar o subir el DTE', () => {
   const fn = bloque('async function handleEmitDTE(');
-  assert.doesNotMatch(fn, /siiResult\.estado !== '-11'/, 'era código muerto');
-  assert.match(fn, /await env\.FOLIOS_KV\.put\(`folio_\$\{data\.tipo_documento\}`, String\(folio\)\);/);
-  // Y el motivo tiene que estar escrito: es una decisión, no un descuido.
-  assert.match(fn, /dos documentos tributarios con el mismo número/);
+  assert.doesNotMatch(fn, /siiResult\.estado !== '-11'/,'no debe quedar código muerto');
+  assert.match(fn, /await nextFolio\(data\.tipo_documento, env\)/);
+  assert.ok(fn.indexOf('await nextFolio(')<fn.indexOf('await uploadDTE('));
+  assert.doesNotMatch(fn,/await env\.FOLIOS_KV\.put/,'el emisor ya no reserva después del envío');
+  assert.match(GUARD,/await this\.state\.storage\.put\('last',next\)/,'reservar en almacenamiento durable');
+  assert.match(GUARD,/this\.queue=task\.catch/,'serializar todas las reservas por tipo');
 });
 
 test('sin TrackID el worker no lo hace pasar por envío exitoso', () => {
