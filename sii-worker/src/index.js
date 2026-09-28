@@ -1,6 +1,7 @@
 import { parsePFX } from './sii-crypto.js';
 import { getSIIToken, uploadDTE } from './sii-auth.js';
 import { buildSignedEnvioDTE } from './dte-xml.js';
+export { SiiFolioGuard } from './folio-guard.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -82,7 +83,7 @@ export default {
       }
 
       // POST / — emite un DTE
-      if (request.method === 'POST') {
+      if (request.method === 'POST' && (url.pathname === '/' || url.pathname === '/emit')) {
         return await handleEmitDTE(request, env);
       }
 
@@ -90,7 +91,7 @@ export default {
 
     } catch (e) {
       console.error('[SII Worker]', e.message);
-      return err(e.message, 500);
+      return err(e.message, Number.isInteger(e.status)?e.status:500);
     }
   },
 };
@@ -103,24 +104,13 @@ async function handleEmitDTE(request, env) {
   const data = await request.json().catch(() => { throw new Error('Body inválido — se espera JSON'); });
   validatePayload(data);
 
-  // Cargar y parsear certificado
+  // Primero autenticar con SII. La reserva irreversible del folio se realiza
+  // inmediatamente después y ANTES de firmar/subir el documento: dos requests
+  // simultáneos obtienen números distintos a través del Durable Object.
   const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD || '');
-
-  // Obtener CAF del KV
-  const cafKey = `caf_${data.tipo_documento}`;
-  const cafXml = await env.FOLIOS_KV.get(cafKey);
-  if (!cafXml) {
-    throw new Error(
-      `CAF no encontrado para tipo ${data.tipo_documento}. ` +
-      `Súbelo con PUT /caf {"tipo_documento":"${data.tipo_documento}","caf_xml":"..."}`
-    );
-  }
-
-  // Obtener y reservar el siguiente folio
-  const folio = await nextFolio(data.tipo_documento, cafXml, env);
-
-  // Autenticar con SII
   const token = await getSIIToken(privateKey, certificate, env);
+  const reservation = await nextFolio(data.tipo_documento, env);
+  const folio = reservation.folio, cafXml = reservation.caf_xml;
 
   // Generar el DTE, firmarlo y envolverlo en un EnvioDTE listo para el SII
   // (buildSignedEnvioDTE hace el DTE + TED, la carátula y firma cada Documento
@@ -130,14 +120,9 @@ async function handleEmitDTE(request, env) {
   // Subir al SII
   const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
 
-  // El folio se marca consumido SIEMPRE que la llamada haya llegado hasta aquí.
-  // La condición anterior (estado !== '-11' && estado !== '-1') era código
-  // muerto: uploadDTE LANZA en esos dos casos y nunca alcanzaba esta línea.
-  // La regla real es la que importa: repetir un folio que sí entró al SII
-  // produce dos documentos tributarios con el mismo número, y eso es mucho peor
-  // que perder un folio del CAF. Ante la duda, se consume.
-  await env.FOLIOS_KV.put(`folio_${data.tipo_documento}`, String(folio));
-
+  // El folio YA quedó reservado persistentemente en DO.storage antes del envío.
+  // Si el SII no responde o falla la red, NO se revierte: el resultado es
+  // ambiguo y se concilia en el portal tributario antes de intentar otro DTE.
   // Sin TrackID no hay constancia de que el SII haya recibido nada. Antes esto
   // se devolvía igual que un envío exitoso y el dashboard lo daba por emitido.
   const recibido = !!siiResult.trackid;
@@ -174,62 +159,33 @@ async function handleCafUpload(request, env) {
   try { range = parseCafRange(caf_xml); }
   catch (e) { return err(e.message, 400); }
 
-  // Volver a subir el MISMO CAF no puede rebobinar el contador: los folios ya
-  // emitidos se reemitirían con el mismo número. Solo se parte del inicio del
-  // rango cuando el contador actual queda FUERA de él, que es lo que ocurre con
-  // un CAF nuevo de verdad.
-  const actual = parseInt(await env.FOLIOS_KV.get(`folio_${tipo_documento}`) || '0', 10);
-  const dentro = Number.isInteger(actual) && actual >= range.desde - 1 && actual <= range.hasta;
-  const inicio = dentro ? actual : range.desde - 1;
-
-  await env.FOLIOS_KV.put(`caf_${tipo_documento}`, caf_xml);
-  await env.FOLIOS_KV.put(`folio_${tipo_documento}`, String(inicio));
-
-  return ok({
-    ok: true,
-    tipo_documento,
-    rango: range,
-    siguiente_folio: inicio + 1,
-    // Solo es "conservado" si de verdad se evitó un rebobinado: un contador que
-    // cae justo en desde-1 (CAF nuevo que sigue al anterior) no conservó nada.
-    contador_conservado: dentro && actual > range.desde - 1,
-  });
+  const saved = await folioGuardCall(env, String(tipo_documento), 'upload', { caf_xml });
+  return ok(saved);
 }
 
 async function handleFolioStatus(tipo, env) {
-  const cafXml = await env.FOLIOS_KV.get(`caf_${tipo}`);
-  if (!cafXml) return err(`Sin CAF configurado para tipo ${tipo}`, 404);
-
-  const range = parseCafRange(cafXml);
-  const actual = parseInt(await env.FOLIOS_KV.get(`folio_${tipo}`) || String(range.desde - 1));
-  const disponibles = range.hasta - actual;
-
-  return ok({
-    tipo_documento: tipo,
-    folio_actual: actual,
-    siguiente_folio: actual + 1,
-    rango_caf: range,
-    folios_disponibles: disponibles,
-    advertencia: disponibles <= 10 ? '⚠ Quedan pocos folios — solicita nuevo CAF al SII' : null,
-  });
+  return ok(await folioGuardCall(env, String(tipo), 'status'));
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function nextFolio(tipoDTE, cafXml, env) {
-  const range = parseCafRange(cafXml);
-  const key = `folio_${tipoDTE}`;
-  const current = parseInt(await env.FOLIOS_KV.get(key) || String(range.desde - 1));
-  const next = current + 1;
-
-  if (next > range.hasta) {
-    throw new Error(
-      `Folios agotados para tipo ${tipoDTE} ` +
-      `(rango CAF: ${range.desde}-${range.hasta}). Solicita nuevo CAF al SII.`
-    );
+async function folioGuardCall(env, tipo, op, payload = {}) {
+  if (!env.FOLIO_GUARD || !env.FOLIOS_KV) {
+    throw Object.assign(new Error('Guard de folios SII no configurado; emisión bloqueada'), { status: 503 });
   }
-  // No persistimos aún — lo hacemos después del upload exitoso
-  return next;
+  const id = env.FOLIO_GUARD.idFromName('sii-tipo-' + tipo);
+  const stub = env.FOLIO_GUARD.get(id);
+  const result = await stub.fetch('https://folio-guard.internal/', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({op,tipo,...payload})
+  });
+  const data = await result.json().catch(()=>({}));
+  if (!result.ok) throw Object.assign(new Error(data.error || 'Error de guardia de folios'), { status: result.status });
+  return data;
+}
+
+async function nextFolio(tipoDTE, env) {
+  return folioGuardCall(env, String(tipoDTE), 'reserve');
 }
 
 // Antes, un CAF que no calzara con el patrón se convertía en el rango 1–100 sin
