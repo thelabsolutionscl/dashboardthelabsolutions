@@ -121,21 +121,19 @@ async function handleEmitDTE(request, env) {
 
   const data = await request.json().catch(() => { throw new Error('Body inválido — se espera JSON'); });
   validatePayload(data);
-  if(data.pedido_id&&!/^rec[A-Za-z0-9]{5,}$/.test(String(data.pedido_id)))
-    throw Object.assign(new Error('pedido_id debe ser un record ID válido de Airtable'),{status:400});
+  // No permitir /emit sin identidad: la ruta legada de folios no impide
+  // que dos equipos emitan documentos distintos para el mismo pedido.
+  if(!/^rec[A-Za-z0-9]{5,}$/.test(String(data.pedido_id||'')))
+    throw Object.assign(new Error('pedido_id es obligatorio y debe ser un record ID válido de Airtable'),{status:422});
 
   // Primero autenticar con SII. La reserva irreversible del folio se realiza
   // inmediatamente después y ANTES de firmar/subir el documento: dos requests
   // simultáneos obtienen números distintos a través del Durable Object.
   const { privateKey, certificate } = parsePFX(env.CERT_PFX_BASE64, env.CERT_PFX_PASSWORD || '');
   const token = await getSIIToken(privateKey, certificate, env);
-  const pedidoId=data.pedido_id?String(data.pedido_id):'';
-  const fingerprint=pedidoId?await siiPayloadFingerprint(data):'';
-  // Compatible con integraciones anteriores sin pedido_id: siguen usando
-  // reserva normal. El dashboard ya envía el ID Airtable del pedido.
-  const reservation=pedidoId
-    ?await folioGuardCall(env,String(data.tipo_documento),'begin',{pedido_id:pedidoId,fingerprint})
-    :await nextFolio(data.tipo_documento, env);
+  const pedidoId=String(data.pedido_id);
+  const fingerprint=await siiPayloadFingerprint(data);
+  const reservation=await folioGuardCall(env,String(data.tipo_documento),'begin',{pedido_id:pedidoId,fingerprint});
   // Si se perdió la respuesta HTTP de una emisión CONFIRMADA, recuperar el
   // mismo TrackID/folio sin firmar ni subir nuevamente al SII.
   if(reservation.replayed){
@@ -146,10 +144,20 @@ async function handleEmitDTE(request, env) {
   // Generar el DTE, firmarlo y envolverlo en un EnvioDTE listo para el SII
   // (buildSignedEnvioDTE hace el DTE + TED, la carátula y firma cada Documento
   //  y el SetDTE, y devuelve el XML completo que espera uploadDTE).
-  const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
-
-  // Subir al SII
-  const siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
+  let siiResult;
+  try {
+    const envioDte = buildSignedEnvioDTE(data, folio, cafXml, privateKey, certificate, env);
+    // Desde este punto el SII PUEDE haber recibido el XML. Nunca reintentar
+    // automáticamente ni consumir otro folio si perdemos la respuesta HTTP.
+    siiResult = await uploadDTE(envioDte, token, env.RUT_EMISOR, env);
+  } catch (cause) {
+    console.error('[SII] Resultado ambiguo para folio reservado', folio, cause&&cause.message);
+    throw Object.assign(new Error(
+      'El folio '+folio+' permanece reservado: el resultado del envío es incierto. '+
+      'Verifica este DTE en el portal SII y concilia antes de otro intento.'),{
+        status:503, code:'DTE_PENDING_RECONCILIATION', folio,
+      });
+  }
 
   // El folio YA quedó reservado persistentemente en DO.storage antes del envío.
   // Si el SII no responde o falla la red, NO se revierte: el resultado es
