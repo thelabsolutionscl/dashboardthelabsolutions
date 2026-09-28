@@ -775,6 +775,30 @@ export default {
     if (!['GET','POST','PATCH','DELETE'].includes(request.method)) {
       return json({ error: 'Method not allowed' }, 405, CORS);
     }
+    // El POST de Pedidos/Cotizaciones DEBE pasar por CrmMutationGuard. Airtable
+    // permite referirse a una tabla por nombre O tblId y algunos routers
+    // aceptan segmentos URL codificados: /%50edidos o /tbl... no deben saltarse
+    // el guard por no coincidir literalmente con /Pedidos. El HTML legítimo
+    // siempre usa encodeURIComponent(table), por lo que la ruta canónica se
+    // puede exigir sin romper sus escrituras.
+    if (path.startsWith(dataPrefix) && request.method !== 'GET') {
+      const segment = path.slice(dataPrefix.length).split('/')[0];
+      let table;
+      try { table = decodeURIComponent(segment); }
+      catch (_) { return json({ error: 'Invalid Airtable table path' }, 400, CORS); }
+      if (!table || table.includes('%') || table.includes('/') || table.includes('\\') ||
+          /^tbl[A-Za-z0-9]{14}$/.test(table) || segment !== encodeURIComponent(table)) {
+        return json({ error: 'Noncanonical Airtable table path' }, 403, CORS);
+      }
+      // Airtable no debe interpretar una variante de caja como tabla crítica
+      // mientras el Worker la trata como una tabla no protegida.
+      const critical = table.toLowerCase();
+      if ((critical === 'pedidos' || critical === 'cotizaciones') &&
+          (table !== (critical === 'pedidos' ? 'Pedidos' : 'Cotizaciones') ||
+           (request.method === 'POST' && path !== dataPrefix + table))) {
+        return json({ error: 'CRM creates require canonical guarded path' }, 403, CORS);
+      }
+    }
     // La APP_KEY publicada no autoriza operaciones genéricas sobre el esquema.
     // Conservar únicamente lectura y bootstrap de tablas/campos TLS conocidos.
     if (path.startsWith(metaPrefix)) {
