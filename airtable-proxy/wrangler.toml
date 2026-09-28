@@ -50,3 +50,12 @@ class_name = "AiBudgetGuard"
 [[migrations]]
 tag = "v1-anthropic-budget-atomic"
 new_sqlite_classes = ["AiBudgetGuard"]
+
+# Serializa las altas de cotizaciones/pedidos de TODOS los navegadores.
+[[durable_objects.bindings]]
+name = "CRM_MUTATION_GUARD"
+class_name = "CrmMutationGuard"
+
+[[migrations]]
+tag = "v2-crm-mutation-guard"
+new_sqlite_classes = ["CrmMutationGuard"]

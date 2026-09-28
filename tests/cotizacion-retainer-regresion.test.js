@@ -121,7 +121,7 @@ test('recurrentes: no anuncia éxitos si fallan todos los pedidos',async()=>{
   assert.equal(h.notes.filter(n=>n.kind==='error').length,1);
 });
 test('cotización manual adopta respuesta POST antes del refresco en segundo plano',()=>{
-  assert.match(MANUAL,/const _creada=await _saveCotFields\('POST'/);
+  assert.match(MANUAL,/_creada=await _saveCotFields\('POST'/);
   assert.match(MANUAL,/_mergeRecords\(state\.cotizaciones,\[_creada\]\)/);
   assert.match(MANUAL,/const _newCot=\(_creada&&_creada\.id\)/);
 });
