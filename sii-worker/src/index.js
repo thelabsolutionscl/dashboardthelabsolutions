@@ -152,6 +152,8 @@ async function handleEmitDTE(request, env) {
   const receipt={
     dte_numero: folio,
     tipo_documento: data.tipo_documento,
+    // Fecha de la primera emisión en Chile, no la fecha del replay posterior.
+    fecha_emision: new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago'}).format(new Date()),
     trackid: siiResult.trackid,
     estado_sii: siiResult.estado,
     glosa_sii: siiResult.glosa || '',
@@ -177,7 +179,6 @@ async function handleEmitDTE(request, env) {
 
   return ok({...receipt,replayed:false});
 }
-/* ORIGINAL RECEIPT REMOVED */
 // ── CAF ───────────────────────────────────────────────────────────────────────
 
 async function handleCafUpload(request, env) {
