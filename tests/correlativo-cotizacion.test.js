@@ -61,9 +61,9 @@ test('sin nada remoto nuevo, sigue del máximo local', async () => {
   assert.equal(await _nextNumCotizacion(), PREF + '07');
 });
 
-test('si Airtable falla al releer, cae al local (best-effort, no rompe)', async () => {
+test('si Airtable falla al releer, no emite un número desde caché obsoleta', async () => {
   const { _nextNumCotizacion } = montar({ locales: [cot(PREF + '11')], remotos: 'ERR' });
-  assert.equal(await _nextNumCotizacion(), PREF + '12');
+  await assert.rejects(_nextNumCotizacion, /red/);
 });
 
 test('mes vacío arranca en 01', async () => {
