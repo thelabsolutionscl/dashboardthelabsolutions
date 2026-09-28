@@ -302,7 +302,7 @@ async function durableStartNext(id){
     await syncQueue(true);
     const j=jobs.find(x=>x.machineId===id&&['queued','retry'].includes(x.state));
     if(!j){if(controllerOk===false)throw new Error('Farm Controller no disponible');return null;}
-    const r=await controllerFetch('/farm/queue/'+encodeURIComponent(j.id+'/run'),{method:'POST',signal:AbortSignal.timeout(5000)});
+    const r=await controllerFetch('/farm/queue/'+encodeURIComponent(j.id)+'/run',{method:'POST',signal:AbortSignal.timeout(5000)});
     const d=await readJson(r);setTimeout(()=>syncQueue(true),1200);return d.job||j;
   }catch(e){
     console.warn('[FarmQueue] start durable falló',e);controllerOk=false;
