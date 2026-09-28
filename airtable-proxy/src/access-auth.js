@@ -112,6 +112,14 @@ function accessTable(path){
 function accessAllows(identity,method,path){
   if(identity.role==='admin')return true;
   const isWrite=method!=='GET'&&method!=='HEAD';
+  // Privileged SII calls are never exposed to the legacy shared APP_KEY:
+  // finance may emit/read status, only admin may upload CAF.
+  if(path==='/sii/emit')return identity.role==='finance'&&method==='POST';
+  if(/^\/sii\/folio\/(33|39|52|56|61)$/.test(path))
+    return identity.role==='finance'&&method==='GET';
+  if(path==='/sii/caf')return false; // handled exclusively by admin above
+  if(path.startsWith('/sii/'))return false;
+
   if(path.startsWith('/v0/meta/'))return false;
   if(path.startsWith('/anthropic/')||path.startsWith('/openai/')||path==='/seo-fetch')
     return !isWrite||identity.role==='operator'||identity.role==='finance';
