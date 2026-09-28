@@ -43,7 +43,7 @@ const ALLOWED_ORIGINS = [
   'https://thelabsolutionscl.github.io',
 ];
 const CORS_BASE = {
-  'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,X-AI-Agent,anthropic-version,x-api-key',
   'Vary': 'Origin',
 };
