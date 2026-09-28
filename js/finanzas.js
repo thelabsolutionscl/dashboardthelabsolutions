@@ -2344,7 +2344,13 @@ async function emitirDTE(){
   };
   try{
     const r=await fetch(cfg.webhookUrl,{method:'POST',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
-    if(!r.ok) throw new Error(`HTTP ${r.status} — verifica la URL del webhook`);
+    if(!r.ok){
+      const issue=await r.json().catch(()=>({}));
+      const message=typeof issue.error==='string'?issue.error:'Verifica la configuración del Worker SII';
+      const e=new Error(`HTTP ${r.status}: ${message}`);
+      e.code=issue.code||'';e.folio=issue.folio||null;
+      throw e;
+    }
     let resp={};try{resp=await r.json();}catch(e){}
     const dteNum=resp.dte_numero||resp.folio||resp.numero||resp.id||'';
     const tipoDTE=document.getElementById('dteTipoDoc').value;
@@ -2401,7 +2407,11 @@ async function emitirDTE(){
           if(saved?.id)state.facturas=_mergeRecords(state.facturas,[saved]);
         }
         try{await loadAllDataSilent();}catch(e){}
-      }catch(e){console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);}
+      }catch(e){
+        console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);
+        toast('⚠ DTE N° '+dteNum+' recibido, pero no se pudo sincronizar Facturas: '+e.message+
+          '. Concilia el documento en Facturas antes de reintentar.','error');
+      }
       renderPedidos();
     }
     if(_recibido){
@@ -2415,7 +2425,15 @@ async function emitirDTE(){
       const _sb=document.getElementById('dteSIIStatus');
       if(_sb){_sb.style.color='var(--danger)';_sb.textContent='\u26a0 Sin confirmaci\u00f3n del SII'+(dteNum?' \u2014 folio '+dteNum:'')+'. No reemitas sin revisar el portal.';}
     }
-  }catch(e){toast('Error al emitir DTE: '+e.message,'error');}
+  }catch(e){
+    if(e.code==='DTE_PENDING_RECONCILIATION'||e.code==='DTE_DOCUMENT_CONFLICT'){
+      const message='⚠ Emisión detenida'+(e.folio?' — folio '+e.folio:'')+
+        ': '+e.message+'. Verifica el documento en el portal SII antes de iniciar otro.';
+      const status=document.getElementById('dteSIIStatus');
+      if(status){status.style.color='var(--danger)';status.textContent=message;}
+      toast(message,'error');
+    }else toast('Error al emitir DTE: '+e.message,'error');
+  }
   btn.disabled=false;btn.textContent='📤 Emitir DTE';
 }
 function openSIIConfigModal(){
