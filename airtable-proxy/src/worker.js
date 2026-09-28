@@ -621,7 +621,7 @@ export default {
     // on the server; a forged Origin or copied APP_KEY cannot grant rights.
     const authorized=await accessAuthorize(request,env,
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -635,6 +635,59 @@ export default {
       }));
     }
 
+
+    // Proxied SII is deliberately unavailable in legacy APP_KEY-only mode.
+    // Access validates the signed user's identity and requires finance/admin
+    // for emit/folio; /caf is admin-only. Never forward arbitrary paths.
+    if (url.pathname.startsWith('/sii/')) {
+      if (!authorized.identity) {
+        return json({error:'SII requires an authenticated user session',code:'ACCESS_REQUIRED'},503,CORS);
+      }
+      const route=url.pathname.slice('/sii'.length);
+      const permitted=(route==='/emit'&&request.method==='POST')||
+        (route==='/caf'&&request.method==='PUT')||
+        (/^\/folio\/(33|39|52|56|61)$/.test(route)&&request.method==='GET');
+      if (!permitted || url.search) return json({error:'SII proxy route not allowed'},404,CORS);
+      let target;
+      try {
+        target=new URL(String(env.SII_WORKER_URL||''));
+        if(target.protocol!=='https:'||target.username||target.password||target.search||
+           target.hash||target.pathname!=='/'||
+           !(target.hostname.endsWith('.workers.dev')||target.hostname==='sii.thelab.solutions'))
+          throw new Error('Invalid SII backend origin');
+      } catch (_) {
+        return json({error:'SII backend URL is not configured safely'},503,CORS);
+      }
+      if(!env.SII_WORKER_KEY)
+        return json({error:'SII backend secret is not configured'},503,CORS);
+      let body;
+      if(request.method!=='GET'){
+        if(!String(request.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+          return json({error:'SII only accepts JSON'},415,CORS);
+        body=await request.text();
+        if(body.length>256000)return json({error:'SII payload exceeds limit'},413,CORS);
+        try { JSON.parse(body); } catch (_) { return json({error:'Invalid SII JSON'},400,CORS); }
+      }
+      try {
+        const upstream=await fetch(target.origin+route,{
+          method:request.method,redirect:'manual',
+          headers:{'Content-Type':'application/json','X-Worker-Key':env.SII_WORKER_KEY},
+          ...(body===undefined?{}:{body})
+        });
+        // Never follow a redirect to another site with the privileged key.
+        if(upstream.status>=300&&upstream.status<400)
+          return json({error:'Unexpected SII redirect; document status uncertain',
+            code:'DTE_PENDING_RECONCILIATION'},502,CORS);
+        const replyText=await upstream.text();
+        if(replyText.length>1000000||!String(upstream.headers.get('Content-Type')||'').toLowerCase().includes('application/json'))
+          return json({error:'Unexpected SII response; reconcile before retrying',
+            code:'DTE_PENDING_RECONCILIATION'},502,CORS);
+        return new Response(replyText,{status:upstream.status,headers:{...CORS,'Content-Type':'application/json'}});
+      } catch (_) {
+        return json({error:'SII response unavailable; check existing folio before reissuing',
+          code:'DTE_PENDING_RECONCILIATION'},502,CORS);
+      }
+    }
 
     if (url.pathname === '/anthropic/usage') {
       if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405, CORS);
