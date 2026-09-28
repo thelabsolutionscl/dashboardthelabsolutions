@@ -188,6 +188,15 @@ El repositorio de GitHub es público y la workflow semanal subía `backup/*.json
 
 **Pendiente externo:** configurar un secreto aleatorio y estable `BACKUP_ENCRYPTION_KEY` en GitHub Actions, guardarlo fuera del repo, verificar una ejecución manual completa, y revisar/eliminar cualquier artefacto histórico en texto plano si existiera. No suponer que los artifacts históricos quedaron protegidos por cambiar la workflow.
 
+### P0-CRM-001 — Correlativos duplicables entre computadores
+
+**Estado:** CORREGIDO PARA CREACIONES QUE PASAN POR `airtable-proxy` EN ESTA RAMA.  
+La secuencia cliente de `_nextNumPedido`/`_nextNumCotizacion` solo releía Airtable. Dos equipos podían observar el mismo máximo simultáneamente y crear dos números iguales. Todas las rutas `POST /v0/app.../Pedidos` y `POST /v0/app.../Cotizaciones` del proxy pasan ahora por **una instancia global de `CrmMutationGuard` (Durable Object SQLite)**, que serializa la comprobación completa y la escritura real. Rechaza números ya ocupados (HTTP 409); si otro equipo convirtió la **misma cotización**, devuelve el registro ya creado (200) sin emitir otro POST. Las interfaces manual y guiada pueden releer y reintentar una sola vez tras **409 confirmado**; un timeout o 5xx nunca provoca reenvío.
+
+Antes del POST se guarda una reserva durable por número y por cotización; ante una respuesta de resultado ambiguo se bloquean más creaciones con esos identificadores hasta reconciliar contra Airtable. Solo rechazos 400/401/403/422 confirmados liberan la reserva. Si falla la lectura completa o no está enlazado el DO, el proxy falla cerrado (503) antes de crear.
+
+**Límites:** esta garantía cubre todas las creaciones que atraviesan el proxy. No evita mutaciones externas hechas con otro PAT ni convierte `APP_KEY` en autenticación. Una creación con resultado ambiguo y sin registro visible puede requerir conciliación manual; no se hará un POST ciego. Se debe comprobar el deploy de Cloudflare v2 antes de declarar protección activa y mantener la migración SQL `v2-crm-mutation-guard`.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
