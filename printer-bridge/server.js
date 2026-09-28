@@ -564,7 +564,7 @@ server.on('upgrade', (req, clientSocket, head) => {
   // Auth: header X-Bridge-Token (no llega desde el navegador) o ?bt=
   const btPart = qParts.find(p => p.startsWith('bt='));
   const given = req.headers['x-bridge-token'] || (btPart ? decodeURIComponent(btPart.slice(3)) : '');
-  if (given !== TOKEN) return fail();
+  if (!tokenMatches(given)) return fail();
 
   const m = rawPath.match(/^\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d{1,5}))?(\/.*)?$/);
   if (!m) return fail();
