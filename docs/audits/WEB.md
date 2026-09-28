@@ -107,3 +107,12 @@ Corrección esperada: comparar igualdad exacta normalizada y mostrar éxito solo
 - ROAS y capacidad se calculan con atribución y clasificación reales.
 - Los diez `test.todo` pasan a pruebas activas.
 - Workflow `Web audit` en verde.
+
+
+## Seguridad del fetch SEO (2026-09-28)
+
+El backend `airtable-proxy /seo-fetch` ahora resuelve redirecciones manualmente
+para no seguir enlaces desde `thelab.solutions` hacia orígenes ajenos.
+Solo admite HTTPS al dominio canónico o su variante `www`; corta a
+4 solicitudes y 2 MiB de HTML. No realiza fetch a terceros aunque el
+primer enlace sea legítimo. Regresión automatizada: `tests/seo-proxy-ssrf.test.js`.
