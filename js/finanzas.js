@@ -2341,7 +2341,13 @@ function openDTEModal(pedidoId){
   if(dteNum&&btn){btn.textContent='🔎 Verificar / recuperar DTE';btn.style.opacity='0.85';}else if(btn){btn.style.opacity='1';}
   const cfg=getSIICfg();
   const sb=document.getElementById('dteSIIStatus');
-  if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='\u2705 Webhook configurado \u2014 emisor: <strong>'+escapeHtml(cfg.razonEmisor||cfg.rutEmisor||'Tu empresa')+'</strong>'+(dteNum?' &nbsp;&middot;&nbsp; <span style="color:var(--accent3)">DTE anterior: N\u00b0 '+escapeHtml(dteNum)+'</span>':'');}
+  if(cfg.secureProxy){
+    const login=_siiLoginUrl();
+    sb.style.color='var(--accent)';
+    sb.innerHTML='🔐 SII con sesión personal de Cloudflare Access.'+
+      (login?' <a href="'+escapeHtml(login)+'" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Iniciar sesión / renovar acceso</a>':' Configura el proxy seguro primero.')+
+      (dteNum?' · DTE anterior: N° '+escapeHtml(dteNum):'');
+  }else if(cfg?.webhookUrl){sb.style.color='var(--accent)';sb.innerHTML='\u2705 Webhook configurado \u2014 emisor: <strong>'+escapeHtml(cfg.razonEmisor||cfg.rutEmisor||'Tu empresa')+'</strong>'+(dteNum?' &nbsp;&middot;&nbsp; <span style="color:var(--accent3)">DTE anterior: N\u00b0 '+escapeHtml(dteNum)+'</span>':'');}
   else{sb.style.color='var(--text3)';sb.innerHTML='⚠ Sin configurar — <a href="#" onclick="openSIIConfigModal();event.preventDefault()" style="color:var(--accent)">configura el Worker SII</a>';}
   document.getElementById('dteModal').style.display='flex';
 }
@@ -2488,6 +2494,18 @@ async function emitirDTE(){
 function openSIIConfigModal(){
   const cfg=getSIICfg();
   document.getElementById('siiWebhookUrl').value=cfg.webhookUrl||'';
+  const endpointInput=document.getElementById('siiWebhookUrl');
+  if(endpointInput){endpointInput.readOnly=!!cfg.secureProxy;
+    endpointInput.title=cfg.secureProxy?'La URL se administra desde la configuración segura del proxy':'';}
+  const host=document.getElementById('siiStatusBox')?.parentNode;
+  if(host&&cfg.secureProxy&&!document.getElementById('siiAccessLoginBtn')){
+    const btn=document.createElement('button');
+    btn.id='siiAccessLoginBtn';btn.type='button';
+    btn.textContent='🔐 Iniciar sesión en Cloudflare Access';
+    btn.onclick=()=>{const url=_siiLoginUrl();if(url)window.open(url,'_blank','noopener,noreferrer');else toast('Configura el proxy seguro primero','error');};
+    host.appendChild(btn);
+  }
+
   document.getElementById('siiRutEmisor').value=cfg.rutEmisor||'';
   document.getElementById('siiRazonEmisor').value=cfg.razonEmisor||'';
   const sb=document.getElementById('siiStatusBox');
@@ -2505,6 +2523,14 @@ function saveSIIConfig(){
   const rutEmisor=(document.getElementById('siiRutEmisor').value||'').trim();
   const razonEmisor=(document.getElementById('siiRazonEmisor').value||'').trim();
   if(!webhookUrl){toast('La URL del Worker es requerida','error');return;}
+  if(_siiAccessMode()){
+    if(webhookUrl!==_siiProxyConfig().base+'/sii'){
+      toast('La URL SII protegida la determina el proxy; no se puede cambiar aquí','error');return;
+    }
+    localStorage.setItem('sii_cfg',JSON.stringify({rutEmisor,razonEmisor}));
+    toast('Emisor SII guardado; la autenticación la administra Cloudflare Access','success');
+    closeSIIConfigModal();return;
+  }
   localStorage.setItem('sii_cfg',JSON.stringify({webhookUrl,rutEmisor,razonEmisor}));
   toast('✓ Configuración SII guardada','success');
   const sb=document.getElementById('dteSIIStatus');
@@ -2516,6 +2542,21 @@ function saveSIIConfig(){
 async function testSIIWorker(){
   const url=(document.getElementById('siiWebhookUrl').value||'').trim();
   if(!url){toast('Ingresa la URL del Worker primero','error');return;}
+  if(_siiAccessMode()){
+    const sb=document.getElementById('siiStatusBox');
+    try{
+      const r=await _siiRequest('/access/me');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const who=await r.json();
+      if(sb){sb.style.color=who.authenticated?'var(--accent)':'var(--danger)';
+        sb.textContent=who.authenticated?'🔐 Sesión activa: '+who.email+' ('+who.role+')':'Acceso todavía no activado';}
+      toast(who.authenticated?'Acceso SII autenticado':'Activa Access antes de usar SII',who.authenticated?'success':'error');
+    }catch(e){
+      if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ Sesión no disponible: inicia sesión en Cloudflare Access';}
+      toast('Inicia sesión en Access para comprobar el SII: '+e.message,'error');
+    }
+    return;
+  }
   const sb=document.getElementById('siiStatusBox');
   if(sb){sb.style.color='var(--text3)';sb.textContent='⏳ Probando conexión...';}
   try{
