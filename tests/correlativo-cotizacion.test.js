@@ -94,6 +94,6 @@ test('un número de otro mes no afecta el máximo', () => {
 // ── Los dos flujos de creación releen ────────────────────────────────────
 
 test('el flujo guiado y el manual aseguran el correlativo contra Airtable', () => {
-  assert.match(extract('crearCotizacionGuiada'), /const num=await _nextNumCotizacion\(\)/, 'el guiado usa el async');
+  assert.match(extract('crearCotizacionGuiada'), /(?:let|const) num=await _nextNumCotizacion\(\)/, 'el guiado usa el async');
   assert.match(extract('createCotizacion'), /_todos\.some\(c=>String\(\(c\.fields\|\|\{\}\)\['N° Cotización'\]\|\|''\)===num\)/, 'el manual re-chequea colisión contra Airtable');
 });
