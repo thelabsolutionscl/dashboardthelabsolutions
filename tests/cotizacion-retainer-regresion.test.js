@@ -24,7 +24,8 @@ function helper(responses){
       if(value instanceof Error)throw value;
       return value;
     },
-    ensureCotizacionFields:async()=>calls.push({kind:'schema'})
+    ensureCotizacionFields:async()=>calls.push({kind:'schema'}),
+    _crmRequestId:()=> 'crm:test-schema'
   };
   return {fn:new Function(...Object.keys(deps),HELPER+'\nreturn _saveCotFields;')(...Object.values(deps)),calls};
 }
