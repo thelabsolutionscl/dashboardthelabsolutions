@@ -2359,7 +2359,7 @@ async function emitirDTE(){
       // queda solo en memoria y al recargar el pedido aparece sin DTE. Hay que
       // avisar sí o sí — el documento tributario existe aunque el dashboard lo pierda.
       try{await airtableWrite('Pedidos','PATCH',pedidoId,{'DTE N°':String(dteNum)});}
-      catch(e){avisoNoGuardado(`el DTE N° ${dteNum} en el pedido (ya fue emitido en el SII — anótalo)`,e);}
+      catch(e){avisoNoGuardado(`el folio DTE N° ${dteNum} en el pedido (${_recibido?'recibido por SII':'reservado, recepción por SII sin confirmar'} — anótalo y concilia)`,e);}
       const p=state.pedidosById[pedidoId];if(p) p.fields['DTE N°']=String(dteNum);
       // Materializa el DTE como Factura ligada al pedido (para cobranza y reportes)
       try{
@@ -2372,14 +2372,28 @@ async function emitirDTE(){
           'Track ID':_trackId,'Estado SII':_recibido?(resp.estado_sii||resp.estado||'Enviado'):'Sin confirmar',
           'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
         };
-        const facturaExistente=(state.facturas||[]).find(r=>{
+        // Otro computador pudo guardar este folio mientras el modal estaba
+        // abierto. Airtable es autoritativo: un fallo de lectura NO permite
+        // repetir a ciegas el POST tras una emisión tributaria real.
+        const remote=await airtableFetch('Facturas',1000);
+        const todas=remote.records||[];
+        const facturaExistente=todas.find(r=>{
           const ff=r?.fields||{};
-          return String(ff['Tipo DTE']||'')===String(tipoDTE)&&String(ff['Folio']||'')===String(dteNum);
+          return String(ff['Tipo DTE']||'')===String(tipoDTE)&&Number(ff['Folio'])===Number(dteNum);
         });
-        if(facturaExistente?.id) await airtableWrite('Facturas','PATCH',facturaExistente.id,facturaFields);
-        else await airtableWrite('Facturas','POST',null,facturaFields);
+        if(facturaExistente?.id){
+          const saved=await airtableWrite('Facturas','PATCH',facturaExistente.id,facturaFields);
+          state.facturas=_mergeRecords(state.facturas||[],[saved?.id?saved:{...facturaExistente,fields:{...facturaExistente.fields,...facturaFields}}]);
+        }else{
+          const created=await airtableWrite('Facturas','POST',null,facturaFields);
+          if(!created?.id)throw new Error('Airtable no confirmó ID; revisar el folio antes de reintentar');
+          state.facturas=_mergeRecords(state.facturas||[],[created]);
+        }
         try{await loadAllDataSilent();}catch(e){}
-      }catch(e){console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);}
+      }catch(e){
+        console.warn('[DTE] Factura ligada sin conciliar:',e.message);
+        toast('⚠ Folio DTE '+dteNum+' reservado/emitido, pero no se confirmó el registro en Facturas. Verifica Airtable antes de reintentar.','error');
+      }
       renderPedidos();
     }
     if(_recibido){
