@@ -56,9 +56,43 @@ export class SiiFolioGuard {
     const kv=this.env.FOLIOS_KV;
     if (!kv || !this.state?.storage) return reply({error:'Guard de folios no configurado'},503);
 
+    // Idempotencia durable por pedido y tipo de DTE (la instancia ya se separa
+    // por tipo). /begin y /complete solo son invocados desde el Worker SII;
+    // el navegador nunca puede llamar al Durable Object directamente.
+    const idemOp=op==='begin'||op==='complete';
+    const pedidoId=String(body?.pedido_id||'');
+    const fingerprint=String(body?.fingerprint||'');
+    if(idemOp && (!/^rec[A-Za-z0-9]{5,}$/.test(pedidoId)||!/^[a-f0-9]{64}$/.test(fingerprint)))
+      return reply({error:'Identificador de pedido o firma de documento inválidos'},400);
+    const idemKey=idemOp?'emision:'+pedidoId:null;
+    if(op==='complete'){
+      const current=await this.state.storage.get(idemKey);
+      if(!current||current.fingerprint!==fingerprint||current.folio!==Number(body.folio))
+        return reply({error:'Emisión sin reserva previa o firma inconsistente'},409);
+      if(current.estado==='completado')return reply({ok:true,replayed:true,folio:current.folio});
+      const receipt=body.receipt;
+      if(!receipt||!receipt.trackid||Number(receipt.dte_numero)!==current.folio||
+          String(receipt.tipo_documento)!==tipo)
+        return reply({error:'Confirmación del SII sin TrackID/folio válido'},422);
+      // Respuesta completa primero en almacenamiento durable: una caída del
+      // navegador tras subir al SII puede recuperarla sin emitir otro DTE.
+      await this.state.storage.put(idemKey,{...current,estado:'completado',
+        receipt,completado_en:new Date().toISOString()});
+      return reply({ok:true,replayed:false,folio:current.folio});
+    }
     const previous=folioNumber(await this.state.storage.get('last'));
     const legacy=folioNumber(await kv.get('folio_'+tipo));
     const highWater=Math.max(previous,legacy);
+    if(op==='begin'){
+      const current=await this.state.storage.get(idemKey);
+      if(current){
+        if(current.fingerprint!==fingerprint)
+          return reply({error:'Ya existe una emisión para este pedido y tipo con contenido diferente; conciliar antes de emitir otra',code:'DTE_DOCUMENT_CONFLICT',folio:current.folio},409);
+        if(current.estado==='completado')
+          return reply({replayed:true,receipt:current.receipt,folio:current.folio},200);
+        return reply({error:'Emisión anterior no confirmada: verificar en SII antes de reintentar',code:'DTE_PENDING_RECONCILIATION',folio:current.folio},409);
+      }
+    }
 
     if(op==='upload') {
       const xml=String(body.caf_xml||'');
@@ -96,10 +130,24 @@ export class SiiFolioGuard {
         ' (rango CAF: '+range.desde+'-'+range.hasta+'). Solicita nuevo CAF al SII.'},409);
 
     // COMMIT ANTES DEL ENVÍO: este número nunca volverá a reservarse.
-    await this.state.storage.put('last',next);
+    // Para emisiones identificadas, el folio y la reserva de ese pedido
+    // deben quedar JUNTOS en una transacción durable: un reinicio no puede
+    // conservar el número y perder la relación de idempotencia.
+    if(op==='begin'){
+      if(typeof this.state.storage.transaction!=='function')
+        return reply({error:'Durable Object sin transacciones: emisión bloqueada'},503);
+      await this.state.storage.transaction(async txn=>{
+        await txn.put('last',next);
+        await txn.put(idemKey,{pedido_id:pedidoId,fingerprint,folio:next,
+          tipo_documento:tipo,estado:'pendiente',creado_en:new Date().toISOString()});
+      });
+    }else{
+      await this.state.storage.put('last',next);
+    }
     // KV es espejo; su fallo NO permite volver a usar el número reservado.
     try{await kv.put('folio_'+tipo,String(next));}
     catch(e){console.error('[SII FolioGuard] KV espejo falló tras reserva segura:',e&&e.message);}
-    return reply({folio:next,tipo_documento:tipo,caf_xml:cafXml,consumido:true});
+    return reply({folio:next,tipo_documento:tipo,caf_xml:cafXml,consumido:true,
+      ...(op==='begin'?{idempotencia:'reservada'}:{})});
   }
 }
