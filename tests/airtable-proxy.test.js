@@ -147,7 +147,7 @@ test('con Origin permitido y clave válida, la petición Airtable llega al upstr
     const r = await worker.fetch(req('/app1YtD74AqiPWQhy/Clientes', { origin: OK_ORIGIN, key: ENV.APP_KEY }), ENV, undefined);
     assert.equal(r.status, 200);
     assert.equal(spy.calls.length, 1, 'reenvía al upstream');
-    assert.match(spy.calls[0].url, /^https:\/\/api\.airtable\.com\/v0\/app1YtD\/Clientes/);
+    assert.match(spy.calls[0].url, /^https:\/\/api\.airtable\.com\/v0\/app1YtD74AqiPWQhy\/Clientes/);
     assert.equal(spy.calls[0].opts.headers.get('Authorization'), 'Bearer patTEST123');
   } finally { spy.restore(); }
 });
