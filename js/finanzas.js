@@ -2323,7 +2323,13 @@ function dteValidarRut(el){
 async function emitirDTE(){
   const cfg=getSIICfg();
   if(!cfg?.webhookUrl){toast('Configura el Worker SII primero','error');openSIIConfigModal();return;}
-  const pedidoId=document.getElementById('dtePedidoId').value;
+  const pedidoId=String(document.getElementById('dtePedidoId')?.value||'');
+  if(!/^rec[A-Za-z0-9]{5,}$/.test(pedidoId)){
+    toast('Selecciona un pedido válido antes de emitir el DTE','error');return;
+  }
+  const pendingButton=document.getElementById('dteSubmitBtn');
+  if(pendingButton?.disabled)return; // evita doble clic dentro del mismo navegador
+
   const rut=(document.getElementById('dteRut').value||'').trim();
   const razonSocial=(document.getElementById('dteRazonSocial').value||'').trim();
   const neto=parseInt(document.getElementById('dteMontoNeto').value)||0;
@@ -2431,7 +2437,7 @@ async function emitirDTE(){
       if(_sb){_sb.style.color='var(--danger)';_sb.textContent='\u26a0 Sin confirmaci\u00f3n del SII'+(dteNum?' \u2014 folio '+dteNum:'')+'. No reemitas sin revisar el portal.';}
     }
   }catch(e){
-    if(e.code==='DTE_PENDING_RECONCILIATION'||e.code==='DTE_DOCUMENT_CONFLICT'){
+    if(e.code==='DTE_PENDING_RECONCILIATION'||e.code==='DTE_DOCUMENT_CONFLICT'||e.code==='FACTURA_PENDING_RECONCILIATION'){
       const message='⚠ Emisión detenida'+(e.folio?' — folio '+e.folio:'')+
         ': '+e.message+'. Verifica el documento en el portal SII antes de iniciar otro.';
       const status=document.getElementById('dteSIIStatus');

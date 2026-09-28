@@ -411,11 +411,85 @@ export class CrmMutationGuard {
     try { data = await request.json(); }
     catch (_) { return this._json({ error: 'Invalid JSON' }, 400); }
     const table = data && data.table;
-    if (!['Pedidos','Cotizaciones'].includes(table) || !data.body ||
+    if (!['Pedidos','Cotizaciones','Facturas'].includes(table) || !data.body ||
         typeof data.body !== 'object' || Array.isArray(data.body) ||
         !data.body.fields || typeof data.body.fields !== 'object' ||
         Array.isArray(data.body.fields) || data.body.records) {
       return this._json({ error: 'Only single-record CRM creates are allowed' }, 400);
+    }
+    // Facturas: un único Durable Object serializa la lectura remota y el POST
+    // para TODOS los navegadores. La reserva permanece ante timeout/5xx.
+    if (table === 'Facturas') {
+      const fields = data.body.fields;
+      const tipo = String(fields['Tipo DTE'] || '').trim();
+      const folio = Number(fields.Folio);
+      const fecha = String(fields.Fecha || '').slice(0, 10);
+      if (!/^(33|39|52|56|61)$/.test(tipo) || !Number.isSafeInteger(folio) ||
+          folio < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
+          !Number.isFinite(Date.parse(fecha + 'T12:00:00Z'))) {
+        return this._json({ error: 'Factura requiere tipo, folio y fecha válidos' }, 422);
+      }
+      const year = fecha.slice(0, 4);
+      const key = 'pending:factura:' + year + ':' + tipo + ':' + folio;
+      let remote, marker;
+      try {
+        remote = await this._readAll('Facturas');
+        marker = await this.state.storage.get(key);
+      } catch (_) {
+        return this._json({ error: 'No fue posible comprobar la unicidad de Facturas' }, 503);
+      }
+      const same = remote.find(r => {
+        const f = r.fields || {};
+        return String(f['Tipo DTE'] || '').trim() === tipo &&
+          Number(f.Folio) === folio && String(f.Fecha || '').slice(0, 4) === year;
+      });
+      if (same) {
+        // NO sobrescribir datos de pago, vencimiento o cliente de una
+        // factura existente: devolverla para conciliación explícita.
+        return this._json(same, 200);
+      }
+      if (marker) return this._json({
+        error: 'Un alta anterior de este DTE sigue pendiente de conciliación en Airtable',
+        code: 'FACTURA_PENDING_RECONCILIATION', tipo, folio, year,
+      }, 503);
+      const reservation = { tipo, folio, year, at: new Date().toISOString() };
+      try { await this.state.storage.put(key, reservation); }
+      catch (_) { return this._json({ error: 'No se pudo reservar el alta de Facturas' }, 503); }
+      let upstream;
+      try {
+        upstream = await fetch(AIRTABLE_BASE + '/v0/app1YtD74AqiPWQhy/Facturas', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.env.AIRTABLE_TOKEN, 'Content-Type': 'application/json' },
+          body: JSON.stringify(data.body),
+        });
+      } catch (_) {
+        return this._json({
+          error: 'Alta de Factura con resultado incierto: conciliar antes de repetir',
+          code: 'FACTURA_PENDING_RECONCILIATION', tipo, folio, year,
+        }, 503);
+      }
+      // Solo rechazos definitivos pueden liberar la reserva.
+      if ([400, 401, 403, 422].includes(upstream.status)) {
+        try { await this.state.storage.delete(key); } catch (_) {}
+        return upstream;
+      }
+      if (!upstream.ok) return this._json({
+        error: 'Airtable devolvió un resultado incierto al guardar Facturas',
+        code: 'FACTURA_PENDING_RECONCILIATION', tipo, folio, year,
+      }, 503);
+      let created;
+      try { created = await upstream.json(); }
+      catch (_) { return this._json({
+        error: 'Airtable respondió sin un registro verificable; conciliar',
+        code: 'FACTURA_PENDING_RECONCILIATION', tipo, folio, year,
+      }, 503); }
+      if (!created || typeof created.id !== 'string') return this._json({
+        error: 'Airtable no confirmó el identificador de la Factura; conciliar',
+        code: 'FACTURA_PENDING_RECONCILIATION', tipo, folio, year,
+      }, 503);
+      try { await this.state.storage.put(key, { ...reservation, record_id: created.id, completed: true }); }
+      catch (_) { /* En un resultado incierto, nunca liberar el bloqueo. */ }
+      return this._json(created, 200);
     }
     const numberField = table === 'Pedidos' ? 'N° Pedido' : 'N° Cotización';
     const number = String(data.body.fields[numberField] || '').trim();
@@ -807,10 +881,10 @@ export default {
       // Airtable no debe interpretar una variante de caja como tabla crítica
       // mientras el Worker la trata como una tabla no protegida.
       const critical = table.toLowerCase();
-      if ((critical === 'pedidos' || critical === 'cotizaciones') &&
-          (table !== (critical === 'pedidos' ? 'Pedidos' : 'Cotizaciones') ||
+      if ((critical === 'pedidos' || critical === 'cotizaciones' || critical === 'facturas') &&
+          (table !== (critical === 'pedidos' ? 'Pedidos' : critical === 'cotizaciones' ? 'Cotizaciones' : 'Facturas') ||
            (request.method === 'POST' && path !== dataPrefix + table))) {
-        return json({ error: 'CRM creates require canonical guarded path' }, 403, CORS);
+        return json({ error: 'CRM and Facturas creates require canonical guarded path' }, 403, CORS);
       }
     }
     // La APP_KEY publicada no autoriza operaciones genéricas sobre el esquema.
@@ -859,16 +933,16 @@ export default {
         return json({ error: 'Schema operation not allowed' }, 403, CORS);
       }
     }
-    // Las creaciones de Pedidos/Cotizaciones no pueden depender de un
+    // Las creaciones de Pedidos/Cotizaciones/Facturas no pueden depender de un
     // check-then-POST en dos navegadores. Serializar ambas en el mismo DO.
     if (request.method === 'POST' &&
-        (path === dataPrefix + 'Pedidos' || path === dataPrefix + 'Cotizaciones')) {
+        (path === dataPrefix + 'Pedidos' || path === dataPrefix + 'Cotizaciones' || path === dataPrefix + 'Facturas')) {
       if (!env.CRM_MUTATION_GUARD) {
-        return json({ error: 'CRM write guard unavailable; creation suspended' }, 503, CORS);
+        return json({ error: 'CRM/Facturas write guard unavailable; creation suspended' }, 503, CORS);
       }
       let body;
       try { body = await readOpenAiJson(request); }
-      catch (_) { return json({ error: 'Invalid CRM JSON body' }, 400, CORS); }
+      catch (_) { return json({ error: 'Invalid guarded create JSON body' }, 400, CORS); }
       try {
         const id = env.CRM_MUTATION_GUARD.idFromName('tls-crm-global');
         const guard = env.CRM_MUTATION_GUARD.get(id);

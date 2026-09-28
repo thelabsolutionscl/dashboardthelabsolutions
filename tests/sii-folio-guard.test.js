@@ -125,7 +125,7 @@ test('SII exige DO en el worker y migración automática en Wrangler',()=>{
   assert.match(WRANGLER,/new_sqlite_classes = \["SiiFolioGuard"\]/);
   assert.match(WORKER,/if \(!env\.FOLIO_GUARD \|\| !env\.FOLIOS_KV\)/);
   const emission=WORKER.slice(WORKER.indexOf('async function handleEmitDTE('),WORKER.indexOf('// ── CAF'));
-  assert.ok(emission.indexOf('await nextFolio(')<emission.indexOf('await uploadDTE('));
+  assert.ok(emission.indexOf("'begin'")<emission.indexOf('await uploadDTE('));
   assert.doesNotMatch(emission,/env\.FOLIOS_KV\.put/,'el contador no se guarda después del envío');
 });
 

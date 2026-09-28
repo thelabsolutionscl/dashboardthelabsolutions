@@ -144,10 +144,10 @@ test('un CAF ilegible no se guarda ni toca el contador', async () => {
 test('el folio se reserva en DO antes de firmar o subir el DTE', () => {
   const fn = bloque('async function handleEmitDTE(');
   assert.doesNotMatch(fn, /siiResult\.estado !== '-11'/,'no debe quedar código muerto');
-  assert.match(fn, /await nextFolio\(data\.tipo_documento, env\)/);
-  assert.ok(fn.indexOf('await nextFolio(')<fn.indexOf('await uploadDTE('));
+  assert.match(fn, /await folioGuardCall/);
+  assert.ok(fn.indexOf("'begin'")<fn.indexOf('await uploadDTE('));
   assert.doesNotMatch(fn,/await env\.FOLIOS_KV\.put/,'el emisor ya no reserva después del envío');
-  assert.match(GUARD,/await this\.state\.storage\.put\('last',next\)/,'reservar en almacenamiento durable');
+  assert.match(GUARD,/await txn\.put\('last',next\)/,'reserva en transacción durable');
   assert.match(GUARD,/this\.queue=task\.catch/,'serializar todas las reservas por tipo');
 });
 
