@@ -54,7 +54,7 @@ export function sha256(x) { return createHash('sha256').update(x).digest('hex');
 const API=process.env.GITHUB_API_URL || 'https://api.github.com';
 const repository=process.env.GITHUB_REPOSITORY || '';
 const token=process.env.GITHUB_TOKEN || '';
-const secret=process.env.BACKUP_ENCRYPTION_KEY || '';
+const secret=(process.env.BACKUP_ENCRYPTION_KEY || '').trim();
 const output='backup-migrated';
 function validateEnvironment() {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error('GITHUB_REPOSITORY inválido');
