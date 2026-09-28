@@ -25,7 +25,52 @@ let operations=[],lastOperationsSync=0,operationsSyncing=null;
 
 function token(){try{return typeof getPrinterTunnelToken==='function'?getPrinterTunnelToken():'';}catch(_){return'';}}
 function base(){try{return typeof getPrinterTunnel==='function'?getPrinterTunnel().replace(/\/$/,''):'';}catch(_){return'';}}
-function url(path){const t=token();return base()+path+(t?(path.includes('?')?'&':'?')+'bt='+encodeURIComponent(t):'');}
+function url(path){return base()+path;}
+let controllerSessionToken='',controllerSessionRole='',controllerSessionExpiresAt=0,controllerSessionPromise=null;
+let controllerSessionUnsupportedUntil=0;
+function _farmHeaders(extra={},authToken=''){
+  const h={...extra},t=authToken||token();if(t)h['X-Bridge-Token']=t;return h;
+}
+async function _farmRawFetch(path,opts={},authToken=''){
+  return fetch(url(path),{...opts,headers:_farmHeaders(opts.headers||{},authToken)});
+}
+async function ensureControllerSession(force=false){
+  const now=Date.now();
+  if(!force&&controllerSessionToken&&controllerSessionExpiresAt>now+15000)
+    return{token:controllerSessionToken,role:controllerSessionRole,expiresAt:controllerSessionExpiresAt};
+  if(!force&&controllerSessionUnsupportedUntil>now)return null;
+  if(controllerSessionPromise)return controllerSessionPromise;
+  const master=token(),b=base();if(!master||!b)return null;
+  controllerSessionPromise=(async()=>{
+    try{
+      const r=await _farmRawFetch('/farm/session',{
+        method:'POST',cache:'no-store',signal:AbortSignal.timeout(5000)
+      },master);
+      if(!r.ok){
+        if([400,404,405].includes(r.status))controllerSessionUnsupportedUntil=Date.now()+5*60*1000;
+        return null;
+      }
+      const d=await r.json();
+      const session=String(d.token||''),role=String(d.role||''),expiresAt=Number(d.expiresAt||0);
+      if(session.length<24||!['viewer','operator','admin'].includes(role)||expiresAt<=Date.now()+5000)return null;
+      controllerSessionToken=session;controllerSessionRole=role;controllerSessionExpiresAt=expiresAt;controllerRole=role;
+      return{token:session,role,expiresAt};
+    }catch(_){return null;}
+    finally{controllerSessionPromise=null;}
+  })();
+  return controllerSessionPromise;
+}
+async function controllerFetch(path,opts={}){
+  const master=token();if(!base()||!master)throw new Error('Farm Controller/token no disponible');
+  const session=await ensureControllerSession(false),auth=session?.token||master;
+  let r=await _farmRawFetch(path,opts,auth);
+  if((r.status===401||r.status===403)&&session){
+    controllerSessionToken='';controllerSessionExpiresAt=0;
+    const fresh=await ensureControllerSession(true);
+    if(fresh?.token)r=await _farmRawFetch(path,opts,fresh.token);
+  }
+  return r;
+}
 function render(){try{if(typeof renderMonitorGrid==='function')renderMonitorGrid();}catch(_){}}
 function machines(){try{return typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)?MAQUINAS:[];}catch(_){return[];}}
 function executionId(prefix='exec'){
@@ -40,10 +85,14 @@ async function readJson(r){
   return d||{};
 }
 async function authRole(force=false){
-  if(controllerRole&&!force)return controllerRole;
+  if(controllerRole&&!force&&controllerSessionExpiresAt>Date.now()+15000)return controllerRole;
   const b=base(),t=token();if(!b||!t)return'';
-  try{const r=await fetch(url('/authcheck'),{cache:'no-store',signal:AbortSignal.timeout(5000)});const d=await readJson(r);controllerRole=String(d.role||'');controllerOk=true;return controllerRole;}
-  catch(_){controllerOk=false;return'';}
+  try{
+    const session=await ensureControllerSession(force);
+    if(session?.role){controllerRole=session.role;controllerOk=true;return controllerRole;}
+    const r=await _farmRawFetch('/authcheck',{cache:'no-store',signal:AbortSignal.timeout(5000)},t);
+    const d=await readJson(r);controllerRole=String(d.role||'');controllerOk=true;return controllerRole;
+  }catch(_){controllerOk=false;return'';}
 }
 
 // ── Registry: identidad estable > IP guardada en navegador ───────────────
@@ -57,7 +106,7 @@ async function syncRegistry(force=false){
   const b=base(),t=token();if(!b||!t)return registry;
   registrySyncing=(async()=>{
     try{
-      const r=await fetch(url('/farm/registry'),{cache:'no-store',signal:AbortSignal.timeout(6000)});
+      const r=await controllerFetch('/farm/registry',{cache:'no-store',signal:AbortSignal.timeout(6000)});
       const d=await readJson(r);
       registry=Array.isArray(d.machines)?d.machines:[];
       rebuildRegistry();lastRegistrySync=Date.now();controllerOk=true;
@@ -90,7 +139,7 @@ async function patchRegistryMachine(m,forcedIp){
   let cameraConfigured=false;try{cameraConfigured=!!(localStorage.getItem('printer_cam_'+m.id)||m.cam||(typeof _defaultCamUrl==='function'&&_defaultCamUrl(m)));}catch(_){}
   const body={id:m.id,ip:fallback,name:m.nombre||m.name||'',model:m.modelo||m.model||'',num:m.numG||m.num||'',nozzleInstalled:nozzle,
     physicalProfile:{cfsInstalled,cameraConfigured,profileVersion:1}};
-  const r=await fetch(url('/farm/registry'),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(6000)});
+  const r=await controllerFetch('/farm/registry',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(6000)});
   const d=await readJson(r);
   if(d.machine){
     const ix=registry.findIndex(x=>x.id===m.id||x.ip===fallback);
@@ -133,7 +182,7 @@ async function discoverRegistry(){
     const role=await authRole();
     if(role!=='admin')return{started:false,reason:'admin-required'};
     const b=base(),t=token();if(!b||!t)return{started:false,reason:'controller-unavailable'};
-    const r=await fetch(url('/farm/discover'),{method:'POST',signal:AbortSignal.timeout(6000)});
+    const r=await controllerFetch('/farm/discover',{method:'POST',signal:AbortSignal.timeout(6000)});
     const d=await readJson(r);
     if(d.started){
       const refresh=async()=>{
@@ -164,7 +213,7 @@ async function syncQueue(force=false){
   const b=base(),t=token();if(!b||!t)return jobs;
   queueSyncing=(async()=>{
     try{
-      const r=await fetch(url('/farm/queue'),{cache:'no-store',signal:AbortSignal.timeout(5000)});
+      const r=await controllerFetch('/farm/queue',{cache:'no-store',signal:AbortSignal.timeout(5000)});
       const d=await readJson(r);
       jobs=Array.isArray(d.jobs)?d.jobs:[];lastQueueSync=Date.now();controllerOk=true;rebuildCounts();
       try{window.MachineOps?.reconcileFarmQueueJobs?.(jobs);}catch(_){}
@@ -185,7 +234,7 @@ async function _postQueue(path,payload,timeout=15000){
   let lastError=null;
   for(let attempt=0;attempt<2;attempt++){
     try{
-      const r=await fetch(url(path),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(timeout)});
+      const r=await controllerFetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(timeout)});
       return await readJson(r);
     }catch(e){lastError=e;if(attempt===0)await sleep(450);}
   }
@@ -227,7 +276,7 @@ async function syncOperations(force=false){
   const b=base(),t=token();if(!b||!t)return operations;
   operationsSyncing=(async()=>{
     try{
-      const r=await fetch(url('/farm/operations'),{cache:'no-store',signal:AbortSignal.timeout(5000)}),d=await readJson(r);
+      const r=await controllerFetch('/farm/operations',{cache:'no-store',signal:AbortSignal.timeout(5000)}),d=await readJson(r);
       const previousIds=new Set(operations.map(x=>x.machineId));operations=Array.isArray(d.operations)?d.operations:[];const nextIds=new Set(operations.map(x=>x.machineId));
       previousIds.forEach(id=>{if(!nextIds.has(id))window.MachineActivityStore?.clear?.(id);});lastOperationsSync=Date.now();controllerOk=true;
       window.MachineActivityStore?.merge?.(operations);render();
@@ -240,12 +289,12 @@ async function syncOperations(force=false){
 async function setOperation(id,operation={}){
   if(!id)throw new Error('machineId requerido');
   window.MachineActivityStore?.set?.(id,operation);
-  const r=await fetch(url('/farm/operations/'+encodeURIComponent(id)),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(operation),signal:AbortSignal.timeout(6000)}),d=await readJson(r);
+  const r=await controllerFetch('/farm/operations/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(operation),signal:AbortSignal.timeout(6000)}),d=await readJson(r);
   if(d.operation)window.MachineActivityStore?.set?.(id,d.operation);await syncOperations(true);return d.operation||operation;
 }
 async function clearOperation(id){
   if(!id)return false;window.MachineActivityStore?.clear?.(id);
-  const r=await fetch(url('/farm/operations/'+encodeURIComponent(id)),{method:'DELETE',signal:AbortSignal.timeout(6000)}),d=await readJson(r);
+  const r=await controllerFetch('/farm/operations/'+encodeURIComponent(id),{method:'DELETE',signal:AbortSignal.timeout(6000)}),d=await readJson(r);
   await syncOperations(true);return d.removed!==false;
 }
 async function durableStartNext(id){
@@ -253,7 +302,7 @@ async function durableStartNext(id){
     await syncQueue(true);
     const j=jobs.find(x=>x.machineId===id&&['queued','retry'].includes(x.state));
     if(!j){if(controllerOk===false)throw new Error('Farm Controller no disponible');return null;}
-    const r=await fetch(url('/farm/queue/'+encodeURIComponent(j.id)+'/run'),{method:'POST',signal:AbortSignal.timeout(5000)});
+    const r=await controllerFetch('/farm/queue/'+encodeURIComponent(j.id+'/run'),{method:'POST',signal:AbortSignal.timeout(5000)});
     const d=await readJson(r);setTimeout(()=>syncQueue(true),1200);return d.job||j;
   }catch(e){
     console.warn('[FarmQueue] start durable falló',e);controllerOk=false;
