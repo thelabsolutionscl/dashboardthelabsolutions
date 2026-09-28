@@ -39,6 +39,21 @@ limita el impacto económico, pero NO reemplaza la autenticación server-side.
 | `GOOGLE_CLIENT_ID`, URLs e identificadores públicos de SII/Ads | Bajo | No autorizan operaciones por sí mismos |
 | `SII_WORKER_KEY`, `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` | Crítico | Todavía pueden quedar incrustados en HTML público; deben sustituirse por sesiones y permisos server-side antes de considerarse protegidos |
 
+## Contención adicional de septiembre 2026
+
+El proxy solo permite reenviar datos y metadata de la base TLS
+(`app1YtD74AqiPWQhy`). Impide usar el PAT del servidor contra otras bases
+incluso si alguien copia `APP_KEY`, pero **no protege los registros de la
+propia base TLS**: la clave sigue siendo pública en el cliente y Origin se
+puede falsificar fuera de un navegador.
+
+La siguiente migración debe autenticar sesiones firmadas en Cloudflare,
+autorizar las operaciones por usuario/rol/tabla/fila en cada endpoint,
+intermediar desde backend las acciones de SII, portal y máquinas, y solo
+después retirar del deploy las credenciales administrativas y rotarlas.
+No borrar hoy las claves del frontend sin una ruta compatible: rompería
+facturación, portal o controles de taller.
+
 ## Pasos pendientes de una sola vez (recomendado)
 
 Los tokens viejos ya estuvieron publicados en el HTML, así que hay que rotarlos:
