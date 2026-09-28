@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 'use strict';
+// This harness deliberately exercises the legacy no-Access configuration.
+global.accessAuthorize=async()=>({legacy:true});
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 
 function cargarGuard(){
-  const src=fs.readFileSync(path.join(__dirname,'..','airtable-proxy','src','worker.js'),'utf8')
+  const src=fs.readFileSync(path.join(__dirname,'..','airtable-proxy','src','worker.js'),'utf8').replace("import { accessAuthorize } from './access-auth.js';",'')
     .replace('export class AiBudgetGuard','class AiBudgetGuard').replace('export class CrmMutationGuard','class CrmMutationGuard')
     .replace('export default','const __worker =');
   return new Function(src+'\nreturn AiBudgetGuard;')();
