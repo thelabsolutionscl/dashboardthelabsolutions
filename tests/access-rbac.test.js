@@ -101,7 +101,7 @@ test('valid JWT but insufficient role is explicitly forbidden',async()=>{
 test('proxy wires Access after shared compatibility key, before any private route',()=>{
   const proxy=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/worker.js'),'utf8');
   const key=proxy.indexOf("const appKey = request.headers.get('X-App-Key')");
-  const access=proxy.indexOf('await accessAuthorize(request,env');
+  const access=proxy.indexOf('await accessAuthorize(request,env',key);
   const ai=proxy.indexOf("if (url.pathname === '/anthropic/usage')");
   assert.ok(key>0&&access>key&&ai>access);
 });
