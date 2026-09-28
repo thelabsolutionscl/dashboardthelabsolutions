@@ -186,4 +186,21 @@ test('Finanzas envía identidad estable y hace preflight remoto antes de crear F
   assert.match(fn,/const facturasRemotas=await airtableFetch\('Facturas',1000\)/);
   assert.match(fn,/else if\(resp\.replayed\)/);
   assert.match(fn,/resp\.fecha_emision\|\|hoyCL\(\)/);
+  assert.match(fn,/delete updateFields\['Estado Pago'\]/,'no revertir Facturas pagadas');
+  assert.match(fn,/delete updateFields\['Fecha Vencimiento'\]/,'no pisar acuerdos de cobranza');
+  assert.match(fn,/DTE_PENDING_RECONCILIATION/,'mostrar advertencia accionable al usuario');
+});
+test('fecha de emisión en horario Chile no se desplaza por UTC ni en cambio de temporada',()=>{
+  const src=workerSource.slice(workerSource.indexOf('function siiChileDate() {'),
+    workerSource.indexOf('async function siiPayloadFingerprint('));
+  assert.ok(src.startsWith('function siiChileDate()'));
+  for(const [utc,expected] of [
+    ['2026-09-28T02:00:00.000Z','2026-09-27'],
+    ['2026-06-28T02:00:00.000Z','2026-06-27'],
+    ['2026-09-28T15:00:00.000Z','2026-09-28']
+  ]){
+    class FakeDate extends Date { constructor(...args){super(...(args.length?args:[utc]));} }
+    const result=new Function('Date',src+'\nreturn siiChileDate;')(FakeDate)();
+    assert.equal(result,expected,'fecha local para '+utc);
+  }
 });
