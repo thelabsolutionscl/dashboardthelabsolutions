@@ -79,12 +79,47 @@ function espiarFetch(status = 200, payload = '{"records":[]}') {
   return { calls, restore: () => { global.fetch = orig; } };
 }
 
+// Alcance real del PAT: nunca permitir que APP_KEY acceda a otra base.
+test('una APP_KEY válida no permite consultar otra base Airtable', async () => {
+  const spy = espiarFetch();
+  try {
+    const r = await worker.fetch(req('/appOTRA1111111111/Clientes', {
+      origin: OK_ORIGIN, key: ENV.APP_KEY
+    }), ENV, undefined);
+    assert.equal(r.status, 403);
+    assert.equal(spy.calls.length, 0);
+  } finally { spy.restore(); }
+});
+
+test('una APP_KEY válida no permite administrar metadata de otra base', async () => {
+  const spy = espiarFetch();
+  try {
+    const r = await worker.fetch(req('/meta/bases/appOTRA1111111111/tables', {
+      origin: OK_ORIGIN, key: ENV.APP_KEY
+    }), ENV, undefined);
+    assert.equal(r.status, 403);
+    assert.equal(spy.calls.length, 0);
+  } finally { spy.restore(); }
+});
+
+test('la consulta legítima de metadata de la base TLS sigue disponible', async () => {
+  const spy = espiarFetch(200, '{"tables":[]}');
+  try {
+    const r = await worker.fetch(req('/meta/bases/app1YtD74AqiPWQhy/tables', {
+      origin: OK_ORIGIN, key: ENV.APP_KEY
+    }), ENV, undefined);
+    assert.equal(r.status, 200);
+    assert.equal(spy.calls.length, 1);
+    assert.equal(spy.calls[0].url, 'https://api.airtable.com/v0/meta/bases/app1YtD74AqiPWQhy/tables');
+  } finally { spy.restore(); }
+});
+
 // ── El corazón del arreglo ──────────────────────────────────────────────
 
 test('SIN Origin, aun con clave válida, se rechaza y NO llega al upstream', async () => {
   const spy = espiarFetch();
   try {
-    const r = await worker.fetch(req('/app1YtD/Clientes', { key: ENV.APP_KEY }), ENV, undefined);
+    const r = await worker.fetch(req('/app1YtD74AqiPWQhy/Clientes', { key: ENV.APP_KEY }), ENV, undefined);
     assert.equal(r.status, 403, 'una petición sin Origin no debe pasar');
     assert.equal(spy.calls.length, 0, 'no debe tocar Airtable');
     const j = await r.json();
@@ -109,7 +144,7 @@ test('SIN Origin no puede llegar al proxy de Anthropic (gastar créditos)', asyn
 test('con Origin permitido y clave válida, la petición Airtable llega al upstream', async () => {
   const spy = espiarFetch();
   try {
-    const r = await worker.fetch(req('/app1YtD/Clientes', { origin: OK_ORIGIN, key: ENV.APP_KEY }), ENV, undefined);
+    const r = await worker.fetch(req('/app1YtD74AqiPWQhy/Clientes', { origin: OK_ORIGIN, key: ENV.APP_KEY }), ENV, undefined);
     assert.equal(r.status, 200);
     assert.equal(spy.calls.length, 1, 'reenvía al upstream');
     assert.match(spy.calls[0].url, /^https:\/\/api\.airtable\.com\/v0\/app1YtD\/Clientes/);
@@ -224,7 +259,7 @@ test('OpenAI usage consulta el ledger sin ejecutar un modelo', async () => {
 test('Origin de otro sitio se rechaza aunque la clave sea válida', async () => {
   const spy = espiarFetch();
   try {
-    const r = await worker.fetch(req('/app1YtD/Clientes', { origin: 'https://evil.example', key: ENV.APP_KEY }), ENV, undefined);
+    const r = await worker.fetch(req('/app1YtD74AqiPWQhy/Clientes', { origin: 'https://evil.example', key: ENV.APP_KEY }), ENV, undefined);
     assert.equal(r.status, 403);
     assert.equal(spy.calls.length, 0);
   } finally { spy.restore(); }
@@ -233,7 +268,7 @@ test('Origin de otro sitio se rechaza aunque la clave sea válida', async () => 
 test('clave incorrecta se rechaza aun con Origin válido', async () => {
   const spy = espiarFetch();
   try {
-    const r = await worker.fetch(req('/app1YtD/Clientes', { origin: OK_ORIGIN, key: 'mala' }), ENV, undefined);
+    const r = await worker.fetch(req('/app1YtD74AqiPWQhy/Clientes', { origin: OK_ORIGIN, key: 'mala' }), ENV, undefined);
     assert.equal(r.status, 403);
     assert.equal(spy.calls.length, 0);
     const j = await r.json();
@@ -254,7 +289,7 @@ test('/health responde sin Origin ni clave (monitores de uptime)', async () => {
 test('OPTIONS (preflight) responde 204 sin tocar upstream', async () => {
   const spy = espiarFetch();
   try {
-    const r = await worker.fetch(req('/app1YtD/Clientes', { method: 'OPTIONS', origin: OK_ORIGIN }), ENV, undefined);
+    const r = await worker.fetch(req('/app1YtD74AqiPWQhy/Clientes', { method: 'OPTIONS', origin: OK_ORIGIN }), ENV, undefined);
     assert.equal(r.status, 204);
     assert.equal(spy.calls.length, 0);
   } finally { spy.restore(); }
