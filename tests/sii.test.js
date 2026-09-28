@@ -206,11 +206,11 @@ test('una factura sin confirmar no se guarda como "Enviado"', () => {
   assert.match(fn, /'Track ID':_trackId/);
 });
 
-test('el número de DTE se sigue guardando aunque Airtable falle', () => {
-  // Ya estaba bien: el folio se consumió en el SII pase lo que pase acá.
+test('el dashboard distingue recibido de reservado al fallar el guardado en Airtable', () => {
   const fn = bloque('async function emitirDTE(', FIN);
-  assert.match(fn, /avisoNoGuardado\(`el DTE N° \$\{dteNum\}/);
-  assert.match(fn, /ya fue emitido en el SII/);
+  assert.match(fn, /avisoNoGuardado\(`el folio DTE N° \$\{dteNum\}/);
+  assert.match(fn, /_recibido\?'recibido por SII':'reservado, recepción por SII sin confirmar'/);
+  assert.match(fn, /await airtableFetch\('Facturas',1000\)/,'revalidación remota antes de upsert');
 });
 
 // ── La puerta del worker ────────────────────────────────────────────────
