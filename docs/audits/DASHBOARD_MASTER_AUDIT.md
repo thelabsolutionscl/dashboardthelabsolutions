@@ -195,6 +195,18 @@ El agregador financiero comparaba solo `fact` (folio) para sustituir líneas his
 
 **Pruebas:** `tests/finanzas-dte-identidad.test.js` ejecuta las funciones financieras reales con documentos de años/tipos distintos, líneas múltiples, registros locales, fechas nulas y folios con ceros iniciales.
 
+### P1-COT-003 — Cotización guiada reintentaba POST ambiguos y nueva cotización no aparecía
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La ruta guiada ejecutaba un segundo `POST` si el error contenía "unknown", sin comprobar el estado HTTP. Un 502 con error genérico podía causar dos cotizaciones. Además, tanto la creación manual como la guiada confiaban en el refresco silencioso (limitado por tiempo) para localizar el ID del registro recién creado: el cliente podía recibir éxito mientras el documento no aparecía en la pantalla o el resultado devolvía `cotId:null`. Ahora los reintentos de esquema solo se permiten si Airtable responde un error HTTP 422 confirmado de campo desconocido; ambas rutas incorporan inmediatamente el registro devuelto por Airtable y usan su ID en Drive.
+
+### P1-PED-003 — Contratos recurrentes anunciaban éxitos que no ocurrieron
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`retainersAutoCheck` mostraba `pend.length` contratos generados aunque `generarRetainer` devolviera `false`. Ahora contabiliza retornos verdaderos, aísla errores de un contrato del siguiente y presenta un aviso de error cuando quedan operaciones pendientes. No cambia el mecanismo ya existente para revertir la marca mensual si falla una creación.
+
+**Pendiente:** garantizar unicidad entre equipos en el backend y un número correlativo atómico; la protección por localStorage solo opera por navegador.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
