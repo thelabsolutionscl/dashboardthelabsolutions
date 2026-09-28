@@ -23,3 +23,13 @@ id = "12c2c38ebe2d47b39e20daafddfa6ea7"
 #   wrangler secret put AIRTABLE_TOKEN     (PAT con scope data.records:write)
 #   wrangler secret put AIRTABLE_BASE_ID   (= app1YtD74AqiPWQhy)
 # Sin estos, el latido simplemente no se ejecuta (no afecta la emisión de DTE).
+
+# Folios: un Durable Object por tipo de DTE serializa reservas y cambios de CAF.
+# Es obligatorio para /emit, /folio y /caf. Sin enlace, emisión fail-closed.
+[[durable_objects.bindings]]
+name = "FOLIO_GUARD"
+class_name = "SiiFolioGuard"
+
+[[migrations]]
+tag = "v1-sii-folios-atomic"
+new_sqlite_classes = ["SiiFolioGuard"]
