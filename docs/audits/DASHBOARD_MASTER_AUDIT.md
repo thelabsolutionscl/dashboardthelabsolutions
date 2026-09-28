@@ -218,6 +218,15 @@ Se agrega `SiiFolioGuard`: **un Durable Object por tipo de documento** con opera
 
 **Límites:** esto impide que el **mismo Worker** asigne simultáneamente dos folios iguales. No garantiza la idempotencia de una intención de facturación repetida: al reenviar dos veces el mismo pedido podrían consumirse dos folios distintos. Se requiere una cola de conciliación, claves de idempotencia server-side por intención e identificación en SII ante respuestas ambiguas. Antes del primer despliegue, conciliar manualmente el último folio confirmado en SII con el contador KV de cada tipo; los folios emitidos fuera de este Worker no están bajo el guard.
 
+### P1-COT-004 / P1-PED-004 — Secuencias no atómicas entre computadores
+
+**Estado:** MITIGADO EN ESTA RAMA para todas las altas que usen el proxy de producción.  
+Se introduce `CrmWriteGuard`, un Durable Object global que serializa todos los POST de `Cotizaciones` y `Pedidos` provenientes de `airtable-proxy`. El guard vuelve a leer TODAS las páginas de la tabla desde Airtable bajo el mismo lock, valida el payload, toma el máximo entre los registros remotos y el contador durable y reserva el siguiente número ANTES de escribir. Solo entonces hace un POST; guarda por `X-Crm-Request-Id` las respuestas exitosas para que una repetición reciba el mismo registro. Dos intentos de convertir la misma cotización se fusionan por el vínculo `Cotizaciones`; los contratos recurrentes se deduplican por `Notas pedido=Retainer <id> <mes>` y una clave estable. El navegador usa siempre el número definitivo devuelto por Airtable.
+
+En red/5xx ambiguos, una misma clave queda pendiente y se reconcilia leyendo Airtable por número reservado antes de cualquier eventual reintento. Si el servicio o su Durable Object están ausentes, la creación falla cerrado en lugar de saltarse el guard. Los rechazos 422 confirmados permiten corregir el payload: pueden dejar huecos numéricos, preferibles a duplicados. Pruebas cubren dos computadores simultáneos, cotización compartida, contratos, paginación inválida y conciliación de timeout posterior a la creación.
+
+**Riesgo pendiente P0:** APP_KEY del frontend sigue siendo pública y la API de Airtable no aplica unicidad si alguien escribe por otra vía (PAT directo u otros Workers no migrados). Solo las escrituras por este proxy comparten el lock. Queda pendiente una capa real de identidad/RBAC y centralizar TODAS las otras altas de origen externo. La numeración deja de aceptar números arbitrarios introducidos manualmente y usa consecutivos oficiales del servidor por año o mes. Verificar operación tras el deploy de la migración Durable Object v2.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  

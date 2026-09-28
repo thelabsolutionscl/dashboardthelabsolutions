@@ -27,7 +27,8 @@ const path = require('path');
 // de modo que TODO el módulo se inicializa igual que en Cloudflare.
 function cargarWorker() {
   const src = fs.readFileSync(path.join(__dirname, '..', 'airtable-proxy', 'src', 'worker.js'), 'utf8');
-  const body = src.replace('export class AiBudgetGuard', 'class AiBudgetGuard').replace('export default', 'const __wk =') + '\nreturn __wk;';
+  const body = src.replace('export class AiBudgetGuard', 'class AiBudgetGuard')
+    .replace('export class CrmWriteGuard','class CrmWriteGuard').replace('export default', 'const __wk =') + '\nreturn __wk;';
   return new Function(body)();
 }
 const worker = cargarWorker();

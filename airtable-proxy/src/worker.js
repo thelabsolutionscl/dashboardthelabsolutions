@@ -43,7 +43,7 @@ const ALLOWED_ORIGINS = [
 ];
 const CORS_BASE = {
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,X-AI-Agent,anthropic-version,x-api-key',
+  'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,X-AI-Agent,X-Crm-Request-Id,anthropic-version,x-api-key',
   'Vary': 'Origin',
 };
 // Solo el bootstrap de esquemas que realmente usa TLS. Una APP_KEY visible
@@ -355,6 +355,188 @@ export class AiBudgetGuard {
     return new Response(JSON.stringify(data), {
       status, headers: { 'Content-Type': 'application/json' },
     });
+  }
+}
+
+
+/**
+ * Serializador de altas comerciales.
+ *
+ * Un solo Durable Object para TODOS los POST de Cotizaciones y Pedidos del
+ * dashboard. Airtable no impone unicidad: asignar el N° en el navegador tras
+ * releer el máximo sigue siendo una carrera entre dos computadores.
+ *
+ * NOTA: no autentica al usuario. APP_KEY continúa pública hasta completar RBAC.
+ * Los clientes que escriban directamente a Airtable eludiendo este proxy
+ * quedan fuera de la garantía de secuencialidad.
+ */
+export class CrmWriteGuard {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this._queue = Promise.resolve();
+  }
+  fetch(request) {
+    const run = this._queue.then(() => this._handle(request));
+    this._queue = run.catch(() => {});
+    return run;
+  }
+  _json(body, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  async _records(table) {
+    const all = [], seen = new Set();
+    let offset = '';
+    for (let page = 0; page < 100; page++) {
+      const url = AIRTABLE_BASE + '/v0/app1YtD74AqiPWQhy/' + encodeURIComponent(table) +
+        '?pageSize=100' + (offset ? '&offset=' + encodeURIComponent(offset) : '');
+      const response = await fetch(url, {
+        headers: { Authorization: 'Bearer ' + this.env.AIRTABLE_TOKEN },
+      });
+      if (!response.ok) throw new Error('Airtable GET ' + table + ': HTTP ' + response.status);
+      const data = await response.json();
+      if (!data || !Array.isArray(data.records) ||
+          data.records.some(x => !x || typeof x.id !== 'string' ||
+            !x.fields || typeof x.fields !== 'object')) {
+        throw new Error('Airtable GET ' + table + ': respuesta inválida');
+      }
+      all.push(...data.records);
+      const next = data.offset || '';
+      if (next && (typeof next !== 'string' || seen.has(next))) {
+        throw new Error('Airtable GET ' + table + ': paginación inválida');
+      }
+      if (!next) return all;
+      seen.add(next);
+      offset = next;
+    }
+    throw new Error('Airtable GET ' + table + ': más de 100 páginas');
+  }
+  async _handle(request) {
+    if (request.method !== 'POST' || new URL(request.url).pathname !== '/create')
+      return this._json({ error: 'Operación no permitida' }, 405);
+    if (!this.env.AIRTABLE_TOKEN)
+      return this._json({ error: 'Airtable no configurado' }, 503);
+    let data;
+    try { data = await request.json(); }
+    catch (_) { return this._json({ error: 'JSON inválido' }, 400); }
+    const table = data && data.table;
+    const payload = data && data.payload;
+    const fields = payload && payload.fields;
+    const requestId = String(data && data.requestId || '');
+    if (!['Cotizaciones', 'Pedidos'].includes(table) || !fields ||
+        typeof fields !== 'object' || Array.isArray(fields) ||
+        Object.keys(fields).length > 100 ||
+        (requestId && !/^crm:[A-Za-z0-9:_-]{1,120}$/.test(requestId)))
+      return this._json({ error: 'Solicitud CRM inválida' }, 400);
+
+    const idKey = requestId ? 'request:' + requestId : '';
+    let previous = null;
+    if (idKey) {
+      previous = await this.state.storage.get(idKey);
+      if (previous && previous.table !== table) return this._json({ error: 'Idempotency key reutilizada' }, 409);
+      if (previous && previous.done && previous.record) return this._json(previous.record);
+    }
+    let all;
+    try { all = await this._records(table); }
+    catch (e) { return this._json({ error: e.message, code: 'CRM_VERIFY_UNAVAILABLE' }, 503); }
+
+    // Tras timeout/caída del isolate, una solicitud "pending" NO reenvía otro
+    // POST. Primero reconcilia en Airtable por el número exclusivo reservado.
+    if (previous && !previous.done) {
+      const existing = all.find(x => String(x.fields[previous.field] || '') === previous.number);
+      if (existing) {
+        await this.state.storage.put(idKey, { table, done: true, record: existing });
+        return this._json(existing);
+      }
+      return this._json({
+        error: 'Creación de ' + table + ' pendiente de conciliación; no reintentar a ciegas',
+        code: 'CRM_AMBIGUOUS_CREATE',
+      }, 409);
+    }
+
+    // Un pedido está unívocamente vinculado a una cotización: incluso dos
+    // navegadores que usan requestId distintos reciben el MISMO registro.
+    if (table === 'Pedidos') {
+      const cotIds = Array.isArray(fields.Cotizaciones) ? fields.Cotizaciones : [];
+      const cotId = cotIds.length === 1 ? cotIds[0] : '';
+      const recurrence = String(fields['Notas pedido'] || '');
+      const recurringKey = /^Retainer [A-Za-z0-9_-]{1,100} \d{4}-\d{2}$/.test(recurrence) ? recurrence : '';
+      const existing = all.find(x => {
+        const f = x.fields || {};
+        const links = Array.isArray(f.Cotizaciones) ? f.Cotizaciones : [];
+        return (cotId && links.includes(cotId)) ||
+          (recurringKey && String(f['Notas pedido'] || '') === recurringKey);
+      });
+      if (existing) {
+        if (idKey) await this.state.storage.put(idKey, { table, done: true, record: existing });
+        return this._json(existing);
+      }
+    }
+
+    const chileanDate = (() => {
+      try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date()); }
+      catch (_) { return new Date().toISOString().slice(0, 10); }
+    })();
+    const orderYear = chileanDate.slice(0, 4);
+    const quoteDate = String(fields['Fecha cotización'] || chileanDate);
+    const quoteYearMonth = /^\d{4}-\d{2}-\d{2}$/.test(quoteDate)
+      ? quoteDate.slice(2, 4) + quoteDate.slice(5, 7)
+      : chileanDate.slice(2, 4) + chileanDate.slice(5, 7);
+    const field = table === 'Pedidos' ? 'N° Pedido' : 'N° Cotización';
+    const prefix = table === 'Pedidos' ? 'PED-' + orderYear + '-' : quoteYearMonth;
+    let largest = 0;
+    for (const r of all) {
+      const value = String(r.fields[field] || '');
+      if (value.startsWith(prefix)) {
+        const suffix = value.slice(prefix.length);
+        if (/^\d+$/.test(suffix)) largest = Math.max(largest, Number(suffix));
+      }
+    }
+    const seqKey = 'seq:' + table + ':' + prefix;
+    largest = Math.max(largest, Number(await this.state.storage.get(seqKey)) || 0);
+    if (!Number.isSafeInteger(largest) || largest > 999999)
+      return this._json({ error: 'Correlativo fuera de rango' }, 409);
+    const next = largest + 1, number = prefix + String(next).padStart(2 + (table === 'Pedidos' ? 1 : 0), '0');
+    // Persistir ANTES del POST: si se pierde la respuesta puede quedar un
+    // hueco en la secuencia, pero nunca se reutiliza un número ya reservado.
+    try {
+      await this.state.storage.put(seqKey, next);
+      if (idKey) await this.state.storage.put(idKey, { table, done: false, field, number });
+    } catch (_) {
+      return this._json({ error: 'No se pudo reservar el correlativo' }, 503);
+    }
+
+    const assigned = { ...fields, [field]: number };
+    let upstream;
+    try {
+      upstream = await fetch(AIRTABLE_BASE + '/v0/app1YtD74AqiPWQhy/' + encodeURIComponent(table), {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + this.env.AIRTABLE_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...payload, fields: assigned }),
+      });
+    } catch (_) {
+      return this._json({ error: 'Respuesta de Airtable incierta: comprobar antes de reintentar', code: 'CRM_AMBIGUOUS_CREATE' }, 502);
+    }
+    if (!upstream.ok) {
+      // 422/4xx confirman rechazo SIN alta; el cliente puede corregir el
+      // esquema y reintentar. Los 5xx son ambiguos: conservar pending.
+      if (upstream.status < 500 && idKey) await this.state.storage.delete(idKey);
+      return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+    }
+    let created;
+    try { created = await upstream.json(); }
+    catch (_) {
+      return this._json({ error: 'Airtable confirmó alta sin JSON verificable', code: 'CRM_AMBIGUOUS_CREATE' }, 502);
+    }
+    if (!created || typeof created.id !== 'string' || !created.fields)
+      return this._json({ error: 'Alta sin registro verificable', code: 'CRM_AMBIGUOUS_CREATE' }, 502);
+    if (idKey) await this.state.storage.put(idKey, { table, done: true, record: created });
+    return this._json(created);
   }
 }
 
@@ -681,6 +863,38 @@ export default {
       } else {
         return json({ error: 'Schema operation not allowed' }, 403, CORS);
       }
+    }
+    // Todas las altas de pedidos y cotizaciones pasan por un solo Durable
+    // Object. No existe fallback directo: si falta el guard, fallar cerrado
+    // antes de emitir números duplicados entre computadores.
+    if (request.method === 'POST' &&
+        (path === dataPrefix + 'Pedidos' || path === dataPrefix + 'Cotizaciones')) {
+      if (!env.CRM_WRITE_GUARD)
+        return json({ error: 'Guard CRM no configurado; alta bloqueada', code: 'CRM_GUARD_UNAVAILABLE' }, 503, CORS);
+      let body;
+      try {
+        const raw = await request.clone().text();
+        if (raw.length > 256000) return json({ error: 'Alta CRM demasiado grande' }, 413, CORS);
+        body = JSON.parse(raw);
+      } catch (_) { return json({ error: 'Alta CRM inválida' }, 400, CORS); }
+      let result;
+      try {
+        const stub = env.CRM_WRITE_GUARD.get(env.CRM_WRITE_GUARD.idFromName('crm-global-writes'));
+        result = await stub.fetch('https://crm-write.internal/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table: path.slice(dataPrefix.length),
+            payload: body,
+            requestId: request.headers.get('X-Crm-Request-Id') || '',
+          }),
+        });
+      } catch (_) {
+        return json({ error: 'Guard CRM no disponible; alta bloqueada', code: 'CRM_GUARD_UNAVAILABLE' }, 503, CORS);
+      }
+      const responseHeaders = new Headers(result.headers);
+      Object.entries(CORS).forEach(([k, v]) => responseHeaders.set(k, v));
+      return new Response(result.body, { status: result.status, headers: responseHeaders });
     }
     const target = AIRTABLE_BASE + path + url.search;
 

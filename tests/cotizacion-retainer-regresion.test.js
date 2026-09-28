@@ -52,6 +52,7 @@ function guided(first){
   const state={cotizaciones:[],cotizacionesById:{}};
   const deps={
     _nextNumCotizacion:async()=> '260901',
+    _crmRequestId:()=> 'crm:test-guided',
     hoyCL:()=> '2026-09-28',
     calBusinessDate:()=> '2026-10-12',
     isVendorMode:()=>false,

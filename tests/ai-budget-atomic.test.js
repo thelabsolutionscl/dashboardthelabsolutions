@@ -8,6 +8,7 @@ const path=require('node:path');
 function cargarGuard(){
   const src=fs.readFileSync(path.join(__dirname,'..','airtable-proxy','src','worker.js'),'utf8')
     .replace('export class AiBudgetGuard','class AiBudgetGuard')
+    .replace('export class CrmWriteGuard','class CrmWriteGuard')
     .replace('export default','const __worker =');
   return new Function(src+'\nreturn AiBudgetGuard;')();
 }

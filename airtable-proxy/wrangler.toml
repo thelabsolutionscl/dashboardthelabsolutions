@@ -50,3 +50,13 @@ class_name = "AiBudgetGuard"
 [[migrations]]
 tag = "v1-anthropic-budget-atomic"
 new_sqlite_classes = ["AiBudgetGuard"]
+
+# Todas las altas de Cotizaciones/Pedidos (y sus correlativos) pasan por una
+# única instancia; no compartir su namespace con el presupuesto de IA.
+[[durable_objects.bindings]]
+name = "CRM_WRITE_GUARD"
+class_name = "CrmWriteGuard"
+
+[[migrations]]
+tag = "v2-crm-atomic-writes"
+new_sqlite_classes = ["CrmWriteGuard"]

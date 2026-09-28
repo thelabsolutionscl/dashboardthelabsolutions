@@ -7356,7 +7356,12 @@ async function airtableHttp(url,opts,{retries=2,timeout=20000,idempotent=true}={
   }
   throw new Error('Error de red: '+(lastErr?.message||'sin conexión'));
 }
-async function airtableWrite(table,method,recordId,fields){
+function _crmRequestId(){
+  const random=(typeof crypto!=='undefined'&&typeof crypto.randomUUID==='function')
+    ?crypto.randomUUID():(Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+  return 'crm:'+random;
+}
+async function airtableWrite(table,method,recordId,fields,requestId){
   const _wu=AUTH.getUser();
   if(_wu&&!RBAC.canWriteTable(_wu.role,table)){toast('Tu rol no tiene permiso de escritura','error');throw new Error('RBAC: escritura no permitida para rol '+_wu.role+' en '+table);}
   const cfg=_airtableConfig();
@@ -7364,7 +7369,10 @@ async function airtableWrite(table,method,recordId,fields){
   // El POST de creación NO es idempotente: si un corte de red o un 5xx deja el
   // resultado ambiguo, no se reintenta (evita duplicar el registro con el mismo
   // correlativo). PATCH/DELETE sí son idempotentes.
-  const r=await airtableHttp(url,{method,headers:{...cfg.headers,'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})},{idempotent:method!=='POST'});
+  const headers={...cfg.headers,'Content-Type':'application/json'};
+  if(method==='POST'&&['Cotizaciones','Pedidos'].includes(table))
+    headers['X-Crm-Request-Id']=requestId||_crmRequestId();
+  const r=await airtableHttp(url,{method,headers,body:JSON.stringify({fields,typecast:true})},{idempotent:method!=='POST'});
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${j.error?.message||j.error?.type||'Error desconocido'}`);}
   return await r.json();
 }
@@ -11045,28 +11053,30 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   if(fields['Instrucciones fabricación']) base['Instrucciones fabricación']=fields['Instrucciones fabricación'];
   if(fields['Notas pedido']) base['Notas pedido']=fields['Notas pedido'];
   let creado;
+  const requestId='crm:quote:'+cotId;
   try{
-    creado=await airtableWrite('Pedidos','POST',null,fields);
+    creado=await airtableWrite('Pedidos','POST',null,fields,requestId);
   }catch(e){
     // Solo 422 (rechazo confirmado de esquema) permite reintentar un POST.
     // Red/timeout/5xx tienen resultado ambiguo: otro POST duplicaría el pedido.
     if(/^HTTP 422:/.test(e.message||'')){
-      try{await ensureCalendarioCrmFields();creado=await airtableWrite('Pedidos','POST',null,fields);}
+      try{await ensureCalendarioCrmFields();creado=await airtableWrite('Pedidos','POST',null,fields,requestId);}
       catch(e2){
         if(!/^HTTP 422:/.test(e2.message||'')){toast(`⚠ Error: ${e2.message}`,'error');return false;}
-        try{creado=await airtableWrite('Pedidos','POST',null,base);}
+        try{creado=await airtableWrite('Pedidos','POST',null,base,requestId);}
         catch(e3){toast(`⚠ Error: ${e3.message}`,'error');return false;}
       }
     }else{toast(`⚠ Error: ${e.message}`,'error');return false;}
   }
   if(creado&&creado.id){state.pedidos=_mergeRecords(state.pedidos,[creado]);_rebuildPedidosById();}
-  toast(`✓ Pedido ${numPedido} creado desde ${numCot||'la cotización'}`,'success');
+  const numeroFinal=creado?.fields?.['N° Pedido']||numPedido;
+  toast(`✓ Pedido ${numeroFinal} creado desde ${numCot||'la cotización'}`,'success');
   // Con tope 50 la lista se truncaba: pasados los 50 pedidos, crear uno hacía
   // desaparecer el resto de la pantalla hasta recargar, y dejaba ciego al
   // correlativo. Mismo tope que la carga inicial.
   try{const pRes=await airtableFetch('Pedidos',1000);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
   try{renderPedidos();}catch(e){}try{renderCotizaciones();}catch(e){}
-  if(!opts.silent) _offerAgentChain(numPedido,solicitudCot);
+  if(!opts.silent) _offerAgentChain(numeroFinal,solicitudCot);
   return true;
   }finally{_pedidosCotEnCurso.delete(cotId);}
 }
@@ -11264,16 +11274,17 @@ async function _saveCotFields(method,id,fields){
   // reintentar un POST en esos casos podría duplicar la cotización.
   const isUnknown=e=>/^HTTP 422:.*\b(unknown|field)\b/i.test((e&&e.message)||'');
   const f={...fields};
-  try{ return await airtableWrite('Cotizaciones',method,id,f); }
+  const requestId=method==='POST'?_crmRequestId():null;
+  try{ return await airtableWrite('Cotizaciones',method,id,f,requestId); }
   catch(e){
     if(!isUnknown(e)) throw e;
     try{ await ensureCotizacionFields(); }catch(_){}
-    try{ return await airtableWrite('Cotizaciones',method,id,f); }
+    try{ return await airtableWrite('Cotizaciones',method,id,f,requestId); }
     catch(e2){
       if(!isUnknown(e2)) throw e2;
       for(const k of ['Historial fechas calendario','Fecha límite cotización','Fecha de entrega','Tiempo de producción máx','Detalle JSON','Tipo días producción','Tiempo de producción']){
         if(k in f){ delete f[k];
-          try{ return await airtableWrite('Cotizaciones',method,id,f); }
+          try{ return await airtableWrite('Cotizaciones',method,id,f,requestId); }
           catch(e3){ if(!isUnknown(e3)) throw e3; }
         }
       }
@@ -13558,17 +13569,26 @@ async function _retainerCrearPedido(ret){
   let numPedido;
   try{numPedido=await _nextNumPedido();}
   catch(e){console.warn('[retainers] No se pudo verificar correlativo:',e);return false;}
-  const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0,'Detalle productos':ret.concepto||'','Solicitud cliente (texto libre)':'[Contrato recurrente] '+(ret.concepto||'')};
+  const claveRet='Retainer '+String(ret.id||'').replace(/[^A-Za-z0-9_-]/g,'')+' '+_mesActualKey();
+  // Clave natural persistida en Airtable para evitar dos pedidos del mismo
+  // contrato/mes aunque dos computadores pulsen Generar simultáneamente.
+  const requestId='crm:retainer:'+String(ret.id||'').replace(/[^A-Za-z0-9_-]/g,'')+':'+_mesActualKey();
+  const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0,'Detalle productos':ret.concepto||'','Solicitud cliente (texto libre)':'[Contrato recurrente] '+(ret.concepto||''),'Notas pedido':claveRet};
   if(ret.clienteId) fields['Cliente']=[ret.clienteId];
-  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0};if(fields['Cliente'])base['Cliente']=fields['Cliente'];
-  try{await airtableWrite('Pedidos','POST',null,fields);}
-  catch(e){if(/^HTTP 422:/.test(e.message||'')){try{await airtableWrite('Pedidos','POST',null,base);}catch(e2){return false;}}else return false;}
-  // Con tope 50 la lista se truncaba: pasados los 50 pedidos, crear uno hacía
-  // desaparecer el resto de la pantalla hasta recargar, y dejaba ciego al
-  // correlativo. Mismo tope que la carga inicial.
+  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0,'Notas pedido':claveRet};
+  if(fields['Cliente'])base['Cliente']=fields['Cliente'];
+  let creado;
+  try{creado=await airtableWrite('Pedidos','POST',null,fields,requestId);}
+  catch(e){
+    if(/^HTTP 422:/.test(e.message||'')){
+      try{creado=await airtableWrite('Pedidos','POST',null,base,requestId);}
+      catch(e2){return false;}
+    }else return false;
+  }
+  if(creado?.id){state.pedidos=_mergeRecords(state.pedidos,[creado]);_rebuildPedidosById();}
   try{const pRes=await airtableFetch('Pedidos',1000);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
   try{renderPedidos();}catch(e){}
-  return numPedido;
+  return creado?.fields?.['N° Pedido']||numPedido;
 }
 async function generarRetainer(id,silent){
   const arr=_retainers();const ret=arr.find(x=>x.id===id);if(!ret)return false;
@@ -13669,10 +13689,11 @@ async function createCotizacion(){
     const _itJsonN=_cotItemsJSON('#itemsContainer .item-row');if(_itJsonN) fields['Detalle JSON']=_itJsonN;
     const _creada=await _saveCotFields('POST',null,fields);
     if(_creada&&_creada.id){state.cotizaciones=_mergeRecords(state.cotizaciones,[_creada]);_rebuildCotizacionesById();}
-    toast(`✓ Cotización ${num} guardada`,'success');
+    const finalNum=_creada?.fields?.['N° Cotización']||num;
+    toast(`✓ Cotización ${finalNum} guardada`,'success');
     if(_estadoInicial==='Enviada')await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
-    const _newCot=(_creada&&_creada.id)?_creada:state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
+    const _newCot=(_creada&&_creada.id)?_creada:state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===finalNum);
     if(_newCot) syncCotizacionADrive(_newCot.id);
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='✚ Guardar Cotización';
@@ -13875,11 +13896,12 @@ async function crearCotizacionGuiada(d){
   const _itJsonG=(d.items||[]).length?JSON.stringify((d.items||[]).map(it=>({desc:it.desc||'',und:it.und||1,costoUnit:it.costo||0,ventaUnit:it.venta||0}))):'';
   if(_itJsonG)fields['Detalle JSON']=_itJsonG;
   let creada;
-  try{creada=await airtableWrite('Cotizaciones','POST',null,fields);}
+  const requestId=_crmRequestId();
+  try{creada=await airtableWrite('Cotizaciones','POST',null,fields,requestId);}
   catch(e){
     if(!/^HTTP 422:.*\b(unknown|field)\b/i.test((e&&e.message)||''))throw e;
     delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];
-    creada=await airtableWrite('Cotizaciones','POST',null,fields);
+    creada=await airtableWrite('Cotizaciones','POST',null,fields,requestId);
     ensureCotizacionFields();
   }
   // El refresco silencioso está limitado a 10 min: adoptar la respuesta del
@@ -13887,9 +13909,10 @@ async function crearCotizacionGuiada(d){
   if(creada&&creada.id){state.cotizaciones=_mergeRecords(state.cotizaciones,[creada]);_rebuildCotizacionesById();}
   if(d.clienteId&&estado==='Enviada')await _advanceEtapaCliente(d.clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
   await loadAllDataSilent();renderCotizaciones();renderOverview();
-  const newCot=(creada&&creada.id)?creada:state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
+  const finalNum=creada?.fields?.['N° Cotización']||num;
+  const newCot=(creada&&creada.id)?creada:state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===finalNum);
   if(newCot)syncCotizacionADrive(newCot.id);
-  return{num,total,cotId:newCot?newCot.id:null,status:estado,fechaLimite};
+  return{num:finalNum,total,cotId:newCot?newCot.id:null,status:estado,fechaLimite};
 }
 // Pantalla final con opciones de compartir (#8)
 function _gfQuoteSuccess(r,clienteId){

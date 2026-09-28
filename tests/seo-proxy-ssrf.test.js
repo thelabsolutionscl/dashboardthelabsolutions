@@ -6,6 +6,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const src=fs.readFileSync(path.join(__dirname,'..','airtable-proxy','src','worker.js'),'utf8');
 const worker=new Function(src.replace('export class AiBudgetGuard','class AiBudgetGuard')
+    .replace('export class CrmWriteGuard','class CrmWriteGuard')
     .replace('export default','const __wk =')+'\nreturn __wk;')();
 const ENV={APP_KEY:'test-local-app-key'};
 const ORIGIN='https://dashboard.thelab.solutions';
