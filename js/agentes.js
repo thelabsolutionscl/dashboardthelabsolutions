@@ -335,7 +335,88 @@ function wbMarkDone(cliId){
 // el tiempo desde el último pedido alcanza ~su cadencia habitual, es momento de
 // invitarlos a reponer — proactivo, ANTES de que se enfríen (eso lo cubre winback).
 const _RECOMPRA_LOG_KEY='thelab_recompra_log_v1';
-function _recompraLog(){try{return JSON.parse(localStorage.getItem(_RECOMPRA_LOG_KEY)||'{}');}catch(e){return{};}}
+const _RECOMPRA_REMOTE_PREFIX='CRM_RECOMPRA:';
+let _recompraRemoteHydrated=false,_recompraRemoteReadAt=0,_recompraRemotePromise=null;
+const _recompraRemoteChains=new Map();
+function _recompraNormalize(raw,now=Date.now()){
+  const out={};
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return out;
+  for(const [id,v] of Object.entries(raw)){
+    if(!/^rec[A-Za-z0-9]{5,}$/.test(id)||!v||typeof v!=='object')continue;
+    const ts=Number(v.ts);
+    if(!Number.isFinite(ts)||ts<=0||ts>now+864e5)continue;
+    // La bandeja solo suprime 30 días. Conservar 45 mantiene margen para
+    // sincronizar equipos offline sin hacer crecer Monitor Sistema para siempre.
+    if(now-ts>45*864e5)continue;
+    out[id]={ts,via:String(v.via||'manual').slice(0,40)};
+  }
+  return out;
+}
+function _recompraMerge(a,b){
+  const out={..._recompraNormalize(a)};
+  for(const [id,v] of Object.entries(_recompraNormalize(b))){
+    if(!out[id]||v.ts>out[id].ts)out[id]=v;
+  }
+  return out;
+}
+function _recompraStore(log){
+  const clean=_recompraNormalize(log);
+  try{localStorage.setItem(_RECOMPRA_LOG_KEY,JSON.stringify(clean));}catch(e){}
+  return clean;
+}
+function _recompraLog(){
+  try{return _recompraNormalize(JSON.parse(localStorage.getItem(_RECOMPRA_LOG_KEY)||'{}'));}
+  catch(e){return{};}
+}
+function _recompraRemotePayload(cliId,row){
+  return JSON.stringify({version:1,cliente_id:cliId,ts:Number(row.ts),via:String(row.via||'manual').slice(0,40)});
+}
+function _recompraQueueRemote(cliId,row){
+  if(window._DEMO_MODE||typeof _monitorUpsert!=='function')return;
+  const prev=_recompraRemoteChains.get(cliId)||Promise.resolve();
+  const run=prev.catch(()=>{}).then(()=>_monitorUpsert(
+    _RECOMPRA_REMOTE_PREFIX+cliId,
+    _recompraRemotePayload(cliId,row),
+    'recompraRemoteId_'+cliId
+  )).catch(e=>console.warn('[Recompra] sincronización remota pendiente',cliId,e&&e.message));
+  _recompraRemoteChains.set(cliId,run);
+}
+async function _recompraHydrateRemote(force=false){
+  if(window._DEMO_MODE||typeof airtableFetch!=='function')return false;
+  if(!force&&_recompraRemoteHydrated&&Date.now()-_recompraRemoteReadAt<15000)return false;
+  if(_recompraRemotePromise)return _recompraRemotePromise;
+  _recompraRemotePromise=(async()=>{
+    const before=_recompraLog(),remote={};let rows=[];
+    try{
+      const res=await airtableFetch('Monitor Sistema',1000);rows=res.records||[];
+    }catch(e){
+      console.warn('[Recompra] no se pudo leer estado compartido',e&&e.message);
+      return false;
+    }
+    for(const rec of rows){
+      const name=String(rec?.fields?.Name||'');
+      if(!name.startsWith(_RECOMPRA_REMOTE_PREFIX))continue;
+      const cliId=name.slice(_RECOMPRA_REMOTE_PREFIX.length);
+      let payload={};try{payload=JSON.parse(rec.fields?.Notes||'{}');}catch(_){}
+      if(payload.cliente_id&&payload.cliente_id!==cliId)continue;
+      const clean=_recompraNormalize({[cliId]:payload});
+      if(clean[cliId]&&(!remote[cliId]||clean[cliId].ts>remote[cliId].ts)){
+        remote[cliId]=clean[cliId];
+        try{state['recompraRemoteId_'+cliId]=rec.id;}catch(_){}
+      }
+    }
+    const merged=_recompraMerge(before,remote);
+    _recompraStore(merged);
+    // Migración y reconciliación: si este navegador tiene una gestión más nueva,
+    // publícala como registro independiente por cliente; no pisa otros clientes.
+    for(const [id,row] of Object.entries(before)){
+      if(!remote[id]||row.ts>remote[id].ts)_recompraQueueRemote(id,row);
+    }
+    _recompraRemoteHydrated=true;_recompraRemoteReadAt=Date.now();
+    return JSON.stringify(merged)!==JSON.stringify(before);
+  })().finally(()=>{_recompraRemotePromise=null;});
+  return _recompraRemotePromise;
+}
 function _clientePedidos(cli){
   const emp=cli.fields['Empresa']||cli.fields['Contacto']||'';
   return (state.pedidos||[]).filter(p=>{
@@ -373,6 +454,11 @@ function _recompraMsg(cand){
   return `Hola${nombre?' '+nombre:''} 👋 Te saludo de The Lab Solutions. Vimos que sueles renovar con nosotros cada ~${cand.cadencia} días y ya pasó un tiempo desde tu último pedido${emp?` (${emp})`:''}. ¿Te preparamos una nueva producción o cotización? Cuéntanos qué necesitas y lo dejamos listo. 💙`;
 }
 function buildRecompraTray(){
+  // Render inmediato con caché local y reconciliación asíncrona para que una
+  // gestión hecha desde otro computador desaparezca también aquí.
+  if(!_recompraRemoteHydrated||Date.now()-_recompraRemoteReadAt>=15000){
+    _recompraHydrateRemote().then(changed=>{if(changed)buildRecompraTray();}).catch(()=>{});
+  }
   const card=document.getElementById('recompraTrayCard'); if(!card) return;
   const cands=_recompraCands();
   const cnt=document.getElementById('recompraTrayCount'); if(cnt) cnt.textContent=cands.length;
@@ -395,8 +481,9 @@ function buildRecompraTray(){
   }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más</div>`:'');
 }
 function _recompraMark(cliId,via){
-  const log=_recompraLog(); log[cliId]={ts:Date.now(),via:via||'manual'};
-  try{localStorage.setItem(_RECOMPRA_LOG_KEY,JSON.stringify(log));}catch(e){}
+  const log=_recompraLog(),row={ts:Date.now(),via:via||'manual'};
+  log[cliId]=row;_recompraStore(log);
+  _recompraQueueRemote(cliId,row);
   buildRecompraTray();
 }
 async function recompraWhatsApp(cliId){
