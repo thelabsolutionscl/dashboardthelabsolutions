@@ -114,6 +114,89 @@ test('la consulta legítima de metadata de la base TLS sigue disponible', async 
   } finally { spy.restore(); }
 });
 
+
+// La clave del navegador no debe permitir modificar estructura de producción.
+// El bootstrap actual sigue funcionando únicamente para esquemas conocidos.
+test('el proxy bloquea DELETE/PATCH de metadata incluso con la clave correcta',async()=>{
+  const spy=espiarFetch();
+  try{
+    for(const method of ['DELETE','PATCH']){
+      const r=await worker.fetch(req('/meta/bases/app1YtD74AqiPWQhy/tables/tblvVAc4TtiERA0Tc',{
+        origin:OK_ORIGIN,key:ENV.APP_KEY,method
+      }),ENV,undefined);
+      assert.equal(r.status,403);
+    }
+    assert.equal(spy.calls.length,0);
+  }finally{spy.restore();}
+});
+
+test('un cliente no puede crear tablas desconocidas del esquema TLS',async()=>{
+  const spy=espiarFetch();
+  try{
+    const r=await worker.fetch(req('/meta/bases/app1YtD74AqiPWQhy/tables',{
+      origin:OK_ORIGIN,key:ENV.APP_KEY,method:'POST',body:JSON.stringify({
+        name:'Backdoor',fields:[{name:'Material',type:'singleLineText'}]
+      })
+    }),ENV,undefined);
+    assert.equal(r.status,403);
+    assert.equal(spy.calls.length,0);
+  }finally{spy.restore();}
+});
+
+test('un cliente no puede agregar campos arbitrarios ni editar campos existentes',async()=>{
+  const spy=espiarFetch();
+  try{
+    const r=await worker.fetch(req('/meta/bases/app1YtD74AqiPWQhy/tables/tblvVAc4TtiERA0Tc/fields',{
+      origin:OK_ORIGIN,key:ENV.APP_KEY,method:'POST',body:JSON.stringify({name:'Campo desconocido',type:'singleLineText'})
+    }),ENV,undefined);
+    assert.equal(r.status,403);
+    assert.equal(spy.calls.length,0);
+  }finally{spy.restore();}
+});
+
+test('el bootstrap legítimo de tablas sigue disponible tras verificar el esquema real',async()=>{
+  const spy=espiarFetch(200,'{"tables":[]}');
+  try{
+    const r=await worker.fetch(req('/meta/bases/app1YtD74AqiPWQhy/tables',{
+      origin:OK_ORIGIN,key:ENV.APP_KEY,method:'POST',body:JSON.stringify({
+        name:'Inventario',fields:[{name:'Material',type:'singleLineText'}]
+      })
+    }),ENV,undefined);
+    assert.equal(r.status,200);
+    assert.equal(spy.calls.length,2,'un GET de verificación y un POST de creación');
+    assert.equal(spy.calls[0].url,'https://api.airtable.com/v0/meta/bases/app1YtD74AqiPWQhy/tables');
+    assert.equal(spy.calls[1].opts.method,'POST');
+  }finally{spy.restore();}
+});
+
+test('el bootstrap legítimo de campo solo toca tablas conocidas y no duplica campos',async()=>{
+  const good={tables:[{id:'tblvVAc4TtiERA0Tc',name:'Cotizaciones',fields:[]}]};
+  const spy=espiarFetch(200,JSON.stringify(good));
+  try{
+    const reqOpts={origin:OK_ORIGIN,key:ENV.APP_KEY,method:'POST',body:JSON.stringify({
+      name:'Detalle JSON',type:'multilineText'
+    })};
+    const path='/meta/bases/app1YtD74AqiPWQhy/tables/tblvVAc4TtiERA0Tc/fields';
+    const r=await worker.fetch(req(path,reqOpts),ENV,undefined);
+    assert.equal(r.status,200);
+    assert.equal(spy.calls.length,2);
+    assert.equal(spy.calls[1].opts.method,'POST');
+  }finally{spy.restore();}
+});
+
+test('un POST de esquema falla cerrado si no puede consultar el esquema autoritativo',async()=>{
+  const spy=espiarFetch(500,'{}');
+  try{
+    const r=await worker.fetch(req('/meta/bases/app1YtD74AqiPWQhy/tables',{
+      origin:OK_ORIGIN,key:ENV.APP_KEY,method:'POST',body:JSON.stringify({
+        name:'Inventario',fields:[{name:'Material',type:'singleLineText'}]
+      })
+    }),ENV,undefined);
+    assert.equal(r.status,502);
+    assert.equal(spy.calls.length,1,'nunca hace el POST después de fallar el GET');
+  }finally{spy.restore();}
+});
+
 // ── El corazón del arreglo ──────────────────────────────────────────────
 
 test('SIN Origin, aun con clave válida, se rechaza y NO llega al upstream', async () => {
