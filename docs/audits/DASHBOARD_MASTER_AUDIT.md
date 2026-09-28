@@ -284,6 +284,15 @@ Dos flujos de creación retiraban campos opcionales y repetían `POST Clientes` 
 
 **Pruebas:** `tests/printer-bridge-hardening.test.js` cubre CORS, comparación en tiempo constante, métodos seguros y orden fail-closed.
 
+### P0-MAQ-002 — Farm Controller enviaba el token persistente en cada URL API
+
+**Estado:** MITIGADO EN ESTA RAMA.  
+`js/maquinas-farm-controller.js` agregaba `?bt=<token>` a todas las llamadas `fetch` de cola, registry, operaciones y discovery, pese a que el Controller ya dispone de `POST /farm/session`. Esto multiplica la exposición del token maestro en URLs, trazas y capas intermedias. Ahora el navegador solicita un ticket efímero con `X-Bridge-Token`, conserva únicamente el ticket en memoria y usa headers para las APIs del Controller. La sesión se renueva antes de expirar y una respuesta 401/403 permite una sola renovación. Un Controller antiguo sin `/farm/session` conserva compatibilidad mediante el mismo header, no query string.
+
+**Límite:** cámaras y WebSocket todavía requieren autenticación compatible con URLs/handshake del navegador y pueden seguir usando `?bt=`. La credencial privilegiada publicada en frontend no queda resuelta por este cambio; el objetivo pendiente es emitir capacidades viewer/operator de corta vida desde una identidad server-side y evitar que el navegador conozca el token admin.
+
+**Pruebas:** `tests/maquinas-farm-controller.test.js` verifica sesión, renovación, fallback por header, ausencia de token query en APIs y preservación de rutas de cola.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
