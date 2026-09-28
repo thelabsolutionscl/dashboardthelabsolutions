@@ -39,6 +39,19 @@ limita el impacto económico, pero NO reemplaza la autenticación server-side.
 | `GOOGLE_CLIENT_ID`, URLs e identificadores públicos de SII/Ads | Bajo | No autorizan operaciones por sí mismos |
 | `SII_WORKER_KEY`, `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` | Crítico | Todavía pueden quedar incrustados en HTML público; deben sustituirse por sesiones y permisos server-side antes de considerarse protegidos |
 
+## Control de metadata Airtable
+
+La lectura de tablas queda permitida para las comprobaciones de esquema. Las
+operaciones destructivas (`PATCH`/`DELETE`) de metadata y las altas de
+tablas o campos desconocidos ahora se rechazan. Las altas legítimas de los
+campos predefinidos requieren consultar el esquema real de Airtable antes de
+escribir, y no se reintentan creando duplicados si ya existe el objeto.
+
+Esto limita daños, pero no sustituye autenticación: la clave visible aún
+permite editar registros y activar altas de esquema permitidas. El cierre P0
+requiere identidad de usuario, permisos en el servidor y un canal
+administrativo privado para cualquier cambio estructural.
+
 ## Contención adicional de septiembre 2026
 
 El proxy solo permite reenviar datos y metadata de la base TLS

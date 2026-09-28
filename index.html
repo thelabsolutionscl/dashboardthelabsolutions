@@ -8046,7 +8046,7 @@ const _CORE_TABLES=[
 // marcar "en vivo" y guardar caché aunque Pedidos hubiese fallado: el navegador
 // seguía mostrando un snapshot parcial como si fuera actual. Reintentamos solo
 // el núcleo y no avanzamos el reloj/caché si alguno sigue fallando.
-const _CRITICAL_CORE_INDEXES=[0,1,2];
+const _CRITICAL_CORE_INDEXES=[0,1,2,6]; // Facturas también es dato financiero crítico
 function _fetchAllCore(){
   // Se mantienen las llamadas explícitas: además de ser más legibles, varios
   // chequeos de wiring verifican aquí los topes de cada tabla.
@@ -8084,6 +8084,13 @@ function _criticalCoreError(res){
     .map(i=>_CORE_TABLES[i][0]);
   return failed.length?new Error('Carga incompleta del CRM: '+failed.join(', ')):null;
 }
+// Un snapshot scope=full solo es válido cuando las siete tablas se cargaron.
+// Las tablas secundarias pueden fallar sin bloquear el dashboard, pero jamás
+// deben contaminar una caché completa ni avanzar el cursor incremental.
+function _missingCoreTables(res){
+  return _CORE_TABLES.filter((_,i)=>res?.[i]?.status!=='fulfilled').map(x=>x[0]);
+}
+function _coreSnapshotComplete(res){return _missingCoreTables(res).length===0;}
 // Trae sólo los registros de una tabla modificados después de sinceIso (refresco incremental).
 async function airtableFetchSince(table,sinceIso,max=1000){
   const cfg=_airtableConfig();
@@ -8134,7 +8141,7 @@ function _rebuildCotizacionesById(){
 // convención que el resto de prefs: thelab_*_<username>). En el arranque se
 // hidrata el state y se pinta de inmediato; loadAllData() refresca en segundo
 // plano. No se cachea en modo demo (datos sintéticos que igual se regeneran).
-const _DATA_CACHE_VERSION=4; // invalida snapshots previos que pudieron quedar parciales
+const _DATA_CACHE_VERSION=5; // descarta snapshots previos donde Facturas/secundarias pudieron faltar
 function _dataCacheKey(){const u=(typeof AUTH!=='undefined'&&AUTH.getUser)?AUTH.getUser():null;return(u&&u.username)?'thelab_datacache_'+u.username:null;}
 function _saveDataCache(){
   if(window._DEMO_MODE) return;
@@ -8158,6 +8165,12 @@ function _hydrateFromCache(){
     // la forma de lo guardado, una caché vieja se hidrataría igual y pintaría
     // datos mal formados como si fueran buenos. Mejor descartarla y recargar.
     if(o.v!==_DATA_CACHE_VERSION||o.scope!=='full'){try{localStorage.removeItem(k);}catch(e2){}return false;}
+    // Un snapshot "full" corrupto no debe convertirse en arrays vacíos.
+    const keys=['clientes','cotizaciones','pedidos','reportes','proveedores','facturas'];
+    if(keys.some(key=>!Array.isArray(o.d[key])||o.d[key].some(row=>!row||typeof row.id!=='string'||!row.fields||typeof row.fields!=='object'))){
+      try{localStorage.removeItem(k);}catch(e2){}
+      return false;
+    }
     state.clientes=o.d.clientes||[];state.cotizaciones=o.d.cotizaciones||[];
     state.pedidos=o.d.pedidos||[];state.reportes=o.d.reportes||[];
     state.proveedores=o.d.proveedores||[];state.facturas=o.d.facturas||[];
@@ -8490,10 +8503,13 @@ async function loadAllData(){
     if(isFirst) slProgress(60,'Procesando registros...');
     _assignCoreState(res,true);
     if(isFirst) slProgress(92,'Calculando resumen...');
-    state.loaded=true;state.lastUpdateTs=Date.now();state._silentN=0;setStatus('en vivo',true);
+    const _complete=_coreSnapshotComplete(res);
+    state.loaded=true;state.lastUpdateTs=_complete?Date.now():0;state._silentN=0;
+    setStatus(_complete?'en vivo':'datos parciales',_complete);
     try{_setOfflineBanner(false);}catch(e){}
-    _saveDataCache();
-    document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')}`;
+    if(_complete)_saveDataCache();
+    else toast('Carga parcial: falta actualizar '+_missingCoreTables(res).join(', ')+'. Se conserva la última caché completa.','info');
+    document.getElementById('lastUpdate').textContent=(_complete?'Actualizado ':'Parcial ')+new Date().toLocaleTimeString('es-CL');
     _safeRender('overview',renderOverview);
     // Tras hidratar desde caché, el primer fetch es un refresco silencioso: no
     // mostramos el toast (se limpia la marca para que los refrescos manuales sí avisen).
@@ -8555,9 +8571,19 @@ async function loadAllDataSilent(){
       changed=_mergeCoreState(res)>0;
       if(changed) _reRenderActiveList();
     }
-    if(doFull||changed) _saveDataCache();
-    state.lastUpdateTs=Date.now();
-    document.getElementById('lastUpdate').textContent=`Actualizado ${new Date().toLocaleTimeString('es-CL')} (auto)`;
+    const _complete=_coreSnapshotComplete(res);
+    if(_complete){
+      if(doFull||changed) _saveDataCache();
+      state.lastUpdateTs=Date.now();
+      setStatus('en vivo',true);
+    }else{
+      // No avanzar el watermark: una tabla ausente en este delta debe volver a
+      // solicitarse desde el mismo timestamp. Si el full falló, forzar otro full.
+      if(doFull) state.lastUpdateTs=0;
+      setStatus('datos parciales',false);
+      logErr('loadAllDataSilent parcial',new Error(_missingCoreTables(res).join(', ')));
+    }
+    document.getElementById('lastUpdate').textContent=(_complete?'Actualizado ':'Parcial ')+new Date().toLocaleTimeString('es-CL')+' (auto)';
     if(changed) renderOverview();
   }catch(e){ setStatus('error (auto)',false); logErr('loadAllDataSilent',e); }
 }

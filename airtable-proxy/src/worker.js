@@ -46,6 +46,81 @@ const CORS_BASE = {
   'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,X-AI-Agent,anthropic-version,x-api-key',
   'Vary': 'Origin',
 };
+// Solo el bootstrap de esquemas que realmente usa TLS. Una APP_KEY visible
+// no debe poder borrar, renombrar ni inventar tablas/campos administrativos.
+// Al introducir otro campo legítimo, revisar esta lista en código y sus pruebas.
+const SCHEMA_BOOTSTRAP_TABLES = new Set(['Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Facturas','Inventario']);
+const SCHEMA_BOOTSTRAP_FIELDS = Object.freeze({
+  "cam": ["singleLineText"],
+  "Cliente": ["singleLineText"],
+  "Cliente ID": ["singleLineText"],
+  "color": ["singleLineText"],
+  "Consumo materiales": ["multilineText"],
+  "Costo mano de obra (CLP)": ["currency"],
+  "Costo material real (CLP)": ["currency"],
+  "Costo real total (CLP)": ["currency"],
+  "desc": ["singleLineText"],
+  "Detalle JSON": ["multilineText"],
+  "estado": ["singleLineText"],
+  "Estado Pago": ["singleLineText"],
+  "Estado SII": ["singleLineText"],
+  "Exento": ["number"],
+  "fecha": ["date"],
+  "Fecha": ["date"],
+  "Fecha de entrega": ["date"],
+  "Fecha límite cotización": ["date"],
+  "Fecha Vencimiento": ["date"],
+  "Ficha Propuesta": ["multilineText"],
+  "Ficha Tecnica": ["multilineText"],
+  "Folio": ["number"],
+  "Forma de pago": ["singleSelect"],
+  "Historial fechas calendario": ["multilineText"],
+  "hora_fin": ["singleLineText"],
+  "hora_inicio": ["singleLineText"],
+  "Horas máquina reales": ["number"],
+  "id": ["singleLineText"],
+  "ip": ["singleLineText"],
+  "IVA": ["number"],
+  "Máquina asignada": ["singleLineText"],
+  "maquina_id": ["singleLineText"],
+  "Material": ["singleLineText"],
+  "modelo": ["singleLineText"],
+  "N° Cotización": ["singleLineText"],
+  "N° Pedido": ["singleLineText"],
+  "Neto": ["number"],
+  "nombre": ["singleLineText"],
+  "notas": ["multilineText"],
+  "Notas": ["singleLineText"],
+  "num": ["number"],
+  "numG": ["number"],
+  "pedido_id": ["singleLineText"],
+  "persona_id": ["singleLineText"],
+  "print_hours": ["number"],
+  "Punto de reorden": ["number"],
+  "repuestos": ["multilineText"],
+  "Stock actual": ["number"],
+  "SUBTOTAL": ["currency"],
+  "tiempo": ["number"],
+  "Tiempo de producción": ["number"],
+  "Tiempo de producción máx": ["number"],
+  "tipo": ["singleLineText"],
+  "Tipo días producción": ["singleLineText"],
+  "Tipo DTE": ["singleLineText"],
+  "Total": ["number"],
+  "TOTAL CON IVA": ["currency"],
+  "Track ID": ["singleLineText"],
+  "ts": ["number"],
+  "Unidad": ["singleLineText"],
+});
+const SCHEMA_FIELD_TYPES = new Set(['singleLineText','multilineText','number','currency','date','singleSelect','multipleSelects','multipleRecordLinks','checkbox','url','email','phoneNumber','attachment','dateTime']);
+function schemaFieldAllowed(field) {
+  if (!field || typeof field.name !== 'string' || !SCHEMA_FIELD_TYPES.has(field.type)) return false;
+  const exact = SCHEMA_BOOTSTRAP_FIELDS[field.name];
+  if (exact) return exact.includes(field.type);
+  const item = /^(ITEM|UNIDADES|COSTO NETO|VALOR NETO)([1-9]|1[0-9]|20)$/.exec(field.name);
+  if (!item) return false;
+  return field.type === ({ITEM:'singleLineText', UNIDADES:'number', 'COSTO NETO':'currency', 'VALOR NETO':'currency'})[item[1]];
+}
 // Headers CORS reflejando el origen permitido (si no, el principal).
 function cors(origin) {
   const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
@@ -516,6 +591,52 @@ export default {
     }
     if (!['GET','POST','PATCH','DELETE'].includes(request.method)) {
       return json({ error: 'Method not allowed' }, 405, CORS);
+    }
+    // La APP_KEY publicada no autoriza operaciones genéricas sobre el esquema.
+    // Conservar únicamente lectura y bootstrap de tablas/campos TLS conocidos.
+    if (path.startsWith(metaPrefix)) {
+      const tableList = metaPrefix + 'tables';
+      if (request.method === 'GET' && path === tableList) {
+        // Necesario para comprobar qué campos ya existen.
+      } else if (request.method === 'POST') {
+        const createTable = path === tableList;
+        const fieldMatch = new RegExp('^' + tableList + '/(tbl[A-Za-z0-9]{14})/fields$').exec(path);
+        if (!createTable && !fieldMatch) return json({ error: 'Schema operation not allowed' }, 403, CORS);
+        let body;
+        try { body = await readOpenAiJson(request); }
+        catch (_) { return json({ error: 'Invalid schema JSON' }, 400, CORS); }
+        if (createTable) {
+          if (!body || !SCHEMA_BOOTSTRAP_TABLES.has(body.name) ||
+            !Array.isArray(body.fields) || body.fields.length < 1 || body.fields.length > 30 ||
+            !body.fields.every(schemaFieldAllowed)) {
+            return json({ error: 'Schema table creation not allowed' }, 403, CORS);
+          }
+        } else if (!schemaFieldAllowed(body)) {
+          return json({ error: 'Schema field creation not allowed' }, 403, CORS);
+        }
+        // Nunca hacer un alta sin comprobar el esquema: evita duplicados,
+        // valida el tblId real y falla cerrado si la metadata no responde.
+        let meta;
+        try {
+          const check = await fetch(AIRTABLE_BASE + tableList, {
+            headers: { Authorization: 'Bearer ' + env.AIRTABLE_TOKEN }
+          });
+          if (!check.ok) return json({ error: 'Cannot verify schema' }, 502, CORS);
+          meta = await check.json();
+        } catch (_) { return json({ error: 'Cannot verify schema' }, 502, CORS); }
+        if (!meta || !Array.isArray(meta.tables)) return json({ error: 'Invalid schema' }, 502, CORS);
+        if (createTable) {
+          if (meta.tables.some(t => t.name === body.name)) return json({ error: 'Table already exists' }, 409, CORS);
+        } else {
+          const found = meta.tables.find(t => t.id === fieldMatch[1]);
+          if (!found || !['Cotizaciones','Pedidos','Maquinas','Maquinas_Eventos','Maquinas_Mant'].includes(found.name)) {
+            return json({ error: 'Schema table not allowed' }, 403, CORS);
+          }
+          if ((found.fields || []).some(f => f.name === body.name)) return json({ error: 'Field already exists' }, 409, CORS);
+        }
+      } else {
+        return json({ error: 'Schema operation not allowed' }, 403, CORS);
+      }
     }
     const target = AIRTABLE_BASE + path + url.search;
 

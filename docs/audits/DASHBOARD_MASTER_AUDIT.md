@@ -155,6 +155,20 @@ La conversión comprueba el vínculo Cotizaciones→Pedidos directamente en Airt
 
 **Riesgo pendiente:** lectura y POST siguen siendo dos operaciones separadas entre navegadores. Cerrar con guard de mutación/idempotencia en backend y reconciliación por cotización, sin volver a publicar secretos administrativos.
 
+### P0-DATA-005 — Facturas y auxiliares podían quedar fuera de una caché marcada como completa
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+Facturas no estaba en la lista de tablas críticas, y un error de Reportes/Proveedores/Monitor Sistema tampoco impedía guardar un snapshot con `scope:full`. Esto podía hacer que una sesión posterior mostrara una base aparentemente actualizada con datos financieros/auxiliares ausentes. Facturas ahora se reintenta como parte del núcleo; la caché solo se reemplaza cuando las siete tablas terminaron correctamente. Si falla una secundaria, la pantalla muestra `datos parciales`, conserva la caché íntegra anterior y no avanza el cursor incremental; si falla un full, el siguiente refresco vuelve a ser full. La versión de la caché pasa a v5 y se validan los seis arrays persistidos.
+
+**Pendiente:** reconciliación multi-dispositivo de mutaciones simultáneas, edición offline con cola durable, e idempotencia transaccional de DTE.
+
+### P0-SEC-010 — APP_KEY permitía borrar o modificar esquemas Airtable
+
+**Estado:** CONTENIDO EN ESTA RAMA; falta autenticar usuarios.  
+Aunque el proxy estaba limitado a la base TLS, reenviaba `PATCH` y `DELETE` de metadata usando un PAT de servidor que el navegador no debe controlar. Ahora solo permite leer la lista de tablas y realizar altas de un conjunto explícito de tablas y tipos de campos usados por el propio dashboard. Cada alta requiere validar contra la metadata autoritativa y rechaza duplicados y tablas no conocidas. Se añaden pruebas para bloquear modificaciones destructivas y validar el bootstrap.
+
+**Riesgo que permanece:** APP_KEY es pública en el HTML: se pueden seguir ejecutando mutaciones de registros de la base TLS, y las altas de esquema legítimas siguen siendo alcanzables desde fuera del navegador con headers falsificados. Se requiere un sistema de sesiones firmado y autorización servidor por operación y tabla, además de un circuito administrativo separado para cambios de esquema.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
