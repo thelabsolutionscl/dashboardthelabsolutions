@@ -2237,7 +2237,45 @@ if(typeof document!=='undefined'){
 }
 
 // ── SII / DTE ─────────────────────────────────────────────────
-function getSIICfg(){try{const c=JSON.parse(localStorage.getItem('sii_cfg')||'{}');return{webhookUrl:c.webhookUrl||_DEFAULTS.SII_WORKER_URL,rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};}catch(e){return{webhookUrl:_DEFAULTS.SII_WORKER_URL,rutEmisor:_DEFAULTS.SII_RUT_EMISOR,razonEmisor:_DEFAULTS.SII_RAZON_SOCIAL};}}
+// Activated only after Cloudflare Access, SII proxy secrets and the browser
+// migration have all been tested. In this mode never call the legacy Worker
+// directly or read its shared secret from HTML/localStorage.
+function _siiAccessMode(){return '%%SII_ACCESS_MODE%%'==='true';}
+function _siiProxyConfig(){
+  const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!px?.url||!px?.key)throw new Error('Proxy seguro no configurado. No se enviará ningún DTE.');
+  const url=new URL(px.url);
+  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)
+    throw new Error('La URL del proxy seguro es inválida');
+  return {base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+}
+function _siiLoginUrl(){
+  try{return _siiProxyConfig().base+'/access/session';}catch(_){return '';}
+}
+async function _siiRequest(route,options={}){
+  if(!_siiAccessMode())throw new Error('La vía protegida SII todavía no está activa');
+  if(!/^\/(emit|caf|folio\/(33|39|52|56|61)|access\/me)$/.test(route))
+    throw new Error('Ruta SII no autorizada');
+  const proxy=_siiProxyConfig();
+  const endpoint=route==='/access/me'?route:'/sii'+route;
+  return fetch(proxy.base+endpoint,{
+    ...options,
+    credentials:'include',
+    redirect:'error',
+    headers:{...options.headers,'X-App-Key':proxy.key}
+  });
+}
+function getSIICfg(){
+  let c={};
+  try{c=JSON.parse(localStorage.getItem('sii_cfg')||'{}')||{};}catch(_){}
+  const secure=_siiAccessMode();
+  let url=secure?'':(c.webhookUrl||_DEFAULTS.SII_WORKER_URL);
+  if(secure)try{url=_siiProxyConfig().base+'/sii';}catch(_){}
+  return{webhookUrl:url,secureProxy:secure,
+    rutEmisor:c.rutEmisor||_DEFAULTS.SII_RUT_EMISOR,
+    razonEmisor:c.razonEmisor||_DEFAULTS.SII_RAZON_SOCIAL};
+}
+
 async function uploadCAF(tipo,input){
   const file=input.files[0];if(!file)return;
   const cfg=getSIICfg();
@@ -2246,7 +2284,7 @@ async function uploadCAF(tipo,input){
   if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳ Subiendo...';}
   try{
     const caf_xml=await file.text();
-    const r=await fetch(cfg.webhookUrl+'/caf',{method:'PUT',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({tipo_documento:tipo,caf_xml})});
+    const r=cfg.secureProxy?await _siiRequest('/caf',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo_documento:tipo,caf_xml})}):await fetch(cfg.webhookUrl+'/caf',{method:'PUT',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify({tipo_documento:tipo,caf_xml})});
     const d=await r.json();
     if(r.ok){
       if(statusEl){statusEl.style.color='var(--accent)';statusEl.textContent='✅ Folios '+d.rango?.desde+'–'+d.rango?.hasta;}
@@ -2267,7 +2305,7 @@ async function checkFolios(tipo){
   const statusEl=document.getElementById('cafStatus'+tipo);
   if(statusEl){statusEl.style.color='var(--text3)';statusEl.textContent='⏳...';}
   try{
-    const r=await fetch(cfg.webhookUrl+'/folio/'+tipo,{headers:siiHeaders()});
+    const r=cfg.secureProxy?await _siiRequest('/folio/'+tipo):await fetch(cfg.webhookUrl+'/folio/'+tipo,{headers:siiHeaders()});
     const d=await r.json();
     if(r.ok){
       const disp=d.folios_disponibles;
@@ -2349,7 +2387,7 @@ async function emitirDTE(){
     observaciones:document.getElementById('dteObservaciones').value
   };
   try{
-    const r=await fetch(cfg.webhookUrl,{method:'POST',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
+    const r=cfg.secureProxy?await _siiRequest('/emit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}):await fetch(cfg.webhookUrl,{method:'POST',headers:siiHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
     if(!r.ok){
       const issue=await r.json().catch(()=>({}));
       const message=typeof issue.error==='string'?issue.error:'Verifica la configuración del Worker SII';
@@ -2366,7 +2404,7 @@ async function emitirDTE(){
     // por bueno sin que nadie del SII lo hubiera acusado.
     const _trackId=resp.trackid||resp.track_id||'';
     const _recibido=(resp.recibido!==false)&&!!_trackId;
-    const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
+    const pdfUrl=resp.pdf_url||resp.url_pdf||resp.pdf||(!cfg.secureProxy&&dteNum?cfg.webhookUrl+'/pdf/'+tipoDTE+'/'+dteNum:'');
     if(dteNum){
       // El folio ya se consumió en el SII: si aquí falla el guardado, el número
       // queda solo en memoria y al recargar el pedido aparece sin DTE. Hay que
