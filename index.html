@@ -13570,17 +13570,43 @@ async function _retainerCrearPedido(ret){
   let numPedido;
   try{numPedido=await _nextNumPedido();}
   catch(e){console.warn('[retainers] No se pudo verificar correlativo:',e);return false;}
-  const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0,'Detalle productos':ret.concepto||'','Solicitud cliente (texto libre)':'[Contrato recurrente] '+(ret.concepto||'')};
+  // La misma identidad debe existir en ambos computadores y sobrevivir a
+  // errores de red: el guard del servidor verifica este campo ANTES del número.
+  const marker='Retainer '+String(ret.id||'').replace(/[^A-Za-z0-9_-]/g,'')+' '+_mesActualKey();
+  const fields={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0,
+    'Detalle productos':ret.concepto||'','Solicitud cliente (texto libre)':'[Contrato recurrente] '+(ret.concepto||''),
+    'Notas pedido':marker};
   if(ret.clienteId) fields['Cliente']=[ret.clienteId];
-  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado','Monto total (CLP)':ret.monto||0};if(fields['Cliente'])base['Cliente']=fields['Cliente'];
-  try{await airtableWrite('Pedidos','POST',null,fields);}
-  catch(e){if(/^HTTP 422:/.test(e.message||'')){try{await airtableWrite('Pedidos','POST',null,base);}catch(e2){return false;}}else return false;}
-  // Con tope 50 la lista se truncaba: pasados los 50 pedidos, crear uno hacía
-  // desaparecer el resto de la pantalla hasta recargar, y dejaba ciego al
-  // correlativo. Mismo tope que la carga inicial.
+  const base={'N° Pedido':numPedido,'Estado pedido':'Confirmado',
+    'Monto total (CLP)':ret.monto||0,'Notas pedido':marker};
+  if(fields['Cliente'])base['Cliente']=fields['Cliente'];
+  let creado=null;
+  for(let intento=0;intento<2;intento++){
+    try{
+      try{creado=await airtableWrite('Pedidos','POST',null,fields);}
+      catch(e){
+        if(!/^HTTP 422:/.test(e.message||''))throw e;
+        // 422 es rechazo confirmado; el segundo POST conserva la identidad
+        // del contrato aun si los campos opcionales no existen en Airtable.
+        creado=await airtableWrite('Pedidos','POST',null,base);
+      }
+      break;
+    }catch(e){
+      // Un 409 CRM_NUMBER_CONFLICT confirma que NO hubo un alta. Solo ahí se
+      // permite releer y reintentar una vez; nunca ante timeout o 5xx ambiguo.
+      if(intento!==0||!/^HTTP 409:.*CRM_NUMBER_CONFLICT/.test(e.message||''))return false;
+      try{numPedido=await _nextNumPedido();}
+      catch(_){return false;}
+      fields['N° Pedido']=numPedido;
+      base['N° Pedido']=numPedido;
+    }
+  }
+  // La respuesta del guard puede ser un pedido EXISTENTE, con su número
+  // definitivo diferente del que este navegador calculó con un estado viejo.
+  if(creado?.id){state.pedidos=_mergeRecords(state.pedidos,[creado]);_rebuildPedidosById();}
   try{const pRes=await airtableFetch('Pedidos',1000);state.pedidos=pRes.records||[];_rebuildPedidosById();}catch(e){}
   try{renderPedidos();}catch(e){}
-  return numPedido;
+  return creado?.fields?.['N° Pedido']||numPedido;
 }
 async function generarRetainer(id,silent){
   const arr=_retainers();const ret=arr.find(x=>x.id===id);if(!ret)return false;
