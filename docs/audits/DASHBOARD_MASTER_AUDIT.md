@@ -188,6 +188,25 @@ El repositorio de GitHub es público y la workflow semanal subía `backup/*.json
 
 **Pendiente externo:** configurar un secreto aleatorio y estable `BACKUP_ENCRYPTION_KEY` en GitHub Actions, guardarlo fuera del repo, verificar una ejecución manual completa, y revisar/eliminar cualquier artefacto histórico en texto plano si existiera. No suponer que los artifacts históricos quedaron protegidos por cambiar la workflow.
 
+### P1-FIN-008 — Folio sin año/tipo ocultaba facturas legítimas
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+El agregador financiero comparaba solo `fact` (folio) para sustituir líneas históricas por DTE de Airtable. El mismo folio de otro año o de otro tipo de documento (por ejemplo factura 33 y nota de crédito 61) eliminaba ingresos o cobranzas legítimas. Se concilia por `año|tipo|folio`; los registros históricos sin tipo se interpretan como factura 33, no como cualquier otro DTE. Se conservan todos los ítems del mismo documento histórico hasta que Airtable tenga el mismo DTE real. Folios vacíos y fechas ausentes no participan en la conciliación. Si el DTE carece de fecha válida se mantiene visible, pero no se asigna ficticiamente a enero del año en curso.
+
+**Pruebas:** `tests/finanzas-dte-identidad.test.js` ejecuta las funciones financieras reales con documentos de años/tipos distintos, líneas múltiples, registros locales, fechas nulas y folios con ceros iniciales.
+
+### P1-COT-003 — Cotización guiada reintentaba POST ambiguos y nueva cotización no aparecía
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La ruta guiada ejecutaba un segundo `POST` si el error contenía "unknown", sin comprobar el estado HTTP. Un 502 con error genérico podía causar dos cotizaciones. Además, tanto la creación manual como la guiada confiaban en el refresco silencioso (limitado por tiempo) para localizar el ID del registro recién creado: el cliente podía recibir éxito mientras el documento no aparecía en la pantalla o el resultado devolvía `cotId:null`. Ahora los reintentos de esquema solo se permiten si Airtable responde un error HTTP 422 confirmado de campo desconocido; ambas rutas incorporan inmediatamente el registro devuelto por Airtable y usan su ID en Drive.
+
+### P1-PED-003 — Contratos recurrentes anunciaban éxitos que no ocurrieron
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`retainersAutoCheck` mostraba `pend.length` contratos generados aunque `generarRetainer` devolviera `false`. Ahora contabiliza retornos verdaderos, aísla errores de un contrato del siguiente y presenta un aviso de error cuando quedan operaciones pendientes. No cambia el mecanismo ya existente para revertir la marca mensual si falla una creación.
+
+**Pendiente:** garantizar unicidad entre equipos en el backend y un número correlativo atómico; la protección por localStorage solo opera por navegador.
+
 ### P0-CRM-001 — Correlativos duplicables entre computadores
 
 **Estado:** CORREGIDO PARA CREACIONES QUE PASAN POR `airtable-proxy` EN ESTA RAMA.  

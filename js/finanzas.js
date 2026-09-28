@@ -243,8 +243,11 @@ function finFacturasFromAirtable(){
     .map(r=>{
       const f=r.fields;
       const fecha=f['Fecha']||f['Fecha Emisión']||'';
-      const year=fecha.slice(0,4)||String(new Date().getFullYear());
-      const mes=String(parseInt(fecha.slice(5,7),10)||1).padStart(2,'0');
+      // Sin fecha válida la factura sigue visible para conciliar, pero no se
+      // atribuye arbitrariamente a enero del año actual ni borra históricos.
+      const fechaValida=/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:$|T)/.test(String(fecha));
+      const year=fechaValida?fecha.slice(0,4):'';
+      const mes=fechaValida?fecha.slice(5,7):'';
       const neto=Number(f['Neto'])||0;
       const iva=Number(f['IVA'])||0;
       const exento=Number(f['Exento'])||0;
@@ -275,13 +278,32 @@ function finFacturasFromAirtable(){
       };
     });
 }
+// Un folio NO identifica por sí solo a un DTE: se reutiliza entre tipos y
+// puede repetirse en ejercicios diferentes. La serie histórica sin tipo se
+// considera factura 33; nunca inferir su identidad desde un DTE con otra serie.
+function finClaveDocumento(r){
+  const folio=String(r?.fact??'').trim().replace(/^0+(?=\d)/,'');
+  const year=String(r?.year??'').trim();
+  if(!folio||!/^\d{4}$/.test(year)) return null;
+  const raw=String(r?.tipoDTE||'33').trim().toLowerCase();
+  const tipo=/^(33|factura|factura electr[oó]nica)$/.test(raw)?'33':
+    /^(39|boleta|boleta electr[oó]nica)$/.test(raw)?'39':
+    /^(61|nota de cr[eé]dito|nota de cr[eé]dito electr[oó]nica)$/.test(raw)?'61':
+    /^(56|nota de d[eé]bito|nota de d[eé]bito electr[oó]nica)$/.test(raw)?'56':
+    /^(52|gu[ií]a de despacho|gu[ií]a de despacho electr[oó]nica)$/.test(raw)?'52':null;
+  return tipo?year+'|'+tipo+'|'+folio:null;
+}
 function finGetAllFacturas(){
   let local;try{local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){local=[];}
+  if(!Array.isArray(local))local=[];
   const airtable=finFacturasFromAirtable();
-  // Airtable es autoritativo para un DTE con folio. Si ese folio también existe
-  // en el histórico/local, se excluyen esas líneas para no duplicar total ni saldo.
-  const foliosAT=new Set(airtable.filter(r=>r.fact).map(r=>String(r.fact).trim()));
-  const legacy=[...FIN_FACTURAS_BASE,...local].filter(r=>!r.fact||!foliosAT.has(String(r.fact).trim()));
+  // Una factura en Airtable reemplaza TODOS los ítems del histórico de ese
+  // mismo DTE. Un folio de otro año/tipo es una operación independiente.
+  const clavesAT=new Set(airtable.map(finClaveDocumento).filter(Boolean));
+  const legacy=[...FIN_FACTURAS_BASE,...local].filter(r=>{
+    const clave=finClaveDocumento(r);
+    return !clave||!clavesAT.has(clave);
+  });
   return [...legacy,...airtable];
 }
 function finVentasMerged(){
