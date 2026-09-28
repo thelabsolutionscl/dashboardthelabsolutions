@@ -424,14 +424,21 @@ export class CrmMutationGuard {
     const cot = table === 'Pedidos' && Array.isArray(data.body.fields.Cotizaciones) &&
       data.body.fields.Cotizaciones.length === 1 && /^rec[A-Za-z0-9]+$/.test(data.body.fields.Cotizaciones[0])
       ? data.body.fields.Cotizaciones[0] : '';
+    // Identidad natural de contratos recurrentes: dos navegadores pueden
+    // proponer N° distintos para EL MISMO contrato/mes. No deduplicar por
+    // cliente+importe: un cliente puede contratar varios trabajos iguales.
+    const recurrence = table === 'Pedidos' ? String(data.body.fields['Notas pedido'] || '').trim() : '';
+    const retainer = /^Retainer [A-Za-z0-9_-]{1,100} \d{4}-\d{2}$/.test(recurrence) ? recurrence : '';
     const keyNum = 'pending:' + table + ':' + number;
     const keyCot = cot ? 'pending:cot:' + cot : '';
-    let remote, pendingNum, pendingCot;
+    const keyRet = retainer ? 'pending:retainer:' + retainer : '';
+    let remote, pendingNum, pendingCot, pendingRet;
     try {
       // La lectura incluye TODO el universo actual; si falla, nunca autorizar un POST.
       remote = await this._readAll(table);
       pendingNum = await this.state.storage.get(keyNum);
       if (keyCot) pendingCot = await this.state.storage.get(keyCot);
+      if (keyRet) pendingRet = await this.state.storage.get(keyRet);
     } catch (_) { return this._json({ error: 'Cannot verify CRM uniqueness; creation suspended' }, 503); }
     // Si la otra pestaña ya creó el pedido para la misma cotización, adoptar
     // el registro real independientemente de qué número estimó el cliente.
@@ -439,20 +446,25 @@ export class CrmMutationGuard {
       const existing = remote.find(r => Array.isArray(r.fields.Cotizaciones) && r.fields.Cotizaciones.includes(cot));
       if (existing) return this._json(existing, 200);
     }
+    if (retainer) {
+      const existing = remote.find(r => String(r.fields['Notas pedido'] || '').trim() === retainer);
+      if (existing) return this._json(existing, 200);
+    }
     if (remote.some(r => String(r.fields[numberField] || '').trim() === number)) {
       return this._json({ error: 'CRM document number already exists', code: 'CRM_NUMBER_CONFLICT' }, 409);
     }
     // Un POST anterior pudo haberse grabado pese al timeout. Bloquear nuevos
     // intentos (incluso con otro número para la misma cotización) hasta reconciliar.
-    if (pendingNum || pendingCot) return this._json({
+    if (pendingNum || pendingCot || pendingRet) return this._json({
       error: 'Previous CRM creation has an uncertain outcome; reconcile Airtable before retrying',
       code: 'CRM_PENDING_RECONCILIATION',
     }, 503);
 
-    const marker = { created: new Date().toISOString(), table, number, cot };
+    const marker = { created: new Date().toISOString(), table, number, cot, retainer };
     try {
       await this.state.storage.put(keyNum, marker);
       if (keyCot) await this.state.storage.put(keyCot, marker);
+      if (keyRet) await this.state.storage.put(keyRet, marker);
     } catch (_) { return this._json({ error: 'Cannot reserve CRM document' }, 503); }
 
     let upstream;
@@ -471,6 +483,7 @@ export class CrmMutationGuard {
       try {
         await this.state.storage.delete(keyNum);
         if (keyCot) await this.state.storage.delete(keyCot);
+        if (keyRet) await this.state.storage.delete(keyRet);
       } catch (_) { /* ante fallo de storage, mantener bloqueado > duplicar */ }
       return upstream;
     }
@@ -492,6 +505,7 @@ export class CrmMutationGuard {
       const done = { ...marker, record_id: created.id, committed: true };
       await this.state.storage.put(keyNum, done);
       if (keyCot) await this.state.storage.put(keyCot, done);
+      if (keyRet) await this.state.storage.put(keyRet, done);
     } catch (_) { /* el registro ya se creó; la lectura autoritativa manda */ }
     return this._json(created, upstream.status);
   }

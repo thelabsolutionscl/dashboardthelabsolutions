@@ -95,6 +95,59 @@ test('dos equipos convierten la misma cotización con números distintos y adopt
   }finally{h.restore();}
 });
 
+
+test('dos equipos: mismo contrato/mes y N° distintos devuelven el MISMO pedido',async()=>{
+  const h=harness();
+  try{
+    const ret=(num)=>order(num);
+    const a=ret('PED-2026-060');a.fields['Notas pedido']='Retainer ret-abc 2026-09';
+    const b=ret('PED-2026-061');b.fields['Notas pedido']='Retainer ret-abc 2026-09';
+    const [first,second]=await Promise.all([h.create('Pedidos',a),h.create('Pedidos',b)]);
+    assert.equal(first.status,201);
+    assert.equal(second.status,200);
+    assert.equal((await first.json()).id,(await second.json()).id);
+    assert.equal(h.postCount(),1);
+  }finally{h.restore();}
+});
+
+test('timeout tras crear un contrato: otro equipo lo reconcilia aun con N° diferente',async()=>{
+  const h=harness({throwFirst:true});
+  try{
+    const a=order('PED-2026-070');a.fields['Notas pedido']='Retainer ret-abc 2026-09';
+    const b=order('PED-2026-071');b.fields['Notas pedido']='Retainer ret-abc 2026-09';
+    assert.equal((await h.create('Pedidos',a)).status,503);
+    const res=await h.create('Pedidos',b);
+    assert.equal(res.status,200);
+    assert.equal((await res.json()).id,h.records.Pedidos[0].id);
+    assert.equal(h.postCount(),1);
+  }finally{h.restore();}
+});
+
+test('un contrato incierto sin alta visible bloquea otro N° del mismo mes',async()=>{
+  const h=harness({throwFirst:true,failWithoutCommit:true});
+  try{
+    const a=order('PED-2026-080');a.fields['Notas pedido']='Retainer ret-abc 2026-09';
+    const b=order('PED-2026-081');b.fields['Notas pedido']='Retainer ret-abc 2026-09';
+    assert.equal((await h.create('Pedidos',a)).status,503);
+    const res=await h.create('Pedidos',b);
+    assert.equal(res.status,503);
+    assert.equal((await res.json()).code,'CRM_PENDING_RECONCILIATION');
+    assert.equal(h.postCount(),1);
+    assert.ok(h.map.has('pending:retainer:Retainer ret-abc 2026-09'));
+  }finally{h.restore();}
+});
+
+test('rechazo 422 confirmado libera la reserva del contrato recurrente',async()=>{
+  const h=harness({reject422:true});
+  try{
+    const r=order('PED-2026-090');r.fields['Notas pedido']='Retainer ret-abc 2026-09';
+    assert.equal((await h.create('Pedidos',r)).status,422);
+    assert.equal(h.map.has('pending:retainer:Retainer ret-abc 2026-09'),false);
+    assert.equal((await h.create('Pedidos',r)).status,201);
+    assert.equal(h.postCount(),2);
+  }finally{h.restore();}
+});
+
 test('las cotizaciones también se serializan en la misma instancia global',async()=>{
   const h=harness();
   try{

@@ -227,6 +227,15 @@ Antes del POST se guarda una reserva durable por número y por cotización; ante
 
 **Límites:** esta garantía cubre todas las creaciones que atraviesan el proxy. No evita mutaciones externas hechas con otro PAT ni convierte `APP_KEY` en autenticación. Una creación con resultado ambiguo y sin registro visible puede requerir conciliación manual; no se hará un POST ciego. Se debe comprobar el deploy de Cloudflare v2 antes de declarar protección activa y mantener la migración SQL `v2-crm-mutation-guard`.
 
+### P1-PED-005 — Contrato recurrente duplicable entre dos computadores
+
+**Estado:** CORREGIDO EN ESTA RAMA para altas a través del proxy.  
+El guard global anterior deduplicaba por número y vínculo de cotización, pero no por contrato/mes. Si dos usuarios estimaban números distintos para el mismo retainer, el backend aceptaba ambos; la marca local `ultimoGenerado` no impide dobles altas entre navegadores. Ahora cada pedido recurrente lleva una identidad natural persistente en Airtable (`Notas pedido=Retainer <id> <mes>`). El Durable Object comprueba esa identidad en todas las páginas antes de evaluar el número, devuelve el registro existente si ya se creó y mantiene una reserva durable de contrato/mes ante timeout hasta poder conciliar. Un 422 confirmado libera todas las reservas sin habilitar reintentos ambiguos.
+
+La UI usa el número real de Airtable, conserva el vínculo de contrato/mes incluso en el fallback de campos opcionales y permite un solo reintento ante HTTP 409 confirmado por conflicto de correlativo. Si un POST devuelve 5xx/timeout no se reintenta. Pruebas: `tests/crm-mutation-guard.test.js` y `tests/retainer-servidor.test.js`.
+
+**Límites:** otros sistemas con PAT directo que salten el proxy pueden seguir creando duplicados; también habría que unificar contratos que se hubieran creado manualmente bajo IDs distintos. Si un 422 confirma que `Notas pedido` no existe, se debe corregir el esquema en vez de omitir la identidad.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
