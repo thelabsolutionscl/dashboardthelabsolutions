@@ -11,3 +11,6 @@ resend.key
 backup/
 backups-restaurados/
 *.decrypted.json
+
+# Solo archivos cifrados temporales y manifest privado de migración
+backup-migrated/
