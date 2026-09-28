@@ -180,6 +180,33 @@ test('una modificación de monto del pedido anterior se rechaza antes de subir u
   await assert.rejects(()=>x.emit({json:async()=>edited},x.env),/contenido diferente/);
   assert.equal(x.stats().uploads,1);
 });
+test('el Worker rechaza DTE sin pedido_id antes de reservar folio',async()=>{
+  const x=bootEmitter();
+  const unlinked={...x.data};
+  delete unlinked.pedido_id;
+  await assert.rejects(()=>x.emit({json:async()=>unlinked},x.env),/pedido_id es obligatorio/);
+  assert.equal(x.stats().uploads,0);
+  assert.equal(x.w.entries.has('last'),false);
+});
+test('si se pierde la respuesta del envío, conserva la reserva y exige conciliación',async()=>{
+  const x=bootEmitter();
+  const old=global.console.error;
+  const originalUploads=x.stats;
+  // El guard no permite otro envío mientras el primer resultado sea incierto.
+  const ambiguous=bootEmitter({noTrack:true});
+  try {
+    console.error=()=>{};
+    const first=await ambiguous.emit({json:async()=>structuredClone(ambiguous.data)},ambiguous.env);
+    const answer=await first.json();
+    assert.equal(answer.recibido,false);
+    assert.equal(answer.dte_numero,101);
+    await assert.rejects(
+      ()=>ambiguous.emit({json:async()=>structuredClone(ambiguous.data)},ambiguous.env),
+      /Emisión anterior no confirmada/
+    );
+    assert.equal(ambiguous.stats().uploads,1);
+  }finally {console.error=old;}
+});
 test('Finanzas envía identidad estable y hace preflight remoto antes de crear Factura',()=>{
   const fn=financeSource.slice(financeSource.indexOf('async function emitirDTE(){'),financeSource.indexOf('function openSIIConfigModal()'));
   assert.match(fn,/pedido_id:pedidoId/);
