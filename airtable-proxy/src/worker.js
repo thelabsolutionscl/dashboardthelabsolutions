@@ -398,16 +398,60 @@ export default {
     // ── SEO fetch — trae el HTML de una página del PROPIO sitio para auditarla ──
     // Restringido a thelab.solutions (sin SSRF). Evita el CORS del navegador.
     if (url.pathname === '/seo-fetch') {
-      let t;
-      try { t = new URL(url.searchParams.get('url') || ''); } catch { return json({ error: 'URL inválida' }, 400, CORS); }
-      const okHost = t.hostname === 'thelab.solutions' || t.hostname === 'www.thelab.solutions';
-      if (t.protocol !== 'https:' || !okHost) {
-        return json({ error: 'Solo se permite auditar thelab.solutions' }, 403, CORS);
-      }
+      // El hostname inicial NO basta: "redirect:follow" permitía salir a
+      // destinos ajenos al sitio (open redirect → SSRF). Validar cada salto,
+      // no enviar credenciales ni traer respuestas sin límite de bytes.
+      const validSeoUrl = t => t.protocol === 'https:' &&
+        (t.hostname === 'thelab.solutions' || t.hostname === 'www.thelab.solutions') &&
+        !t.username && !t.password && !t.port;
+      let target;
+      try { target = new URL(url.searchParams.get('url') || ''); }
+      catch (_) { return json({ error: 'URL inválida' }, 400, CORS); }
+      if (!validSeoUrl(target)) return json({ error: 'Solo se permite auditar thelab.solutions' }, 403, CORS);
+      const maxBytes = 2 * 1024 * 1024;
       try {
-        const up = await fetch(t.toString(), { headers: { 'User-Agent': 'TheLab-SEO-Auditor/1.0' }, redirect: 'follow' });
-        const html = await up.text();
-        return json({ ok: true, status: up.status, finalUrl: up.url || t.toString(), html }, 200, CORS);
+        for (let hop = 0; hop < 4; hop++) {
+          const up = await fetch(target.toString(), {
+            headers: { 'User-Agent': 'TheLab-SEO-Auditor/1.0' },
+            redirect: 'manual',
+          });
+          if ([301,302,303,307,308].includes(up.status)) {
+            const location = up.headers.get('Location');
+            if (!location) return json({ error: 'Redirección sin destino' }, 502, CORS);
+            let next;
+            try { next = new URL(location, target); }
+            catch (_) { return json({ error: 'Redirección inválida' }, 502, CORS); }
+            if (!validSeoUrl(next)) return json({ error: 'Redirección fuera del dominio permitido' }, 403, CORS);
+            target = next;
+            continue;
+          }
+          if (Number(up.headers.get('Content-Length') || 0) > maxBytes) {
+            return json({ error: 'Respuesta SEO demasiado grande' }, 413, CORS);
+          }
+          let html = '';
+          if (up.body && typeof up.body.getReader === 'function') {
+            const reader = up.body.getReader();
+            const decoder = new TextDecoder();
+            let total = 0;
+            for (;;) {
+              const chunk = await reader.read();
+              if (chunk.done) break;
+              total += chunk.value.byteLength;
+              if (total > maxBytes) {
+                await reader.cancel().catch(() => {});
+                return json({ error: 'Respuesta SEO demasiado grande' }, 413, CORS);
+              }
+              html += decoder.decode(chunk.value, { stream: true });
+            }
+            html += decoder.decode();
+          } else {
+            html = await up.text();
+            if (new TextEncoder().encode(html).byteLength > maxBytes)
+              return json({ error: 'Respuesta SEO demasiado grande' }, 413, CORS);
+          }
+          return json({ ok: true, status: up.status, finalUrl: target.toString(), html }, 200, CORS);
+        }
+        return json({ error: 'Demasiadas redirecciones SEO' }, 502, CORS);
       } catch (e) {
         return json({ error: 'No se pudo traer la página: ' + (e && e.message || e) }, 502, CORS);
       }

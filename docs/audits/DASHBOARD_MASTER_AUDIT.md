@@ -169,6 +169,13 @@ Aunque el proxy estaba limitado a la base TLS, reenviaba `PATCH` y `DELETE` de m
 
 **Riesgo que permanece:** APP_KEY es pública en el HTML: se pueden seguir ejecutando mutaciones de registros de la base TLS, y las altas de esquema legítimas siguen siendo alcanzables desde fuera del navegador con headers falsificados. Se requiere un sistema de sesiones firmado y autorización servidor por operación y tabla, además de un circuito administrativo separado para cambios de esquema.
 
+### P1-SEC-011 — Auditor SEO podía seguir un open redirect fuera del dominio
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`/seo-fetch` validaba el primer hostname (thelab.solutions) pero usaba `redirect:follow` en el Worker. Si una URL del sitio redirigía fuera del dominio, el backend la seguía sin revalidar destino, abriendo una ruta de SSRF y lecturas no acotadas. Ahora se ejecutan hasta cuatro solicitudes con `redirect:manual`, se validan todos los destinos (HTTPS, host exacto, sin credenciales ni puertos no estándar), se bloquean destinos externos/internos y se rechaza cualquier cuerpo mayor de 2 MiB incluso sin `Content-Length`.
+
+**Regresión:** `tests/seo-proxy-ssrf.test.js` cubre redirecciones externas y a rangos privados, loop, respuesta pequeña legítima, cabecera grande y respuesta fragmentada grande.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
