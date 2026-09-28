@@ -142,7 +142,12 @@ test('la fecha del documento se toma en hora de Chile', () => {
 // ── Llaves y trabajo que cuesta plata ───────────────────────────────────
 
 test('OpenAI nunca usa ni persiste una API key en el navegador', () => {
-  const fetchFn = bloque('function _openaiFetch(');
+  // Las opciones destructuradas incluyen llaves antes del cuerpo: el extractor
+  // genérico de funciones se detendría al terminar la lista de parámetros.
+  const start=PDF.indexOf('function _openaiFetch(');
+  const end=PDF.indexOf('\nfunction _openaiAvailable(',start);
+  assert.ok(start>=0&&end>start,'el helper OpenAI debe existir y tener un delimitador');
+  const fetchFn=PDF.slice(start,end);
   const saveFn = bloque('function saveIAConfig(');
   assert.match(fetchFn, /Proxy IA requerido/, 'sin proxy debe fallar cerrado');
   assert.match(fetchFn, /X-App-Key/, 'la salida debe ir por el proxy');

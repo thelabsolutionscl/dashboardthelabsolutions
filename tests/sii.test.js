@@ -198,7 +198,9 @@ test('el número de DTE se sigue guardando aunque Airtable falle', () => {
 // ── La puerta del worker ────────────────────────────────────────────────
 
 test('el worker que emite documentos tributarios pide clave', () => {
-  assert.match(IDX, /if \(env\.WORKER_KEY && url\.pathname !== '\/health'\)/);
+  assert.match(IDX, /if \(url\.pathname !== '\/health'\)/, 'toda ruta privada exige autenticación');
+  assert.match(IDX, /if \(!env\.WORKER_KEY\)/, 'sin secreto debe fallar cerrado');
+  assert.match(IDX, /status: 503/, 'un Worker sin secreto nunca puede emitir DTE');
   assert.match(IDX, /timingSafeEqual\(key, env\.WORKER_KEY\)/, 'comparación en tiempo constante');
   const fn = bloque('function timingSafeEqual(');
   assert.match(fn, /diff \|= x\.charCodeAt\(i\) \^ y\.charCodeAt\(i\)/);

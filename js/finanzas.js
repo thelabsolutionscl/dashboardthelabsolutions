@@ -343,20 +343,26 @@ function finRenderFacturasPage(){
     const tot=r._total!=null?r._total:neto+iva;
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
     const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':r.canal==='DTE'?'badge-purple':'badge-gray';
+    const safeNombre=escapeHtml(String(r.nombre||'—'));
+    const safeEmpresa=escapeHtml(String(r.empresa||'—'));
+    const safeItem=escapeHtml(String(r.item||'—'));
+    const safeFact=escapeHtml(String(r.fact||'—'));
+    const safeCanal=escapeHtml(String(r.canal||'—'));
+    const safeCat=escapeHtml(String(r.cat||'—'));
     html+=`<tr>
-      <td data-label="Mes/Año" style="white-space:nowrap">${mesNombre} ${r.year}</td>
-      <td data-label="Cliente" style="font-weight:600;white-space:nowrap">${r.nombre}</td>
-      <td data-label="Empresa" style="color:var(--text2);font-size:11px">${r.empresa}</td>
-      <td data-label="Ítem">${r.item}</td>
+      <td data-label="Mes/Año" style="white-space:nowrap">${mesNombre} ${escapeHtml(String(r.year||''))}</td>
+      <td data-label="Cliente" style="font-weight:600;white-space:nowrap">${safeNombre}</td>
+      <td data-label="Empresa" style="color:var(--text2);font-size:11px">${safeEmpresa}</td>
+      <td data-label="Ítem">${safeItem}</td>
       <td data-label="Cant." style="text-align:right">${r.cant.toLocaleString('es-CL')}</td>
       <td data-label="Valor Unit." style="text-align:right">${clp(r.valor)}</td>
       <td data-label="Neto" style="text-align:right">${clp(neto)}</td>
       <td data-label="IVA" style="text-align:right;color:var(--text3)">${clp(iva)}</td>
       <td data-label="Total+IVA" style="text-align:right;font-weight:600;color:var(--accent)">${clp(tot)}</td>
       <td data-label="Por Cobrar" style="text-align:right;color:${r.porCobrar>0?'var(--danger)':'var(--accent3)'}">${clp(r.porCobrar)}</td>
-      <td data-label="Fact.N°" style="font-size:11px;color:var(--text3)">${r.fact||'—'}</td>
-      <td data-label="Canal"><span class="badge ${canalBadge}">${r.canal}</span></td>
-      <td data-label="Categoría" style="font-size:11px">${r.cat||'—'}</td>
+      <td data-label="Fact.N°" style="font-size:11px;color:var(--text3)">${safeFact}</td>
+      <td data-label="Canal"><span class="badge ${canalBadge}">${safeCanal}</span></td>
+      <td data-label="Categoría" style="font-size:11px">${safeCat}</td>
     </tr>`;
   });
   if(!slice.length)html='<tr><td colspan="13" style="text-align:center;padding:30px;color:var(--text3)">Sin resultados</td></tr>';
@@ -389,7 +395,11 @@ function finVenc(r){
   const emision=parseLocal(r&&r.fecha);
   const base=emision||parseLocal(`${r.year}-${r.mes}-01`);
   const plazo=(r&&r.plazoDias>=0)?Number(r.plazoDias):finPlazoDefault();
-  return new Date(base.getTime()+plazo*86400000);
+  // Sumar días de calendario, no períodos fijos de 24 h: en Chile el cambio
+  // de horario de verano puede adelantar o atrasar el vencimiento un día.
+  const vencimiento=new Date(base.getTime());
+  vencimiento.setDate(vencimiento.getDate()+plazo);
+  return vencimiento;
 }
 function finRenderCobrar(){
   if(window.OP)OP.collections();
@@ -874,7 +884,8 @@ function nvRecalcular(){
   document.getElementById('nv-total').value=clp(neto);
   document.getElementById('nv-iva').value=clp(iva);
   document.getElementById('nv-total-iva').value=clp(tot);
-  document.getElementById('nv-utilidad').value=costo?clp(tot-costo):'—';
+  // El IVA no es ingreso de TLS. La utilidad compara venta neta con costo neto.
+  document.getElementById('nv-utilidad').value=costo?clp(neto-costo):'—';
 }
 function nvLimpiar(){
   ['nv-nombre','nv-empresa','nv-rut','nv-factura','nv-item','nv-pago','nv-costo','nv-fecha-fact','nv-fecha-pago'].forEach(id=>{
@@ -882,6 +893,15 @@ function nvLimpiar(){
   });
   ['nv-cantidad','nv-valor'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   nvRecalcular();
+}
+function _finSetLocalVentas(rows){
+  try{
+    localStorage.setItem('fin_ventas',JSON.stringify(Array.isArray(rows)?rows:[]));
+    return true;
+  }catch(e){
+    toast('No se pudieron guardar las ventas locales en este navegador','error');
+    return false;
+  }
 }
 function nvGuardar(){
   const cant=parseFloat(document.getElementById('nv-cantidad').value)||1;
@@ -909,17 +929,15 @@ function nvGuardar(){
   };
   let existing;try{existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){existing=[];}
   existing.push(rec);
-  try{localStorage.setItem('fin_ventas',JSON.stringify(existing));}catch(e){toast('Sin espacio para guardar','error');return;}
-  saveFinVentasAirtable();
+  if(!_finSetLocalVentas(existing)) return;
   nvLimpiar();
   finRenderNuevaLista();
-  toast('Venta guardada correctamente','success');
+  toast('Venta guardada en este navegador','success');
   finInit();
 }
 function nvLimpiarTodas(){
   if(!confirm('¿Eliminar todas las ventas ingresadas manualmente?'))return;
-  localStorage.removeItem('fin_ventas');
-  saveFinVentasAirtable();
+  if(!_finSetLocalVentas([])) return;
   finRenderNuevaLista();
   finInit();
 }
@@ -932,13 +950,17 @@ function finRenderNuevaLista(){
     const tot=neto+Math.round(neto*0.19);
     const mesNombre=MESES_FULL[(parseInt(r.mes,10)||1)-1];
     const canalBadge=r.canal==='ADWORDS'?'badge-yellow':r.canal==='VENDEDORES'?'badge-green':'badge-gray';
+    const safeNombre=escapeHtml(String(r.nombre||'—'));
+    const safeEmpresa=escapeHtml(String(r.empresa||'—'));
+    const safeItem=escapeHtml(String(r.item||'—'));
+    const safeCanal=escapeHtml(String(r.canal||'—'));
     html+=`<tr>
-      <td>${mesNombre} ${r.year}</td>
-      <td style="font-weight:600">${r.nombre}</td>
-      <td>${r.empresa||'—'}</td>
-      <td>${r.item}</td>
+      <td>${mesNombre} ${escapeHtml(String(r.year||''))}</td>
+      <td style="font-weight:600">${safeNombre}</td>
+      <td>${safeEmpresa}</td>
+      <td>${safeItem}</td>
       <td style="color:var(--accent);font-weight:700">${clp(tot)}</td>
-      <td><span class="badge ${canalBadge}">${r.canal}</span></td>
+      <td><span class="badge ${canalBadge}">${safeCanal}</span></td>
       <td><button class="btn-mini btn-mini-red" onclick="nvEliminar(${idx})">✕</button></td>
     </tr>`;
   });
@@ -948,22 +970,30 @@ function finRenderNuevaLista(){
 }
 function nvEliminar(idx){
   let data;try{data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){data=[];}
+  if(idx<0||idx>=data.length)return;
   data.splice(idx,1);
-  localStorage.setItem('fin_ventas',JSON.stringify(data));
-  saveFinVentasAirtable();
+  if(!_finSetLocalVentas(data)) return;
   finRenderNuevaLista();
+  finInit();
 }
 
 /* ── Exportar CSV ── */
+function _finCsvCell(v){
+  let t=String(v??'');
+  // Evita CSV/Excel formula injection en campos procedentes de Airtable/usuario.
+  if(/^\s*[=+\-@]/.test(t)) t="'"+t;
+  return '"'+t.replace(/"/g,'""')+'"';
+}
 function exportarFinanzasCSV(){
   const data=finGetAllFacturas();
   const headers=['Año','Mes','Nombre','Empresa','Ítem','Cantidad','Valor Unit.','Total Neto','IVA','Total+IVA','Por Cobrar','Canal','Categoría','Factura N°'];
   const rows=data.map(r=>{
-    const neto=r.valor*r.cant;
-    const iva=Math.round(neto*0.19);
-    return [r.year,r.mes,r.nombre,r.empresa,r.item,r.cant,r.valor,neto,iva,neto+iva,r.porCobrar||0,r.canal,r.cat||'',r.fact||''];
+    const neto=r._neto!=null?Number(r._neto):(Number(r.valor)||0)*(Number(r.cant)||1);
+    const iva=r._iva!=null?Number(r._iva):Math.round(neto*0.19);
+    const total=r._total!=null?Number(r._total):neto+iva+(Number(r._exento)||0);
+    return [r.year,r.mes,r.nombre,r.empresa,r.item,r.cant,r.valor,neto,iva,total,r.porCobrar||0,r.canal,r.cat||'',r.fact||''];
   });
-  const csv=[headers,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const csv=[headers,...rows].map(r=>r.map(_finCsvCell).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='finanzas_thelab.csv';a.click();
@@ -1695,19 +1725,25 @@ function c3dCalcPieza(id){
   const matQty=parseFloat(document.getElementById('c3d-p-matqty-'+id)?.value)||0;
   const qty=Math.max(1,parseFloat(document.getElementById('c3d-p-qty-'+id)?.value)||1);
   const margen=(parseFloat(document.getElementById('c3d-i-margen')?.value)||65)/100;
-  const costoMat=Math.round(matQty*mat.preciog*(1+mat.merma));
-  let costoMaq=0;
-  C3D_MAQUINAS.forEach(m=>{const h=parseFloat(document.getElementById('c3d-pm-'+id+'-'+m.id)?.value)||0;costoMaq+=Math.round(h*m.costo);});
-  let costoExtras=0;
+  const costoMatUnit=Math.round(matQty*mat.preciog*(1+mat.merma));
+  let costoMaqUnit=0;
+  C3D_MAQUINAS.forEach(m=>{const h=parseFloat(document.getElementById('c3d-pm-'+id+'-'+m.id)?.value)||0;costoMaqUnit+=Math.round(h*m.costo);});
+  // Los extras pertenecen al trabajo completo. Un extra flat se cobra una vez;
+  // un extra unit se multiplica solo por la cantidad explícita, nunca otra vez por qty.
+  let costoExtrasTrabajo=0;
   C3D_EXTRAS.forEach(e=>{
     const chk=document.getElementById('c3d-ex-'+id+'-'+e.id);
     if(!chk?.checked) return;
-    if(e.tipo==='unit'){const extQty=parseFloat(document.getElementById('c3d-exqty-'+id+'-'+e.id)?.value)||qty;costoExtras+=Math.round(e.costo*extQty);}
-    else costoExtras+=e.costo;
+    if(e.tipo==='unit'){
+      const extQty=Math.max(0,parseFloat(document.getElementById('c3d-exqty-'+id+'-'+e.id)?.value)||qty);
+      costoExtrasTrabajo+=Math.round(e.costo*extQty);
+    }else costoExtrasTrabajo+=e.costo;
   });
-  const costoUnit=costoMat+costoMaq+costoExtras;
-  const netoUnit=margen<1?Math.round(costoUnit/(1-margen)):costoUnit;
-  return{costoUnit,netoUnit,costoTotal:costoUnit*qty,netoTotal:netoUnit*qty,totalConIva:Math.round(netoUnit*qty*1.19),qty};
+  const costoTotal=Math.round((costoMatUnit+costoMaqUnit)*qty+costoExtrasTrabajo);
+  const costoUnit=Math.round(costoTotal/qty);
+  const netoTotal=margen<1?Math.round(costoTotal/(1-margen)):costoTotal;
+  const netoUnit=Math.round(netoTotal/qty);
+  return{costoUnit,netoUnit,costoTotal,netoTotal,totalConIva:Math.round(netoTotal*1.19),qty};
 }
 
 function c3dUpdateAll(){
@@ -2308,12 +2344,18 @@ async function emitirDTE(){
         if(typeof ensureFacturasTable==='function') await ensureFacturasTable();
         const cid=p?(Array.isArray(p.fields['Cliente'])?p.fields['Cliente'][0]:p.fields['Cliente']):'';
         const venc=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
-        await airtableWrite('Facturas','POST',null,{
+        const facturaFields={
           'Cliente':razonSocial,'Cliente ID':cid||'','Tipo DTE':tipoDTE,'Folio':Number(dteNum)||0,
           'Fecha':hoyCL(),'Neto':neto,'IVA':iva,'Total':neto+iva,
           'Track ID':_trackId,'Estado SII':_recibido?(resp.estado_sii||resp.estado||'Enviado'):'Sin confirmar',
           'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
+        };
+        const facturaExistente=(state.facturas||[]).find(r=>{
+          const ff=r?.fields||{};
+          return String(ff['Tipo DTE']||'')===String(tipoDTE)&&String(ff['Folio']||'')===String(dteNum);
         });
+        if(facturaExistente?.id) await airtableWrite('Facturas','PATCH',facturaExistente.id,facturaFields);
+        else await airtableWrite('Facturas','POST',null,facturaFields);
         try{await loadAllDataSilent();}catch(e){}
       }catch(e){console.warn('[DTE] no se pudo crear la Factura ligada:',e.message);}
       renderPedidos();
@@ -2369,8 +2411,12 @@ async function testSIIWorker(){
     const r=await fetch(url+'/health',{method:'GET'});
     const d=await r.json();
     if(r.ok){
-      if(sb){sb.style.color='var(--accent)';sb.innerHTML='✅ Worker activo — env: <strong>'+escapeHtml(d.sii_env||'?')+'</strong> | RUT: '+escapeHtml(d.rut_emisor||'?')+'<br>'+(d.cert_loaded?'🔐 Certificado cargado':'⚠ Certificado no cargado');}
-      toast('✅ Worker SII conectado','success');
+      const authOk=d.auth==='on';
+      const rutOk=d.rut_emisor_configurado===true;
+      if(sb){sb.style.color=authOk?'var(--accent)':'var(--danger)';sb.innerHTML='✅ Worker activo — env: <strong>'+escapeHtml(d.sii_env||'?')+'</strong>'
+        +' · RUT '+(rutOk?'configurado':'faltante')+' · '+(d.cert_loaded?'🔐 Certificado cargado':'⚠ Certificado no cargado')
+        +' · '+(authOk?'🔒 autenticación activa':'⛔ autenticación inactiva');}
+      toast(authOk?'✅ Worker SII conectado y protegido':'⚠ Worker SII responde, pero su autenticación no está activa',authOk?'success':'error');
     }else{
       if(sb){sb.style.color='var(--danger)';sb.textContent='⛔ Error '+r.status+': '+JSON.stringify(d);}
       toast('Error: '+r.status,'error');

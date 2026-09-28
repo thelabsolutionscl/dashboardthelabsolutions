@@ -26,7 +26,7 @@ Cada bloque debe revisar cinco capas cuando apliquen:
 | 03 | Datos, Airtable, caché y sincronización | P0 | PENDIENTE | snapshots parciales, paginación, dedupe, rollback, conflictos |
 | 04 | Cotizaciones | P1 | PENDIENTE | cálculo, estados, aprobación→pedido, documentos, edición |
 | 05 | Pedidos | P1 | PENDIENTE | lifecycle, pagos, despacho, tarjetas/tabla, integridad de relaciones |
-| 06 | Finanzas y Facturas | P0/P1 | PENDIENTE | revenue, saldos, IVA, DTE, caja, idempotencia |
+| 06 | Finanzas y Facturas | P0/P1 | EN AUDITORÍA | revenue, saldos, IVA, DTE, caja, idempotencia |
 | 07 | Clientes / CRM / Recompras | P1 | PENDIENTE | ownership, historial, cadencias, acciones y trazabilidad |
 | 08 | Máquinas / granja / cámaras | P0/P1 | PENDIENTE | bridge, auth, telemetría, estados, recuperación, falsas alarmas |
 | 09 | Cola / trabajos / producción 3D | P1 | PENDIENTE | lifecycle durable, asignación, reimpresión, concurrencia |
@@ -119,6 +119,43 @@ La firma HMAC de confirmación/baja requiere `NEWSLETTER_SECRET` exclusivo. Se e
 El deploy todavía puede publicar credenciales con privilegios reales como `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` y la clave de acceso del Worker SII. Quitarlas sin una sesión server-side rompería funciones actuales; por eso no se considera resuelto con ofuscación o localStorage.
 
 **Objetivo final:** autenticar al usuario en backend y emitir permisos/tokens efímeros por capacidad. Ningún secreto maestro de portal, impresoras o tributación debe formar parte del HTML/JS público.
+
+### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`nvGuardar`, `nvEliminar` y `nvLimpiarTodas` llamaban una función inexistente después de mutar localStorage. El dato podía quedar guardado mientras la UI abortaba con una excepción. Ahora usan una única escritura local protegida y el mensaje declara que el dato queda en ese navegador. La migración a persistencia compartida sigue abierta.
+
+### P1-FIN-002 — Costeo 3D multiplicaba extras varias veces
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+Extras flat se aplican una vez por trabajo; extras unitarios se multiplican una sola vez por la cantidad indicada. El costo total se calcula antes de distribuir costo/venta unitaria.
+
+### P1-FIN-003 — Utilidad manual incluía IVA como ganancia
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La utilidad ahora es venta neta menos costo. El IVA deja de inflar el margen.
+
+### P1-FIN-004 — CSV no coincidía con la tabla de Facturas
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La exportación reutiliza los montos normalizados de Airtable y neutraliza celdas que podrían convertirse en fórmulas al abrir el CSV.
+
+### P1-FIN-005 — Health SII esperaba un RUT que el Worker ya no expone
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+El helper global `siiHeaders()` ya existía y CAF/folios/DTE lo reutilizan. El bug real estaba en la pantalla de diagnóstico: esperaba `rut_emisor`, campo retirado del health público por seguridad. Ahora usa `rut_emisor_configurado`, `cert_loaded` y `auth` sin exigir datos sensibles. Sigue abierto P0-SEC-007: la credencial maestra del Worker no debe terminar en un frontend estático.
+
+### P1-FIN-006 — DTE repetido podía duplicar la fila Facturas
+
+**Estado:** MITIGADO EN ESTA RAMA.  
+Al materializar la respuesta del Worker se busca tipo DTE + folio en el estado autoritativo y se hace PATCH si existe. Falta idempotencia server-side y conciliación durable para cerrar completamente el riesgo.
+
+### P1-FIN-007 — Vencimientos desfasados al cambiar horario de verano
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`finVenc` sumaba `plazo*86400000` a una fecha anclada a medianoche. Al cruzar cambios de horario en Chile, el resultado podía quedar a las 23:00 del día anterior o 01:00 del día esperado. El cálculo ahora usa `Date#setDate` para sumar días de calendario y mantener la medianoche local.
+
+**Regresión:** `tests/finanzas-vencimiento-local.test.js` ejecuta casos de entrada/salida del horario de verano con `TZ=America/Santiago`.
 
 ## Backlog confirmado por pruebas TODO existentes
 
