@@ -101,10 +101,11 @@ async function accessVerify(token,config){
 function accessTable(path){
   const prefix='/v0/app1YtD74AqiPWQhy/';
   if(!path.startsWith(prefix))return '';
-  let segment=path.slice(prefix.length).split('/')[0];
-  try{segment=decodeURIComponent(segment);}catch(_){return '';}
+  const raw=path.slice(prefix.length).split('/')[0];
+  let segment;
+  try{segment=decodeURIComponent(raw);}catch(_){return '';}
   // Noncanonical paths, table IDs and hidden encodings cannot bypass RBAC.
-  if(segment!==encodeURIComponent(segment)||!ACCESS_ALLOWED_TABLES.has(segment))return '';
+  if(raw!==encodeURIComponent(segment)||!ACCESS_ALLOWED_TABLES.has(segment))return '';
   return segment;
 }
 
