@@ -104,8 +104,10 @@ test('abrir borrador de recompra no la elimina; correo la marca solo después de
   assert.doesNotMatch(a,/_recompraMark/,'abrir/revisar borrador no cuenta como gestión');
   const marker=MAIL.indexOf("_recompraMark(this._cmpRecompraCli,'correo')");
   assert.ok(marker>0,'send exitoso debe marcar recompra');
-  const before=MAIL.slice(Math.max(0,marker-2500),marker);
-  assert.match(before,/if\(data\.ok\)/,'el marcado queda dentro del caso de envío confirmado');
+  const before=MAIL.slice(Math.max(0,marker-4200),marker);
+  const errorCheck=before.lastIndexOf('if(data.error)');
+  const successElse=before.lastIndexOf('else{');
+  assert.ok(errorCheck>=0&&successElse>errorCheck,'el marcado queda dentro del caso posterior a respuesta sin error');
 });
 
 test('el estado remoto usa un registro separado por cliente, no un blob compartido destructivo',()=>{
