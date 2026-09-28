@@ -67,6 +67,36 @@ después retirar del deploy las credenciales administrativas y rotarlas.
 No borrar hoy las claves del frontend sin una ruta compatible: rompería
 facturación, portal o controles de taller.
 
+## Backups semanales cifrados (repositorio público)
+
+El workflow `weekly.yml` no puede publicar CRM en texto plano. Descubre todas
+las tablas existentes por Airtable Metadata y exige copia íntegra para marcar
+un backup como completo. Si una tabla falla, conserva solamente el rescate
+**cifrado** y marca el workflow como fallo; envía el resumen de alerta si
+Resend está configurado.
+
+**Configuración pendiente para realizar de una sola vez:** crear el secret
+`BACKUP_ENCRYPTION_KEY` en GitHub Actions con una clave aleatoria de 32 bytes
+(por ejemplo, generar localmente con `openssl rand -base64 32`); guardar esa
+clave en el gestor de contraseñas de la empresa, nunca en el repositorio ni
+en el navegador. La PAT `AIRTABLE` del workflow necesita permisos de
+lectura de registros Y de metadata de la base para descubrir todas las tablas.
+
+Con la clave disponible, ejecutar **Automatización semanal → Run workflow**,
+comprobar su estado exitoso y descargar un backup cifrado para ensayar una
+restauración local en una carpeta privada:
+
+```bash
+BACKUP_ENCRYPTION_KEY='CLAVE_DEL_GESTOR' \
+  node scripts/decrypt-backup.mjs backup-crm-AAAA-MM-DD.enc.json \
+  /ruta/privada/backup-restaurado.json
+```
+
+No subir el JSON restaurado a GitHub. Si se cambia la clave en el futuro,
+conservar la anterior para descifrar los respaldos creados con ella. Revisar
+y borrar cualquier artifact HISTÓRICO en texto plano que haya sido generado
+antes de esta corrección: el cambio no protege los archivos ya publicados.
+
 ## Pasos pendientes de una sola vez (recomendado)
 
 Los tokens viejos ya estuvieron publicados en el HTML, así que hay que rotarlos:
