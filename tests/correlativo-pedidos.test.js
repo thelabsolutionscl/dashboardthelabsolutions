@@ -98,8 +98,8 @@ test('ignora números de otros años y basura', async () => {
 test('ningún sitio vuelve a calcular el correlativo por su cuenta', () => {
   const sueltos = (HTML.match(/maxNum\s*=\s*Math\.max\(maxNum/g) || []).length;
   assert.equal(sueltos, 0, 'el cálculo debe estar solo en _nextNumPedido');
-  assert.equal((HTML.match(/await\s+_nextNumPedido\s*\(\)/g) || []).length, 3,
-    'ambos flujos y el reintento tras 409 confirmado deben usar el helper');
+  assert.equal((HTML.match(/await\s+_nextNumPedido\s*\(\)/g) || []).length, 4,
+    'conversión y recurrentes usan el helper, incluyendo un reintento 409 en cada flujo');
 });
 
 test('recargar la lista de pedidos no la recorta', () => {
