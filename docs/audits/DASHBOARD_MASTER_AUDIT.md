@@ -27,7 +27,7 @@ Cada bloque debe revisar cinco capas cuando apliquen:
 | 04 | Cotizaciones | P1 | EN AUDITORÍA | cálculo, estados, aprobación→pedido, documentos, edición |
 | 05 | Pedidos | P1 | EN AUDITORÍA | lifecycle, pagos, despacho, tarjetas/tabla, integridad de relaciones |
 | 06 | Finanzas y Facturas | P0/P1 | EN AUDITORÍA | revenue, saldos, IVA, DTE, caja, idempotencia |
-| 07 | Clientes / CRM / Recompras | P1 | PENDIENTE | ownership, historial, cadencias, acciones y trazabilidad |
+| 07 | Clientes / CRM / Recompras | P1 | EN AUDITORÍA | ownership, historial, cadencias, acciones y trazabilidad |
 | 08 | Máquinas / granja / cámaras | P0/P1 | PENDIENTE | bridge, auth, telemetría, estados, recuperación, falsas alarmas |
 | 09 | Cola / trabajos / producción 3D | P1 | PENDIENTE | lifecycle durable, asignación, reimpresión, concurrencia |
 | 10 | Slicer / simulación / Visual AI | P1/P2 | PENDIENTE | fiabilidad, permisos, iframe, costo IA, errores |
@@ -246,6 +246,17 @@ La interfaz de Finanzas envía el ID real de Airtable del pedido, conserva la fe
 **Límites operativos:** si el SII recibe el XML pero se pierde el TrackID, se conserva el estado pendiente y hace falta conciliación manual; nunca se reutiliza el folio. El guard cubre emisiones que envían `pedido_id`; integraciones antiguas sin él conservan la ruta de reserva legada y deben migrarse. Una segunda factura legítima del mismo tipo para el mismo pedido requiere identificarla como una operación nueva en un flujo futuro explícito, no eludir el control de idempotencia. `SII_WORKER_KEY` sigue pendiente de configuración para desplegar la protección en el Worker tributario.
 
 **Pruebas:** `tests/sii-idempotencia-pedido.test.js` prueba concurrencia, confirmación y replay, estados inciertos, conflictos de monto, transacciones y autenticación fallida.
+
+### P1-CRM-006 — Recompras gestionadas no se compartían entre computadores
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+La bandeja de recompra guardaba `thelab_recompra_log_v1` únicamente en `localStorage`. Un WhatsApp o correo confirmado podía sacar la oportunidad en un equipo, pero seguía apareciendo en otro; cambiar de navegador también hacía reaparecer gestiones recientes. Ahora cada cliente tiene un registro independiente en `Monitor Sistema` con nombre `CRM_RECOMPRA:<recordId>`. La UI sigue respondiendo de inmediato con caché local, pero reconcilia Airtable cada 15 segundos y conserva la gestión con timestamp más reciente.
+
+El diseño usa **un registro por cliente** en vez de un blob global, para evitar que dos computadores gestionando clientes distintos se pisen entre sí. Los registros duplicados del mismo cliente se concilian por timestamp; entradas corruptas, futuras o mayores a 45 días se descartan. Los datos locales previos se migran al primer hydrate.
+
+**Evidencia de acción:** abrir/revisar un borrador no marca la recompra. WATI solo marca después de que `sendWatiMessage` confirma; el fallback a WhatsApp Web abre el mensaje pero no lo considera enviado. Correo marca únicamente dentro del flujo de envío confirmado. El botón manual ✓ sigue siendo una acción explícita del usuario y mantiene su semántica.
+
+**Pruebas:** `tests/recompra-shared.test.js` cubre conflicto entre equipos, migración, duplicados remotos, datos corruptos y la regla de “no desaparecer hasta envío confirmado”.
 
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
