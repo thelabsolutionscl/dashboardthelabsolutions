@@ -56,3 +56,39 @@ test('el registry comparte perfil físico además de IP e identidad',()=>{
   assert.match(src,/cfsInstalled/);
   assert.match(src,/cameraConfigured/);
 });
+
+
+test('Farm Controller intercambia el token persistente por una sesión efímera',()=>{
+  assert.match(src,/\/farm\/session/);
+  assert.match(src,/controllerSessionExpiresAt/);
+  assert.match(src,/controllerSessionToken/);
+  assert.match(src,/X-Bridge-Token/);
+  assert.match(src,/ensureControllerSession/);
+});
+
+test('las APIs Farm no ponen el token maestro en query string',()=>{
+  const urlStart=src.indexOf('function url(path)');
+  const urlEnd=src.indexOf('\nlet controllerSessionToken',urlStart);
+  const urlFn=src.slice(urlStart,urlEnd);
+  assert.match(urlFn,/return base\(\)\+path/);
+  assert.doesNotMatch(urlFn,/bt=/);
+  assert.doesNotMatch(src,/encodeURIComponent\(t\).*bt=/s);
+  assert.match(src,/controllerFetch\('\/farm\/registry'/);
+  assert.match(src,/controllerFetch\('\/farm\/queue'/);
+  assert.match(src,/controllerFetch\('\/farm\/operations'/);
+});
+
+test('sesión expirada se renueva una sola vez y mantiene fallback compatible',()=>{
+  const start=src.indexOf('async function controllerFetch(');
+  const end=src.indexOf('\nfunction render()',start);
+  const body=src.slice(start,end);
+  assert.match(body,/r\.status===401\|\|r\.status===403/);
+  assert.match(body,/ensureControllerSession\(true\)/);
+  const auth=src.slice(src.indexOf('async function authRole('),src.indexOf('// ── Registry'));
+  assert.match(auth,/_farmRawFetch\('\/authcheck'/,'controllers antiguos usan header como fallback');
+});
+
+test('ruta de ejecutar cola conserva /run fuera del encodeURIComponent',()=>{
+  assert.match(src,/controllerFetch\('\/farm\/queue\/'\+encodeURIComponent\(j\.id\)\+'\/run'/);
+  assert.doesNotMatch(src,/encodeURIComponent\(j\.id\+'\/run'\)/);
+});
