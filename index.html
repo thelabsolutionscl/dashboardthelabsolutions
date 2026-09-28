@@ -11259,7 +11259,10 @@ function updateEditItemTotal(){
 // opcionales de plazo de uno en uno —dejando el mínimo para el final— para no perder
 // el resto de los datos. Así un intervalo o una fecha ya no impiden guardar.
 async function _saveCotFields(method,id,fields){
-  const isUnknown=e=>/unknown/i.test((e&&e.message)||'');
+  // Solo un rechazo 422 de campo desconocido garantiza que Airtable NO creó
+  // el registro. Timeout, 5xx y mensajes genéricos "unknown" son ambiguos:
+  // reintentar un POST en esos casos podría duplicar la cotización.
+  const isUnknown=e=>/^HTTP 422:.*\b(unknown|field)\b/i.test((e&&e.message)||'');
   const f={...fields};
   try{ return await airtableWrite('Cotizaciones',method,id,f); }
   catch(e){
@@ -13596,8 +13599,15 @@ async function retainersAutoCheck(){
   const pend=arr.filter(r=>r.activo!==false&&r.ultimoGenerado!==mk&&hoy>=(r.dia||1));
   if(!pend.length)return;
   _retainersRunning=true;
-  try{for(const r of pend){await generarRetainer(r.id,true);}toast(`✓ ${pend.length} contrato(s) recurrente(s) generaron su pedido del mes`,'success');}
-  catch(e){console.error('retainersAutoCheck',e);}
+  let generados=0,fallidos=0;
+  try{
+    for(const r of pend){
+      try{if(await generarRetainer(r.id,true))generados++;else fallidos++;}
+      catch(e){fallidos++;console.error('retainersAutoCheck '+r.id,e);}
+    }
+    if(generados)toast(`✓ ${generados} contrato(s) recurrente(s) generaron su pedido del mes`,'success');
+    if(fallidos)toast(`⚠ ${fallidos} contrato(s) no pudieron generar pedido. Revisa Contratos recurrentes y reintenta.`,'error');
+  }catch(e){console.error('retainersAutoCheck',e);}
   finally{_retainersRunning=false;}
 }
 function renderRetainers(){
@@ -13657,11 +13667,12 @@ async function createCotizacion(){
     if(clienteId) fields['Cliente']=[clienteId];
     if(isVendorMode()){fields['Vendedor']=currentVendorId();}else{const vv=document.getElementById('cot-vendedor')?.value;if(vv) fields['Vendedor']=vv;}
     const _itJsonN=_cotItemsJSON('#itemsContainer .item-row');if(_itJsonN) fields['Detalle JSON']=_itJsonN;
-    await _saveCotFields('POST',null,fields);
+    const _creada=await _saveCotFields('POST',null,fields);
+    if(_creada&&_creada.id){state.cotizaciones=_mergeRecords(state.cotizaciones,[_creada]);_rebuildCotizacionesById();}
     toast(`✓ Cotización ${num} guardada`,'success');
     if(_estadoInicial==='Enviada')await _advanceEtapaCliente(clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
     clearForm('cot');switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderOverview();
-    const _newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
+    const _newCot=(_creada&&_creada.id)?_creada:state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
     if(_newCot) syncCotizacionADrive(_newCot.id);
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='✚ Guardar Cotización';
@@ -13863,11 +13874,20 @@ async function crearCotizacionGuiada(d){
   if(isVendorMode())fields['Vendedor']=currentVendorId();
   const _itJsonG=(d.items||[]).length?JSON.stringify((d.items||[]).map(it=>({desc:it.desc||'',und:it.und||1,costoUnit:it.costo||0,ventaUnit:it.venta||0}))):'';
   if(_itJsonG)fields['Detalle JSON']=_itJsonG;
-  try{await airtableWrite('Cotizaciones','POST',null,fields);}
-  catch(e){if(!e.message.toLowerCase().includes('unknown'))throw e;delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];await airtableWrite('Cotizaciones','POST',null,fields);ensureCotizacionFields();}
+  let creada;
+  try{creada=await airtableWrite('Cotizaciones','POST',null,fields);}
+  catch(e){
+    if(!/^HTTP 422:.*\b(unknown|field)\b/i.test((e&&e.message)||''))throw e;
+    delete fields['Tiempo de producción'];delete fields['Tipo días producción'];delete fields['Detalle JSON'];
+    creada=await airtableWrite('Cotizaciones','POST',null,fields);
+    ensureCotizacionFields();
+  }
+  // El refresco silencioso está limitado a 10 min: adoptar la respuesta del
+  // POST inmediatamente para que la cotización creada no desaparezca en UI.
+  if(creada&&creada.id){state.cotizaciones=_mergeRecords(state.cotizaciones,[creada]);_rebuildCotizacionesById();}
   if(d.clienteId&&estado==='Enviada')await _advanceEtapaCliente(d.clienteId,'Propuesta enviada',['','Lead nuevo','Contactado']);
   await loadAllDataSilent();renderCotizaciones();renderOverview();
-  const newCot=state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
+  const newCot=(creada&&creada.id)?creada:state.cotizaciones.find(x=>(x.fields['N° Cotización']||'')===num);
   if(newCot)syncCotizacionADrive(newCot.id);
   return{num,total,cotId:newCot?newCot.id:null,status:estado,fechaLimite};
 }
