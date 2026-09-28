@@ -10571,6 +10571,20 @@ async function ensureFacturasTable(){
     ]})});
   }catch(e){}
 }
+// La numeración de un mismo tipo de DTE pertenece al emisor, no al cliente:
+// el mismo tipo+folio en dos clientes distintos también es un duplicado.
+// Normalizar "Factura Electrónica" y 33 para fuentes legadas del CRM.
+function _facturaClave(fields){
+  const folio=String(fields?.['Folio']??'').trim();
+  const raw=String(fields?.['Tipo DTE']||'').trim().toLowerCase();
+  if(!/^\\d+$/.test(folio)||Number(folio)<=0||!raw) return '';
+  const tipos={'factura':'33','factura electrónica':'33','boleta':'39','boleta electrónica':'39',
+    'nota de crédito':'61','nota de crédito electrónica':'61','nota de débito':'56',
+    'nota de débito electrónica':'56','guía de despacho':'52','guía de despacho electrónica':'52'};
+  const tipo=tipos[raw]||raw.replace(/\\s+/g,'');
+  return tipo+'|'+String(Number(folio));
+}
+const _facturasEnCurso=new Set();
 async function saveFactura(){
   const btn=document.getElementById('facGuardarBtn');
   const folio=document.getElementById('facFolio').value.trim();
@@ -10578,9 +10592,6 @@ async function saveFactura(){
   const tipo=document.getElementById('facTipo').value;
   const facId=document.getElementById('facId').value;
   const clienteId=document.getElementById('facClienteId').value;
-  // Validar folio duplicado (mismo tipo+folio en el mismo cliente)
-  const duplicado=state.facturas.find(r=>r.id!==facId&&String(r.fields['Folio'])===folio&&r.fields['Tipo DTE']===tipo&&(r.fields['Cliente ID']===clienteId||(r.fields['Cliente']||'').toLowerCase()===(document.getElementById('facClienteNombre').value||'').toLowerCase()));
-  if(duplicado){toast(`Ya existe un ${tipo} con folio #${folio} para este cliente`,'error');return;}
   const num=el=>{const v=parseInt(document.getElementById(el).value);return isNaN(v)?null:v;};
   const fields={
     'Cliente':document.getElementById('facClienteNombre').value||'',
@@ -10596,14 +10607,29 @@ async function saveFactura(){
     'Notas':document.getElementById('facNotas').value||'',
   };
   const empresa=document.getElementById('facClienteNombre').value;
+  const clave=_facturaClave(fields);
+  if(!clave){toast('Tipo de DTE o folio inválido','error');return;}
+  if(_facturasEnCurso.has(clave))return; // doble clic o envíos paralelos de esta pestaña
+  _facturasEnCurso.add(clave);
   try{
     btn.disabled=true;btn.textContent='Guardando...';
     await ensureFacturasTable();
+    // Revalidar SIEMPRE contra Airtable antes de insertar/editar: otro equipo
+    // puede haber creado este DTE después del último refresco del dashboard.
+    // Error de red = NO escribir a ciegas (un segundo POST duplicaría el folio).
+    const remotas=await airtableFetch('Facturas',1000);
+    const registros=remotas.records||[];
+    const duplicado=registros.find(r=>r.id!==facId&&_facturaClave(r.fields)===clave);
+    if(duplicado) throw new Error('Ya existe un '+tipo+' con folio #'+folio+' en Airtable (registro '+duplicado.id+')');
+    if(facId&&!registros.some(r=>r.id===facId)) throw new Error('Esta factura ya no existe en Airtable: actualiza antes de editar');
+    state.facturas=registros;
     if(facId){
-      await airtableWrite('Facturas','PATCH',facId,fields);
-      const rec=state.facturas.find(x=>x.id===facId);if(rec) rec.fields={...rec.fields,...fields};
+      const saved=await airtableWrite('Facturas','PATCH',facId,fields);
+      const rec=state.facturas.find(x=>x.id===facId);
+      if(rec)rec.fields={...rec.fields,...(saved?.fields||fields)};
     }else{
       const res=await airtableWrite('Facturas','POST',null,fields);
+      if(!res?.id) throw new Error('Airtable no confirmó el ID: verifica si se creó antes de reintentar');
       state.facturas.push({id:res.id,fields:res.fields||fields});
     }
     toast('Factura guardada ✓','success');
@@ -10611,7 +10637,7 @@ async function saveFactura(){
     renderClienteFacturas(clienteId,empresa);
     if(typeof finRenderFacturas==='function') finRenderFacturas();
   }catch(e){toast('Error: '+e.message,'error');}
-  finally{btn.disabled=false;btn.textContent='💾 Guardar';}
+  finally{_facturasEnCurso.delete(clave);btn.disabled=false;btn.textContent='💾 Guardar';}
 }
 async function deleteFactura(id,clienteId){
   if(!confirm('¿Eliminar este registro de factura?')) return;
