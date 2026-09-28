@@ -218,6 +218,20 @@ Se agrega `SiiFolioGuard`: **un Durable Object por tipo de documento** con opera
 
 **Límites:** esto impide que el **mismo Worker** asigne simultáneamente dos folios iguales. No garantiza la idempotencia de una intención de facturación repetida: al reenviar dos veces el mismo pedido podrían consumirse dos folios distintos. Se requiere una cola de conciliación, claves de idempotencia server-side por intención e identificación en SII ante respuestas ambiguas. Antes del primer despliegue, conciliar manualmente el último folio confirmado en SII con el contador KV de cada tipo; los folios emitidos fuera de este Worker no están bajo el guard.
 
+### P1-FIN-009 — Facturas manuales podían duplicarse entre computadores
+
+**Estado:** MITIGADO EN ESTA RAMA.  
+La creación manual de Facturas consultaba solo el `state.facturas` del navegador y comprobaba coincidencia de tipo/folio **dentro del mismo cliente**, aunque la serie de un emisor no depende del cliente. Ahora `saveFactura` compara tipo normalizado + folio contra una lectura fresca y completa de Airtable, bloquea altas si falla la lectura, impide doble envío simultáneo en la misma pestaña y no agrega registros locales sin ID confirmado por Airtable. Editar un registro eliminado o colisionar con otro también produce un error explícito.
+
+**Límite:** dos equipos aún pueden superar simultáneamente la lectura y crear el mismo documento. Falta idempotencia transaccional obligatoria en el backend para todas las escrituras de Facturas, no solo validaciones del navegador.
+
+### P0-SII-013 — Error tras reservar un folio ocultaba el número utilizado
+
+**Estado:** CORREGIDO EN CÓDIGO, pendiente del despliegue SII.  
+Con el nuevo guard de folios, un timeout o fallo de firma **después** de reservar produce un número consumido, aunque el SII no confirme recepción. El Worker ya no devuelve solamente 500 sin contexto: responde `recibido:false` con el número reservado y un aviso que exige conciliación manual con SII antes de intentar otro DTE. La interfaz distingue recepción confirmada de reserva no confirmada; antes de crear la Factura vinculada verifica remotamente si el folio ya fue registrado, y avisa expresamente si no pudo guardarse. El fallo de autenticación SII ocurre antes de reservar.
+
+**Límites:** la idempotencia server-side por intención de emisión, el seguimiento de TrackID y una cola de conciliación todavía son necesarios. La nueva ruta no está activa hasta que se configure `SII_WORKER_KEY` y se verifique el último folio emitido en SII respecto al contador KV.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
