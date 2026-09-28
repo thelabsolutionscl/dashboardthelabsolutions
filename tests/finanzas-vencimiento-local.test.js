@@ -77,12 +77,12 @@ test('la mora del propio día de vencimiento es 0 a cualquier hora simulada', ()
 
 test('finVenc ancla vencimiento, emisión y mes a medianoche local', () => {
   const f = extract('finVenc');
-  assert.match(f, /new Date\\(String\\(v\\)\\.slice\\(0,10\\)\\+'T00:00:00'\\)/, 'todas las fechas pasan por el parser local');
-  assert.match(f, /const explicita=parseLocal\\(r&&r\\.venc\\)/, 'vencimiento explícito local');
-  assert.match(f, /const emision=parseLocal\\(r&&r\\.fecha\\)/, 'fecha de emisión local');
-  assert.match(f, /const base=emision\\|\\|parseLocal\\(/, 'fallback del mes también es local');
-  assert.match(f, /vencimiento\\.setDate\\(vencimiento\\.getDate\\(\\)\\+plazo\\)/, 'días de calendario, sin sumar milisegundos');
-  assert.doesNotMatch(f, /new Date\\(`\\$\\{r\\.year\\}-\\$\\{r\\.mes\\}-01`\\)/, 'no parsea la base como UTC');
+  assert.match(f, /new Date\(String\(v\)\.slice\(0,10\)\+'T00:00:00'\)/, 'todas las fechas pasan por el parser local');
+  assert.match(f, /const explicita=parseLocal\(r&&r\.venc\)/, 'vencimiento explícito local');
+  assert.match(f, /const emision=parseLocal\(r&&r\.fecha\)/, 'fecha de emisión local');
+  assert.match(f, /const base=emision\|\|parseLocal\(/, 'fallback del mes también es local');
+  assert.match(f, /vencimiento\.setDate\(vencimiento\.getDate\(\)\+plazo\)/, 'días de calendario, sin sumar milisegundos');
+  assert.doesNotMatch(f, /new Date\(`\$\{r\.year\}-\$\{r\.mes\}-01`\)/, 'no parsea la base como UTC');
 });
 
 test('el vencimiento mantiene medianoche al cruzar cambios de horario de Chile', () => {
