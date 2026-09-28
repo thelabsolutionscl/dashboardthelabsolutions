@@ -601,6 +601,22 @@ export default {
       return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN }, 200, CORS);
     }
 
+    // Login is a top-level browser navigation. Cloudflare Access handles the
+    // identity provider redirect at the edge; the Worker verifies the signed
+    // assertion independently, then returns to the fixed dashboard origin.
+    // No APP_KEY, query-string return URLs, or client-controlled redirects.
+    if(url.pathname==='/access/session'){
+      if(request.method!=='GET'||url.search)
+        return json({error:'Access login path not allowed'},405,CORS);
+      const signed=await accessAuthorize(request,env,'/access/me');
+      if(signed.response||!signed.identity)
+        return json({error:'Cloudflare Access must be activated before login'},503,CORS);
+      return new Response(null,{status:302,headers:{
+        Location:'https://dashboard.thelab.solutions/',
+        'Cache-Control':'no-store','Referrer-Policy':'no-referrer'
+      }});
+    }
+
     // Allowlist de origen: solo se aceptan peticiones cuyo Origin esté en la lista.
     // Antes el chequeo era `if (origin && ...)`, así que una petición SIN header
     // Origin (curl, un script, server-to-server) se lo saltaba por completo. Exigir
@@ -621,12 +637,18 @@ export default {
     // on the server; a forged Origin or copied APP_KEY cannot grant rights.
     const authorized=await accessAuthorize(request,env,
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
       Object.entries(CORS).forEach(([k,v])=>headers.set(k,v));
       return new Response(authorized.response.body,{status:authorized.response.status,headers});
+    }
+    if(url.pathname==='/access/me'){
+      if(request.method!=='GET'||url.search)return json({error:'Method not allowed'},405,CORS);
+      return json(authorized.identity
+        ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
+        :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
     if(authorized.identity&&request.method!=='GET'){
       console.log('[Access audit]',JSON.stringify({
