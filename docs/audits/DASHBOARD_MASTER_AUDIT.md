@@ -23,9 +23,9 @@ Cada bloque debe revisar cinco capas cuando apliquen:
 |---|---|---:|---|---|
 | 01 | Seguridad, identidad y secretos | P0 | EN AUDITORÍA | autenticación real, RBAC server-side, secretos, CORS, rate limit, auditoría |
 | 02 | IA, agentes y gasto de tokens | P0 | EN AUDITORÍA | Anthropic/OpenAI, hard caps, modelos, concurrencia, caché, atribución de costo |
-| 03 | Datos, Airtable, caché y sincronización | P0 | PENDIENTE | snapshots parciales, paginación, dedupe, rollback, conflictos |
-| 04 | Cotizaciones | P1 | PENDIENTE | cálculo, estados, aprobación→pedido, documentos, edición |
-| 05 | Pedidos | P1 | PENDIENTE | lifecycle, pagos, despacho, tarjetas/tabla, integridad de relaciones |
+| 03 | Datos, Airtable, caché y sincronización | P0 | EN AUDITORÍA | snapshots parciales, paginación, dedupe, rollback, conflictos |
+| 04 | Cotizaciones | P1 | EN AUDITORÍA | cálculo, estados, aprobación→pedido, documentos, edición |
+| 05 | Pedidos | P1 | EN AUDITORÍA | lifecycle, pagos, despacho, tarjetas/tabla, integridad de relaciones |
 | 06 | Finanzas y Facturas | P0/P1 | EN AUDITORÍA | revenue, saldos, IVA, DTE, caja, idempotencia |
 | 07 | Clientes / CRM / Recompras | P1 | PENDIENTE | ownership, historial, cadencias, acciones y trazabilidad |
 | 08 | Máquinas / granja / cámaras | P0/P1 | PENDIENTE | bridge, auth, telemetría, estados, recuperación, falsas alarmas |
@@ -126,6 +126,34 @@ El deploy todavía puede publicar credenciales con privilegios reales como `PORT
 GitHub Pages podía insertar `secrets.AIRTABLE` directamente en `index.html` si faltaba el proxy. `deploy.yml` ahora exige `PROXY_URL` y `PROXY_KEY`; sin ambos falla antes de publicar y no recibe el PAT como variable de entorno. Regresión: `tests/deploy-proxy-required.test.js`.
 
 **Límite de esta corrección:** el proxy todavía recibe un `APP_KEY` conocido por el navegador y otros secretos administrativos aún se inyectan en la versión estática. Se necesita autenticación real de usuario y migrar las funciones privilegiadas al backend para cerrar P0-SEC-001 y P0-SEC-007.
+
+### P0-SEC-009 — Proxy Airtable operaba sobre bases ajenas
+
+**Estado:** CONTENIDO EN ESTA RAMA (no resuelve autorización).  
+El Worker reenviaba rutas Airtable arbitrarias con el PAT del servidor. Una APP_KEY copiada del HTML y un Origin falsificado podían alcanzar cualquier otra base accesible al PAT. Ahora se restringen los endpoints de datos y metadata a la base TLS `app1YtD74AqiPWQhy` y se rechazan otros verbos.
+
+**Riesgo pendiente:** cualquiera que copie APP_KEY todavía puede leer o modificar registros de la propia base TLS. La restricción NO equivale a inicio de sesión, RBAC ni control por fila; migrar a identidad firmada, roles server-side y rotar claves publicadas.
+
+### P0-DATA-004 — Respuestas parciales o malformadas podían vaciar el CRM
+
+**Estado:** CORREGIDO EN ESTA RAMA (regresión añadida).  
+`airtableFetch` y `airtableFetchSince` aceptaban HTTP 200 sin un array `records` válido y trataban el resultado como `[]`. En una carga completa podían sustituir Pedidos por cero registros; cuando había más páginas que el máximo, se guardaba un snapshot truncado con etiqueta `scope:full`. Ahora el payload/paginación inválidos y los topes incompletos de tablas críticas provocan error antes de sustituir estado. La caché aumenta a v4 para no reutilizar snapshots anteriores.
+
+**Riesgo pendiente:** las tablas auxiliares mantienen límites intencionales de consulta; ampliar la auditoría de sincronización, detección de eliminaciones y reconciliación en todas las tablas.
+
+### P1-COT-001 — Emisión de correlativos desde copia local tras error remoto
+
+**Estado:** MITIGADO EN ESTA RAMA.  
+Si falla la lectura de Airtable, el correlativo de cotización/pedido ya no se calcula sobre una copia posiblemente obsoleta. La cotización manual tampoco ignora una lectura fallida de colisiones. Un error de red impide crear el documento y muestra el fallo; no se presenta como éxito.
+
+**Riesgo pendiente:** dos equipos todavía pueden leer el mismo máximo a la vez. Hace falta reserva atómica del correlativo e idempotencia server-side; Airtable por sí solo no impone unicidad en estos campos.
+
+### P1-PED-002 — Conversión de cotización duplicable o invisible tras crear
+
+**Estado:** MITIGADO EN ESTA RAMA (regresión añadida).  
+La conversión comprueba el vínculo Cotizaciones→Pedidos directamente en Airtable antes de escribir; falla cerrado si no puede verificarlo; bloquea dos conversiones simultáneas en la misma pestaña; limita reintentos POST a rechazos HTTP 422 confirmados; e incorpora el registro creado inmediatamente al estado local si falla el refresco posterior. El mismo criterio 422 se aplica a los pedidos de contratos recurrentes.
+
+**Riesgo pendiente:** lectura y POST siguen siendo dos operaciones separadas entre navegadores. Cerrar con guard de mutación/idempotencia en backend y reconciliación por cotización, sin volver a publicar secretos administrativos.
 
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
