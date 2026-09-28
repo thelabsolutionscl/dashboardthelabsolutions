@@ -100,6 +100,6 @@ export class SiiFolioGuard {
     // KV es espejo; su fallo NO permite volver a usar el número reservado.
     try{await kv.put('folio_'+tipo,String(next));}
     catch(e){console.error('[SII FolioGuard] KV espejo falló tras reserva segura:',e&&e.message);}
-    return reply({folio:next,tipo_documento:tipo,consumido:true});
+    return reply({folio:next,tipo_documento:tipo,caf_xml:cafXml,consumido:true});
   }
 }
