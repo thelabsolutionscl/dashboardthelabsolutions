@@ -10577,11 +10577,11 @@ async function ensureFacturasTable(){
 function _facturaClave(fields){
   const folio=String(fields?.['Folio']??'').trim();
   const raw=String(fields?.['Tipo DTE']||'').trim().toLowerCase();
-  if(!/^\\d+$/.test(folio)||Number(folio)<=0||!raw) return '';
+  if(!/^\d+$/.test(folio)||Number(folio)<=0||!raw) return '';
   const tipos={'factura':'33','factura electrónica':'33','boleta':'39','boleta electrónica':'39',
     'nota de crédito':'61','nota de crédito electrónica':'61','nota de débito':'56',
     'nota de débito electrónica':'56','guía de despacho':'52','guía de despacho electrónica':'52'};
-  const tipo=tipos[raw]||raw.replace(/\\s+/g,'');
+  const tipo=tipos[raw]||raw.replace(/\s+/g,'');
   return tipo+'|'+String(Number(folio));
 }
 const _facturasEnCurso=new Set();
