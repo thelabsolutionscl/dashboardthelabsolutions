@@ -91,7 +91,8 @@ export default {
 
     } catch (e) {
       console.error('[SII Worker]', e.message);
-      return err(e.message, Number.isInteger(e.status)?e.status:500);
+      return err(e.message, Number.isInteger(e.status)?e.status:500,
+        e.code?{code:e.code,...(Number.isSafeInteger(e.folio)?{folio:e.folio}:{})}:{});
     }
   },
 };
@@ -99,6 +100,13 @@ export default {
 // La firma se calcula en el Worker sobre el contenido real que se enviará,
 // nunca se confía en un hash provisto por el navegador. Excluimos pedido_id,
 // que representa la identidad de la operación y no forma parte del DTE.
+function siiChileDate() {
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Santiago',
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const pick=type=>parts.find(p=>p.type===type)?.value;
+  return pick('year')+'-'+pick('month')+'-'+pick('day');
+}
+
 async function siiPayloadFingerprint(data) {
   const {pedido_id, ...documento}=data;
   const bytes=new TextEncoder().encode(JSON.stringify(documento));
@@ -153,7 +161,7 @@ async function handleEmitDTE(request, env) {
     dte_numero: folio,
     tipo_documento: data.tipo_documento,
     // Fecha de la primera emisión en Chile, no la fecha del replay posterior.
-    fecha_emision: new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago'}).format(new Date()),
+    fecha_emision: siiChileDate(),
     trackid: siiResult.trackid,
     estado_sii: siiResult.estado,
     glosa_sii: siiResult.glosa || '',
@@ -217,7 +225,8 @@ async function folioGuardCall(env, tipo, op, payload = {}) {
     body:JSON.stringify({op,tipo,...payload})
   });
   const data = await result.json().catch(()=>({}));
-  if (!result.ok) throw Object.assign(new Error(data.error || 'Error de guardia de folios'), { status: result.status });
+  if (!result.ok) throw Object.assign(new Error(data.error || 'Error de guardia de folios'),
+    { status: result.status,code:data.code,folio:data.folio });
   return data;
 }
 
@@ -279,8 +288,8 @@ function ok(data) {
   });
 }
 
-function err(msg, status = 400) {
-  return new Response(JSON.stringify({ error: msg }), {
+function err(msg, status = 400, extra = {}) {
+  return new Response(JSON.stringify({ error: msg,...extra }), {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   });
