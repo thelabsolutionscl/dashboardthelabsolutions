@@ -198,7 +198,7 @@ test('el proxy enruta altas por el guard sin emitir POST directamente',async()=>
   try{
     f.env.CRM_WRITE_GUARD={
       idFromName: name=>name,
-      get: id=>{assert.equal(id,'crm-global-writes');return f.guard;}
+      get: id=>{assert.equal(id,'crm-global-writes');return {fetch:(url,opts)=>f.guard.fetch(new Request(url,opts))};}
     };
     const r=await worker.fetch(new Request(
       'https://proxy.workers.dev/'+BASE+'/Pedidos',{
