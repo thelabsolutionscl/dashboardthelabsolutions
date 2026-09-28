@@ -503,8 +503,20 @@ export default {
     if (!env.AIRTABLE_TOKEN) {
       return json({ error: 'Worker misconfigured: missing AIRTABLE_TOKEN secret' }, 500);
     }
-    // El dashboard ya incluye /v0 en algunas rutas; normalizamos a una sola /v0
+    // Reducir el alcance de un APP_KEY copiado del HTML: este Worker sólo debe
+    // operar sobre la base TLS, nunca convertirse en un proxy para otras bases
+    // a las que el PAT del servidor también pudiera tener acceso.
+    // Esto es contención, NO autenticación ni RBAC (APP_KEY es visible).
+    const allowedBase = 'app1YtD74AqiPWQhy';
     const path = url.pathname.startsWith('/v0/') ? url.pathname : '/v0' + url.pathname;
+    const dataPrefix = '/v0/' + allowedBase + '/';
+    const metaPrefix = '/v0/meta/bases/' + allowedBase + '/';
+    if (!(path.startsWith(dataPrefix) || path.startsWith(metaPrefix))) {
+      return json({ error: 'Airtable base or route not allowed' }, 403, CORS);
+    }
+    if (!['GET','POST','PATCH','DELETE'].includes(request.method)) {
+      return json({ error: 'Method not allowed' }, 405, CORS);
+    }
     const target = AIRTABLE_BASE + path + url.search;
 
     const headers = new Headers();
