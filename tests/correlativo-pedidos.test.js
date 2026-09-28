@@ -77,9 +77,9 @@ test('nunca retrocede: si lo local va más adelante, manda lo local', async () =
   assert.equal(await fn(), `PED-${anio}-031`);
 });
 
-test('si Airtable no responde, se sigue con lo local en vez de no crear el pedido', async () => {
+test('si Airtable no responde, se detiene antes de emitir un correlativo posiblemente duplicado', async () => {
   const { fn } = montar({ local: [ped(`PED-${anio}-024`)], remoto: [], falla: true });
-  assert.equal(await fn(), `PED-${anio}-025`);
+  await assert.rejects(fn, /Airtable 503/);
 });
 
 test('sin pedidos previos empieza en 001', async () => {
