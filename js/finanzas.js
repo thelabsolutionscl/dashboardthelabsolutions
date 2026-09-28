@@ -2397,7 +2397,12 @@ async function emitirDTE(){
             String(ff['Fecha']||'').slice(0,4)===String(fechaDoc).slice(0,4);
         });
         if(facturaExistente?.id){
-          await airtableWrite('Facturas','PATCH',facturaExistente.id,facturaFields);
+          // Recuperar un TrackID no debe devolver a "Pendiente" una factura
+          // que ya fue pagada ni pisar el vencimiento renegociado por cobranza.
+          const updateFields={...facturaFields};
+          delete updateFields['Estado Pago'];
+          delete updateFields['Fecha Vencimiento'];
+          await airtableWrite('Facturas','PATCH',facturaExistente.id,updateFields);
         }else if(resp.replayed){
           // Puede existir una creación en curso desde el navegador original.
           // Un segundo POST ahora produciría dos facturas para un solo DTE.
