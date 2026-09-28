@@ -227,6 +227,20 @@ Antes del POST se guarda una reserva durable por número y por cotización; ante
 
 **Límites:** esta garantía cubre todas las creaciones que atraviesan el proxy. No evita mutaciones externas hechas con otro PAT ni convierte `APP_KEY` en autenticación. Una creación con resultado ambiguo y sin registro visible puede requerir conciliación manual; no se hará un POST ciego. Se debe comprobar el deploy de Cloudflare v2 antes de declarar protección activa y mantener la migración SQL `v2-crm-mutation-guard`.
 
+### P1-FIN-009 — Facturas manuales podían duplicarse entre computadores
+
+**Estado:** MITIGADO EN ESTA RAMA.  
+La creación manual de Facturas consultaba solo el `state.facturas` del navegador y comprobaba coincidencia de tipo/folio **dentro del mismo cliente**, aunque la serie de un emisor no depende del cliente. Ahora `saveFactura` compara tipo normalizado + folio contra una lectura fresca y completa de Airtable, bloquea altas si falla la lectura, impide doble envío simultáneo en la misma pestaña y no agrega registros locales sin ID confirmado por Airtable. Editar un registro eliminado o colisionar con otro también produce un error explícito.
+
+**Límite:** dos equipos aún pueden superar simultáneamente la lectura y crear el mismo documento. Falta idempotencia transaccional obligatoria en el backend para todas las escrituras de Facturas, no solo validaciones del navegador.
+
+### P0-SII-013 — Error tras reservar un folio ocultaba el número utilizado
+
+**Estado:** CORREGIDO EN CÓDIGO, pendiente del despliegue SII.  
+Con el nuevo guard de folios, un timeout o fallo de firma **después** de reservar produce un número consumido, aunque el SII no confirme recepción. El Worker ya no devuelve solamente 500 sin contexto: responde `recibido:false` con el número reservado y un aviso que exige conciliación manual con SII antes de intentar otro DTE. La interfaz distingue recepción confirmada de reserva no confirmada; antes de crear la Factura vinculada verifica remotamente si el folio ya fue registrado, y avisa expresamente si no pudo guardarse. El fallo de autenticación SII ocurre antes de reservar.
+
+**Límites:** la idempotencia server-side por intención de emisión, el seguimiento de TrackID y una cola de conciliación todavía son necesarios. La nueva ruta no está activa hasta que se configure `SII_WORKER_KEY` y se verifique el último folio emitido en SII respecto al contador KV.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
