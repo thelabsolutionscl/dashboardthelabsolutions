@@ -258,6 +258,23 @@ El diseño usa **un registro por cliente** en vez de un blob global, para evitar
 
 **Pruebas:** `tests/recompra-shared.test.js` cubre conflicto entre equipos, migración, duplicados remotos, datos corruptos y la regla de “no desaparecer hasta envío confirmado”.
 
+### P1-CRM-007 — Cambio masivo de etapa rompía la categoría Lead/Cliente
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+El cambio individual a una etapa de cliente escribía `Validado=true`, pero la acción masiva solo cambiaba `Etapa venta`. Así podían existir registros en “Cliente activo” que seguían categorizados como lead según el campo explícito. El bulk ahora usa la misma regla del flujo individual y aplica en memoria exactamente los campos confirmados por Airtable.
+
+### P1-CRM-008 — Eliminar un cliente podía dejar historial comercial huérfano
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+Las eliminaciones individual y masiva ejecutaban DELETE sin comprobar relaciones. El “deshacer” recrea un registro nuevo con otro `recordId`, por lo que no puede restaurar enlaces rotos. Antes de borrar, el dashboard relee **Cotizaciones, Pedidos y Facturas** desde Airtable; si no puede verificar las relaciones, falla cerrado. Cualquier cliente con historial se conserva y se indica usar “Cliente inactivo”. El borrado masivo elimina únicamente registros libres y mantiene seleccionados los bloqueados.
+
+### P1-CRM-009 — Alta de cliente podía repetirse tras un error ambiguo
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+Dos flujos de creación retiraban campos opcionales y repetían `POST Clientes` cuando el mensaje contenía “unknown”, incluso si provenía de un 5xx ambiguo. Ahora el fallback se habilita exclusivamente ante `HTTP 422` confirmado de campo/esquema desconocido. Timeout, red y 5xx no provocan una segunda alta. La misma detección estricta se aplica al fallback de Comuna de edición, aunque PATCH sea idempotente.
+
+**Pruebas:** `tests/clientes-integridad.test.js` ejecuta la semántica del bulk, la detección de dependencias remotas, borrado fail-closed y clasificación de errores 422/5xx.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  
