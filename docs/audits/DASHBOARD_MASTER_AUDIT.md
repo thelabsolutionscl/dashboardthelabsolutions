@@ -207,6 +207,17 @@ La ruta guiada ejecutaba un segundo `POST` si el error contenía "unknown", sin 
 
 **Pendiente:** garantizar unicidad entre equipos en el backend y un número correlativo atómico; la protección por localStorage solo opera por navegador.
 
+### P0-SII-012 — Dos emisiones paralelas podían reservar el mismo folio tributario
+
+**Estado:** CORREGIDO EN CÓDIGO; DEPLOY BLOQUEADO HASTA CONFIGURAR SII_WORKER_KEY.  
+Antes `nextFolio()` leía el contador de KV, se enviaba el DTE al SII y solo entonces se incrementaba el contador. Dos solicitudes concurrentes podían leer el mismo número y producir un DTE duplicado; un timeout después de llegar al SII podía dejar ese folio disponible para otro envío.
+
+Se agrega `SiiFolioGuard`: **un Durable Object por tipo de documento** con operaciones serializadas y `DO.storage` como máximo persistente. Cada emisión obtiene y persiste un folio antes de firmar o enviar, nunca lo devuelve al pool ante un resultado ambiguo y utiliza KV solo como espejo de compatibilidad. La carga de CAF y la consulta de estado pasan por el mismo guard para impedir retrocesos; se rechaza subir un CAF anterior o con tipo discordante. Un Worker sin binding `FOLIO_GUARD` devuelve error 503 y no emite. Las rutas POST de emisión quedan limitadas a `/` y `/emit`. La autenticación con SII se realiza antes de reservar para no agotar folios por un fallo de login.
+
+**Verificación:** `tests/sii-folio-guard.test.js` prueba 20 reservas simultáneas, reinicio de isolate, KV desfasado, re-subida de CAF, agotamiento, tipo equivocado y ausencia de bindings; `tests/sii.test.js` conserva los casos previos. La migración Wrangler `v1-sii-folios-atomic` crea la clase en Cloudflare cuando se vuelva a desplegar el Worker SII.
+
+**Límites:** esto impide que el **mismo Worker** asigne simultáneamente dos folios iguales. No garantiza la idempotencia de una intención de facturación repetida: al reenviar dos veces el mismo pedido podrían consumirse dos folios distintos. Se requiere una cola de conciliación, claves de idempotencia server-side por intención e identificación en SII ante respuestas ambiguas. Antes del primer despliegue, conciliar manualmente el último folio confirmado en SII con el contador KV de cada tipo; los folios emitidos fuera de este Worker no están bajo el guard.
+
 ### P1-FIN-001 — Ventas manuales llamaban persistencia inexistente
 
 **Estado:** CORREGIDO EN ESTA RAMA.  

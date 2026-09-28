@@ -67,6 +67,22 @@ después retirar del deploy las credenciales administrativas y rotarlas.
 No borrar hoy las claves del frontend sin una ruta compatible: rompería
 facturación, portal o controles de taller.
 
+## Emisión SII y migración de folios (pendiente de una sola vez)
+
+Se introduce `FOLIO_GUARD`, un Durable Object independiente para serializar
+la reserva de folios por tipo, persistiendo el high-water ANTES del envío a
+SII. `wrangler.toml` incluye su migración; no requiere un secreto adicional,
+pero no se ejecutará mientras falte `SII_WORKER_KEY` en GitHub Actions.
+Si falta el binding, el Worker falla cerrado (503), sin emitir DTE.
+
+**Al reactivar el SII:** reconciliar primero el último folio emitido en
+SII y el contador del Worker para cada tipo. No reintentar automáticamente
+un envío con resultado ambiguo: el número ya queda reservado; verificar el
+documento en SII y registrar su TrackID/estado cuando exista. Nunca
+reutilizar un folio reservado, aunque la red falle. La idempotencia por pedido
+todavía necesita una clave transaccional server-side y una cola de conciliación.
+La autenticación real por usuario también sigue pendiente.
+
 ## Backups semanales cifrados (repositorio público)
 
 El workflow `weekly.yml` no puede publicar CRM en texto plano. Descubre todas
