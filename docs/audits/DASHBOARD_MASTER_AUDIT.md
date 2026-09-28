@@ -150,6 +150,13 @@ El helper global `siiHeaders()` ya existía y CAF/folios/DTE lo reutilizan. El b
 **Estado:** MITIGADO EN ESTA RAMA.  
 Al materializar la respuesta del Worker se busca tipo DTE + folio en el estado autoritativo y se hace PATCH si existe. Falta idempotencia server-side y conciliación durable para cerrar completamente el riesgo.
 
+### P1-FIN-007 — Vencimientos desfasados al cambiar horario de verano
+
+**Estado:** CORREGIDO EN ESTA RAMA.  
+`finVenc` sumaba `plazo*86400000` a una fecha anclada a medianoche. Al cruzar cambios de horario en Chile, el resultado podía quedar a las 23:00 del día anterior o 01:00 del día esperado. El cálculo ahora usa `Date#setDate` para sumar días de calendario y mantener la medianoche local.
+
+**Regresión:** `tests/finanzas-vencimiento-local.test.js` ejecuta casos de entrada/salida del horario de verano con `TZ=America/Santiago`.
+
 ## Backlog confirmado por pruebas TODO existentes
 
 La repo ya declara deuda técnica explícita que se incorpora a esta auditoría:
