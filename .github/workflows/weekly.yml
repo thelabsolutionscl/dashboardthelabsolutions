@@ -5,7 +5,8 @@ name: Automatización semanal
 # 2) (Opcional) Envía un resumen directamente por Resend.
 #
 # Secrets que usa:
-#   AIRTABLE        (ya existe — el mismo del deploy)
+#   AIRTABLE        (PAT de Airtable del backup, scope schema+records read)
+#   BACKUP_ENCRYPTION_KEY (mínimo 24 caracteres, distinto de las API keys)
 #   RESEND_API_KEY  (opcional; sin él no se envía el resumen)
 #   RESEND_FROM     (opcional; fallback: The Lab Solutions <hola@thelab.solutions>)
 #   REPORT_EMAIL    (opcional; sin él no se envía el resumen)
@@ -34,16 +35,20 @@ jobs:
       - name: Backup Airtable → JSON
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
         run: node scripts/backup-airtable.mjs
 
-      - name: Guardar backup como artifact (90 días)
+      - name: Guardar SOLO el backup cifrado como artifact (90 días)
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: backup-crm-${{ github.run_id }}
-          path: backup/
+          name: backup-crm-cifrado-${{ github.run_id }}
+          path: backup/*.enc.json
+          if-no-files-found: warn
           retention-days: 90
 
-      - name: Enviar resumen por Resend
+      - name: Enviar resumen por Resend (alertar si quedó incompleto)
+        if: ${{ always() && hashFiles('backup/resumen.txt') != '' }}
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM: ${{ secrets.RESEND_FROM }}
