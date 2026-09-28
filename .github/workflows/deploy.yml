@@ -30,7 +30,6 @@ jobs:
 
       - name: Inject secrets into index.html
         env:
-          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}       # el secret se llama AIRTABLE
           GOOGLE_CLIENT_ID: ${{ secrets.DRIVE }}        # el secret se llama DRIVE
           SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
           SII_WORKER_KEY: ${{ secrets.SII_WORKER_KEY }}   # clave del worker tributario (ver sii-worker)
@@ -47,15 +46,14 @@ jobs:
           PUBLIC_LEAD_KEY: ${{ secrets.PUBLIC_LEAD_KEY }}
           PORTAL_ADMIN_KEY: ${{ secrets.PORTAL_ADMIN_KEY }}
         run: |
-          # MODO PROXY (ver SECURITY.md): con PROXY_URL+PROXY_KEY configurados,
-          # Airtable, Claude y OpenAI salen por Workers. Ninguna API key de IA
-          # se inyecta en el HTML estático.
-          if [ -n "${PROXY_URL}" ] && [ -n "${PROXY_KEY}" ]; then
-            echo "Modo proxy activo: Claude sólo usa airtable-proxy."
-          else
-            sed -i "s|%%AIRTABLE_TOKEN%%|${AIRTABLE_TOKEN}|g" index.html
-            echo "::warning::PROXY_URL/PROXY_KEY faltan — Claude quedará bloqueado."
+          # Nunca publicar un PAT de Airtable en GitHub Pages, ni siquiera
+          # cuando falte el Proxy. Si no hay backend configurado se detiene
+          # el deploy y la versión actualmente publicada queda intacta.
+          if [ -z "${PROXY_URL}" ] || [ -z "${PROXY_KEY}" ]; then
+            echo "::error::PROXY_URL y PROXY_KEY son obligatorios. Deploy bloqueado para evitar exponer Airtable."
+            exit 1
           fi
+          echo "Modo proxy obligatorio: Airtable y la IA usan airtable-proxy."
           sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
           # Portal del cliente: lo sirve el lead-worker. El dashboard solo necesita
           # su URL y PORTAL_ADMIN_KEY para pedir el link firmado de cada cliente.
