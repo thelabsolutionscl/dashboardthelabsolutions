@@ -123,7 +123,7 @@ export class SiiFolioGuard {
         siguiente_folio:last+1,rango_caf:range,folios_disponibles:remaining,
         advertencia:remaining<=10?'⚠ Quedan pocos folios — solicita nuevo CAF al SII':null});
     }
-    if(op!=='reserve') return reply({error:'Operación no permitida'},400);
+    if(op!=='reserve'&&op!=='begin') return reply({error:'Operación no permitida'},400);
     const next=last+1;
     if(next>range.hasta)
       return reply({error:'Folios agotados para tipo '+tipo+
