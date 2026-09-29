@@ -223,7 +223,7 @@ test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ad
   const send=functionBlock(SOURCE,'sendAdsMutation');
   const save=functionBlock(SOURCE,'saveCampaignMutation');
   assert.match(load,/window\._DEMO_MODE\|\|!cfg\.endpoint/);
-  assert.match(send,/if\(window\._DEMO_MODE\)/);
+  assert.match(send,/if\(_adsIsReadOnly\(\)\)/,'explicit demo and fixture fallback must both be blocked');
   assert.match(send,/status=['"]demo['"]/);
   assert.match(save,/ADS_MAKE_SHELL\.url&&!window\._DEMO_MODE/);
   assert.match(SOURCE,/ads_demo_pending_mutations/,'la cola demo debe estar separada de la real');
