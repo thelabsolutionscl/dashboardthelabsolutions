@@ -176,3 +176,29 @@ test('proxy rechaza alta de Reportes si falta DO y bloquea PATCH directo',async(
     assert.equal(bypass.status,403);
   }finally{h.restore();}
 });
+
+test('si un reporte confirmado fue eliminado, permite una creación nueva; no libera incertidumbres',async()=>{
+  const h=harness();
+  try{
+    assert.equal((await h.invoke(report('2026-W40'))).status,201);
+    h.records.splice(0,1); // operator deliberately removed the old record in Airtable
+    assert.equal((await h.invoke(report('2026-W40'))).status,201);
+    assert.equal(h.counts().posts,2);
+    assert.equal(h.records.length,1);
+  }finally{h.restore();}
+});
+test('Reportes usa una instancia DO distinta del guard de Pedidos/Facturas',async()=>{
+  const seen=[];
+  const proxyEnv={...ENV,CRM_MUTATION_GUARD:{
+    idFromName(name){seen.push(name);return name;},
+    get(){return {fetch:async()=>new Response(JSON.stringify({id:'recGuarded',fields:{}}),{status:200})};}
+  }};
+  const request=(table,fields)=>new Request('https://proxy.test'+BASE+table,{
+    method:'POST',headers:{Origin:ORIGIN,'X-App-Key':ENV.APP_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({fields})
+  });
+  const ctx={waitUntil:()=>{}};
+  assert.equal((await worker.fetch(request('Reportes',report('2026-W40').fields),proxyEnv,ctx)).status,200);
+  assert.equal((await worker.fetch(request('Pedidos',{'N° Pedido':'PED-2026-042'}),proxyEnv,ctx)).status,200);
+  assert.deepEqual(seen,['tls-reportes-global','tls-crm-global']);
+});
