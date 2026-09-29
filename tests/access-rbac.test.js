@@ -86,6 +86,16 @@ test('privileged SII bridge only permits finance emission/status and admin CAF',
   assert.equal(accessAllows({role:'admin'},'PUT','/sii/caf'),true);
   assert.equal(accessAllows({role:'finance'},'GET','/sii/folio/999'),false);
 });
+test('operational supplier/monitoring tables work with Access, reports remain financial',()=>{
+  const base='/v0/app1YtD74AqiPWQhy/';
+  assert.equal(accessAllows({role:'operator'},'GET',base+'Monitor%20Sistema'),true);
+  assert.equal(accessAllows({role:'operator'},'PATCH',base+'Proveedores/recABC12345'),true);
+  assert.equal(accessAllows({role:'operator'},'GET',base+'Reportes'),false);
+  assert.equal(accessAllows({role:'finance'},'GET',base+'Reportes'),true);
+  assert.equal(accessAllows({role:'finance'},'POST',base+'Reportes'),true);
+  assert.equal(accessAllows({role:'viewer'},'GET',base+'Reportes'),false);
+  assert.equal(accessAllows({role:'viewer'},'PATCH',base+'Monitor%20Sistema/recABC12345'),false);
+});
 test('unknown tables, metadata and path aliases fail closed for non-admin',()=>{
   assert.equal(accessTable('/v0/app1YtD74AqiPWQhy/%46acturas'),'');
   assert.equal(accessTable('/v0/app1YtD74AqiPWQhy/tblABCDEFGHIJKLMN'),'');

@@ -7288,10 +7288,24 @@ function _airtableConfig(){
 // Mismo camino para CUALQUIER llamada a Airtable (records o meta): con proxy va
 // al Worker (que reenvía /meta/... igual que /records con su token server-side);
 // sin proxy, directo con el token local. path SIN prefijo /v0.
+// Include Cloudflare Access cookies only when calling this dashboard's own
+// configured proxy. Never attach those credentials to external Airtable,
+// third-party APIs or a user-supplied URL on another origin.
+function _proxyCredentials(url){
+  const px=_proxyCfg();
+  if(!px?.url)return 'same-origin';
+  try{
+    const target=new URL(url,location.href),proxy=new URL(px.url,location.href);
+    const prefix=proxy.pathname.replace(/\/$/,'');
+    return target.origin===proxy.origin&&
+      (target.pathname===prefix||target.pathname.startsWith(prefix+'/'))
+      ?'include':'same-origin';
+  }catch(_){return 'same-origin';}
+}
 function _atFetch(path,opts={}){
   const cfg=_airtableConfig();
   if(window._DEMO_MODE) return _demoAirtableHttp(cfg.base+path,opts);
-  return fetch(cfg.base+path,{...opts,headers:{...(opts.headers||{}),...cfg.headers}});
+  return fetch(cfg.base+path,{...opts,credentials:opts.credentials||_proxyCredentials(cfg.base+path),headers:{...(opts.headers||{}),...cfg.headers}});
 }
 function _atHttp(path,opts={}){
   const cfg=_airtableConfig();
@@ -7334,7 +7348,7 @@ async function airtableHttp(url,opts,{retries=2,timeout=20000,idempotent=true}={
   for(let attempt=0;attempt<=retries;attempt++){
     const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),timeout);
     try{
-      const r=await fetch(url,{...opts,signal:ctrl.signal});
+      const r=await fetch(url,{...opts,credentials:opts.credentials||_proxyCredentials(url),signal:ctrl.signal});
       // 429 (rate limit) SIEMPRE es seguro reintentar: Airtable rechaza ANTES de
       // procesar, no crea nada. Los 5xx son AMBIGUOS en una escritura no idempotente
       // (POST de creación): el registro pudo crearse y solo perderse la respuesta,
@@ -8699,7 +8713,7 @@ async function _claudeHttp(url,opts,{reintentos=1,limite=60000}={}){
     const ctrl=new AbortController();
     const t=setTimeout(()=>ctrl.abort(),limite);
     try{
-      const r=await fetch(url,{...opts,signal:ctrl.signal});
+      const r=await fetch(url,{...opts,credentials:opts.credentials||_proxyCredentials(url),signal:ctrl.signal});
       // Sólo 429 se reintenta: un 5xx puede ocurrir después de iniciar una
       // generación y repetirlo podría pagar dos veces por el mismo trabajo.
       if(r.status===429&&intento<reintentos){

@@ -11,16 +11,17 @@
  */
 const ACCESS_ROLES=new Set(['viewer','operator','finance','admin']);
 const ACCESS_WRITE_TABLES={
-  operator:new Set(['Clientes','Cotizaciones','Pedidos','Inventario','Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos']),
-  finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas']),
+  operator:new Set(['Clientes','Cotizaciones','Pedidos','Inventario','Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema','Proveedores']),
+  finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas','Proveedores','Reportes']),
 };
 const ACCESS_FINANCE_TABLES=new Set([
   'Facturas','Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones',
-  'Presupuestos','Prestamos','Préstamos','Ventas','Caja'
+  'Presupuestos','Prestamos','Préstamos','Ventas','Caja','Reportes'
 ]);
 const ACCESS_ALLOWED_TABLES=new Set([
   'Clientes','Cotizaciones','Pedidos','Facturas','Inventario','Maquinas',
-  'Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos',
+  'Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema',
+  'Proveedores','Reportes',
   'Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones','Presupuestos',
   'Prestamos','Préstamos','Ventas','Caja'
 ]);

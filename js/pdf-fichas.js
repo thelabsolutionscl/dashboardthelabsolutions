@@ -492,7 +492,7 @@ function _openaiFetch(path,{method='POST',body=null,isForm=false}={}){
   if(!px?.url||!px?.key) return Promise.reject(new Error('Proxy IA requerido'));
   const headers={'X-App-Key':px.key,'X-AI-Agent':'openai-dashboard'};
   if(!isForm) headers['Content-Type']='application/json';
-  return fetch(px.url.replace(/\/$/,'')+'/openai'+path,{method,headers,body});
+  return fetch(px.url.replace(/\/$/,'')+'/openai'+path,{method,credentials:'include',headers,body});
 }
 function _openaiAvailable(){return !!(typeof _proxyCfg==='function'&&_proxyCfg());}
 

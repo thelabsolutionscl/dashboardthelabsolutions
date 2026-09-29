@@ -126,3 +126,31 @@ ya no se puede cambiar manualmente la URL fiscal protegida.
   compatible `APP_KEY` **siguen siendo otra tarea abierta**. No declarar el
   dashboard protegido en su totalidad hasta migrar portal y máquinas y
   retirar esas credenciales del frontend.
+
+## Bloqueo de cookies corregido antes de encender Access (PR #310)
+
+El navegador ahora envía las cookies de Cloudflare Access en todas las rutas
+centrales del proxy: lectura/escritura de CRM, Claude, KAI, análisis de gasto
+y generación de imágenes. La inclusión de cookies queda limitada al origen
+y prefijo configurado del proxy; la conexión directa a Airtable u otro dominio
+no recibe esas credenciales. La matriz de RBAC también incluye las tablas
+operativas usadas en el dashboard: `Monitor Sistema` y `Proveedores`;
+`Reportes` queda restringida al equipo de Finanzas y administradores.
+
+**Cloudflare requiere configuración real antes de activar el switch:**
+- Usar preferentemente un hostname del mismo sitio, como
+  `proxy.thelab.solutions`, en lugar de `workers.dev`. Las cookies de un
+  dominio de terceros pueden bloquearse desde el dashboard.
+- Cloudflare Access suele bloquear `OPTIONS` antes de llegar al Worker.
+  En la app Access, configurar *Bypass OPTIONS requests to origin* o la
+  respuesta CORS de preflight de Access, **sin omitir** la validación JWT del
+  Worker para las operaciones reales.
+- Entrar primero al hostname del proxy mediante el botón de sesión de Finanzas
+  y volver al dashboard. Una sesión en el dominio de la app y la configuración
+  de cookies correcta son necesarias para las solicitudes autenticadas.
+- Documentación: https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/cors/
+
+Las pruebas automatizadas solo cubren las rutas y el código. Los bloqueos de
+cookies del navegador, la política Access, el SII y los secretos del entorno
+requieren una prueba real de extremo a extremo antes de activar
+`SII_ACCESS_MODE=true`.

@@ -47,7 +47,7 @@ function proxyCfg(){
 async function fetchDaily(){
   const px=proxyCfg();if(!px?.url||!px?.key)return null;
   const r=await target.fetch(px.url.replace(/\/$/,'')+'/anthropic/usage',{
-    method:'GET',headers:{'X-App-Key':px.key,'Accept':'application/json'}
+    method:'GET',credentials:'include',headers:{'X-App-Key':px.key,'Accept':'application/json'}
   });
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json();
