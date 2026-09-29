@@ -1,12 +1,28 @@
 /* js/seo-ads.js — módulo extraído de index.html (carga en el mismo punto). */
 // ── SEO WORDPRESS ─────────────────────────────────────────────
-function getWPConfig(){try{const s=localStorage.getItem('wp_config');if(s) return JSON.parse(s);}catch(e){}return{url:'https://thelab.solutions',user:'',pass:''};}
+function getWPConfig(){
+  const fallback={url:'https://thelab.solutions',user:'',pass:''};
+  try{
+    const stored=sessionStorage.getItem('wp_config');
+    if(stored)return {...fallback,...JSON.parse(stored)};
+    // One-time cleanup of old passwords from persistent browser storage.
+    const legacy=localStorage.getItem('wp_config');
+    if(legacy){
+      const cfg={...fallback,...JSON.parse(legacy)};
+      sessionStorage.setItem('wp_config',JSON.stringify(cfg));
+      localStorage.removeItem('wp_config');
+      return cfg;
+    }
+  }catch(e){console.warn('WordPress config could not be read');}
+  return fallback;
+}
 function saveWPConfig(){
   const url=(document.getElementById('wp-url')?.value||'').trim().replace(/\/$/,'');
   const user=(document.getElementById('wp-user')?.value||'').trim();
   const pass=(document.getElementById('wp-pass')?.value||'').trim();
   if(!url||!user||!pass){toast('Completa todos los campos','error');return;}
-  localStorage.setItem('wp_config',JSON.stringify({url,user,pass}));
+  sessionStorage.setItem('wp_config',JSON.stringify({url,user,pass}));
+  localStorage.removeItem('wp_config');
   toast('✓ Credenciales guardadas','success');
   const panel=document.getElementById('wpConfigPanel');if(panel)panel.style.display='none';
 }
@@ -926,14 +942,32 @@ function adsExportKeywordsCSV(){
   a.click();
   toast('✓ CSV de palabras clave descargado','success');
 }
-function getAdsConfig(){try{const s=localStorage.getItem('ads_config');if(s){const c=JSON.parse(s);return{...c,secret:c.secret||''};}}catch(e){}const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;return{endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbzepd4w_8meCRmOCsx-pngGHyQ_BqUXAaWAFE8WpIFtTO6zRmFPDukNarCXUNzmfLdt/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099',secret:''};}
+function getAdsConfig(){
+  const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;
+  const defaults={endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbzepd4w_8meCRmOCsx-pngGHyQ_BqUXAaWAFE8WpIFtTO6zRmFPDukNarCXUNzmfLdt/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099',secret:''};
+  try{
+    const previous=localStorage.getItem('ads_config');
+    if(previous){
+      const old=JSON.parse(previous);
+      // Keep only nonsensitive endpoint and customer ID in persistent storage.
+      if(old&&typeof old==='object'){
+        if(old.secret&&!sessionStorage.getItem('ads_mutation_secret'))
+          sessionStorage.setItem('ads_mutation_secret',old.secret);
+        localStorage.setItem('ads_config',JSON.stringify({endpoint:old.endpoint||'',customerId:old.customerId||''}));
+      }
+    }
+    const stored=JSON.parse(localStorage.getItem('ads_config')||'null');
+    return {...defaults,...(stored||{}),secret:sessionStorage.getItem('ads_mutation_secret')||''};
+  }catch(e){return defaults;}
+}
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
   const secret=(document.getElementById('ads-secret')?.value||'').trim();
   if(!endpoint){toast('Ingresa la URL del endpoint','error');return;}
   if(secret.length<16){toast('Usa un secreto de al menos 16 caracteres','error');return;}
-  localStorage.setItem('ads_config',JSON.stringify({endpoint,customerId,secret}));
+  sessionStorage.setItem('ads_mutation_secret',secret);
+  localStorage.setItem('ads_config',JSON.stringify({endpoint,customerId}));
   document.getElementById('adsConfigPanel').style.display='none';
   toast('✓ Configuración Google Ads guardada','success');
   loadAdsData();
