@@ -284,3 +284,59 @@ Sin esas verificaciones, el modo nuevo permanece apagado para conservar la
 operación existente; integrar el código **no** equivale a haber retirado la
 clave de producción. La credencial maestra de impresoras y el `APP_KEY`
 compartido del dashboard siguen pendientes en el P0 de seguridad #306.
+
+## Impresoras: tickets breves por rol, sin secreto maestro publicado (fase opt-in)
+
+El proxy expone exclusivamente `POST /printer/session`, disponible solo para
+identidades humanas con Cloudflare Access firmado. Emite un ticket temporal
+del Farm Controller mediante el secreto adecuado almacenado **en el proxy**:
+`viewer` y `finance` reciben lectura, `operator` puede operar las impresoras
+y `admin` puede ejecutar acciones administrativas. Se valida que el
+Controller devuelva exactamente el rol solicitado y una expiración breve;
+si no lo hace, se rechaza. El dominio de canje se fija a
+`https://printers.thelab.solutions` y no se siguen redirecciones.
+
+El frontend ya tiene un modo separado bajo `PRINTER_ACCESS_MODE`. Cuando se
+activa, ignora las claves antiguas del HTML y almacenamiento, las borra del
+navegador, usa exclusivamente tickets efímeros para cámaras, WebSocket y
+operaciones remotas, renueva su sesión y jamás vuelve al token largo ante un
+error. El túnel de impresoras queda fijo al dominio oficial. El formulario
+«Mi cuenta» deja de aceptar claves y URLs alternativas.
+
+### Activación conjunta, sin cortar producción
+
+1. Confirmar que el iMac corre **Farm Controller** (no el bridge legado
+   `server.js` directamente). Debe responder a `POST /farm/session` con
+   `ok: true`, `role`, `token` y `expiresAt`. Este proceso acepta tickets
+   temporales también en las cámaras y reenvía las peticiones al bridge interno.
+2. Generar **tres secretos distintos** para el Farm Controller:
+   `BRIDGE_VIEWER_TOKEN`, `BRIDGE_OPERATOR_TOKEN` y
+   `BRIDGE_ADMIN_TOKEN`. Configurarlos en el iMac; no sobrescribir ni
+   revocar el token de producción actual antes de la prueba. Configurar
+   las **mismas tres claves** como `PRINTER_VIEWER_TOKEN`,
+   `PRINTER_OPERATOR_TOKEN` y `PRINTER_ADMIN_TOKEN` mediante secretos
+   cifrados del **airtable-proxy**. No configurar esos valores en GitHub
+   Pages ni en el código.
+3. Con Cloudflare Access y los roles activos, verificar el canje a través
+   del proxy para un usuario de cada rol. Comprobar en remoto que lectura,
+   cámaras y telemetría funcionen con `viewer`, que `operator` pueda
+   operar pero no administrar y que solo `admin` tenga controles críticos.
+   Probar sesión vencida, ausencia de sesión y claves incorrectas. Verificar
+   por separado el modo LAN: no debe alterarse.
+4. Solo cuando la prueba anterior resulte correcta, configurar en GitHub
+   Actions las dos variables `PRINTER_ACCESS_MODE=true` y
+   `PRINTER_CUTOVER_VERIFIED=true`, y desplegar Pages. La segunda es una
+   puerta manual obligatoria para impedir un corte accidental. El despliegue
+   retira `PRINTER_TUNNEL_TOKEN` del HTML y activa las solicitudes de
+   tickets firmados. Si Access falla, las acciones remotas fallan cerradas.
+5. Revisar el HTML publicado y los cachés/service workers, validar cámaras,
+   telemetría y acciones en dos dispositivos y retirar el token maestro
+   anteriormente expuesto en coordinación con el iMac. El token de
+   compatibilidad no debe seguir habilitado después del corte definitivo.
+
+**Limitación de seguridad:** un ticket ya expedido conserva su rol hasta que
+venza (normalmente 10 minutos), aunque cambie el rol del usuario en Access.
+Para revocación urgente, invalidar las sesiones del Farm Controller
+reiniciándolo de forma controlada, teniendo en cuenta la continuidad de las
+impresiones y los WebSockets. No se afirma despliegue ni pruebas en el iMac
+hasta verificarlos de verdad.

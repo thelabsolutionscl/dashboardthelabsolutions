@@ -114,6 +114,15 @@ test('privileged SII bridge only permits finance emission/status and admin CAF',
   assert.equal(accessAllows({role:'admin'},'PUT','/sii/caf'),true);
   assert.equal(accessAllows({role:'finance'},'GET','/sii/folio/999'),false);
 });
+test('printer tickets require a signed human role but cannot proxy arbitrary machine routes',()=>{
+  for(const role of ['viewer','operator','finance','admin']){
+    assert.equal(accessAllows({role},'POST','/printer/session'),true,role);
+  }
+  for(const role of ['viewer','operator','finance']){
+    assert.equal(accessAllows({role},'GET','/printer/session'),false);
+    assert.equal(accessAllows({role},'POST','/printer/restart'),false);
+  }
+});
 test('portal administration requires explicit signed roles',()=>{
   assert.equal(accessAllows({role:'operator'},'POST','/portal-admin/link'),true);
   assert.equal(accessAllows({role:'finance'},'POST','/portal-admin/link'),true);

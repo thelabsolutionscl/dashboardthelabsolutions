@@ -1874,10 +1874,12 @@ function populateMobileConfig(){
   if(pk){const v=localStorage.getItem('proxy_key');pk.value=v?'••••••••'+v.slice(-4):'';pk.onfocus=()=>{if(pk.value.startsWith('••')){pk.value='';pk.placeholder='clave-secreta';}};pk.onblur=()=>{if(!pk.value){const vv=localStorage.getItem('proxy_key');pk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const ps=document.getElementById('mbProxyStatus');
   if(ps){const v=(typeof _proxyCfg==='function')&&_proxyCfg();ps.textContent=v?'✓ Proxy activo':'Sin proxy — token local';}
-  const pt=document.getElementById('mbPrinterTunnel');if(pt) pt.value=localStorage.getItem('printer_tunnel')||'';
-  const ptk=document.getElementById('mbPrinterToken');if(ptk){const v=localStorage.getItem('printer_tunnel_token');ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••'))ptk.value='';};ptk.onblur=()=>{if(!ptk.value){const vv=localStorage.getItem('printer_tunnel_token');ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
+  const pt=document.getElementById('mbPrinterTunnel');
+  if(pt){pt.value=_printerAccessMode()?'https://printers.thelab.solutions':(localStorage.getItem('printer_tunnel')||'');pt.disabled=_printerAccessMode();}
+  const ptk=document.getElementById('mbPrinterToken');if(ptk&&_printerAccessMode()){ptk.value='Gestionado por Cloudflare Access';ptk.disabled=true;}
+  else if(ptk){const v=localStorage.getItem('printer_tunnel_token');ptk.value=v?'••••••••'+v.slice(-4):'';ptk.onfocus=()=>{if(ptk.value.startsWith('••'))ptk.value='';};ptk.onblur=()=>{if(!ptk.value){const vv=localStorage.getItem('printer_tunnel_token');ptk.value=vv?'••••••••'+vv.slice(-4):'';}};}
   const pts=document.getElementById('mbPrinterTunnelStatus');
-  if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=(v?'✓ '+v:'Default: https://printers.thelab.solutions')+(localStorage.getItem('printer_tunnel_token')?' · 🔑':'');}
+  if(pts){const v=localStorage.getItem('printer_tunnel');pts.textContent=_printerAccessMode()?'🔐 Access: tickets temporales por usuario':((v?'✓ '+v:'Default: https://printers.thelab.solutions')+(localStorage.getItem('printer_tunnel_token')?' · 🔑':''));}
   const aks=document.getElementById('mbAnthropicStatus');
   if(aks){const px=(typeof _proxyCfg==='function')&&_proxyCfg();aks.textContent=px?'✓ Proxy IA activo · gasto protegido':'⚠ Proxy IA no configurado';}
 }
@@ -1934,6 +1936,7 @@ function clearMbProxy(){
   toast('Proxy eliminado','info');
 }
 function saveMbPrinterTunnel(){
+  if(_printerAccessMode()){toast('La conexión segura se administra desde Cloudflare Access','info');return;}
   const inp=document.getElementById('mbPrinterTunnel');const v=(inp?.value||'').trim();
   if(v) localStorage.setItem('printer_tunnel',v); else localStorage.removeItem('printer_tunnel');
   const tkInp=document.getElementById('mbPrinterToken');const tk=(tkInp?.value||'').trim();
@@ -1946,6 +1949,7 @@ function saveMbPrinterTunnel(){
   if(typeof pollPrinters==='function')pollPrinters();
 }
 function clearMbPrinterTunnel(){
+  if(_printerAccessMode()){toast('La conexión segura se administra desde Cloudflare Access','info');return;}
   localStorage.removeItem('printer_tunnel');
   localStorage.removeItem('printer_tunnel_token');
   const inp=document.getElementById('mbPrinterTunnel');if(inp) inp.value='';
