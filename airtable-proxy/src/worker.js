@@ -489,6 +489,13 @@ export class CrmMutationGuard {
         try{await this.state.storage.put(key,{record_id:updated.id,completed:true,week});}catch(_){}
         return this._json(updated,200);
       }
+      // A known completed report may have been deliberately deleted during
+      // historical cleanup. Once the complete remote read proves it absent,
+      // clear only a COMPLETED marker. An uncertain pending marker stays locked.
+      if(marker?.completed&&marker.record_id){
+        try{await this.state.storage.delete(key);marker=null;}
+        catch(_){return this._json({error:'No se pudo limpiar la reserva completada'},503);}
+      }
       if(reportReplace)return this._json({
         error:'El reporte que ibas a reemplazar ya no existe; recarga antes de continuar',
         code:'REPORTES_REPLACE_CONFLICT',week
@@ -1252,7 +1259,10 @@ export default {
       try { body = await readOpenAiJson(request); }
       catch (_) { return json({ error: 'Invalid guarded create JSON body' }, 400, CORS); }
       try {
-        const id = env.CRM_MUTATION_GUARD.idFromName('tls-crm-global');
+        // Keep heavy report-history reconciliation out of the critical
+        // Pedidos/Facturas queue, while still sharing the deployed DO class.
+        const guardName=path===dataPrefix+'Reportes'?'tls-reportes-global':'tls-crm-global';
+        const id = env.CRM_MUTATION_GUARD.idFromName(guardName);
         const guard = env.CRM_MUTATION_GUARD.get(id);
         const guarded = await guard.fetch('https://crm-write.internal/create', {
           method: 'POST',
