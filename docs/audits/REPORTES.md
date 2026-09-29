@@ -95,3 +95,15 @@ Pruebas: `tests/reportes-period-history.test.js`. Quedan por resolver las primer
 El CAC ahora considera la primera fecha conocida de alta del registro Cliente y la primera cotización histórica. Una cotización de recompra no cuenta como cliente nuevo, aunque sea la primera de ese mes. Si un cliente nuevo cotiza por varios canales durante el mismo período, se atribuye únicamente al canal de su primera cotización, con desempate determinista por ID. Las cotizaciones sin cliente vinculado suman cantidad y revenue aprobado, pero **no se inventan como nuevos clientes**.
 
 La atribución todavía depende de la cobertura y calidad de los registros disponibles en el dashboard: sin historial CRM previo a la migración, el cálculo no puede inferir la adquisición externa anterior. Falta una fuente auditable y compartida para gasto y adquisición entre navegadores.
+
+
+## 2026-09-29 — Reserva de informe semanal por ISO (PR en curso)
+
+- El formulario usa semana ISO de lunes a domingo, también en los cálculos de indicadores. Antes mezclaba un número de semana diferente con inicio dominical.
+- Antes de invocar CEO_AGENT, se verifica la capacidad reportes_iso_upsert en el proxy desplegado y se lee el historial compartido. El automático reutiliza el informe existente sin gastar tokens ni reenviarlo; el manual solicita confirmación antes de reemplazarlo.
+- Las altas de Reportes pasan por CRM_MUTATION_GUARD: lectura completa de Airtable, reserva persistente por semana y serialización de dos navegadores. Un reemplazo manual confirmado actualiza con PATCH; un POST incierto se reconcilia leyendo Airtable y, si no aparece, se bloquean nuevos POST.
+- El proxy rechaza rutas alternativas de creación y PATCH directo. El formulario falla cerrado si todavía no se ha desplegado la versión protegida del Worker; no activa un flujo nuevo contra un proxy antiguo.
+- Los informes antiguos etiquetados como Semana N pueden adoptarse por su fecha de generación cuando solo hay uno. Si hay varios, devuelve REPORTES_LEGACY_DUPLICATES y exige conciliación manual. No se borran filas históricas automáticamente.
+- Pruebas: tests/reportes-semana-guard.test.js para carreras, reintentos, fechas y rutas; tests/reportes-client-idempotency.test.js para preflight, costo de IA y reemplazos; reportes-wiring.test.js sin pendientes.
+- Despliegue: primero actualizar airtable-proxy con CRM_MUTATION_GUARD y comprobar /health (reportes_iso_upsert=true); después desplegar Pages, revisar dos sesiones y el historial real de Airtable. Sin una prueba externa no declarar certificada la concurrencia de producción.
+- Continúa pendiente migrar el gasto de marketing desde localStorage a fuente compartida y reconciliar el historial de adquisiciones antiguo.
