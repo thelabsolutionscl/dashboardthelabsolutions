@@ -59,7 +59,7 @@ export async function checkAccessReadiness(config,fetcher=fetch){
   }catch(_){fail('Cannot probe fiscal access guard');}
   const hasId=!!config.serviceClientId,hasSecret=!!config.serviceClientSecret;
   if(hasId!==hasSecret)fail('Both machine service credentials are required together');
-  else if(!hasId)manual.push('Signed lead-worker service identity not tested: preflight service credentials absent');
+  else if(!hasId)fail('Add temporary PREFLIGHT_CF_CLIENT_ID and PREFLIGHT_CF_CLIENT_SECRET for signed machine checks');
   else {
     try{
       // Invalid JSON deliberately stops BEFORE model selection, budget reserve
@@ -81,7 +81,7 @@ export async function checkAccessReadiness(config,fetcher=fetch){
   if(config.stage==='post'){
     if(config.siiAccessMode!=='true')fail('SII_ACCESS_MODE must be true after cutover');
     if(!config.siiWorkerKey||config.siiWorkerKey.length<16)
-      manual.push('SII public-key exposure could not be checked without the original key');
+      fail('Original SII key required to verify the post-cutover public HTML');
     else {
       try{
         const r=await fetcher(BROWSER_ORIGIN+'/',{
