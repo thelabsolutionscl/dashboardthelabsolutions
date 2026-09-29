@@ -1,5 +1,84 @@
 import { accessAuthorize } from './access-auth.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
+
+const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
+const SELLER_SCOPE_NAMES=new Set(['florencia','nicanor','gustavo']);
+function sellerFieldName(row){
+  const value=row?.fields?.Vendedor;
+  return typeof value==='string'?value:
+    value&&typeof value==='object'&&typeof value.name==='string'?value.name:'';
+}
+// This is a separate, signed-identity route. It intentionally never calls
+// the generic Airtable proxy, exposes no unscoped fallback and never writes.
+async function sellerScopedRead(request,url,identity,env,CORS){
+  if(request.method!=='GET'||!SELLER_SCOPE_NAMES.has(identity?.seller)||
+     !env.AIRTABLE_TOKEN)
+    return json({error:'Scoped sales access unavailable'},403,CORS);
+  const path=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+  const prefix='/v0/app1YtD74AqiPWQhy/';
+  if(!path.startsWith(prefix))return json({error:'Scoped sales route denied'},403,CORS);
+  const parts=path.slice(prefix.length).split('/');
+  let table;
+  try{table=decodeURIComponent(parts[0]);}catch(_){
+    return json({error:'Invalid sales table path'},403,CORS);
+  }
+  if(!SELLER_SCOPE_TABLES.has(table)||parts[0]!==encodeURIComponent(table)||
+     parts.length>2||(parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1])))
+    return json({error:'Scoped sales route denied'},403,CORS);
+  const single=parts.length===2;
+  if(single&&url.search)
+    return json({error:'Unscoped record query forbidden'},422,CORS);
+  const query=new URLSearchParams(url.search);
+  if(!single){
+    const allowed=/^(?:filterByFormula|fields\[\]|pageSize|maxRecords|offset|view|sort\[[0-2]\]\[(?:field|direction)\])$/;
+    if([...query.keys()].some(k=>!allowed.test(k))||
+       [...new Set([...query.keys()].filter(k=>k!=='fields[]'))]
+         .some(k=>query.getAll(k).length!==1)||
+       query.getAll('fields[]').length>30||
+       [...query.values()].some(v=>v.length>600))
+      return json({error:'Unsupported scoped sales query'},422,CORS);
+    for(const key of ['pageSize','maxRecords']){
+      if(query.has(key)&&(!/^[1-9]\d{0,2}$/.test(query.get(key))||
+         Number(query.get(key))>(key==='pageSize'?100:500)))
+        return json({error:'Invalid scoped sales page size'},422,CORS);
+    }
+    // Airtable selects are compared by the verified live Vendedor choice;
+    // all unrelated legacy records (missing Vendedor) remain unassigned.
+    const owner='{Vendedor}="'+identity.seller+'"';
+    const existing=query.get('filterByFormula');
+    query.set('filterByFormula',existing?'AND('+owner+',('+existing+'))':owner);
+    // Always fetch Vendedor so we can independently verify each returned row,
+    // including when the client requested a narrower field projection.
+    if(query.has('fields[]')&&!query.getAll('fields[]').includes('Vendedor'))
+      query.append('fields[]','Vendedor');
+  }
+  const target=AIRTABLE_BASE+path+(single?'':'?'+query.toString());
+  let upstream;
+  try{
+    upstream=await fetch(target,{method:'GET',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+  }catch(_){return json({error:'Scoped sales upstream unavailable'},502,CORS);}
+  if(upstream.status===404)return json({error:'Record not found'},404,CORS);
+  if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+    return json({error:'Scoped sales upstream rejected the request'},502,CORS);
+  let body;
+  try{body=await upstream.json();}catch(_){
+    return json({error:'Scoped sales response invalid'},502,CORS);
+  }
+  const rows=single?[body]:body?.records;
+  if(!Array.isArray(rows)||rows.length>(single?1:100)||
+     rows.some(row=>!row||!/^rec[A-Za-z0-9]{14}$/.test(row.id)||
+       sellerFieldName(row)!==identity.seller)){
+    // A stale/noncompliant Airtable filter must NEVER leak even one record.
+    return json({error:single?'Record not found':'Scoped sales integrity error'},
+      single?404:502,CORS);
+  }
+  if(!single&&(body.offset!==undefined&&
+      (typeof body.offset!=='string'||body.offset.length>600)))
+    return json({error:'Scoped sales paging invalid'},502,CORS);
+  return json(body,200,{...CORS,'Cache-Control':'private, no-store'});
+}
+
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
 const OPENAI_BASE = 'https://api.openai.com';
 // Defensa de costo en el servidor: aunque alguien manipule el JavaScript del
@@ -845,6 +924,12 @@ export default {
         method:request.method,path:url.pathname.slice(0,180),
       }));
     }
+
+    // The new sales role has a dedicated owner-scoped Airtable read path.
+    // It cannot reach AI, printers, SII, portal, schema or generic CRM writes.
+    if(authorized.identity?.role==='sales')
+      return sellerScopedRead(request,url,authorized.identity,env,CORS);
+
 
 
     // Marketing spending is shared only under a verified individual Access
