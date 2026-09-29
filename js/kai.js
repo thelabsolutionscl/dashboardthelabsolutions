@@ -562,7 +562,7 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
         const reqBody=new Blob([JSON.stringify({ model:kaiModel, max_tokens:kaiMaxTokens, stream:true, system:SYS_BLOCKS(), tools:KAI_TOOLS, messages:convo })],{type:'application/json'});
         const RETRY=[429]; let r=null;
         for(let attempt=0; attempt<2 && !timedOut; attempt++){
-          r=await fetch(px.url+'/anthropic/v1/messages',{ method:'POST', signal:ctrl.signal,
+          r=await fetch(px.url+'/anthropic/v1/messages',{ method:'POST', credentials:'include', signal:ctrl.signal,
             headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'kai'}, body:reqBody });
           if(r.ok || !RETRY.includes(r.status) || attempt===1) break;
           $typ.textContent='Esperando límite de la IA…';
