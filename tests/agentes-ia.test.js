@@ -31,7 +31,7 @@ function bloque(src, desde, hasta) {
 // El helper de red, montado con un fetch de mentira para poder observarlo.
 function montarClaudeHttp() {
   const fuente = bloque(HTML, 'async function _claudeHttp', 'async function _callClaudeViaProxy');
-  return new Function(`${fuente}\nreturn _claudeHttp;`)();
+  return new Function('_proxyCredentials',`${fuente}\nreturn _claudeHttp;`)(()=> 'same-origin');
 }
 
 test('una IA que no responde corta sola en vez de dejar el modal colgado', async () => {
