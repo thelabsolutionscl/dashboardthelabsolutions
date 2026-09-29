@@ -462,7 +462,7 @@ export class CrmMutationGuard {
         // Historical reports stored "Semana 39 — septiembre 2026" instead of
         // ISO identity. Do not infer acquisition of arbitrary manual labels:
         // adopt only dated legacy rows from that calendar week.
-        return !/^\d{4}-W\d{2}$/.test(label)&&
+        return !/^\d{4}-W\d{2}$/.test(label)&&(label===''||/^Semana\b/i.test(label))&&
           reportIsoWeekFromDate(f['Fecha generación'])===week;
       });
       if(matches.length>1)return this._json({
@@ -701,7 +701,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
-      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN }, 200, CORS);
+      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN, reportes_iso_upsert: !!env.CRM_MUTATION_GUARD }, 200, CORS);
     }
 
     // Login is a top-level browser navigation. Cloudflare Access handles the
