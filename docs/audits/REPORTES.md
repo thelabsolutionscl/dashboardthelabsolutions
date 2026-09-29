@@ -118,3 +118,19 @@ La atribución todavía depende de la cobertura y calidad de los registros dispo
 - Verificaciones: `tests/reportes-marketing-spend.test.js` prueba escritura concurrente, conflicto de versión, aislamiento de meses, histórico firmado, roles, validación de entrada, sincronización, importación explícita y que el gasto compartido no se duplique en `localStorage`.
 - **Activación real pendiente de infraestructura**: configurar y verificar Cloudflare Access, CORS/sesiones, roles de finance/admin y comprobar lectura/escritura con ambos equipos. No probar con dinero real ni declarar fuente compartida activa hasta confirmar que los dos navegadores ven la misma versión y el historial correcto.
 - Continúa pendiente reconciliar la fecha de primera adquisición de los clientes registrados antes de la migración del CRM. En ausencia de evidencia, el CAC debe seguir etiquetándose como aproximación basada en el primer evento conocido.
+
+## 2026-09-29 — Verificación de atribución CRM y corrección de origen (PR siguiente)
+
+La lectura autorizada de Airtable detectó **314 Clientes**, **70 Cotizaciones**, **37 Clientes con Fecha primer contacto**, **38 con Origen lead**, **3 con GCLID** y **63 de 70 cotizaciones recibidas por WhatsApp**. Hay al menos **9 clientes cuya cotización conocida precede a la fecha registrada de primer contacto**. Estos son indicadores de cobertura de la muestra leída, no prueba de que otros canales no estén generando ventas.
+
+**Problema demostrado:** «Canal solicitud» describe por dónde se pidió la cotización, no la fuente de captación. La fórmula anterior atribuía esas ventas y clientes a WhatsApp, aunque el lead hubiera llegado por Google Ads. La tabla distinguía gasto por Google Ads de cotizaciones por WhatsApp, creando un denominador engañoso.
+
+**Corrección:**
+- Obtener el origen de adquisición de `Clientes.Origen lead`; GCLID o campaña explícita clasifican `Google Ads`. «Google» sin prueba de campaña no se transforma silenciosamente en anuncio pagado.
+- «Canal solicitud» queda como desglose operativo independiente; cotizaciones sin fuente CRM conocida van a «Sin atribución», sin adjudicarlas por defecto a WhatsApp.
+- Incorporar «Fecha primer contacto» al cálculo de primera adquisición si precede a la primera cotización. Fechas contradictorias no aumentan la cobertura fiable.
+- Mostrar porcentajes de cobertura de origen y primera fecha. **Cuando cualquiera es menor al 80%**, ocultar el costo estimado por nuevo cotizante y el ROAS; no presentar cifras de marketing como fiables con una base histórica incompleta.
+- Separar el costo por nuevo cotizante del CAC real de clientes pagadores. El revenue por canal aquí son cotizaciones aprobadas netas, no caja cobrada.
+- Tests de atribución conocida/ausente, cotizaciones recibidas por WhatsApp, fechas anteriores al alta CRM, primera cotización por varios canales, discrepancias cronológicas y gasto separado por mes.
+
+**Trabajo operativo pendiente**: reconstruir primeras fechas y fuente de captación de los clientes importados, preferiblemente desde evidencias existentes (GCLID/UTM, lead original, correo/WhatsApp con fecha, contrato o primera venta) antes de habilitar de nuevo el indicador. No inventar fechas antiguas ni asignar campañas sin pruebas.
