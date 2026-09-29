@@ -105,6 +105,16 @@ async function accessVerify(token,config){
   return {email,role:config.roles[email]};
 }
 
+async function accessVerifyLeadService(token,config,env){
+  const expected=String(env.ACCESS_LEAD_SERVICE_CLIENT_ID||'').trim();
+  if(!/^[A-Za-z0-9._-]{8,180}\\.access$/.test(expected))
+    throw new Error('Lead service client ID not configured');
+  const claims=await accessVerifyClaims(token,config);
+  if(claims.type!=='app'||claims.sub!==''||claims.common_name!==expected||
+     typeof claims.email==='string')
+    throw new Error('Access service identity mismatch');
+  return {role:'lead-service',client_id:expected};
+}
 function accessTable(path){
   const prefix='/v0/app1YtD74AqiPWQhy/';
   if(!path.startsWith(prefix))return '';
@@ -144,7 +154,26 @@ export async function accessAuthorize(request,env,path){
     return {response:new Response(JSON.stringify({error:'Access authentication misconfigured'}),{
       status:503,headers:{'Content-Type':'application/json'}})};
   }
-  if(!config)return {legacy:true};
+  const leadPath='/service/lead/anthropic/v1/messages';
+  if(!config){
+    if(path===leadPath)
+      return {response:new Response(JSON.stringify({error:'Lead service Access not activated'}),{
+        status:503,headers:{'Content-Type':'application/json'}})};
+    return {legacy:true};
+  }
+  if(path===leadPath){
+    if(request.method!=='POST')
+      return {response:new Response(JSON.stringify({error:'Method not allowed'}),{
+        status:405,headers:{'Content-Type':'application/json'}})};
+    try{
+      const serviceIdentity=await accessVerifyLeadService(
+        request.headers.get('Cf-Access-Jwt-Assertion'),config,env);
+      return {serviceIdentity};
+    }catch(_){
+      return {response:new Response(JSON.stringify({error:'Valid lead service token required'}),{
+        status:401,headers:{'Content-Type':'application/json'}})};
+    }
+  }
   let identity;
   try{identity=await accessVerify(request.headers.get('Cf-Access-Jwt-Assertion'),config);}
   catch(_){return {response:new Response(JSON.stringify({error:'Valid Cloudflare Access session required'}),{
