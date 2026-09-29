@@ -3995,7 +3995,7 @@
           <button class="btn btn-primary btn-sm" onclick="crearReporteAuto()">⚡ Reporte 1-clic (CEO_AGENT)</button>
           <button class="btn btn-ghost btn-sm" onclick="prefillReporte()">Rellenar campos</button>
         </div>
-        <div class="field-group"><label class="field-label">Semana</label><input class="field-input" id="rep-semana" placeholder="Semana 20 — mayo 2026"></div>
+        <div class="field-group"><label class="field-label">Semana</label><input class="field-input" id="rep-semana" placeholder="2026-W39"></div>
         <div class="field-group"><label class="field-label">Revenue neto (CLP)</label><input class="field-input" id="rep-revenue" type="number"></div>
         <div class="field-group"><label class="field-label">Cotizaciones enviadas / aprobadas</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-cot-env" type="number" placeholder="enviadas"><input class="field-input" id="rep-cot-apr" type="number" placeholder="aprobadas"></div></div>
         <div class="field-group"><label class="field-label">Pedidos activos / despachados esta sem.</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><input class="field-input" id="rep-ped-act" type="number" placeholder="activos"><input class="field-input" id="rep-ped-des" type="number" placeholder="despachados"></div></div>
@@ -7370,7 +7370,9 @@ async function airtableHttp(url,opts,{retries=2,timeout=20000,idempotent=true}={
   }
   throw new Error('Error de red: '+(lastErr?.message||'sin conexión'));
 }
-async function airtableWrite(table,method,recordId,fields){
+async function airtableWrite(table,method,recordId,fields,options={}){
+  if(table==='Reportes'&&method==='POST'&&!window._DEMO_MODE&&!_proxyCfg())
+    throw new Error('Reportes requiere Proxy Worker con protección semanal; no escribir directo en Airtable');
   const _wu=AUTH.getUser();
   if(_wu&&!RBAC.canWriteTable(_wu.role,table)){toast('Tu rol no tiene permiso de escritura','error');throw new Error('RBAC: escritura no permitida para rol '+_wu.role+' en '+table);}
   const cfg=_airtableConfig();
@@ -7378,9 +7380,13 @@ async function airtableWrite(table,method,recordId,fields){
   // El POST de creación NO es idempotente: si un corte de red o un 5xx deja el
   // resultado ambiguo, no se reintenta (evita duplicar el registro con el mismo
   // correlativo). PATCH/DELETE sí son idempotentes.
-  const r=await airtableHttp(url,{method,headers:{...cfg.headers,'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})},{idempotent:method!=='POST'});
+  const body={fields,typecast:true};
+  if(table==='Reportes'&&method==='POST'&&options.reportReplace===true)body.reportReplace=true;
+  const r=await airtableHttp(url,{method,headers:{...cfg.headers,'Content-Type':'application/json'},body:JSON.stringify(body)},{idempotent:method!=='POST'});
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${j.code?j.code+' — ':''}${j.error?.message||j.error?.type||(typeof j.error==='string'?j.error:'Error desconocido')}`);}
-  return await r.json();
+  const written=await r.json();
+  if(table==='Reportes'&&written&&typeof written==='object')written._reportWriteStatus=r.status;
+  return written;
 }
 // Upsert de un registro de 'Monitor Sistema' por Name, a prueba de duplicados.
 // Antes se hacía "si no tengo id → POST", lo que creaba registros repetidos cuando
@@ -14397,12 +14403,9 @@ function _pedDespachadoEnSemana(f,weekStart){
 }
 function prefillReporte(){
   const today=new Date();today.setHours(0,0,0,0);
-  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
-  // Número de semana ISO
-  const jan1=new Date(today.getFullYear(),0,1);
-  const weekNum=Math.ceil(((today-jan1)/86400000+jan1.getDay()+1)/7);
-  const mesLabel=today.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
-  document.getElementById('rep-semana').value=`Semana ${weekNum} — ${mesLabel}`;
+  const weekStart=new Date(today);weekStart.setDate(today.getDate()-((today.getDay()+6)%7));weekStart.setHours(0,0,0,0);
+  // La clave ISO YYYY-Www identifica unívocamente la semana (lunes a domingo).
+  document.getElementById('rep-semana').value=_isoWeekKey(today);
   // Revenue semanal = venta contratada neta de IVA: pedidos creados esta semana,
   // excluyendo cancelados. "Pedidos despachados" es otra métrica y no debe definir revenue.
   const revSemana=state.pedidos.reduce((s,p)=>{
@@ -14421,10 +14424,62 @@ function prefillReporte(){
   document.getElementById('rep-ped-des').value=pedDesSem;
   toast('✓ Métricas cargadas desde datos actuales','success');
 }
-async function crearReporte(){
-  const btn=document.getElementById('createReporteBtn');btn.disabled=true;btn.textContent='Generando...';const out=document.getElementById('reporteOutput');out.classList.remove('empty');out.textContent='⏳ CEO_AGENT procesando...';
+// Identidad compartida con el Worker: una semana ISO, incluso para informes
+// antiguos que guardaron "Semana 39 — septiembre 2026" con fecha conocida.
+function _reporteSemanaDeRegistro(record){
+  const f=record?.fields||{},label=String(f.Semana||'').trim();
+  if(/^\d{4}-W\d{2}$/.test(label))return label;
+  if(label&& !/^Semana\b/i.test(label))return null;
+  const date=String(f['Fecha generación']||'').slice(0,10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date)?_isoWeekKey(new Date(date+'T12:00:00')):null;
+}
+async function _reportesProxyReady(){
+  if(window._DEMO_MODE)return;
+  const px=_proxyCfg();
+  if(!px)throw new Error('Reportes necesita el Proxy Worker para guardar sin duplicados');
+  const r=await fetch(px.url.replace(/\/$/,'')+'/health',{credentials:'omit'});
+  if(!r.ok)throw new Error('No se pudo verificar la protección semanal del Proxy Worker');
+  const health=await r.json();
+  if(!health?.reportes_iso_upsert)
+    throw new Error('Actualiza airtable-proxy antes de generar reportes; el servidor aún no protege semanas duplicadas');
+}
+async function crearReporte({automatic=false}={}){
+  const btn=document.getElementById('createReporteBtn');
+  if(btn.disabled)return {ok:false,busy:true};
+  btn.disabled=true;btn.textContent='Comprobando semana...';
+  const out=document.getElementById('reporteOutput');
+  out.classList.remove('empty');out.textContent='Verificando el historial compartido...';
+  try{
+  const s=String(document.getElementById('rep-semana').value||'').trim()||_isoWeekKey();
+  const rev=document.getElementById('rep-revenue').value,ce=document.getElementById('rep-cot-env').value,
+    ca=document.getElementById('rep-cot-apr').value,pa=document.getElementById('rep-ped-act').value,
+    pd=document.getElementById('rep-ped-des').value,n=document.getElementById('rep-notas').value;
+  const conv=parseFloat(ce)>0?parseFloat(ca)/parseFloat(ce):0;
+  if(!/^\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])$/.test(s))
+    throw new Error('Semana inválida. Usa el formato ISO 2026-W39.');
+  // Fail closed before consuming any CEO_AGENT tokens if the deployed
+  // backend has not been upgraded to its authoritative Durable Object guard.
+  await _reportesProxyReady();
+  const fetched=await airtableFetch('Reportes',500);
+  state.reportes=fetched.records;
+  const candidates=state.reportes.filter(r=>_reporteSemanaDeRegistro(r)===s);
+  if(candidates.length>1)
+    throw new Error('Hay varios informes históricos para '+s+'. Concílialos en Airtable antes de generar otro.');
+  const existing=candidates[0]||null;
+  if(existing&&automatic){
+    out._rawText=existing.fields['Resumen ejecutivo']||'';
+    out.innerHTML=typeof formatAgentReport==='function'?formatAgentReport(out._rawText):escapeHtml(out._rawText);
+    renderReportes();try{ovRenderUltimoReporteCEO();}catch(e){}
+    return {ok:true,reused:true,record:existing};
+  }
+  if(existing&&!confirm('Ya existe un informe de '+s+'. ¿Quieres reemplazarlo con un análisis actualizado?')){
+    out.textContent='Se conservó el informe existente. No se consumieron tokens.';
+    return {ok:false,cancelled:true};
+  }
+  btn.textContent='Generando...';
+  out.textContent='⏳ CEO_AGENT procesando...';
   try{showAgentWorking('CEO',{verb:'está preparando tu reporte ejecutivo…',messages:['Revisando revenue y márgenes…','Detectando alertas y prioridades…','Redactando el reporte ejecutivo…','Puliendo los detalles…']});}catch(e){}
-  try{const s=document.getElementById('rep-semana').value,rev=document.getElementById('rep-revenue').value,ce=document.getElementById('rep-cot-env').value,ca=document.getElementById('rep-cot-apr').value,pa=document.getElementById('rep-ped-act').value,pd=document.getElementById('rep-ped-des').value,n=document.getElementById('rep-notas').value;const conv=parseFloat(ce)>0?parseFloat(ca)/parseFloat(ce):0;
+
   const ceoCfg=typeof AGENTES_CFG!=='undefined'?AGENTES_CFG.find(a=>a.id==='CEO'):null;
   const sys=ceoCfg?ceoCfg.sys:'Eres el CEO_AGENT de The Lab Solutions. Reportes ejecutivos semanales. Estructura: 1. RESUMEN 2. MÉTRICAS 3. ALERTAS 4. 3 ACCIONES';
   const liveCtx=(ceoCfg&&state.loaded)?buildAgentContext('CEO')+'\n\n':'';
@@ -14435,14 +14490,41 @@ async function crearReporte(){
   const meta=typeof agentResultMeta==='function'?agentResultMeta('CEO',started):{};
   out._rawText=response;out.style.whiteSpace='normal';out.innerHTML=typeof renderAgentResult==='function'?renderAgentResult('CEO',response,meta):formatAgentReport(response);
   try{AGENT_LOG.add('CEO_AGENT','Reporte semanal: '+(s||'actual'),response,meta);}catch(e){}
-  const fields={'Semana':s||`Semana ${new Date().toLocaleDateString('es-CL')}`,'Revenue semana (CLP)':parseFloat(rev)||0,'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,'Resumen ejecutivo':response,'Fecha generación':hoyCL(),'Tasa conversión (%)':conv,'Estado reporte':'Generado'};const created=await airtableWrite('Reportes','POST',null,fields);if(created&&created.id){state.reportes=[created,...(state.reportes||[]).filter(r=>r.id!==created.id)];}else{const fresh=await airtableFetch('Reportes',500);state.reportes=fresh.records||state.reportes||[];}toast('✓ Reporte guardado','success');renderReportes();try{ovRenderUltimoReporteCEO();}catch(e){}}
-  catch(e){toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;}
-  finally{try{hideAgentWorking();}catch(e){}}
-  btn.disabled=false;btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar y Guardar';
+  const fields={'Semana':s,'Revenue semana (CLP)':parseFloat(rev)||0,
+    'Cotizaciones enviadas':parseFloat(ce)||0,'Cotizaciones aprobadas':parseFloat(ca)||0,
+    'Pedidos activos':parseFloat(pa)||0,'Pedidos despachados':parseFloat(pd)||0,
+    'Resumen ejecutivo':response,'Fecha generación':hoyCL(),
+    'Tasa conversión (%)':conv,'Estado reporte':'Generado'};
+  const created=await airtableWrite('Reportes','POST',null,fields,{reportReplace:!!existing});
+  if(created&&created.id){
+    state.reportes=[created,...(state.reportes||[]).filter(r=>r.id!==created.id)];
+  }else{
+    const fresh=await airtableFetch('Reportes',500);
+    state.reportes=fresh.records||state.reportes||[];
+  }
+  // A second workstation may have committed while this one was calling AI.
+  // Never claim or email a second independently generated report in that case.
+  const reused=!existing&&created?._reportWriteStatus===200;
+  if(reused&&created.fields?.['Resumen ejecutivo']){
+    out._rawText=created.fields['Resumen ejecutivo'];
+    out.innerHTML=typeof renderAgentResult==='function'
+      ?renderAgentResult('CEO',out._rawText,meta):formatAgentReport(out._rawText);
+  }
+  toast(reused?'El otro equipo ya guardó el informe de esta semana':'✓ Reporte guardado','success');
+  renderReportes();try{ovRenderUltimoReporteCEO();}catch(e){}
+  return {ok:true,reused,record:created||null};
+  }catch(e){
+    toast('Error: '+e.message,'error');out.textContent='Error: '+e.message;
+    return {ok:false,error:e.message};
+  }finally{
+    try{hideAgentWorking();}catch(e){}
+    btn.disabled=false;
+    btn.innerHTML='<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar y Guardar';
+  }
 }
-async function crearReporteAuto(){
+async function crearReporteAuto({automatic=false}={}){
   prefillReporte();
-  await crearReporte();
+  return await crearReporte({automatic});
 }
 // ── Reporte CEO surtido en el Overview ──
 // Convierte el texto crudo del CEO_AGENT en bloques ordenados por sección
@@ -15103,7 +15185,7 @@ function _histSemanas(n){
   });
   const seen=new Set(),unique=[];
   for(const r of ordered){
-    const f=r.fields||{},key=f['Semana']||f['Fecha generación']||r.id;
+    const f=r.fields||{},key=_reporteSemanaDeRegistro(r)||f['Semana']||f['Fecha generación']||r.id;
     if(seen.has(key))continue;seen.add(key);unique.push(r);
   }
   return unique.slice(0,n||8).map(r=>{const f=r.fields;const cv=f['Tasa conversión (%)']||0;
@@ -15132,9 +15214,11 @@ async function ceoAutoWeeklyCheck(){
   if(localStorage.getItem('ceo_auto_last_week')===wk)return;
   _ceoAutoRunning=true;
   try{
-    await crearReporteAuto();
+    const result=await crearReporteAuto({automatic:true});
+    if(!result?.ok)return;
     ovRenderUltimoReporteCEO();
     localStorage.setItem('ceo_auto_last_week',wk);
+    if(result.reused){toast('El reporte de esta semana ya existía; sin duplicar ni reenviar','info');return;}
     const to=localStorage.getItem('ceo_auto_email')||'';
     const reps=(state.reportes||[]).slice().sort((a,b)=>{
     const byDate=String(b.fields['Fecha generación']||'').localeCompare(String(a.fields['Fecha generación']||''));
