@@ -77,6 +77,5 @@ test('every high-risk Ads write path checks the read-only guard before other ope
  assert.match(send,/if\(_adsIsReadOnly\(\)\)/);
  const snapshots=fragment('async function syncAdsToAirtable(data,days){','async function loadAdsSnapshotsFromAirtable(){');
  assert.match(snapshots.slice(0,170),/if\(_adsIsReadOnly\(\)\|\|data\?\.demo\)return/);
- const load=fragment('async function loadAdsData(){','function ',);
  assert.ok((source.match(/_adsRenderReadOnlyBanner\(\)/g)||[]).length>=4);
 });
