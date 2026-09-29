@@ -442,28 +442,75 @@ async function runSEODiag(){
     }
   }
 
-  // Step 4: write test
-  seoDiagStep('write','⏳','Probando escritura de campo SEO…','','var(--text3)');
+  // Step 4: NEVER alter SEO metadata on a published page. Only an existing
+  // draft is eligible for a reversible write test, with verified rollback.
+  seoDiagStep('write','⏳','Buscando un borrador de prueba…','','var(--text3)');
   try{
-    const testVal='__diag_test__';
-    const wr=await fetch(cfg.url+`/wp-json/wp/v2/pages/${testPageId}`,{
-      method:'POST',headers:wpAuthHeader(),
-      body:JSON.stringify({meta:{_yoast_wpseo_title:testVal}})
+    const list=await fetch(cfg.url+'/wp-json/wp/v2/pages?per_page=1&status=draft&_fields=id,slug,meta',{
+      headers:wpAuthHeader()
     });
-    if(!wr.ok){const j=await wr.json().catch(()=>({}));throw new Error(`HTTP ${wr.status}: ${j.message||'sin detalle'}`);}
-    // verify write persisted
-    const vr=await fetch(cfg.url+`/wp-json/wp/v2/pages/${testPageId}`,{headers:wpAuthHeader()});
-    const vd=vr.ok?await vr.json():{};
-    const written=vd.meta&&vd.meta._yoast_wpseo_title===testVal;
-    if(written){
-      seoDiagStep('write','✓','Escritura verificada — el guardado SEO funciona','El campo _yoast_wpseo_title se guardó y se leyó correctamente.','var(--success)');
-      // restore (optional — leave test value, Yoast will overwrite on next save from WP admin)
-      seoDiagStep('done','🎉','Todo listo','Puedes guardar SEO desde el dashboard sin problemas.','var(--accent)');
-    } else {
-      seoDiagStep('write','⚠','Escritura aceptada pero valor no persistió',`WordPress aceptó el POST (HTTP ${wr.status}) pero el valor leído de vuelta no coincide. Puede ser un cache o un plugin de seguridad.`,'var(--warn)');
+    if(!list.ok)throw new Error('No se pudieron consultar los borradores: HTTP '+list.status);
+    const drafts=await list.json();
+    const draft=Array.isArray(drafts)?drafts[0]:null;
+    if(!draft||!Number.isInteger(Number(draft.id))){
+      seoDiagStep('write','ℹ','Prueba de escritura omitida',
+        'No hay borradores disponibles. Crea una página borrador para verificar escritura sin alterar SEO publicado.','var(--warn)');
+    }else{
+      const route=cfg.url+'/wp-json/wp/v2/pages/'+encodeURIComponent(String(draft.id));
+      const original=draft.meta?._yoast_wpseo_title??'';
+      // Refresh the original value from WordPress immediately before writing,
+      // not from the dashboard's potentially stale page cache.
+      const fresh=await fetch(route,{headers:wpAuthHeader()});
+      if(!fresh.ok)throw new Error('No se pudo leer el borrador antes de modificarlo');
+      const live=await fresh.json();
+      if(live.status!=='draft'||!live.meta||
+         !Object.prototype.hasOwnProperty.call(live.meta,'_yoast_wpseo_title')){
+        throw new Error('El borrador no está confirmado o no expone el campo Yoast. No se modificó nada.');
+      }
+      const originalLive=live.meta._yoast_wpseo_title??original;
+      const testVal='__diag_test__'+Date.now();
+      let attempted=false,verified=false,restoreError=null;
+      try{
+        // A timeout/lost response is ambiguous; always attempt restoration.
+        attempted=true;
+        const write=await fetch(route,{method:'POST',headers:wpAuthHeader(),
+          body:JSON.stringify({meta:{_yoast_wpseo_title:testVal}})});
+        if(!write.ok)throw new Error('WordPress rechazó la prueba: HTTP '+write.status);
+        const readback=await fetch(route,{headers:wpAuthHeader()});
+        if(!readback.ok)throw new Error('No se pudo verificar la escritura');
+        const checked=await readback.json();
+        verified=checked.meta?._yoast_wpseo_title===testVal;
+        if(!verified)throw new Error('La escritura fue aceptada, pero el valor de prueba no coincide');
+      }catch(e){
+        seoDiagStep('write','⚠','No se confirmó la prueba de escritura',e.message,'var(--warn)');
+      }finally{
+        if(attempted){
+          try{
+            const restored=await fetch(route,{method:'POST',headers:wpAuthHeader(),
+              body:JSON.stringify({meta:{_yoast_wpseo_title:originalLive}})});
+            if(!restored.ok)throw new Error('HTTP '+restored.status);
+            const again=await fetch(route,{headers:wpAuthHeader()});
+            if(!again.ok)throw new Error('No se pudo releer el título original');
+            const finalPage=await again.json();
+            if(finalPage.meta?._yoast_wpseo_title!==originalLive)
+              throw new Error('El valor restaurado no coincide con el original');
+          }catch(e){restoreError=e;}
+        }
+      }
+      if(restoreError){
+        seoDiagStep('restore','❌','Restauración SEO fallida',
+          'El borrador '+draft.id+' requiere revisión manual: '+restoreError.message,'var(--danger)');
+      }else if(verified){
+        seoDiagStep('write','✓','Escritura verificada y revertida',
+          'El título del borrador se restauró y se comprobó el valor original.','var(--success)');
+        seoDiagStep('done','🎉','Diagnóstico completo','No se ha modificado ninguna página publicada.','var(--accent)');
+      }else{
+        seoDiagStep('restore','✓','Título del borrador restaurado',
+          'No se ha confirmado la escritura, pero se verificó la restauración.','var(--success)');
+      }
     }
   }catch(e){
-    seoDiagStep('write','❌','Error al escribir campo SEO',e.message,'var(--danger)');
+    seoDiagStep('write','⚠','Prueba de escritura no realizada',e.message,'var(--warn)');
   }
   if(btn){btn.disabled=false;btn.textContent='▶ Ejecutar diagnóstico';}
 }
