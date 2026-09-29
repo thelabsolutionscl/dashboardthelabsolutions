@@ -3,6 +3,106 @@ const AIRTABLE_BASE = 'https://api.airtable.com';
 
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 const SELLER_SCOPE_NAMES=new Set(['florencia','nicanor','gustavo']);
+
+const SELLER_SAFE_PATCH_FIELDS=Object.freeze({
+  Clientes:new Set(['Notas internas','Notas followup','Contacto','Cargo contacto','Teléfono']),
+  Cotizaciones:new Set(['Notas cotización']),
+  Pedidos:new Set(['Notas internas'])
+});
+const SELLER_SAFE_PATCH_MAX_BYTES=12288;
+const SCOPED_CRM_PREFIX='/v0/app1YtD74AqiPWQhy/';
+function sellerScopedPatchShape(table,body){
+  if(!body||typeof body!=='object'||Array.isArray(body)||
+     Object.keys(body).length!==2||!Object.hasOwn(body,'fields')||
+     !Object.hasOwn(body,'expected_fields'))return false;
+  const {fields,expected_fields:expected}=body;
+  if(!fields||typeof fields!=='object'||Array.isArray(fields)||
+     !expected||typeof expected!=='object'||Array.isArray(expected))return false;
+  const keys=Object.keys(fields);
+  if(!keys.length||keys.length>5||Object.keys(expected).length!==keys.length)return false;
+  const allowed=SELLER_SAFE_PATCH_FIELDS[table];
+  return !!allowed&&keys.every(key=>
+    allowed.has(key)&&Object.hasOwn(expected,key)&&
+    typeof fields[key]==='string'&&
+    typeof expected[key]==='string'&&
+    fields[key].length<=(key.includes('Notas')?4000:256)&&
+    expected[key].length<=(key.includes('Notas')?4000:256)&&
+    !/[\x00-\x08\x0b\x0e-\x1f]/.test(fields[key]));
+}
+// Only a narrow PATCH is eligible. It is deliberately opt-in until *all*
+// owner-changing integrations, including direct Airtable/Make writers, have
+// been inventoried; the DO cannot atomically lock an external Airtable writer.
+async function sellerScopedWrite(request,url,identity,env,CORS){
+  if(request.method!=='PATCH'||!SELLER_SCOPE_NAMES.has(identity?.seller))
+    return json({error:'Scoped sales write denied'},403,CORS);
+  if(String(env.ACCESS_SALES_WRITES_ENABLED||'').toLowerCase()!=='true')
+    return json({error:'Sales writes are disabled pending single-writer cutover',
+      code:'SALES_WRITE_CUTOVER_REQUIRED'},503,CORS);
+  if(!env.CRM_MUTATION_GUARD||!env.AIRTABLE_TOKEN)
+    return json({error:'Sales write guard unavailable'},503,CORS);
+  const path=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+  const m=/^\/v0\/app1YtD74AqiPWQhy\/([^/]+)\/(rec[A-Za-z0-9]{14})$/.exec(path);
+  let table;
+  try{table=m&&decodeURIComponent(m[1]);}catch(_){}
+  if(!m||!SELLER_SCOPE_TABLES.has(table)||m[1]!==encodeURIComponent(table)||url.search)
+    return json({error:'Scoped sales write path denied'},403,CORS);
+  if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+     Number(request.headers.get('Content-Length')||0)>SELLER_SAFE_PATCH_MAX_BYTES)
+    return json({error:'Expected a bounded JSON sales patch'},415,CORS);
+  let body;
+  try{
+    const raw=await request.text();
+    if(raw.length>SELLER_SAFE_PATCH_MAX_BYTES)throw Error('Oversized sales patch');
+    body=JSON.parse(raw);
+  }catch(_){return json({error:'Invalid sales patch body'},422,CORS);}
+  if(!sellerScopedPatchShape(table,body))
+    return json({error:'Sales patch contains unsupported or missing expected fields'},422,CORS);
+  try{
+    const id=env.CRM_MUTATION_GUARD.idFromName('tls-crm-global');
+    const stub=env.CRM_MUTATION_GUARD.get(id);
+    const guarded=await stub.fetch('https://crm-write.internal/scoped-patch',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({table,recordId:m[2],method:'PATCH',body,
+        actor:{email:identity.email,role:'sales',seller:identity.seller}})
+    });
+    const headers=new Headers(guarded.headers);
+    Object.entries(CORS).forEach(([k,v])=>headers.set(k,v));
+    headers.set('Cache-Control','private, no-store');
+    return new Response(guarded.body,{status:guarded.status,headers});
+  }catch(_){return json({error:'Sales write guard unavailable'},503,CORS);}
+}
+// Route every signed admin/operator/finance PATCH of a commercial table to
+// the SAME DO queue. This prevents a proxied reassignment from interleaving
+// between a sales ownership check and the associated PATCH.
+async function privilegedScopedPatch(request,url,identity,env,CORS,table){
+  if(!env.CRM_MUTATION_GUARD)
+    return json({error:'Scoped CRM write guard unavailable'},503,CORS);
+  const path=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+  if(!path.startsWith(SCOPED_CRM_PREFIX+encodeURIComponent(table))||
+     (url.search.length>1000))
+    return json({error:'Scoped CRM write path denied'},403,CORS);
+  let raw;
+  try{
+    if(Number(request.headers.get('Content-Length')||0)>262144)
+      throw Error('Oversized patch');
+    raw=await request.text();
+    if(raw.length>262144)throw Error('Oversized patch');
+  }catch(_){return json({error:'CRM patch exceeds supported size'},413,CORS);}
+  try{
+    const id=env.CRM_MUTATION_GUARD.idFromName('tls-crm-global');
+    const stub=env.CRM_MUTATION_GUARD.get(id);
+    const guarded=await stub.fetch('https://crm-write.internal/scoped-patch',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({table,method:'PATCH',body:raw,path,search:url.search,
+        actor:{email:identity.email,role:identity.role}})
+    });
+    const headers=new Headers(guarded.headers);
+    Object.entries(CORS).forEach(([k,v])=>headers.set(k,v));
+    headers.set('Cache-Control','private, no-store');
+    return new Response(guarded.body,{status:guarded.status,headers});
+  }catch(_){return json({error:'Scoped CRM write guard unavailable'},503,CORS);}
+}
+
 function sellerFieldName(row){
   const value=row?.fields?.Vendedor;
   return typeof value==='string'?value:
@@ -928,7 +1028,22 @@ export default {
     // The new sales role has a dedicated owner-scoped Airtable read path.
     // It cannot reach AI, printers, SII, portal, schema or generic CRM writes.
     if(authorized.identity?.role==='sales')
-      return sellerScopedRead(request,url,authorized.identity,env,CORS);
+      return request.method==='GET'
+        ?sellerScopedRead(request,url,authorized.identity,env,CORS)
+        :sellerScopedWrite(request,url,authorized.identity,env,CORS);
+    // Existing privileged PATCHes must share the sales write lock whenever
+    // Access is active. Legacy mode is intentionally unchanged until cutover.
+    if(authorized.identity&&request.method==='PATCH'){
+      const scopedPath=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+      const scopedParts=scopedPath.startsWith(SCOPED_CRM_PREFIX)
+        ?scopedPath.slice(SCOPED_CRM_PREFIX.length).split('/'):[];
+      let scopedTable;
+      try{scopedTable=decodeURIComponent(scopedParts[0]||'');}catch(_){}
+      if(SELLER_SCOPE_TABLES.has(scopedTable)&&
+         scopedParts[0]===encodeURIComponent(scopedTable)&&
+         scopedParts.length<=2)
+        return privilegedScopedPatch(request,url,authorized.identity,env,CORS,scopedTable);
+    }
 
 
 
