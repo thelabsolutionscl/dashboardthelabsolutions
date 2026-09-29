@@ -89,3 +89,9 @@ Corrección esperada: excluir el mes actual hasta cerrarlo o prorratearlo explí
 - El mes calendario en curso ya no participa como observación completa en los promedios ni índices de estacionalidad. Continúa mostrándose como mes futuro/proyectado en los gráficos cuando corresponda.
 
 Pruebas: `tests/reportes-period-history.test.js`. Quedan por resolver las primeras adquisiciones reales del CAC, idempotencia al guardar un reporte semanal y persistencia multiusuario de gastos.
+
+## 2026-09-29 — CAC basado en primera adquisición (#321)
+
+El CAC ahora considera la primera fecha conocida de alta del registro Cliente y la primera cotización histórica. Una cotización de recompra no cuenta como cliente nuevo, aunque sea la primera de ese mes. Si un cliente nuevo cotiza por varios canales durante el mismo período, se atribuye únicamente al canal de su primera cotización, con desempate determinista por ID. Las cotizaciones sin cliente vinculado suman cantidad y revenue aprobado, pero **no se inventan como nuevos clientes**.
+
+La atribución todavía depende de la cobertura y calidad de los registros disponibles en el dashboard: sin historial CRM previo a la migración, el cálculo no puede inferir la adquisición externa anterior. Falta una fuente auditable y compartida para gasto y adquisición entre navegadores.
