@@ -4,6 +4,52 @@ const AIRTABLE_BASE = 'https://api.airtable.com';
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 const SELLER_SCOPE_NAMES=new Set(['florencia','nicanor','gustavo']);
 
+/* Strict, schema-verified response projection for signed sales sessions.
+ * A table-scoped JWT must not expose all fields of an owned CRM record:
+ * bank details, internal cost/margin, fiscal links, attachments, agents'
+ * unrestricted JSON and future schema fields are not part of sales access.
+ * Related-record IDs are intentionally omitted until link-owner verification
+ * is implemented; a linked client may belong to a different salesperson.
+ */
+const SELLER_READ_FIELDS=Object.freeze({
+  Clientes:new Set([
+    'Empresa','Contacto','Cargo contacto','Teléfono','Email',
+    'Fecha primer contacto','Notas internas','Notas followup','RUT',
+    'Dirección','Comuna','Región','Sitio web','Industria / Rubro',
+    'Fecha último pedido','Etapa venta','Origen lead','Estado cuenta',
+    'Vendedor','Lead Score IA','Servicio interés','Próxima acción IA',
+    'Resumen IA','Tipo de cliente','Suscrito newsletter','Email válido',
+    'Validado','Reactivado','Fecha reactivación'
+  ]),
+  Cotizaciones:new Set([
+    'N° Cotización','Estado cotización','Fecha cotización',
+    'Fecha vencimiento','Fecha aprobación','Solicitud cliente (texto libre)',
+    'Subtotal (CLP)','Urgencia (+25%)','Total final (CLP)','Notas cotización',
+    'Canal solicitud','Cantidad','Motivo rechazo','Forma de pago',
+    'Tiempo de producción','Tipo días producción','Vendedor','Descuento (%)',
+    'Alias / Título','Tiempo de producción máx','Fecha de entrega',
+    'Fecha límite cotización'
+  ]),
+  Pedidos:new Set([
+    'N° Pedido','Fecha ingreso','Fecha entrega','Urgente','Fecha despacho',
+    'Followup enviado','Mensaje followup','Monto total (CLP)',
+    'Dirección despacho','N° seguimiento courier','Prioridad','Resultado QA',
+    'Motivo rechazo QA','Texto a grabar / imprimir','Texto confirmado por cliente',
+    'Material','Cantidad','Estado pedido','Etapa producción',
+    'Equipo asignado','Tipo despacho','Tipo documento','Notas pedido',
+    'Vendedor','Fecha objetivo interna'
+  ])
+});
+function sellerProjectRecord(row,table){
+  const allowed=SELLER_READ_FIELDS[table];
+  const fields=Object.fromEntries(Object.entries(row.fields)
+    .filter(([name])=>allowed.has(name)));
+  const result={id:row.id,fields};
+  if(typeof row.createdTime==='string')result.createdTime=row.createdTime;
+  return result;
+}
+
+
 const SELLER_SAFE_PATCH_FIELDS=Object.freeze({
   Clientes:new Set(['Notas internas','Notas followup','Contacto','Cargo contacto','Teléfono']),
   Cotizaciones:new Set(['Notas cotización']),
@@ -130,12 +176,17 @@ async function sellerScopedRead(request,url,identity,env,CORS){
     return json({error:'Unscoped record query forbidden'},422,CORS);
   const query=new URLSearchParams(url.search);
   if(!single){
-    const allowed=/^(?:filterByFormula|fields\[\]|pageSize|maxRecords|offset|view|sort\[[0-2]\]\[(?:field|direction)\])$/;
+    // Never pass arbitrary formulas, sorts or views to Airtable. Even if
+    // returned rows are redacted, an attacker can infer bank/cost values via
+    // boolean filters, result counts or sort order.
+    const allowed=/^(?:fields\[\]|pageSize|maxRecords|offset)$/;
+    const readFields=SELLER_READ_FIELDS[table];
     if([...query.keys()].some(k=>!allowed.test(k))||
        [...new Set([...query.keys()].filter(k=>k!=='fields[]'))]
          .some(k=>query.getAll(k).length!==1)||
        query.getAll('fields[]').length>30||
-       [...query.values()].some(v=>v.length>600))
+       [...query.values()].some(v=>v.length>600)||
+       query.getAll('fields[]').some(name=>!readFields.has(name)))
       return json({error:'Unsupported scoped sales query'},422,CORS);
     for(const key of ['pageSize','maxRecords']){
       if(query.has(key)&&(!/^[1-9]\d{0,2}$/.test(query.get(key))||
@@ -145,12 +196,14 @@ async function sellerScopedRead(request,url,identity,env,CORS){
     // Airtable selects are compared by the verified live Vendedor choice;
     // all unrelated legacy records (missing Vendedor) remain unassigned.
     const owner='{Vendedor}="'+identity.seller+'"';
-    const existing=query.get('filterByFormula');
-    query.set('filterByFormula',existing?'AND('+owner+',('+existing+'))':owner);
-    // Always fetch Vendedor so we can independently verify each returned row,
-    // including when the client requested a narrower field projection.
-    if(query.has('fields[]')&&!query.getAll('fields[]').includes('Vendedor'))
-      query.append('fields[]','Vendedor');
+    query.set('filterByFormula',owner);
+    // Fetch only approved fields upstream as well as sanitizing the outgoing
+    // response. The owner column is mandatory for every individual row.
+    const projection=query.getAll('fields[]');
+    const requested=projection.length?projection:[...readFields];
+    if(projection.length)query.delete('fields[]');
+    if(!requested.includes('Vendedor'))requested.push('Vendedor');
+    for(const name of requested)query.append('fields[]',name);
   }
   const target=AIRTABLE_BASE+path+(single?'':'?'+query.toString());
   let upstream;
@@ -168,6 +221,7 @@ async function sellerScopedRead(request,url,identity,env,CORS){
   const rows=single?[body]:body?.records;
   if(!Array.isArray(rows)||rows.length>(single?1:100)||
      rows.some(row=>!row||!/^rec[A-Za-z0-9]{14}$/.test(row.id)||
+       !row.fields||typeof row.fields!=='object'||Array.isArray(row.fields)||
        sellerFieldName(row)!==identity.seller)){
     // A stale/noncompliant Airtable filter must NEVER leak even one record.
     return json({error:single?'Record not found':'Scoped sales integrity error'},
@@ -176,7 +230,11 @@ async function sellerScopedRead(request,url,identity,env,CORS){
   if(!single&&(body.offset!==undefined&&
       (typeof body.offset!=='string'||body.offset.length>600)))
     return json({error:'Scoped sales paging invalid'},502,CORS);
-  return json(body,200,{...CORS,'Cache-Control':'private, no-store'});
+  const safe=single?sellerProjectRecord(body,table):{
+    records:rows.map(row=>sellerProjectRecord(row,table)),
+    ...(body.offset===undefined?{}:{offset:body.offset})
+  };
+  return json(safe,200,{...CORS,'Cache-Control':'private, no-store'});
 }
 
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
