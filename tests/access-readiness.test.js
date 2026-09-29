@@ -12,7 +12,7 @@ const cors={'Access-Control-Allow-Origin':'https://dashboard.thelab.solutions',
   'Access-Control-Allow-Credentials':'true',
   'Access-Control-Allow-Headers':'Content-Type,X-App-Key,X-AI-Agent',
   'Access-Control-Allow-Methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS'};
-function mock({badCors=false,legacy=false,leak=false}={}){
+function mock({badCors=false,legacy=false,leak=false,marketingUnavailable=false}={}){
  const calls=[];
  const fetcher=async(url,init={})=>{
   calls.push({url,init});
@@ -21,6 +21,8 @@ function mock({badCors=false,legacy=false,leak=false}={}){
     headers:badCors?{}:cors});
   if(u.pathname==='/access/me')return Response.json({enabled:!legacy},
     {status:legacy?200:401});
+  if(u.pathname.startsWith('/marketing/spend'))return Response.json({error:'unauthorized'},
+    {status:marketingUnavailable?503:401});
   if(u.pathname==='/sii/folio/33')return Response.json({error:'unauthorized'},{status:401});
   if(u.pathname==='/service/lead/anthropic/v1/messages')
     return Response.json({error:'Invalid Anthropic JSON body'},{status:400});
@@ -45,6 +47,28 @@ test('unsafe CORS, disabled Access or missing machine proof block readiness',asy
  assert.ok((await checkAccessReadiness(cfg,mock({badCors:true}).fetcher)).errors.length);
  assert.ok((await checkAccessReadiness(cfg,mock({legacy:true}).fetcher)).errors.length);
  assert.ok((await checkAccessReadiness({...cfg,serviceClientId:'',serviceClientSecret:''},mock().fetcher)).errors.length);
+});
+test('Reportes readiness checks marketing authorization and PUT CORS without any spending writes',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const h=mock(),r=await checkAccessReadiness({...cfg,stage:'reportes',
+   serviceClientId:'',serviceClientSecret:''},h.fetcher);
+ assert.equal(r.errors.length,0);
+ assert.equal(r.ready,true);
+ assert.ok(r.passed.some(x=>x.includes('Marketing spend CORS')));
+ assert.equal(h.calls.filter(c=>c.url.includes('/marketing/spend')&&c.init.method==='GET').length,2);
+ assert.ok(h.calls.some(c=>c.url.includes('/marketing/spend')&&c.init.method==='OPTIONS'));
+ assert.ok(h.calls.every(c=>!['PUT','POST','PATCH','DELETE'].includes(c.init.method)));
+ assert.ok(h.calls.every(c=>!c.url.includes('/sii/')&&!c.url.includes('/service/lead/')));
+});
+test('Reportes readiness refuses legacy marketing mode and cross-site Worker hostname',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const denied=await checkAccessReadiness({...cfg,stage:'reportes'},mock({marketingUnavailable:true}).fetcher);
+ assert.match(denied.errors.join(' '),/Unsigned marketing request was not denied/);
+ const h=mock();
+ const wrong=await checkAccessReadiness({...cfg,stage:'reportes',
+   proxyUrl:'https://airtable-proxy.wast3dspa.workers.dev'},h.fetcher);
+ assert.match(wrong.errors.join(' '),/same-site/);
+ assert.equal(h.calls.length,0);
 });
 test('unapproved proxy URLs do not receive service credentials',async()=>{
  const {checkAccessReadiness}=await import(script.href);

@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: Verify before or after SII cutover
+        description: Reportes preflight or before/after SII cutover
         required: true
         type: choice
         default: before
         options:
+          - reportes
           - before
           - post
 
