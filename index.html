@@ -3754,7 +3754,9 @@
       <div class="field-group"><label class="field-label">RUT</label><input class="field-input" id="ecRut"></div>
       <div class="field-group"><label class="field-label">Sitio Web</label><input class="field-input" id="ecWeb"></div>
       <div class="field-group"><label class="field-label">Industria</label><select class="field-select" id="ecIndustria"><option value="">— seleccionar —</option><option>Agencia / Marketing</option><option>Retail</option><option>Tecnología</option><option>Educación</option><option>Eventos</option><option>Otro</option></select></div>
-      <div class="field-group"><label class="field-label">Origen</label><select class="field-select" id="ecOrigen"><option>Referido</option><option>Instagram</option><option>LinkedIn</option><option>Google</option><option>Contacto directo</option><option>Otro</option></select></div>
+      <div class="field-group"><label class="field-label">Origen de adquisición</label><select class="field-select" id="ecOrigen"><option value="">— Sin atribución · por verificar —</option><option>Referido</option><option>LinkedIn</option><option>Instagram</option><option>Contacto directo</option><option>Web</option><option>Google</option><option>Evento / Feria</option><option>Otro</option><option>web</option><option>Redes sociales</option><option>Newsletter web</option><option value="google_ads">Google Ads (campaña verificada)</option></select></div>
+      <div class="field-group"><label class="field-label">Fecha real del primer contacto</label><input class="field-input" id="ecPrimerContacto" type="date"><div style="font-size:10px;color:var(--text3);margin-top:4px">No usar la fecha de importación a Airtable como primera adquisición.</div></div>
+      <div class="field-group form-full"><label class="field-label">Evidencia de conciliación (obligatoria al cambiar origen o fecha)</label><input class="field-input" id="ecEvidenciaCAC" maxlength="500" placeholder="Ej. primer correo del 15/08/2025, cotización original o registro de campaña"><div style="font-size:10px;color:var(--text3);margin-top:4px">Se conserva la referencia de evidencia, los valores anteriores y la fecha en Notas internas. No se completará ningún dato automáticamente.</div></div>
       <div class="field-group"><label class="field-label">Etapa venta</label><select class="field-select" id="ecEtapa"><option value="">— sin etapa —</option><option>Contactado</option><option>Propuesta enviada</option><option>Negociación</option><option>Cliente activo</option><option>Cliente inactivo</option><option>Perdido</option></select></div>
       <div class="field-group"><label class="field-label">Estado cuenta</label><select class="field-select" id="ecEstado"><option>Al día</option><option>Con deuda</option><option>Bloqueado</option></select></div>
       <div class="field-group"><label class="field-label">Valoración (1-5)</label><input class="field-input" id="ecValoracion" type="number" min="1" max="5"></div>
@@ -10884,9 +10886,14 @@ async function confirmarImportarDtes(){
   toast(`${ok} factura${ok!==1?'s':''} importada${ok!==1?'s':''}${err?` (${err} con error)`:''}`,ok?'success':'error');
   renderClienteFacturas(cdCurrentId,cdCurrentEmpresa);
 }
+let _crmEditOriginal=null;
 function openEditCliente(id){
   const c=state.clientesByIdRec[id];if(!c) return;const f=c.fields;
-  document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Comuna']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'Referido';document.getElementById('ecEtapa').value=f['Etapa venta']||'';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
+  document.getElementById('ecId').value=id;document.getElementById('ecEmpresa').value=f['Empresa']||'';document.getElementById('ecContacto').value=f['Contacto']||'';document.getElementById('ecCargo').value=f['Cargo contacto']||'';document.getElementById('ecTelefono').value=f['Teléfono']||'';document.getElementById('ecEmail').value=f['Email']||'';document.getElementById('ecCiudad').value=f['Comuna']||'';document.getElementById('ecRut').value=f['RUT']||'';document.getElementById('ecWeb').value=f['Sitio web']||'';document.getElementById('ecIndustria').value=f['Industria / Rubro']||'';document.getElementById('ecOrigen').value=f['Origen lead']||'';
+  document.getElementById('ecPrimerContacto').value=f['Fecha primer contacto']||'';
+  document.getElementById('ecPrimerContacto').max=hoyCL();
+  document.getElementById('ecEvidenciaCAC').value='';
+  _crmEditOriginal={id,origin:String(f['Origen lead']||''),date:String(f['Fecha primer contacto']||''),notes:String(f['Notas internas']||'')};document.getElementById('ecEtapa').value=f['Etapa venta']||'';document.getElementById('ecEstado').value=f['Estado cuenta']||'Al día';document.getElementById('ecValoracion').value=f['Valoración cliente']||'';document.getElementById('ecFactVenc').value=f['Facturas vencidas']||0;document.getElementById('ecNotas').value=f['Notas internas']||'';
   const _ecV=document.getElementById('ec-vendedor');if(_ecV) _ecV.value=f['Vendedor']||'';
   document.getElementById('editClienteModal').style.display='flex';
 }
@@ -10899,16 +10906,54 @@ async function saveEditCliente(){
   if(ecTel&&!validPhone(ecTel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
   if(ecRut&&!validRUT(ecRut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
   if(ecRut&&ecRutEl) ecRutEl.value=formatRUT(ecRut);
-  btn.disabled=true;btn.textContent='Guardando...';const id=document.getElementById('ecId').value;
-  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('ecCargo').value,'Teléfono':document.getElementById('ecTelefono').value,'Email':document.getElementById('ecEmail').value,'Sitio web':document.getElementById('ecWeb').value,'RUT':document.getElementById('ecRut').value,'Industria / Rubro':document.getElementById('ecIndustria').value,'Origen lead':document.getElementById('ecOrigen').value,'Etapa venta':document.getElementById('ecEtapa').value,'Estado cuenta':document.getElementById('ecEstado').value,'Facturas vencidas':parseInt(document.getElementById('ecFactVenc').value)||0,'Notas internas':document.getElementById('ecNotas').value};
+  const id=document.getElementById('ecId').value;
+  const original=_crmEditOriginal?.id===id?_crmEditOriginal:null;
+  if(!original){toast('Recarga la ficha antes de conciliar este cliente','error');return;}
+  const origin=document.getElementById('ecOrigen').value;
+  const contact=document.getElementById('ecPrimerContacto').value;
+  const changedOrigin=origin!==original.origin,changedContact=contact!==original.date;
+  const provenanceChanged=changedOrigin||changedContact;
+  const proof=document.getElementById('ecEvidenciaCAC').value.trim();
+  if(provenanceChanged){
+    if(proof.length<12){toast('Incluye una referencia verificable antes de cambiar origen o fecha','error');return;}
+    if(proof.length>500){toast('La referencia de evidencia debe tener 500 caracteres como máximo','error');return;}
+    if(contact&&(_crmAuditDate(contact)!==contact||contact>hoyCL())){
+      toast('La primera fecha de contacto debe existir y no ser futura','error');return;
+    }
+    const earliest=(state.cotizaciones||[]).filter(q=>{
+      const link=q.fields?.['Cliente'];
+      return Array.isArray(link)?link.includes(id):link===id;
+    }).map(q=>_crmAuditDate(q.fields?.['Fecha cotización'])).filter(Boolean).sort()[0];
+    if(changedContact&&contact&&earliest&&contact>earliest){
+      toast('La fecha indicada es posterior a una cotización original ('+earliest+'). Verifica la evidencia.','error');return;
+    }
+  }
+  btn.disabled=true;btn.textContent='Guardando...';const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('ecCargo').value,'Teléfono':document.getElementById('ecTelefono').value,'Email':document.getElementById('ecEmail').value,'Sitio web':document.getElementById('ecWeb').value,'RUT':document.getElementById('ecRut').value,'Industria / Rubro':document.getElementById('ecIndustria').value,'Etapa venta':document.getElementById('ecEtapa').value,'Estado cuenta':document.getElementById('ecEstado').value,'Facturas vencidas':parseInt(document.getElementById('ecFactVenc').value)||0,'Notas internas':document.getElementById('ecNotas').value};
   if(document.getElementById('ecValoracion').value) fields['Valoración cliente']=parseInt(document.getElementById('ecValoracion').value);
   const ciudadVal=document.getElementById('ecCiudad').value.trim();if(ciudadVal) fields['Comuna']=ciudadVal;
   const _ecVv=document.getElementById('ec-vendedor')?.value||'';fields['Vendedor']=_ecVv||null;
   try{
+    if(provenanceChanged){
+      const fresh=await airtableFetch('Clientes',1000);
+      const remote=(fresh.records||[]).find(r=>r.id===id);
+      if(!remote)throw new Error('No se encontró el cliente para verificar la conciliación');
+      const rf=remote.fields||{};
+      if(String(rf['Origen lead']||'')!==original.origin||
+         String(rf['Fecha primer contacto']||'')!==original.date||
+         String(rf['Notas internas']||'')!==original.notes)
+        throw new Error('Otro equipo modificó este cliente. Recarga la ficha antes de conciliar.');
+      if(changedOrigin)fields['Origen lead']=origin||null;
+      if(changedContact)fields['Fecha primer contacto']=contact||null;
+      const note='[Conciliación CRM '+hoyCL()+'] Origen: '+(original.origin||'sin atribuir')+
+        ' → '+(origin||'sin atribuir')+'; primer contacto: '+(original.date||'sin fecha')+
+        ' → '+(contact||'sin fecha')+'. Evidencia: '+proof;
+      fields['Notas internas']=(document.getElementById('ecNotas').value||'').trimEnd();
+      fields['Notas internas']+=(fields['Notas internas']?'\n\n':'')+note;
+    }
     await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}
-    toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();
+    toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();if(typeof renderCrmAcquisitionAudit==='function')renderCrmAcquisitionAudit();
   }catch(e){
-    if(ciudadVal&&_clienteSchemaRetryable(e)){try{delete fields['Comuna'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();}catch(e2){toast('Error: '+e2.message,'error');}}
+    if(ciudadVal&&_clienteSchemaRetryable(e)){try{delete fields['Comuna'];await airtableWrite('Clientes','PATCH',id,fields);const c=state.clientesByIdRec[id];if(c){Object.assign(c.fields,fields);state.clientesById[id]=empresa;}toast(`✓ "${empresa}" actualizado`,'success');closeEditCliente();renderClientes();renderOverview();if(typeof renderCrmAcquisitionAudit==='function')renderCrmAcquisitionAudit();}catch(e2){toast('Error: '+e2.message,'error');}}
     else{toast('Error: '+e.message,'error');}
   }
   btn.disabled=false;btn.textContent='💾 Guardar cambios';
