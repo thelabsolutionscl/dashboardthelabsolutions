@@ -114,6 +114,17 @@ test('privileged SII bridge only permits finance emission/status and admin CAF',
   assert.equal(accessAllows({role:'admin'},'PUT','/sii/caf'),true);
   assert.equal(accessAllows({role:'finance'},'GET','/sii/folio/999'),false);
 });
+test('portal administration requires explicit signed roles',()=>{
+  assert.equal(accessAllows({role:'operator'},'POST','/portal-admin/link'),true);
+  assert.equal(accessAllows({role:'finance'},'POST','/portal-admin/link'),true);
+  assert.equal(accessAllows({role:'admin'},'POST','/portal-admin/link'),true);
+  assert.equal(accessAllows({role:'operator'},'POST','/portal-admin/revocar'),false);
+  assert.equal(accessAllows({role:'finance'},'POST','/portal-admin/revocar'),false);
+  assert.equal(accessAllows({role:'viewer'},'POST','/portal-admin/link'),false);
+  assert.equal(accessAllows({role:'admin'},'POST','/portal-admin/revocar'),true);
+  assert.equal(accessAllows({role:'admin'},'GET','/portal-admin/revocar'),true); // Outer route rejects non-POST.
+  assert.equal(accessAllows({role:'finance'},'POST','/portal-admin/other'),false);
+});
 test('operational supplier/monitoring tables work with Access, reports remain financial',()=>{
   const base='/v0/app1YtD74AqiPWQhy/';
   assert.equal(accessAllows({role:'operator'},'GET',base+'Monitor%20Sistema'),true);
