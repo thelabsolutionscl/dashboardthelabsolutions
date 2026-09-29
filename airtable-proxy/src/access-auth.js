@@ -130,6 +130,11 @@ function accessAllows(identity,method,path){
   if(identity.role==='admin')return true;
   const isWrite=method!=='GET'&&method!=='HEAD';
   if(path==='/access/me')return method==='GET';
+  // An authenticated human may request ONLY a short-lived farm ticket.
+  // The proxy maps finance/viewer to read-only, operator to printer
+  // operations and admin to farm administration; shared APP_KEY cannot mint.
+  if(path==='/printer/session')return method==='POST';
+  if(path.startsWith('/printer/'))return false;
   // Portal administrative operations require an individual, signed session.
   // Sales/finance can create a link; revocation invalidates active links and
   // is limited to admins. Never authorize these using only public APP_KEY.
