@@ -247,7 +247,16 @@ test('historial ordena el registro más reciente primero',()=>{
   assert.match(body,/\.sort\s*\(/);
   assert.ok(fs.existsSync(path.join(ROOT,'tests/reportes-period-history.test.js')));
 });
-test.todo('crearReporte debe evitar dos registros para la misma semana o actualizar el existente');
+test('Reportes usa semana ISO, preflight antes de IA y bloqueo concurrente del Worker',()=>{
+  const body=functionBlock(SOURCE,'crearReporte');
+  assert.match(body,/_reportesProxyReady\s*\(/);
+  assert.match(body,/_reporteSemanaDeRegistro\s*\(/);
+  assert.match(body,/if\s*\(existing&&automatic\)/);
+  assert.match(body,/reportReplace:!!existing/);
+  assert.ok(body.indexOf('_reportesProxyReady()')<body.indexOf("callAgentClaude('CEO'"),
+    'comprobar servidor antes de consumir tokens');
+  assert.ok(fs.existsSync(path.join(ROOT,'tests/reportes-semana-guard.test.js')));
+});
 test('estacionalidad excluye del promedio el mes en curso incompleto',()=>{
   const calc=functionBlock(SOURCE,'_estacionalidad');
   assert.match(calc,/new Date\(\)/);
