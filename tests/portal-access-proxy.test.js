@@ -108,6 +108,7 @@ test('signed portal client flow cannot fall back to legacy Worker key',async()=>
   const browserCalls=[],fallback='DO-NOT-SEND-BROWSER-MASTER';
   const mocks={
     _proxyCfg:()=>({url:'https://proxy.thelab.solutions',key:'public-compat-key'}),
+    PORTAL_DIAS:30,
     _DEFAULTS:{LEAD_WORKER_URL:env.LEAD_WORKER_URL,PORTAL_ADMIN_KEY:fallback},
     fetch:async(url,options)=>{browserCalls.push({url,options});return Response.json({ok:true,url:'safe',expira:'tomorrow'});},
     URL,confirm:()=>true,toast:()=>{}
