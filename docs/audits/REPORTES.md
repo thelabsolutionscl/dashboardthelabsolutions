@@ -173,3 +173,10 @@ El workflow manual **Verify Access rollout (read-only)** incorpora el modo `repo
 ## 2026-09-29 — Altas sin fecha de contacto ficticia
 
 Las tres rutas de creación de Cliente (Nuevo lead, flujo guiado y alta rápida desde el cotizador) asignaban hoy al primer contacto aun con clientes históricos. El formulario normal y el guiado aceptan ahora una fecha opcional explícita; una fecha anterior exige referencia verificable de 12–500 caracteres que queda en Notas internas. Fecha inválida o futura bloquea el alta. El alta rápida deja la fecha vacía y el guiado omite Origen lead si el usuario no lo elige. No se modifica ningún registro histórico automáticamente.
+
+
+## 2026-09-29 — Comprobación del artefacto publicado y CORS adversarial
+
+El preflight manual `reportes` comprueba ahora además el HTML realmente servido por GitHub Pages: debe incluir el filtro «Contradicciones» de Reportes y el primer contacto explícito del CRM. Un despliegue completado con caché antigua, un login HTML en lugar del dashboard o un artefacto incompleto no cuenta como validado. También solicita un preflight `OPTIONS` desde un origen ajeno y rechaza cualquier concesión de CORS con credenciales a ese origen o comodín. Todas las solicitudes son GET u OPTIONS; no se modifican gastos, cotizaciones ni clientes, ni se consumen tokens de IA.
+
+El resumen de GitHub Actions distingue las comprobaciones automáticas de la prueba obligatoria con usuarios reales. Si Cloudflare intercepta las llamadas sin JWT y solo devuelve una redirección/403 del borde, la ejecución de `reportes` se considera inconclusa, no una validación de la seguridad del Worker. Siguen pendientes la configuración de Cloudflare Access y la comprobación con sesiones individuales `finance`/`admin` frente a `viewer`/`operator` en dos navegadores; no activar gasto compartido antes de esa evidencia.
