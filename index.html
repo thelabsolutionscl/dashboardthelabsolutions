@@ -15750,29 +15750,147 @@ function _gastoCanal(off=0){
   const period=all[key];
   return period&&typeof period==='object'&&!Array.isArray(period)?{...period}:{};
 }
-function setGastoCanal(){
+// Local v2 is retained strictly as an explicitly labeled, unsynchronized
+// fallback until the real signed Cloudflare Access session is activated.
+const _marketingSpendCache={};
+function _marketingSpendRow(off){
+  const month=_mesRango(off).key;
+  return _marketingSpendCache[month]||null;
+}
+function _gastoCanalVisible(off=0){
+  const row=_marketingSpendRow(off);
+  return row?.status==='shared'?{...row.channels}:_gastoCanal(off);
+}
+function _marketingSpendLabel(off){
+  const row=_marketingSpendRow(off);
+  if(row?.status==='shared')return '✓ Datos compartidos · versión '+row.revision;
+  if(row?.status==='loading')return 'Comprobando datos compartidos…';
+  if(row?.status==='error')return '⚠ Sin sincronización: '+row.message;
+  return '⚠ Datos locales de este navegador · NO sincronizados';
+}
+async function _marketingSpendLoad(off=0,force=false){
+  const month=_mesRango(off).key;
+  const old=_marketingSpendCache[month];
+  if(!force&&(old?.status==='loading'||(old?.loadedAt&&Date.now()-old.loadedAt<60000)))
+    return old;
+  const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!px){
+    return (_marketingSpendCache[month]={status:'local',loadedAt:Date.now(),
+      message:'Proxy no disponible'});
+  }
+  // Keep verified shared figures visible while refreshing. Never overwrite
+  // them with a stale localStorage copy during network errors.
+  if(!old||old.status!=='shared')
+    _marketingSpendCache[month]={status:'loading',loadedAt:Date.now()};
+  try{
+    const url=px.url.replace(/\/$/,'')+'/marketing/spend?month='+encodeURIComponent(month);
+    const res=await fetch(url,{headers:{'X-App-Key':px.key},
+      credentials:typeof _proxyCredentials==='function'?_proxyCredentials(url):'same-origin'});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){
+      const msg=res.status===503?'Cloudflare Access aún no está habilitado':
+        res.status===401?'Inicia sesión con Cloudflare Access':
+        res.status===403?'Tu rol no puede consultar gastos':'Error '+res.status;
+      _marketingSpendCache[month]=old?.status==='shared'
+        ?{...old,loadedAt:Date.now(),message:msg}
+        :{status:'error',loadedAt:Date.now(),message:msg};
+      if(typeof renderCacCanal==='function')try{renderCacCanal();}catch(e){}
+      return _marketingSpendCache[month];
+    }
+    if(data.month!==month||!Number.isSafeInteger(data.revision)||
+       !data.channels||typeof data.channels!=='object'||Array.isArray(data.channels))
+      throw Error('El proxy devolvió datos de gasto inválidos');
+    _marketingSpendCache[month]={status:'shared',channels:{...data.channels},
+      revision:data.revision,loadedAt:Date.now()};
+  }catch(e){
+    _marketingSpendCache[month]=old?.status==='shared'
+      ?{...old,loadedAt:Date.now(),message:e.message}
+      :{status:'error',loadedAt:Date.now(),message:e.message||'Error de conexión'};
+  }
+  if(typeof renderCacCanal==='function')try{renderCacCanal();}catch(e){}
+  return _marketingSpendCache[month];
+}
+async function _marketingSpendPut(month,channel,amount,row){
+  const px=_proxyCfg();
+  if(!px||row?.status!=='shared')throw Error('Carga primero los gastos compartidos');
+  const url=px.url.replace(/\/$/,'')+'/marketing/spend?month='+encodeURIComponent(month);
+  const res=await fetch(url,{method:'PUT',headers:{
+      'X-App-Key':px.key,'Content-Type':'application/json'
+    },credentials:_proxyCredentials(url),body:JSON.stringify({
+      channel,amount_clp:amount,expected_revision:row.revision
+    })});
+  const data=await res.json().catch(()=>({}));
+  if(res.status===409){
+    delete _marketingSpendCache[month];
+    await _marketingSpendLoad(month===_mesRango(0).key?0:-1,true);
+    throw Error('Otro equipo cambió el gasto: revisa los valores y vuelve a guardar');
+  }
+  if(!res.ok||data.month!==month||!Number.isSafeInteger(data.revision))
+    throw Error(data.error||'No fue posible actualizar el gasto compartido');
+  _marketingSpendCache[month]={status:'shared',channels:{...data.channels},
+    revision:data.revision,loadedAt:Date.now()};
+  return _marketingSpendCache[month];
+}
+async function _marketingSpendImport(){
+  const off=parseInt(document.getElementById('cacCanalCard')?.dataset.off||'0',10);
+  const period=_mesRango(off),row=_marketingSpendRow(off);
+  if(row?.status!=='shared')return toast('No hay conexión compartida para importar','error');
+  const local=_gastoCanal(off);
+  const pending=Object.entries(local).filter(([c,v])=>Number.isSafeInteger(v)&&v>0&&
+    !Object.hasOwn(row.channels,c));
+  if(!pending.length)return toast('No hay gastos locales nuevos para importar','info');
+  if(!confirm('Importar '+pending.length+' canal(es) locales de '+period.label+
+      ' al registro compartido. No se sobrescribirán canales existentes. ¿Continuar?'))return;
+  try{
+    let current=row;
+    for(const [channel,amount] of pending){
+      current=await _marketingSpendPut(period.key,channel,amount,current);
+    }
+    toast('✓ '+pending.length+' gastos importados; revisa las cifras compartidas','success');
+  }catch(e){toast('Importación parcial: '+e.message,'error');}
+  renderCacCanal();
+}
+async function setGastoCanal(){
   const el=document.getElementById('cacCanalCard');
   const off=parseInt(el?.dataset.off||'0',10);
   const period=_mesRango(Number.isFinite(off)?off:0);
-  const canal=(prompt('¿Para qué canal registras el gasto de '+period.label+'? (ej: Google Ads, Instagram, WhatsApp)')||'').trim();
+  const row=_marketingSpendRow(off);
+  if(row?.status==='loading')
+    return toast('Se está verificando el gasto compartido; vuelve a intentarlo','info');
+  const canal=(prompt('¿Para qué canal registras el gasto de '+period.label+
+    '? (ej: Google Ads, Instagram, WhatsApp)')||'').trim();
   if(!canal)return;
-  const g=_gastoCanal(off);const cur=g[canal]||'';
-  const v=prompt(`Gasto de "${canal}" en ${period.label} (CLP):`,cur?String(cur):'');
+  if(canal.length>65||/[<>]/.test(canal))
+    return toast('Nombre de canal inválido','error');
+  const g=_gastoCanalVisible(off),cur=g[canal]||'';
+  const v=prompt('Gasto de "'+canal+'" en '+period.label+' (CLP):',
+    cur?String(cur):'');
   if(v===null)return;
   const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
+  if(n<0||n>10000000000)return toast('El gasto debe ser un importe válido en CLP','error');
+  if(row?.status==='shared'){
+    try{
+      await _marketingSpendPut(period.key,canal,n,row);
+      toast(n>0?'✓ Gasto compartido: '+formatCLP(n):'Gasto compartido eliminado','success');
+      renderCacCanal();
+    }catch(e){toast(e.message,'error');}
+    return;
+  }
+  // Preserve the current behavior only while Access is not yet configured.
+  // The orange label makes it explicit that values are not authoritative.
   if(n>0)g[canal]=n;else delete g[canal];
   try{
     const all=JSON.parse(localStorage.getItem(_GASTO_CANAL_V2_KEY)||'{}');
     all[period.key]=g;
     localStorage.setItem(_GASTO_CANAL_V2_KEY,JSON.stringify(all));
   }catch(e){toast('No se pudo guardar el gasto del período','error');return;}
-  toast(n>0?`✓ Gasto de ${canal} en ${period.label}: ${formatCLP(n)}`:'Gasto del período quitado','success');
+  toast('Gasto local (sin sincronizar): '+(n>0?formatCLP(n):'eliminado'),'info');
   try{renderCacCanal();}catch(e){}
 }
 function _canalStats(off){
   const mr=(typeof _mesRango==='function')?_mesRango(off||0):null;
   const ini=mr?mr.ini.getTime():0,fin=mr?mr.fin.getTime():Infinity;
-  const gasto=_gastoCanal(off);
+  const gasto=typeof _gastoCanalVisible==='function'?_gastoCanalVisible(off):_gastoCanal(off);
   const _cid=f=>Array.isArray(f['Cliente'])?(f['Cliente'][0]||null):(f['Cliente']||null);
   // An acquisition is the first known CRM contact, not every quotation a
   // returning customer submits. If its first quote spans multiple channels,
@@ -15811,6 +15929,8 @@ function _canalStats(off){
       e.revenue+=Math.round((f['Total final (CLP)']||0)/1.19);
     by.set(canal,e);
   });
+  // A paid channel with zero quotations must still show its marketing spend.
+  Object.keys(gasto).forEach(c=>{if(!by.has(c))by.set(c,{canal:c,nuevos:new Set(),revenue:0,nCot:0});});
   return [...by.values()].map(e=>{
     const g=gasto[e.canal]||0,nuevos=e.nuevos.size;
     return {canal:e.canal,nCot:e.nCot,revenue:e.revenue,nuevos,gasto:g,
@@ -15820,28 +15940,31 @@ function _canalStats(off){
 function renderCacCanal(){
   const el=document.getElementById('cacCanalCard');if(!el)return;
   const off=parseInt(el.dataset.off||'0');
+  void _marketingSpendLoad(off);
   const rows=_canalStats(off);
-  if(!rows.length){el.innerHTML='';return;}
   const mr=(typeof _mesRango==='function')?_mesRango(off):{label:''};
-  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">📣 CAC y ROI por canal · ${escapeHtml(mr.label||'')}</span>
+  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">📣 CAC y retorno publicitario por canal · ${escapeHtml(mr.label||'')}</span>
     <div style="display:flex;gap:4px;margin-left:auto">
       <button class="btn-mini${off===-1?' btn-mini-yellow':''}" onclick="_cacSetOff(-1)">Mes cerrado</button>
       <button class="btn-mini${off===0?' btn-mini-yellow':''}" onclick="_cacSetOff(0)">Mes en curso</button>
       <button class="btn btn-ghost btn-sm" onclick="setGastoCanal()" style="font-size:10px">⚙️ Gasto</button>
+      <button class="btn btn-ghost btn-sm" onclick="_marketingSpendLoad(${off},true)" style="font-size:10px">↻ Sincronizar</button>
+      ${_marketingSpendRow(off)?.status==='shared'&&Object.keys(_gastoCanal(off)).some(c=>!Object.hasOwn(_marketingSpendRow(off).channels,c))?'<button class="btn btn-ghost btn-sm" onclick="_marketingSpendImport()">Importar local</button>':''}
     </div></div>
-    <div class="table-wrap"><table><thead><tr><th>Canal</th><th style="text-align:right">Clientes nuevos</th><th style="text-align:right">Revenue</th><th style="text-align:right">Gasto</th><th style="text-align:right">CAC</th><th style="text-align:right">ROI</th></tr></thead>
+    <div style="padding:7px 16px;font-size:11px;color:var(--warn)">${escapeHtml(_marketingSpendLabel(off))}</div>
+    <div class="table-wrap"><table><thead><tr><th>Canal</th><th style="text-align:right">Clientes nuevos</th><th style="text-align:right">Revenue</th><th style="text-align:right">Gasto</th><th style="text-align:right">CAC</th><th style="text-align:right">ROAS</th></tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td data-label="Canal" style="font-weight:600">${escapeHtml(r.canal)}</td>
       <td data-label="Nuevos" style="text-align:right">${r.nuevos}</td>
       <td data-label="Revenue" style="text-align:right;color:var(--accent3)">${formatCLP(r.revenue)}</td>
       <td data-label="Gasto" style="text-align:right;color:${r.gasto?'var(--warn)':'var(--text3)'}">${r.gasto?formatCLP(r.gasto):'—'}</td>
       <td data-label="CAC" style="text-align:right">${r.cac?formatCLP(r.cac):'—'}</td>
-      <td data-label="ROI" style="text-align:right;font-weight:700;color:${r.roi==null?'var(--text3)':r.roi>=1?'var(--accent3)':'var(--danger)'}">${r.roi==null?'—':r.roi.toFixed(1)+'x'}</td>
+      <td data-label="ROAS" style="text-align:right;font-weight:700;color:${r.roi==null?'var(--text3)':r.roi>=1?'var(--accent3)':'var(--danger)'}">${r.roi==null?'—':r.roi.toFixed(1)+'x'}</td>
     </tr>`).join('')}</tbody></table></div>
-    <div style="padding:8px 16px;font-size:10px;color:var(--text3)">CAC = gasto ÷ clientes nuevos del canal. ROI = revenue ÷ gasto. Registra el gasto de marketing por canal con ⚙️ Gasto. Los canales orgánicos (sin gasto) muestran “—”.</div>
+    <div style="padding:8px 16px;font-size:10px;color:var(--text3)">CAC = gasto ÷ clientes nuevos del canal. ROAS = revenue atribuido ÷ gasto (no es utilidad ni ROI neto). Los canales orgánicos muestran “—”.</div>
   </div>`;
 }
-function _cacSetOff(o){const el=document.getElementById('cacCanalCard');if(el)el.dataset.off=o;renderCacCanal();}
+function _cacSetOff(o){const el=document.getElementById('cacCanalCard');if(el)el.dataset.off=o;renderCacCanal();void _marketingSpendLoad(o,true);}
 function renderReportes(){
   if(window.OPSections)OPSections.reports();
   try{renderEstacionalidad();}catch(e){}

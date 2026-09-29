@@ -397,7 +397,8 @@ export class CrmMutationGuard {
     this._queue = Promise.resolve();
   }
   fetch(request) {
-    const run = this._queue.then(() => this._handle(request));
+    const run = this._queue.then(() => new URL(request.url).pathname==='/marketing/spend'
+      ?this._handleSpend(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
   }
@@ -405,6 +406,59 @@ export class CrmMutationGuard {
     return new Response(JSON.stringify(data), {
       status, headers: { 'Content-Type': 'application/json' },
     });
+  }
+  // Separate instance (tls-marketing-spend-global): durable, per-month CAS
+  // and immutable revision-addressed audit entries. No new Airtable table or
+  // client-stored credentials. The edge supplies a VERIFIED Access identity.
+  async _handleSpend(request) {
+    if(request.method!=='POST')return this._json({error:'Internal method'},405);
+    let data;
+    try{data=await request.json();}catch(_){return this._json({error:'Malformed request'},400);}
+    const {op,month,actor,channel,amount_clp,expected_revision}=data||{};
+    if(!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month||'')||
+       !actor||!['finance','admin'].includes(actor.role)||
+       typeof actor.email!=='string'||actor.email.length>254||
+       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(actor.email)||
+       !['get','put','history'].includes(op))
+      return this._json({error:'Invalid spend request'},422);
+    const key='marketing:spend:'+month,auditPrefix='marketing:audit:'+month+':';
+    const blank=()=>({month,revision:0,channels:{},updated_at:null});
+    if(op==='get') {
+      const row=await this.state.storage.get(key);
+      return this._json(row||blank(),200);
+    }
+    if(op==='history') {
+      const history=await this.state.storage.list({prefix:auditPrefix,reverse:true,limit:100});
+      return this._json({month,events:[...history.values()]},200);
+    }
+    if(typeof channel!=='string'||channel.length<1||channel.length>65||
+       channel!==channel.trim()||/[\x00-\x1f<>]/.test(channel)||
+       !Number.isSafeInteger(amount_clp)||amount_clp<0||amount_clp>10000000000||
+       !Number.isSafeInteger(expected_revision)||expected_revision<0)
+      return this._json({error:'Invalid channel, amount or revision'},422);
+    let result;
+    try {
+      result=await this.state.storage.transaction(async tx=>{
+        const old=await tx.get(key)||blank();
+        if(old.revision!==expected_revision)return {conflict:true,record:old};
+        const before=old.channels[channel]||0;
+        const next=Object.assign(Object.create(null),old.channels);
+        if(amount_clp===0)delete next[channel];else next[channel]=amount_clp;
+        if(before===amount_clp)return {record:old,unchanged:true};
+        const revision=old.revision+1,at=new Date().toISOString();
+        const record={month,revision,channels:next,updated_at:at};
+        const event={revision,month,channel,before_clp:before,after_clp:amount_clp,
+          actor_email:actor.email,actor_role:actor.role,at};
+        await tx.put(key,record);
+        await tx.put(auditPrefix+String(revision).padStart(12,'0'),event);
+        return {record};
+      });
+    }catch(_){return this._json({error:'Spend storage unavailable'},503);}
+    if(result.conflict)return this._json({
+      error:'El gasto fue modificado por otro equipo; actualiza antes de guardar',
+      code:'SPEND_REVISION_CONFLICT',current:result.record
+    },409);
+    return this._json({...result.record,unchanged:!!result.unchanged},200);
   }
   async _readAll(table) {
     const records = [], seen = new Set();
@@ -708,7 +762,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
-      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN, reportes_iso_upsert: !!env.CRM_MUTATION_GUARD }, 200, CORS);
+      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN, reportes_iso_upsert: !!env.CRM_MUTATION_GUARD, marketing_spend_guard: !!env.CRM_MUTATION_GUARD }, 200, CORS);
     }
 
     // Login is a top-level browser navigation. Cloudflare Access handles the
@@ -751,7 +805,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname.startsWith('/printer/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -771,6 +825,53 @@ export default {
       }));
     }
 
+
+    // Marketing spending is shared only under a verified individual Access
+    // session. Legacy APP_KEY mode cannot read or mutate financial history.
+    if(url.pathname.startsWith('/marketing/')){
+      const isSpend=url.pathname==='/marketing/spend',
+        isHistory=url.pathname==='/marketing/spend/history';
+      if(!isSpend&&!isHistory)return json({error:'Marketing route not found'},404,CORS);
+      if(!authorized.identity)
+        return json({error:'Shared marketing spend requires Cloudflare Access',
+          code:'ACCESS_REQUIRED'},503,{...CORS,'Cache-Control':'no-store'});
+      if(!['finance','admin'].includes(authorized.identity.role))
+        return json({error:'Marketing spend role denied'},403,CORS);
+      const method=request.method;
+      if(!((isSpend&&['GET','PUT'].includes(method))||(isHistory&&method==='GET')))
+        return json({error:'Method not allowed'},405,CORS);
+      const pairs=[...url.searchParams.entries()];
+      if(pairs.length!==1||pairs[0][0]!=='month'||
+         !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(pairs[0][1]))
+        return json({error:'A single valid month parameter is required'},422,CORS);
+      if(!env.CRM_MUTATION_GUARD)
+        return json({error:'Marketing spending guard unavailable'},503,CORS);
+      let payload={op:isHistory?'history':method==='PUT'?'put':'get',
+        month:pairs[0][1],actor:{
+          role:authorized.identity.role,email:authorized.identity.email}};
+      if(method==='PUT'){
+        if(!String(request.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json')||
+           Number(request.headers.get('Content-Length')||0)>1024)
+          return json({error:'JSON required, maximum 1024 bytes'},413,CORS);
+        try{
+          const raw=await request.text();
+          if(raw.length>1024)throw Error('too large');
+          const parsed=JSON.parse(raw);
+          if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||
+             !Object.keys(parsed).every(k=>['channel','amount_clp','expected_revision'].includes(k)))
+            throw Error('invalid keys');
+          payload={...payload,...parsed};
+        }catch(_){return json({error:'Invalid spending update'},400,CORS);}
+      }
+      try{
+        const id=env.CRM_MUTATION_GUARD.idFromName('tls-marketing-spend-global');
+        const upstream=await env.CRM_MUTATION_GUARD.get(id).fetch('https://marketing.internal/marketing/spend',{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+        });
+        return new Response(upstream.body,{status:upstream.status,
+          headers:{...CORS,'Content-Type':'application/json','Cache-Control':'no-store'}});
+      }catch(_){return json({error:'Shared spending temporarily unavailable'},503,CORS);}
+    }
 
     // The lead Worker's privileged portal key never reaches Pages. This
     // bridge is disabled in legacy APP_KEY-only mode, and grants ONLY the
