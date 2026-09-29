@@ -130,6 +130,26 @@ function cors(origin) {
 }
 
 
+// ISO week derived from the report's LOCAL reporting date (YYYY-MM-DD).
+// Date-only UTC arithmetic avoids DST and browser timezone discrepancies.
+function reportIsoWeekFromDate(value) {
+  const date=String(value||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return '';
+  const d=new Date(date+'T12:00:00Z');
+  if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==date)return '';
+  const t=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));
+  const dow=t.getUTCDay()||7;
+  t.setUTCDate(t.getUTCDate()+4-dow);
+  const y=t.getUTCFullYear(),first=new Date(Date.UTC(y,0,1));
+  const w=Math.ceil((((t-first)/86400000)+1)/7);
+  return y+'-W'+String(w).padStart(2,'0');
+}
+function reportWeekValid(week) {
+  const m=/^(\d{4})-W(\d{2})$/.exec(String(week||''));
+  return !!m&&Number(m[2])>=1&&Number(m[2])<=
+    Number(reportIsoWeekFromDate(m[1]+'-12-28').slice(-2));
+}
+
 /**
  * Contador de costo Anthropic con serialización real.
  *
@@ -413,11 +433,93 @@ export class CrmMutationGuard {
     try { data = await request.json(); }
     catch (_) { return this._json({ error: 'Invalid JSON' }, 400); }
     const table = data && data.table;
-    if (!['Pedidos','Cotizaciones','Facturas'].includes(table) || !data.body ||
+    if (!['Pedidos','Cotizaciones','Facturas','Reportes'].includes(table) || !data.body ||
         typeof data.body !== 'object' || Array.isArray(data.body) ||
         !data.body.fields || typeof data.body.fields !== 'object' ||
         Array.isArray(data.body.fields) || data.body.records) {
       return this._json({ error: 'Only single-record CRM creates are allowed' }, 400);
+    }
+    // Reportes: no more check-then-POST in two browsers. Canonical ISO week is
+    // the natural identity; historical labels are adopted only when their
+    // generation date unambiguously identifies the same reporting week.
+    // Never retry an ambiguous POST: a persistent DO reservation survives it.
+    if (table === 'Reportes') {
+      const body=data.body,fields=body.fields,week=fields.Semana;
+      if(!reportWeekValid(week)||
+         !Object.keys(body).every(k=>['fields','typecast','reportReplace'].includes(k))||
+         (body.reportReplace!==undefined&&typeof body.reportReplace!=='boolean')) {
+        return this._json({error:'Reportes requires an ISO week and a single-record body'},422);
+      }
+      const key='pending:report:'+week;
+      let remote,marker;
+      try {
+        remote=await this._readAll('Reportes');
+        marker=await this.state.storage.get(key);
+      }catch(_){return this._json({error:'No se pudo verificar el historial completo de Reportes'},503);}
+      const matches=remote.filter(r=>{
+        const f=r.fields||{},label=String(f.Semana||'').trim();
+        if(label===week)return true;
+        // Historical reports stored "Semana 39 — septiembre 2026" instead of
+        // ISO identity. Do not infer acquisition of arbitrary manual labels:
+        // adopt only dated legacy rows from that calendar week.
+        return !/^\d{4}-W\d{2}$/.test(label)&&
+          reportIsoWeekFromDate(f['Fecha generación'])===week;
+      });
+      if(matches.length>1)return this._json({
+        error:'Hay varios reportes históricos de esta semana; requiere conciliación manual',
+        code:'REPORTES_LEGACY_DUPLICATES',week,record_ids:matches.map(r=>r.id)
+      },409);
+      const headers={Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'};
+      const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/Reportes';
+      const {reportReplace,...airtableBody}=body;
+      if(matches.length){
+        const existing=matches[0];
+        if(!reportReplace)return this._json(existing,200);
+        let upstream;
+        try {upstream=await fetch(target+'/'+encodeURIComponent(existing.id),{
+          method:'PATCH',headers,body:JSON.stringify(airtableBody)
+        });}catch(_){return this._json({
+          error:'Actualización de reporte con resultado incierto; consultar Airtable',
+          code:'REPORTES_UPDATE_UNCERTAIN',week
+        },503);}
+        if(!upstream.ok)return upstream;
+        let updated;try{updated=await upstream.json();}catch(_){}
+        if(!updated||typeof updated.id!=='string')
+          return this._json({error:'Airtable no confirmó la actualización',code:'REPORTES_UPDATE_UNCERTAIN'},503);
+        try{await this.state.storage.put(key,{record_id:updated.id,completed:true,week});}catch(_){}
+        return this._json(updated,200);
+      }
+      if(reportReplace)return this._json({
+        error:'El reporte que ibas a reemplazar ya no existe; recarga antes de continuar',
+        code:'REPORTES_REPLACE_CONFLICT',week
+      },409);
+      if(marker)return this._json({
+        error:'Un alta anterior de esta semana tiene resultado incierto; conciliar antes de repetir',
+        code:'REPORTES_PENDING_RECONCILIATION',week
+      },503);
+      try{await this.state.storage.put(key,{week,created:new Date().toISOString()});}
+      catch(_){return this._json({error:'No se pudo reservar el reporte semanal'},503);}
+      let upstream;
+      try {upstream=await fetch(target,{method:'POST',headers,body:JSON.stringify(airtableBody)});}
+      catch(_){return this._json({
+        error:'Alta de reporte con resultado incierto; conciliar antes de repetir',
+        code:'REPORTES_PENDING_RECONCILIATION',week
+      },503);}
+      if([400,401,403,422].includes(upstream.status)){
+        try{await this.state.storage.delete(key);}catch(_){}
+        return upstream;
+      }
+      if(!upstream.ok)return this._json({
+        error:'Airtable devolvió un resultado incierto al guardar Reportes',
+        code:'REPORTES_PENDING_RECONCILIATION',week
+      },503);
+      let created;try{created=await upstream.json();}catch(_){}
+      if(!created||typeof created.id!=='string')return this._json({
+        error:'Airtable no confirmó el ID del reporte; conciliar antes de repetir',
+        code:'REPORTES_PENDING_RECONCILIATION',week
+      },503);
+      try{await this.state.storage.put(key,{record_id:created.id,completed:true,week});}catch(_){}
+      return this._json(created,201);
     }
     // Facturas: un único Durable Object serializa la lectura remota y el POST
     // para TODOS los navegadores. La reserva permanece ante timeout/5xx.
@@ -1086,9 +1188,10 @@ export default {
       // Airtable no debe interpretar una variante de caja como tabla crítica
       // mientras el Worker la trata como una tabla no protegida.
       const critical = table.toLowerCase();
-      if ((critical === 'pedidos' || critical === 'cotizaciones' || critical === 'facturas') &&
-          (table !== (critical === 'pedidos' ? 'Pedidos' : critical === 'cotizaciones' ? 'Cotizaciones' : 'Facturas') ||
-           (request.method === 'POST' && path !== dataPrefix + table))) {
+      if ((critical === 'pedidos' || critical === 'cotizaciones' || critical === 'facturas' || critical === 'reportes') &&
+          (table !== (critical === 'pedidos' ? 'Pedidos' : critical === 'cotizaciones' ? 'Cotizaciones' : critical === 'facturas' ? 'Facturas' : 'Reportes') ||
+           (request.method === 'POST' && path !== dataPrefix + table) ||
+           (table === 'Reportes' && request.method === 'PATCH'))) {
         return json({ error: 'CRM and Facturas creates require canonical guarded path' }, 403, CORS);
       }
     }
@@ -1141,7 +1244,7 @@ export default {
     // Las creaciones de Pedidos/Cotizaciones/Facturas no pueden depender de un
     // check-then-POST en dos navegadores. Serializar ambas en el mismo DO.
     if (request.method === 'POST' &&
-        (path === dataPrefix + 'Pedidos' || path === dataPrefix + 'Cotizaciones' || path === dataPrefix + 'Facturas')) {
+        (path === dataPrefix + 'Pedidos' || path === dataPrefix + 'Cotizaciones' || path === dataPrefix + 'Facturas' || path === dataPrefix + 'Reportes')) {
       if (!env.CRM_MUTATION_GUARD) {
         return json({ error: 'CRM/Facturas write guard unavailable; creation suspended' }, 503, CORS);
       }
