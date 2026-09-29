@@ -55,6 +55,7 @@ test('read-only guard activates for both explicit demo and live dashboard showin
  assert.equal(notifications.length,1);
  window._adsLastData={ok:true,demo:false};
  assert.equal(funcs._adsRequireLive(),true);
+ funcs._adsRenderReadOnlyBanner(); // loadAdsData refreshes this when real data arrives
  assert.equal(ids.get('adsReadonlyBanner').style.display,'none');
  window._DEMO_MODE=true;
  assert.equal(funcs._adsIsReadOnly(),true);
