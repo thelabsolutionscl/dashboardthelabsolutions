@@ -15887,63 +15887,105 @@ async function setGastoCanal(){
   toast('Gasto local (sin sincronizar): '+(n>0?formatCLP(n):'eliminado'),'info');
   try{renderCacCanal();}catch(e){}
 }
+// Explicit acquisition origin belongs to Clientes; Canal solicitud records
+// the communication channel (often WhatsApp), NEVER the paid campaign.
+function _origenAdquisicion(cliente){
+  const f=cliente?.fields||{};
+  const origin=String(f['Origen lead']?.name||f['Origen lead']||'').trim();
+  if(String(f.GCLID||'').trim()||String(f['Campaña Ads']||'').trim()||
+     origin.toLowerCase()==='google_ads')return 'Google Ads';
+  if(!origin)return 'Sin atribución';
+  if(origin.toLowerCase()==='google')return 'Google (pago no verificado)';
+  if(origin.toLowerCase()==='contacto directo')return 'Directo';
+  return origin.charAt(0).toUpperCase()+origin.slice(1);
+}
 function _canalStats(off){
   const mr=(typeof _mesRango==='function')?_mesRango(off||0):null;
   const ini=mr?mr.ini.getTime():0,fin=mr?mr.fin.getTime():Infinity;
   const gasto=typeof _gastoCanalVisible==='function'?_gastoCanalVisible(off):_gastoCanal(off);
   const _cid=f=>Array.isArray(f['Cliente'])?(f['Cliente'][0]||null):(f['Cliente']||null);
-  // An acquisition is the first known CRM contact, not every quotation a
-  // returning customer submits. If its first quote spans multiple channels,
-  // attribute the customer ONLY to the channel of that first quote.
+  const clients=new Map((state.clientes||[]).map(c=>[c.id,c]));
   const primero=new Map();
   (state.cotizaciones||[]).forEach(c=>{
-    const cid=_cid(c.fields||{});
-    const t=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    const cid=_cid(c.fields||{}),t=c.createdTime?new Date(c.createdTime).getTime():NaN;
     if(!cid||!Number.isFinite(t))return;
-    const previous=primero.get(cid);
-    if(!previous||t<previous.t||(t===previous.t&&String(c.id)<String(previous.id)))
+    const prev=primero.get(cid);
+    if(!prev||t<prev.t||(t===prev.t&&String(c.id)<String(prev.id)))
       primero.set(cid,{t,id:c.id});
   });
-  // A client created before its first quote was acquired before the quote;
-  // historic clients must not be labeled new when they request fresh work.
-  const alta=new Map();
+  // First-contact dates can predate the 2026 CRM import. Use the earliest
+  // known evidence, never a later "first contact" that contradicts a quote.
+  const alta=new Map(),contactoVerificado=new Map();
   (state.clientes||[]).forEach(c=>{
-    const t=c.createdTime?new Date(c.createdTime).getTime():NaN;
-    if(!c.id||!Number.isFinite(t))return;
-    const previous=alta.get(c.id);
-    if(previous===undefined||t<previous)alta.set(c.id,t);
+    const f=c.fields||{},imported=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    const raw=String(f['Fecha primer contacto']||'').slice(0,10);
+    const external=/^\d{4}-\d{2}-\d{2}$/.test(raw)?new Date(raw+'T12:00:00Z').getTime():NaN;
+    const q=primero.get(c.id),validExternal=Number.isFinite(external)&&
+      (!q||external<=q.t);
+    const candidates=[imported,validExternal?external:NaN].filter(Number.isFinite);
+    if(candidates.length)alta.set(c.id,Math.min(...candidates));
+    contactoVerificado.set(c.id,validExternal);
   });
-  const by=new Map();
+  const by=new Map(),seenClients=new Set(),sourceKnown=new Set(),dateKnown=new Set();
   (state.cotizaciones||[]).forEach(c=>{
     const f=c.fields||{},t=c.createdTime?new Date(c.createdTime).getTime():NaN;
     if(!(t>=ini&&t<fin))return;
-    const canal=String(f['Canal solicitud']||'Directo').trim()||'Directo';
+    const cid=_cid(f),cliente=cid?clients.get(cid):null;
+    const canal=_origenAdquisicion(cliente);
     const e=by.get(canal)||{canal,nuevos:new Set(),revenue:0,nCot:0};
     e.nCot++;
-    const cid=_cid(f),first=cid?primero.get(cid):null,created=cid?alta.get(cid):undefined;
+    if(cid){
+      seenClients.add(cid);
+      if(canal!=='Sin atribución')sourceKnown.add(cid);
+      if(contactoVerificado.get(cid))dateKnown.add(cid);
+    }
+    const first=cid?primero.get(cid):null,created=cid?alta.get(cid):undefined;
     if(first&&first.id===c.id&&first.t>=ini&&first.t<fin&&
        (created===undefined||created>=ini))e.nuevos.add(cid);
-    // Revenue belongs to the quotation's actual channel even when the
-    // customer acquisition belonged to a different channel or month.
+    // Approved net sales are attributed to the KNOWN acquisition source.
+    // Quotes without a known origin remain visible under Sin atribución.
     if((f['Estado cotización']||'')==='Aprobada')
       e.revenue+=Math.round((f['Total final (CLP)']||0)/1.19);
     by.set(canal,e);
   });
-  // A paid channel with zero quotations must still show its marketing spend.
+  // Paid channels with zero observed source/quotes must remain visible.
   Object.keys(gasto).forEach(c=>{if(!by.has(c))by.set(c,{canal:c,nuevos:new Set(),revenue:0,nCot:0});});
+  const total=seenClients.size;
+  const sourcePct=total?Math.round(sourceKnown.size/total*100):0;
+  const datePct=total?Math.round(dateKnown.size/total*100):0;
+  // If provenance is incomplete, a numerical CAC/ROAS would be misleading.
+  const quality={sourcePct,datePct,total,reliable:total>0&&sourcePct>=80&&datePct>=80};
   return [...by.values()].map(e=>{
     const g=gasto[e.canal]||0,nuevos=e.nuevos.size;
-    return {canal:e.canal,nCot:e.nCot,revenue:e.revenue,nuevos,gasto:g,
-      cac:g>0&&nuevos>0?Math.round(g/nuevos):0,roi:g>0?e.revenue/g:null};
+    // "CAC" legacy property now represents cost per first-time quoting lead,
+    // NOT the acquisition cost of a paying customer.
+    return {canal:e.canal,nCot:e.nCot,revenue:e.revenue,nuevos,gasto:g,quality,
+      cac:quality.reliable&&g>0&&nuevos>0?Math.round(g/nuevos):null,
+      // Only a campaign explicitly tagged Google Ads qualifies for ad return;
+      // organic Google and untagged Instagram/Meta must not be credited.
+      roi:quality.reliable&&g>0&&e.canal==='Google Ads'?e.revenue/g:null};
   }).sort((a,b)=>b.revenue-a.revenue);
+}
+function _canalesSolicitud(off){
+  const range=_mesRango(off||0),counts=new Map();
+  (state.cotizaciones||[]).forEach(c=>{
+    const date=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    if(!(date>=range.ini.getTime()&&date<range.fin.getTime()))return;
+    const f=c.fields||{};
+    const label=String(f['Canal solicitud']||'Sin canal').trim()||'Sin canal';
+    counts.set(label,(counts.get(label)||0)+1);
+  });
+  return [...counts.entries()].sort((a,b)=>b[1]-a[1]);
 }
 function renderCacCanal(){
   const el=document.getElementById('cacCanalCard');if(!el)return;
   const off=parseInt(el.dataset.off||'0');
   void _marketingSpendLoad(off);
   const rows=_canalStats(off);
+  const quality=rows[0]?.quality||{sourcePct:0,datePct:0,total:0,reliable:false};
+  const contactChannels=_canalesSolicitud(off);
   const mr=(typeof _mesRango==='function')?_mesRango(off):{label:''};
-  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">📣 CAC y retorno publicitario por canal · ${escapeHtml(mr.label||'')}</span>
+  el.innerHTML=`<div class="card"><div class="card-header"><span class="card-title">📣 Adquisición por origen del cliente · ${escapeHtml(mr.label||'')}</span>
     <div style="display:flex;gap:4px;margin-left:auto">
       <button class="btn-mini${off===-1?' btn-mini-yellow':''}" onclick="_cacSetOff(-1)">Mes cerrado</button>
       <button class="btn-mini${off===0?' btn-mini-yellow':''}" onclick="_cacSetOff(0)">Mes en curso</button>
@@ -15952,16 +15994,18 @@ function renderCacCanal(){
       ${_marketingSpendRow(off)?.status==='shared'&&Object.keys(_gastoCanal(off)).some(c=>!Object.hasOwn(_marketingSpendRow(off).channels,c))?'<button class="btn btn-ghost btn-sm" onclick="_marketingSpendImport()">Importar local</button>':''}
     </div></div>
     <div style="padding:7px 16px;font-size:11px;color:var(--warn)">${escapeHtml(_marketingSpendLabel(off))}</div>
-    <div class="table-wrap"><table><thead><tr><th>Canal</th><th style="text-align:right">Clientes nuevos</th><th style="text-align:right">Revenue</th><th style="text-align:right">Gasto</th><th style="text-align:right">CAC</th><th style="text-align:right">ROAS</th></tr></thead>
+    <div style="padding:8px 16px;font-size:11px;color:${quality.reliable?'var(--success)':'var(--warn)'}">${quality.total?'Calidad de atribución: '+quality.sourcePct+'% con origen, '+quality.datePct+'% con fecha válida de primer contacto.':'Sin cotizaciones vinculadas en este período.'} ${quality.reliable?'Estimación habilitada.':'Costo por nuevo cotizante y ROAS ocultos hasta contar con al menos 80% de cobertura de ambos datos.'}</div>
+    <div class="table-wrap"><table><thead><tr><th>Origen de adquisición</th><th style="text-align:right">Nuevos cotizantes</th><th style="text-align:right">Ventas aprobadas netas</th><th style="text-align:right">Gasto</th><th style="text-align:right">Costo/nuevo</th><th style="text-align:right">ROAS*</th></tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td data-label="Canal" style="font-weight:600">${escapeHtml(r.canal)}</td>
       <td data-label="Nuevos" style="text-align:right">${r.nuevos}</td>
       <td data-label="Revenue" style="text-align:right;color:var(--accent3)">${formatCLP(r.revenue)}</td>
       <td data-label="Gasto" style="text-align:right;color:${r.gasto?'var(--warn)':'var(--text3)'}">${r.gasto?formatCLP(r.gasto):'—'}</td>
-      <td data-label="CAC" style="text-align:right">${r.cac?formatCLP(r.cac):'—'}</td>
+      <td data-label="Costo/nuevo" style="text-align:right">${r.cac?formatCLP(r.cac):'—'}</td>
       <td data-label="ROAS" style="text-align:right;font-weight:700;color:${r.roi==null?'var(--text3)':r.roi>=1?'var(--accent3)':'var(--danger)'}">${r.roi==null?'—':r.roi.toFixed(1)+'x'}</td>
     </tr>`).join('')}</tbody></table></div>
-    <div style="padding:8px 16px;font-size:10px;color:var(--text3)">CAC = gasto ÷ clientes nuevos del canal. ROAS = revenue atribuido ÷ gasto (no es utilidad ni ROI neto). Los canales orgánicos muestran “—”.</div>
+    <div style="padding:8px 16px;font-size:10px;color:var(--text3)">Costo/nuevo = gasto ÷ clientes que cotizan por primera vez; no equivale al CAC de clientes que compraron. *ROAS solo si hay origen de campaña Google Ads verificado y suficiente cobertura. Los datos no atribuidos no se asignan a un anuncio por haber llegado por WhatsApp.</div>
+    <div style="padding:8px 16px;font-size:10px;color:var(--text3)">Canal de solicitud (dato separado): ${contactChannels.map(([c,n])=>escapeHtml(c)+': '+n).join(' · ')||'Sin cotizaciones'}</div>
   </div>`;
 }
 function _cacSetOff(o){const el=document.getElementById('cacCanalCard');if(el)el.dataset.off=o;renderCacCanal();void _marketingSpendLoad(o,true);}
