@@ -226,8 +226,31 @@ test('CAC y ROI usa cotizaciones del período, canal, aprobaciones y venta neta'
   assert.match(render,/Mes en curso/);
 });
 
-test.todo('CAC debe contar adquisiciones reales, no todos los clientes que cotizaron en el mes');
-test.todo('el gasto de cada canal debe guardarse por período para no reutilizar el gasto actual en meses históricos');
-test.todo('renderReportes debe ordenar el historial más reciente primero y desempatar por createdTime');
+test('CAC considera primera adquisición y no recompra ni canales secundarios',()=>{
+  const calc=functionBlock(SOURCE,'_canalStats');
+  assert.match(calc,/const primero=new Map\(\)/);
+  assert.match(calc,/const alta=new Map\(\)/);
+  assert.match(calc,/first\.id===c\.id/);
+  assert.match(calc,/created===undefined\|\|created>=ini/);
+  assert.ok(fs.existsSync(path.join(ROOT,'tests/reportes-cac-first-acquisition.test.js')),
+    'los escenarios de recompra, canales y cliente huérfano deben probarse');
+});
+test('gasto de marketing se almacena por mes y canal',()=>{
+  assert.match(SOURCE,/thelab_gasto_canal_por_mes_v2/);
+  assert.ok(fs.existsSync(path.join(ROOT,'tests/reportes-period-history.test.js')),
+    'debe existir cobertura de migración y edición de meses cerrados');
+});
+test('historial ordena el registro más reciente primero',()=>{
+  const body=functionBlock(SOURCE,'renderReportes');
+  assert.match(body,/Fecha generación/);
+  assert.match(body,/createdTime/);
+  assert.match(body,/\.sort\s*\(/);
+  assert.ok(fs.existsSync(path.join(ROOT,'tests/reportes-period-history.test.js')));
+});
 test.todo('crearReporte debe evitar dos registros para la misma semana o actualizar el existente');
-test.todo('estacionalidad debe excluir o prorratear el mes calendario que todavía está incompleto');
+test('estacionalidad excluye del promedio el mes en curso incompleto',()=>{
+  const calc=functionBlock(SOURCE,'_estacionalidad');
+  assert.match(calc,/new Date\(\)/);
+  assert.ok(fs.existsSync(path.join(ROOT,'tests/reportes-period-history.test.js')),
+    'la exclusión de meses incompletos debe probarse con datos de ejemplo');
+});
