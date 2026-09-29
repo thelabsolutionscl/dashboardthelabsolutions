@@ -193,6 +193,10 @@ test('sales mapping fails closed on missing, invalid or unverified seller values
   }
   assert.equal((await accessAuthorize(request.request,
     {ACCESS_SELLER_MAP:'{"vendedor@example.com":"nicanor"}'},request.path)).response.status,503);
+  assert.equal((await accessAuthorize(request.request,
+    {ACCESS_SALES_WRITES_ENABLED:'true'},request.path)).response.status,503,
+    'a write flag on its own must not enable legacy APP_KEY mode');
+  assert.throws(()=>accessConfig({...salesRoles,ACCESS_SALES_WRITES_ENABLED:'yes'}));
   for(const seller of ['florencia','nicanor','gustavo'])
     assert.doesNotThrow(()=>accessConfig({...salesRoles,
       ACCESS_SELLER_MAP:JSON.stringify({'vendedor@example.com':seller})}));
