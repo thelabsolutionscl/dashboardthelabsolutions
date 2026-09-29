@@ -176,9 +176,9 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
     const {appendFileSync}=await import('node:fs');
     const label=result.errors.length?'FAILED':result.manual.length>1?'INCONCLUSIVE':'AUTOMATED PASS';
     appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-      '### Access readiness — '+label+' (manual human-role checks still required)\\n\\n'+
+      '### Access readiness — '+label+' (manual human-role checks still required)\n\n'+
       [...result.passed.map(x=>'- PASS: '+x),...result.manual.map(x=>'- MANUAL: '+x),
-        ...result.errors.map(x=>'- FAIL: '+x)].join('\\n')+'\\n');
+        ...result.errors.map(x=>'- FAIL: '+x)].join('\n')+'\n');
   }
   // Edge redirects/403 are *not* proof that the Worker itself rejects a
   // copied APP_KEY; do not mark Reportes green until the origin is verifiable.
