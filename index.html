@@ -1417,7 +1417,7 @@
       <div class="field-group"><label class="field-label">Cargo</label><input class="field-input" id="nl-cargo"></div>
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="nl-telefono" type="tel" placeholder="+56 9 1234 5678"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="nl-email" type="email"></div>
-      <div class="field-group"><label class="field-label">Origen</label><select class="field-select" id="nl-origen"><option>Referido</option><option>Instagram</option><option>LinkedIn</option><option>Google</option><option>Contacto directo</option><option>Otro</option></select></div>
+      <div class="field-group"><label class="field-label">Origen</label><select class="field-select" id="nl-origen"><option value="">— Sin atribución · por verificar —</option><option>Referido</option><option>Instagram</option><option>LinkedIn</option><option>Google</option><option>Contacto directo</option><option>Otro</option></select></div>
       <div class="field-group"><label class="field-label">Industria</label><select class="field-select" id="nl-industria"><option value="">— seleccionar —</option><option>Agencia / Marketing</option><option>Retail</option><option>Tecnología</option><option>Educación</option><option>Eventos</option><option>Otro</option></select></div>
       <div class="field-group form-full"><label class="field-label">Dirección</label><input class="field-input" id="nl-direccion" placeholder="Av. Ejemplo 123, of. 4"></div>
       <div class="field-group"><label class="field-label">Región</label><select class="field-select" id="nl-region" onchange="cotPopulaComunas('nl-region','nl-comuna','')"><option value="">— Seleccionar —</option><option>Arica y Parinacota</option><option>Tarapacá</option><option>Antofagasta</option><option>Atacama</option><option>Coquimbo</option><option>Valparaíso</option><option>O'Higgins</option><option>Maule</option><option>Ñuble</option><option>Biobío</option><option>La Araucanía</option><option>Los Ríos</option><option>Los Lagos</option><option>Aysén</option><option>Magallanes</option><option>Metropolitana</option></select></div>
@@ -13330,6 +13330,8 @@ async function createLead(){
   if(rut&&rutEl) rutEl.value=formatRUT(rut);
   btn.disabled=true;btn.textContent='Creando...';
   const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':hoyCL()};
+  // No inventar canal de adquisición al crear un lead sin atribución confirmada.
+  if(!fields['Origen lead']) delete fields['Origen lead'];
   if(document.getElementById('nl-industria').value) fields['Industria / Rubro']=document.getElementById('nl-industria').value;
   if(document.getElementById('nl-rut').value) fields['RUT']=document.getElementById('nl-rut').value;
   if(document.getElementById('nl-web').value) fields['Sitio web']=document.getElementById('nl-web').value;
