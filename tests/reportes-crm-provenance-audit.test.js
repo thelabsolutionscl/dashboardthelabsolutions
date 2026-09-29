@@ -83,6 +83,27 @@ test('CRM audit separates chronological contradictions from incomplete fields wi
   assert.equal(unlinkedQuotes.length,1);
   assert.deepEqual(state,before,'review cannot mutate Airtable-derived state');
 });
+test('a quote import timestamp alone cannot establish a chronology contradiction',()=>{
+  const {api}=setup();
+  const c=[client(ids[0],'Importado','Referido','2026-09-20','2026-09-01T10:00:00Z')];
+  const q=[quote('recImported',[ids[0]],null,'2026-09-11T12:00:00Z')];
+  const {stats,entries}=api._crmAcquisitionAudit(c,q);
+  assert.equal(stats.contradictions,0);
+  assert.equal(entries[0].earliest,'2026-09-11');
+  assert.equal(entries[0].earliestOriginal,null);
+  assert.equal(entries[0].earliestSource,'record_created');
+  assert.equal(entries[0].flags.includes('Fecha posterior a una cotización'),false);
+});
+test('explicit original quote dates establish contradictions even if import is later',()=>{
+  const {api}=setup();
+  const c=[client(ids[0],'Importado','Referido','2026-09-20','2026-09-01T10:00:00Z')];
+  const q=[quote('recImported',[ids[0]],null,'2026-08-01T12:00:00Z'),quote('recOriginal',[ids[0]],'2026-08-25','2026-09-11T12:00:00Z')];
+  const {stats,entries}=api._crmAcquisitionAudit(c,q);
+  assert.equal(stats.contradictions,1);
+  assert.equal(entries[0].earliest,'2026-08-01');
+  assert.equal(entries[0].earliestOriginal,'2026-08-25');
+  assert.equal(entries[0].earliestSource,'record_created');
+});
 test('date validator does not accept impossible dates or silently reinterpret invalid text',()=>{
   const {api}=setup();
   assert.equal(api._crmAuditDate('2026-02-30'),null);
@@ -93,6 +114,8 @@ test('review panel escapes customer labels, shows evidence counts and does not o
   const {api,panel}=setup();
   api.renderCrmAcquisitionAudit();
   assert.match(panel.innerHTML,/Conciliación de origen CRM/);
+  assert.match(panel.innerHTML,/Alta en Airtable · no confirma fecha original/);
+  assert.match(panel.innerHTML,/Fecha original de cotización/);
   assert.match(panel.innerHTML,/Solo lectura/);
   assert.match(panel.innerHTML,/recTEST0000000001/);
   assert.match(panel.innerHTML,/&lt;img src=x onerror=alert\(1\)&gt;/);
@@ -115,6 +138,8 @@ test('review export is local, contains five customers and protects against CSV f
   api._crmAuditExportCsv();
   assert.equal(clicked,1);
   assert.match(csv,/Revisión sugerida/);
+  assert.match(csv,/Tipo evidencia primera cotización/);
+  assert.match(csv,/Alta Airtable \(fecha original desconocida\)/);
   assert.match(csv,/"'=HYPERLINK\(/,'formula-like client name must be escaped');
   assert.equal(csv.split('\r\n').length,6);
   assert.ok(!csv.includes('gclid-for-test'),'export only the fields needed to review');
