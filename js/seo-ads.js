@@ -847,6 +847,7 @@ function adsHealthScore(c){
 }
 // ── Airtable sync ────────────────────────────────────────
 async function syncAdsToAirtable(data,days){
+  if(_adsIsReadOnly()||data?.demo)return;
   let cfg;try{cfg=_airtableConfig();}catch(e){return;}
   const today=hoyCL();
   const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
@@ -1050,6 +1051,7 @@ function savePendingToStorage(){
 }
 
 function openCreateCampaign(){
+  if(!_adsRequireLive())return;
   _adsCreateKeywords=[];
   document.getElementById('adsCampaignModalId').value='';
   document.getElementById('adsCampaignModalOp').value='create';
@@ -1084,6 +1086,7 @@ function openCreateCampaign(){
 }
 
 function openEditCampaign(id, nombre, estado, presupuesto){
+  if(!_adsRequireLive())return;
   document.getElementById('adsCampaignModalId').value=id;
   document.getElementById('adsCampaignModalOp').value='edit';
   document.getElementById('adsCampaignModalTitle').textContent='Editar Campaña';
@@ -1104,6 +1107,7 @@ function closeAdsCampaignModal(){
 }
 
 function openDeleteCampaign(id, nombre){
+  if(!_adsRequireLive())return;
   document.getElementById('adsDeleteModalId').value=id;
   document.getElementById('adsDeleteModalNombre').textContent='Campaña: '+nombre;
   document.getElementById('adsDeleteModal').style.display='flex';
@@ -1155,7 +1159,38 @@ function adsPresupuestoValido(nuevo,actual,nombre){
 }
 
 // Encola una mutación reemplazando cualquier mutación pendiente equivalente (evita duplicados)
+// A failed Ads request may display fixture data even on a real dashboard.
+// This state is read-only: never mutate live campaigns based on fake IDs.
+function _adsIsReadOnly(){
+  return !!(window._DEMO_MODE||window._adsLastData?.demo===true);
+}
+function _adsRenderReadOnlyBanner(){
+  const container=document.getElementById('adsCampaignsArea');
+  if(!container||!container.parentNode)return;
+  let banner=document.getElementById('adsReadonlyBanner');
+  if(!banner){
+    banner=document.createElement('div');
+    banner.id='adsReadonlyBanner';
+    banner.setAttribute('role','alert');
+    banner.style.cssText='margin:12px 0;padding:12px 16px;border-radius:10px;border:1px solid var(--warn);background:var(--surface2);color:var(--warn);font-size:12px;font-weight:600';
+    container.parentNode.insertBefore(banner,container);
+  }
+  const blocked=_adsIsReadOnly();
+  banner.textContent=blocked?'DATOS DEMO — SOLO LECTURA. Google Ads no está conectado: no se enviarán campañas, presupuestos, negativos ni órdenes del piloto.':'';
+  banner.style.display=blocked?'block':'none';
+  for(const id of ['btnNuevaCampana','adsRetryAllBtn']){
+    const el=document.getElementById(id);
+    if(el){el.disabled=blocked;el.title=blocked?'Modo demo de solo lectura':'';}
+  }
+}
+function _adsRequireLive(){
+  if(!_adsIsReadOnly())return true;
+  _adsRenderReadOnlyBanner();
+  toast('Modo demo: Google Ads está en solo lectura. Conecta datos reales antes de hacer cambios.','error');
+  return false;
+}
 function _adsQueueMutation(mutation){
+  if(!_adsRequireLive())return false;
   _adsEnsureDemoQueue();
   const keyOf=m=>m.op+'|'+(m.id||'')+'|'+(m.op==='create'?((m.data&&m.data.nombre)||''):(m.op==='negative'||m.op==='pause_keyword')?((m.data&&m.data.termino)||'')+'|'+((m.data&&m.data.campana)||''):'');
   const k=keyOf(mutation);
@@ -1169,6 +1204,7 @@ function _adsQueueMutation(mutation){
 }
 
 function saveCampaignMutation(){
+  if(!_adsRequireLive())return;
   const op=document.getElementById('adsCampaignModalOp').value;
   const id=document.getElementById('adsCampaignModalId').value;
   const nombre=document.getElementById('adsCampaignModalNombre').value.trim();
@@ -1416,6 +1452,7 @@ async function renderAdsAutopilot(){
   panel.style.display='block';
 }
 async function adsAutopilotDecide(i,aprobar){
+  if(!_adsRequireLive())return;
   const p=_adsAutopilotProps[i]; if(!p) return;
   // Re-verifica el estado justo antes (pudo aprobarse por email hace un momento):
   // evita encolar dos veces las mismas mutaciones (un "create" duplicaría la campaña).
@@ -1555,7 +1592,7 @@ async function adsDiagnostico(){
 }
 
 function sendAdsMutation(mutation){
-  if(window._DEMO_MODE){
+  if(_adsIsReadOnly()){
     mutation.status='demo';mutation.error='';savePendingToStorage();renderPendingMutations();
     toast('Cambio simulado: no se envió nada a Google Ads','success');return;
   }
@@ -1669,6 +1706,7 @@ function _startAdsMutationPoll(){
 function _stopAdsMutationPoll(){if(_adsMutationPollInterval){clearInterval(_adsMutationPollInterval);_adsMutationPollInterval=null;}}
 
 function retryMutation(ts){
+  if(!_adsRequireLive())return;
   const m=_adsPendingMutations.find(x=>x.timestamp===ts);
   if(!m) return;
   m.status='pending';m.error='';
@@ -1677,6 +1715,7 @@ function retryMutation(ts){
   renderPendingMutations();
 }
 function retryAllErrors(){
+  if(!_adsRequireLive())return;
   const errors=_adsPendingMutations.filter(m=>m.status==='error');
   if(!errors.length){toast('Sin errores que reintentar','info');return;}
   errors.forEach(m=>{m.status='pending';m.error='';});
@@ -1698,6 +1737,7 @@ async function loadAdsData(){
     await new Promise(r=>setTimeout(r,600));
     const demo=getAdsDemoData(days);
     window._adsLastData=demo;
+    _adsRenderReadOnlyBanner();
     renderAdsKPIs(demo,days);
     renderAdsCampaigns(demo);
     renderAdsAgent(demo);
@@ -1719,6 +1759,7 @@ async function loadAdsData(){
     if(!data.ok) throw new Error(data.error||'Respuesta inválida del script');
     // Renders visuales aislados: un fallo en uno no debe bloquear la sincronización de mutaciones
     window._adsLastData=data;
+    _adsRenderReadOnlyBanner();
     try{ renderAdsKPIs(data,days); }catch(err){ console.error('renderAdsKPIs',err); }
     try{ renderAdsCampaigns(data); }catch(err){ console.error('renderAdsCampaigns',err); }
     try{ renderAdsAgent(data); }catch(err){ console.error('renderAdsAgent',err); }
@@ -1743,6 +1784,7 @@ async function loadAdsData(){
     if(!localStorage.getItem('ads_config')){
       const demo=getAdsDemoData(days);
       window._adsLastData=demo;
+      _adsRenderReadOnlyBanner();
       try{ renderAdsKPIs(demo,days); }catch(err){}
       try{ renderAdsCampaigns(demo); }catch(err){}
       try{ renderAdsAgent(demo); }catch(err){}
