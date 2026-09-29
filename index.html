@@ -10022,32 +10022,74 @@ function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===cli
 // link firmado (el Worker lo emite con vencimiento y lee Airtable server-side,
 // así el cliente nunca recibe el token de Airtable ni datos de otros clientes).
 const PORTAL_DIAS=30;
-// Pide al Worker el link firmado de un cliente. Devuelve {url,expira} o null
-// con el motivo en .error (quien llama decide si avisa o sigue sin el link).
+// Secure mode is deliberately OFF until Access roles and the server-held
+// portal credential are configured and verified by the operator.
+function _portalAccessMode(){return '%%PORTAL_ACCESS_MODE%%'==='true';}
+async function _portalSecureRequest(action,clienteId,dias){
+  if(!_portalAccessMode()||!['link','revocar'].includes(action))
+    throw new Error('El portal protegido todavía no está activo');
+  const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!px?.url||!px?.key)throw new Error('Proxy seguro no configurado');
+  const url=new URL(px.url);
+  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)
+    throw new Error('URL del proxy seguro inválida');
+  const payload=action==='link'?{clienteId,dias:dias||PORTAL_DIAS}:{clienteId};
+  return fetch(url.origin+url.pathname.replace(/\/$/,'')+'/portal-admin/'+action,{
+    method:'POST',credentials:'include',redirect:'error',
+    headers:{'Content-Type':'application/json','X-App-Key':px.key},
+    body:JSON.stringify(payload)
+  });
+}
+// Solicita un enlace firmado. En modo Access la clave maestra NUNCA se lee
+// ni se envía desde el navegador; ante fallo no se vuelve al Worker directo.
 async function portalLinkCliente(clienteId,dias){
+  if(!clienteId)return{error:'La cotización no tiene cliente asociado'};
+  if(_portalAccessMode()){
+    try{
+      const r=await _portalSecureRequest('link',clienteId,dias);
+      const res=await r.json().catch(()=>null);
+      if(!r.ok||!res?.ok)return{error:'No se pudo generar el link protegido: '+(res?.error||r.status)};
+      return{url:res.url,expira:res.expira};
+    }catch(e){return{error:'Portal protegido no disponible: '+e.message};}
+  }
   const base=(_DEFAULTS.LEAD_WORKER_URL||'').replace(/\/+$/,'');
   const key=_DEFAULTS.PORTAL_ADMIN_KEY||'';
-  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key) return{error:'Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY'};
-  if(!clienteId) return{error:'La cotización no tiene cliente asociado'};
+  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key)
+    return{error:'Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY'};
   try{
-    const r=await fetch(base+'/portal/link',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},body:JSON.stringify({clienteId,dias:dias||PORTAL_DIAS})});
+    const r=await fetch(base+'/portal/link',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},
+      body:JSON.stringify({clienteId,dias:dias||PORTAL_DIAS})});
     const res=await r.json().catch(()=>null);
-    if(!r.ok||!res||!res.ok) return{error:'No se pudo generar el link: '+((res&&res.error)||r.status)};
+    if(!r.ok||!res?.ok)return{error:'No se pudo generar el link: '+(res?.error||r.status)};
     return{url:res.url,expira:res.expira};
   }catch(e){return{error:'Error de conexión con el worker: '+e.message};}
 }
-// Corta el acceso de UN cliente: los links que ya le enviaste dejan de abrir
-// (el Worker sube su versión de token). Los demás clientes no se ven afectados.
+// Revocar enlaces es una acción administrativa, autorizada por Access.
 async function revocarPortalCliente(clienteId,nombre){
-  if(!confirm(`¿Revocar los links del portal de ${nombre}?\n\nTodos los enlaces que le enviaste dejarán de funcionar de inmediato. Si sigue necesitando entrar, tendrás que enviarle uno nuevo.`)) return;
+  if(!confirm(`¿Revocar los links del portal de ${nombre}?\n\nTodos los enlaces que le enviaste dejarán de funcionar de inmediato. Si sigue necesitando entrar, tendrás que enviarle uno nuevo.`))return;
+  if(_portalAccessMode()){
+    toast('Revocando…','info');
+    try{
+      const r=await _portalSecureRequest('revocar',clienteId);
+      const res=await r.json().catch(()=>null);
+      if(!r.ok||!res?.ok){toast('No se pudo revocar: '+(res?.error||r.status),'error');return;}
+      toast(`✓ Links de ${nombre} revocados`,'success');
+    }catch(e){toast('Error de conexión con el portal protegido: '+e.message,'error');}
+    return;
+  }
   const base=(_DEFAULTS.LEAD_WORKER_URL||'').replace(/\/+$/,'');
   const key=_DEFAULTS.PORTAL_ADMIN_KEY||'';
-  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key){toast('Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY','error');return;}
+  if(base.startsWith('%%')||!base||key.startsWith('%%')||!key){
+    toast('Portal sin configurar: faltan los secrets LEAD_WORKER_URL y PORTAL_ADMIN_KEY','error');return;
+  }
   toast('Revocando…','info');
   try{
-    const r=await fetch(base+'/portal/revocar',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},body:JSON.stringify({clienteId})});
+    const r=await fetch(base+'/portal/revocar',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Portal-Admin-Key':key},
+      body:JSON.stringify({clienteId})});
     const res=await r.json().catch(()=>null);
-    if(!r.ok||!res||!res.ok){toast('No se pudo revocar: '+((res&&res.error)||r.status),'error');return;}
+    if(!r.ok||!res?.ok){toast('No se pudo revocar: '+(res?.error||r.status),'error');return;}
     toast(`✓ Links de ${nombre} revocados`,'success');
   }catch(e){toast('Error de conexión con el worker: '+e.message,'error');}
 }
