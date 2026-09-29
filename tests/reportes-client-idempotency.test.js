@@ -12,7 +12,7 @@ const SRC=INDEX.slice(start,end);
 function harness(options={}){
   const calls={ai:0,writes:0,prefetch:0,health:0,prompts:0,render:0,toasts:[]};
   const btn={disabled:false,textContent:'',innerHTML:''};
-  const out={classList:{remove:()=>{}},textContent:'',innerHTML:''};
+  const out={classList:{remove:()=>{}},style:{},textContent:'',innerHTML:''};
   const input={ 'rep-semana':'2026-W40','rep-revenue':'100000',
     'rep-cot-env':'3','rep-cot-apr':'1','rep-ped-act':'2','rep-ped-des':'1','rep-notas':''
   };
