@@ -16095,7 +16095,12 @@ function _crmAcquisitionAudit(clients,quotes){
     const linked=byClient.get(String(c.id))||[];
     const known=linked.map(q=>q.date).filter(Boolean).sort();
     const earliest=known[0]||null;
-    const inconsistent=!!(date&&earliest&&date>earliest);
+    // A quote's Airtable createdTime might reflect migration, not its actual date.
+    // Only an explicit original quote date can establish a chronology conflict.
+    const originalDates=linked.filter(q=>q.source==='quote_date').map(q=>q.date).filter(Boolean).sort();
+    const earliestOriginal=originalDates[0]||null;
+    const earliestSource=earliest&&linked.some(q=>q.date===earliest&&q.source==='quote_date')?'quote_date':earliest?'record_created':null;
+    const inconsistent=!!(date&&earliestOriginal&&date>earliestOriginal);
     const adsEvidence=!!(String(f['GCLID']||'').trim()||
       String(f['Campaña Ads']||'').trim());
     const missingOrigin=!origin,missingContact=!date;
@@ -16123,7 +16128,7 @@ function _crmAcquisitionAudit(clients,quotes){
       missingOrigin||missingContact?3:4;
     entries.push({
       id:String(c.id||''),name:String(f['Empresa']||f['Contacto']||'Cliente sin nombre'),
-      origin,date,earliest,linkedQuotes:linked.length,flags,priority,
+      origin,date,earliest,earliestOriginal,earliestSource,linkedQuotes:linked.length,flags,priority,
       acquisitionEvidence:adsEvidence,olderThanImport
     });
   }
@@ -16184,14 +16189,14 @@ function renderCrmAcquisitionAudit(){
       '<button class="btn btn-ghost btn-sm" onclick="_crmAuditExportCsv()" style="margin-left:auto">Exportar revisión CSV</button>'+
     '</div>'+
     '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Cotizaciones</th>'+
-      '<th>Origen actual</th><th>Primer contacto</th><th>Primera cotización conocida</th>'+
+      '<th>Origen actual</th><th>Primer contacto</th><th>Primera cotización conocida (evidencia)</th>'+
       '<th>Revisar</th></tr></thead><tbody>'+
     (shown.length?shown.map(e=>'<tr>'+
       '<td>'+escapeHtml(e.name)+'</td>'+
       '<td>'+e.linkedQuotes+'</td>'+
       '<td>'+escapeHtml(e.origin||'—')+'</td>'+
       '<td>'+escapeHtml(e.date||'—')+'</td>'+
-      '<td>'+escapeHtml(e.earliest||'—')+'</td>'+
+      '<td>'+escapeHtml(e.earliest||'—')+'<br><small style="color:var(--text3)">'+escapeHtml(e.earliestSource==='quote_date'?'Fecha original de cotización':e.earliestSource==='record_created'?'Alta en Airtable · no confirma fecha original':'Sin fecha')+'</small></td>'+
       '<td><span style="font-size:10px">'+escapeHtml(e.flags.join(' · ')||'Documentado')+'</span> '+
         (/^rec[A-Za-z0-9]{14}$/.test(e.id)?'<button class="btn btn-ghost btn-sm" onclick="_crmAuditOpenClient(\''+e.id+'\')">Ver cliente</button>':'')+
       '</td></tr>').join(''):'<tr><td colspan="6" style="padding:15px">No hay registros para este filtro.</td></tr>')+
@@ -16211,8 +16216,8 @@ function _crmAuditExportCsv(){
     if(/^[\s]*[=+@-]/.test(str))str="'"+str;
     return '"'+str.replace(/"/g,'""')+'"';
   };
-  const csv=['ID,Cliente,Origen registrado,Fecha primer contacto,Primera cotización conocida,N° cotizaciones,Revisión sugerida',
-    ...entries.map(e=>[e.id,e.name,e.origin,e.date,e.earliest,e.linkedQuotes,e.flags.join('; ')]
+  const csv=['ID,Cliente,Origen registrado,Fecha primer contacto,Primera cotización conocida,Tipo evidencia primera cotización,N° cotizaciones,Revisión sugerida',
+    ...entries.map(e=>[e.id,e.name,e.origin,e.date,e.earliest,e.earliestSource==='quote_date'?'Fecha original':e.earliestSource==='record_created'?'Alta Airtable (fecha original desconocida)':'Sin fecha',e.linkedQuotes,e.flags.join('; ')]
       .map(escapeCell).join(','))].join('\r\n');
   const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');
