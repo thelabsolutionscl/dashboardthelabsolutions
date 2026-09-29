@@ -134,3 +134,14 @@ La lectura autorizada de Airtable detectó **314 Clientes**, **70 Cotizaciones**
 - Tests de atribución conocida/ausente, cotizaciones recibidas por WhatsApp, fechas anteriores al alta CRM, primera cotización por varios canales, discrepancias cronológicas y gasto separado por mes.
 
 **Trabajo operativo pendiente**: reconstruir primeras fechas y fuente de captación de los clientes importados, preferiblemente desde evidencias existentes (GCLID/UTM, lead original, correo/WhatsApp con fecha, contrato o primera venta) antes de habilitar de nuevo el indicador. No inventar fechas antiguas ni asignar campañas sin pruebas.
+
+
+## 2026-09-29 — Cola de revisión de primera adquisición (PR siguiente)
+
+Se verificó otra vez la base operativa de Airtable, exclusivamente en modo lectura: 314 Clientes y 70 Cotizaciones, sin páginas pendientes; 276 Clientes sin `Origen lead`, 277 sin `Fecha primer contacto`, 275 sin ambos campos y 42 con cotizaciones vinculadas. Entre estos últimos, 14 carecen de origen y 9 tienen una fecha de primer contacto posterior a una cotización conocida. Estas cifras son un diagnóstico de cobertura, **no** una autorización para corregir fechas automáticamente ni una medida de adquisiciones reales.
+
+La sección Reportes incorpora una **cola de conciliación de solo lectura** con prioridades (contradicciones de fechas, indicios publicitarios sin origen, cotizantes incompletos y resto del CRM), filtros, acceso al detalle del cliente sujeto a permisos, fecha de cotización más antigua observada y exportación CSV local con protección contra fórmulas de hoja de cálculo. La revisión se calcula directamente sobre el estado CRM cargado, sin escribir nada en Airtable ni copiar listas de clientes al repositorio.
+
+La fecha de la primera cotización se elige desde `Fecha cotización` cuando existe y es válida, o `createdTime` del registro solo como evidencia de menor calidad. No se confunde `createdTime` del Cliente (posible fecha de importación) con su adquisición real. Una fecha de primer contacto posterior a una cotización se **marca**, no se modifica. Las cotizaciones sin vínculo se cuentan por separado. Los operadores deben revisar primero evidencias originales (primer correo/lead, GCLID/UTM, primera cotización o contrato) y corregir individualmente después de contrastarlas.
+
+**Pendiente fuera de código:** configurar Cloudflare Access con identidades/roles individuales para habilitar gasto compartido, validar el flujo completo en dos equipos y completar la conciliación documental de registros antiguos. Mantener activados los avisos de cobertura insuficiente en CAC/ROAS hasta contar con evidencia confiable.
