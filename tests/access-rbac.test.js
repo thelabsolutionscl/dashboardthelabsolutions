@@ -7,8 +7,8 @@ const path=require('node:path');
 const {generateKeyPairSync,sign,webcrypto}=require('node:crypto');
 const source=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/access-auth.js'),'utf8')
   .replace('export async function accessAuthorize','async function accessAuthorize');
-const {accessConfig,accessVerify,accessAllows,accessAuthorize,accessTable}=
-  new Function('crypto',source+'\nreturn {accessConfig,accessVerify,accessAllows,accessAuthorize,accessTable};')(webcrypto);
+const {accessConfig,accessVerify,accessVerifyLeadService,accessAllows,accessAuthorize,accessTable}=
+  new Function('crypto',source+'\nreturn {accessConfig,accessVerify,accessVerifyLeadService,accessAllows,accessAuthorize,accessTable};')(webcrypto);
 const cfg={
   ACCESS_ENFORCE:'true',ACCESS_TEAM_DOMAIN:'https://tls-test.cloudflareaccess.com',
   ACCESS_AUD:'a'.repeat(32),
@@ -67,6 +67,34 @@ test('tampering, wrong issuer, audience, algorithm and expiration are rejected',
   ]){
     await assert.rejects(()=>accessVerify(value,accessConfig(cfg)));
   }
+});
+test('signed Access service token is restricted to lead-worker route',async()=>{
+  const path='/service/lead/anthropic/v1/messages';
+  const serviceId='lead-machine-123.access';
+  const env={...cfg,ACCESS_LEAD_SERVICE_CLIENT_ID:serviceId};
+  const claims={type:'app',sub:'',common_name:serviceId,email:undefined};
+  const machine=req(jwt(claims),'POST',path);
+  const result=await accessAuthorize(machine.request,env,path);
+  assert.equal(result.serviceIdentity.role,'lead-service');
+  assert.equal(result.serviceIdentity.client_id,serviceId);
+  const interactive=req(jwt(claims),'POST','/v0/app1YtD74AqiPWQhy/Facturas');
+  assert.equal((await accessAuthorize(interactive.request,env,interactive.path)).response.status,401);
+  const human=req(jwt({type:'app',sub:'human-uuid'}),'POST',path);
+  assert.equal((await accessAuthorize(human.request,env,path)).response.status,401);
+  const other=req(jwt({...claims,common_name:'someone-else.access'}),'POST',path);
+  assert.equal((await accessAuthorize(other.request,env,path)).response.status,401);
+  const expired=req(jwt({...claims,exp:1}),'POST',path);
+  assert.equal((await accessAuthorize(expired.request,env,path)).response.status,401);
+  const incorrectMethod=req(jwt(claims),'GET',path);
+  assert.equal((await accessAuthorize(incorrectMethod.request,env,path)).response.status,405);
+});
+test('service route never falls back to shared APP_KEY on partial Access config',async()=>{
+  const path='/service/lead/anthropic/v1/messages';
+  const naked=req(null,'POST',path);
+  assert.equal((await accessAuthorize(naked.request,{},path)).response.status,503);
+  assert.equal((await accessAuthorize(naked.request,cfg,path)).response.status,401);
+  const machine=req(jwt({type:'app',sub:'',common_name:'lead-machine-123.access',email:undefined}),'POST',path);
+  assert.equal((await accessAuthorize(machine.request,cfg,path)).response.status,401);
 });
 test('finance can write Facturas, operator and viewer cannot',async()=>{
   const path='/v0/app1YtD74AqiPWQhy/Facturas';
