@@ -3987,6 +3987,7 @@
   <div class="section-header"><div><div class="section-title">Reportes Ejecutivos</div><div class="section-desc">Informes semanales de revenue, conversión y margen operativo. Historial completo para analizar tendencias y tomar decisiones estratégicas.</div></div></div>
   <div id="estacionalidadCard" style="margin-bottom:16px"></div>
   <div id="cacCanalCard" style="margin-bottom:16px"></div>
+  <div id="crmAcquisitionAuditCard" style="margin-bottom:16px"></div>
   <div class="data-grid">
     <div class="card"><div class="card-header"><span class="card-title">Historial</span><span style="font-size:11px;color:var(--text3)">clic en fila para ver resumen</span></div><div class="table-wrap"><table><thead><tr><th>Semana</th><th>Revenue</th><th>Pedidos</th><th>Margen</th><th>Conv.</th><th>Estado</th><th style="width:28px"></th></tr></thead><tbody id="reportesTableBody"></tbody></table></div></div>
     <div class="card"><div class="card-header"><span class="card-title"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-chart"/></svg> Generar Reporte</span></div>
@@ -16009,10 +16010,174 @@ function renderCacCanal(){
   </div>`;
 }
 function _cacSetOff(o){const el=document.getElementById('cacCanalCard');if(el)el.dataset.off=o;renderCacCanal();void _marketingSpendLoad(o,true);}
+// CRM provenance review is READ-ONLY. Never infer first acquisition from the
+// import timestamp or overwrite customer records without original evidence.
+let _crmAuditFilter='priority',_crmAuditLimit=30;
+function _crmAuditDate(raw){
+  const str=String(raw||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(str))return null;
+  const d=new Date(str+'T12:00:00Z');
+  return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===str?str:null;
+}
+function _crmAcquisitionAudit(clients,quotes){
+  const byClient=new Map(),orphans=[];
+  for(const q of quotes||[]){
+    const f=q.fields||{},ids=Array.isArray(f['Cliente'])?f['Cliente']:
+      (f['Cliente']?[f['Cliente']]:[]);
+    const explicit=_crmAuditDate(f['Fecha cotización']);
+    const created=_crmAuditDate(q.createdTime);
+    // Preserve the provenance of the observation: a quote date is stronger
+    // than the Airtable import timestamp; neither proves initial acquisition.
+    const evidence=explicit||created;
+    if(!ids.length){orphans.push(q.id);continue;}
+    for(const id of ids){
+      const arr=byClient.get(String(id))||[];
+      arr.push({id:q.id,date:evidence,source:explicit?'quote_date':'record_created'});
+      byClient.set(String(id),arr);
+    }
+  }
+  const stats={total:0,withOrigin:0,withFirstContact:0,linked:0,
+    missingOrigin:0,missingContact:0,bothMissing:0,contradictions:0,
+    adsEvidenceNoOrigin:0,linkedMissingOrigin:0,linkedMissingDate:0,
+    quotesWithoutClient:orphans.length,clientsWithImportPrehistory:0};
+  const entries=[];
+  for(const c of clients||[]){
+    const f=c.fields||{},origin=String(f['Origen lead']?.name||
+      f['Origen lead']||'').trim();
+    const date=_crmAuditDate(f['Fecha primer contacto']);
+    const linked=byClient.get(String(c.id))||[];
+    const known=linked.map(q=>q.date).filter(Boolean).sort();
+    const earliest=known[0]||null;
+    const inconsistent=!!(date&&earliest&&date>earliest);
+    const adsEvidence=!!(String(f['GCLID']||'').trim()||
+      String(f['Campaña Ads']||'').trim());
+    const missingOrigin=!origin,missingContact=!date;
+    const olderThanImport=!!(date&&_crmAuditDate(c.createdTime)&&
+      date<_crmAuditDate(c.createdTime));
+    stats.total++;
+    if(origin)stats.withOrigin++;else stats.missingOrigin++;
+    if(date)stats.withFirstContact++;else stats.missingContact++;
+    if(missingOrigin&&missingContact)stats.bothMissing++;
+    if(linked.length)stats.linked++;
+    if(linked.length&&missingOrigin)stats.linkedMissingOrigin++;
+    if(linked.length&&missingContact)stats.linkedMissingDate++;
+    if(inconsistent)stats.contradictions++;
+    if(missingOrigin&&adsEvidence)stats.adsEvidenceNoOrigin++;
+    if(olderThanImport)stats.clientsWithImportPrehistory++;
+    const flags=[];
+    if(inconsistent)flags.push('Fecha posterior a una cotización');
+    if(missingOrigin&&adsEvidence)flags.push('Evidencia publicitaria sin origen');
+    if(missingOrigin)flags.push('Sin origen');
+    if(missingContact)flags.push('Sin primer contacto');
+    // First review records that affect quoted revenue, then the rest of CRM.
+    const priority=inconsistent?0:
+      missingOrigin&&adsEvidence?1:
+      linked.length&&(missingOrigin||missingContact)?2:
+      missingOrigin||missingContact?3:4;
+    entries.push({
+      id:String(c.id||''),name:String(f['Empresa']||f['Contacto']||'Cliente sin nombre'),
+      origin,date,earliest,linkedQuotes:linked.length,flags,priority,
+      acquisitionEvidence:adsEvidence,olderThanImport
+    });
+  }
+  entries.sort((a,b)=>a.priority-b.priority||
+    b.linkedQuotes-a.linkedQuotes||
+    a.name.localeCompare(b.name,'es')||a.id.localeCompare(b.id));
+  return {stats,entries,unlinkedQuotes:orphans};
+}
+function _crmAuditFilterChange(next){
+  if(!['priority','date','origin','unlinked','all'].includes(next))return;
+  _crmAuditFilter=next;_crmAuditLimit=30;renderCrmAcquisitionAudit();
+}
+function _crmAuditOpenClient(id){
+  if(!/^rec[A-Za-z0-9]{14}$/.test(id))return;
+  const who=AUTH.getUser();
+  if(who&&!([...(RBAC.tabs[who.role]||[]),...(RBAC.nuevos[who.role]||[])].includes('clientes')))
+    return toast('Tu rol no tiene acceso a Clientes','error');
+  if(!state.clientesByIdRec?.[id])return toast('Recarga Clientes antes de abrir este registro','info');
+  switchTab('clientes');
+  if(document.getElementById('tab-clientes')?.classList.contains('active'))
+    openClienteDetalle(id);
+}
+function renderCrmAcquisitionAudit(){
+  const el=document.getElementById('crmAcquisitionAuditCard');if(!el)return;
+  if(!state.loaded){
+    el.innerHTML='<div class="card"><div class="card-header"><span class="card-title">🧾 Revisión del origen CRM</span></div><div style="padding:16px;color:var(--text3)">Cargando datos completos…</div></div>';
+    return;
+  }
+  const data=_crmAcquisitionAudit(state.clientes||[],state.cotizaciones||[]);
+  const {stats,entries}=data;
+  const rows=entries.filter(e=>_crmAuditFilter==='all'?true:
+    _crmAuditFilter==='priority'?e.priority<=2:
+    _crmAuditFilter==='date'?e.flags.includes('Fecha posterior a una cotización')||
+      e.flags.includes('Sin primer contacto'):
+    _crmAuditFilter==='origin'?e.flags.includes('Sin origen'):
+    _crmAuditFilter==='unlinked'?e.linkedQuotes===0:false);
+  const shown=rows.slice(0,_crmAuditLimit);
+  const pct=(num,den)=>den?Math.round(100*num/den)+'%':'—';
+  const options=[['priority','Prioritarios'],['date','Fechas'],['origin','Orígenes faltantes'],
+    ['unlinked','Sin cotizaciones'],['all','Todos']];
+  el.innerHTML='<div class="card"><div class="card-header"><span class="card-title">🧾 Conciliación de origen CRM</span>'+
+    '<span style="margin-left:auto;font-size:11px;color:var(--warn)">Solo lectura · sin correcciones automáticas</span></div>'+
+    '<div style="padding:10px 16px;font-size:12px;line-height:1.8">'+
+      '<strong>'+stats.total+'</strong> clientes · <strong>'+stats.linked+'</strong> con cotizaciones · '+
+      'origen documentado: <strong>'+pct(stats.withOrigin,stats.total)+'</strong> · '+
+      'primer contacto documentado: <strong>'+pct(stats.withFirstContact,stats.total)+'</strong><br>'+
+      '<strong>'+stats.contradictions+'</strong> fechas posteriores a una cotización · '+
+      '<strong>'+stats.linkedMissingOrigin+'</strong> clientes con cotizaciones sin origen · '+
+      '<strong>'+stats.quotesWithoutClient+'</strong> cotizaciones sin cliente vinculado'+
+    '</div>'+
+    '<div style="padding:0 16px 10px;font-size:11px;color:var(--text3)">'+
+      'Priorizar evidencias originales: GCLID/UTM, primer lead o correo y primera cotización. '+
+      'La fecha de alta en Airtable NO prueba la adquisición original.'+
+    '</div>'+
+    '<div style="padding:0 16px 12px;display:flex;flex-wrap:wrap;gap:6px">'+
+      options.map(([v,label])=>'<button class="btn-mini'+(_crmAuditFilter===v?' btn-mini-yellow':'')+
+        '" onclick="_crmAuditFilterChange(\''+v+'\')">'+label+'</button>').join('')+
+      '<button class="btn btn-ghost btn-sm" onclick="_crmAuditExportCsv()" style="margin-left:auto">Exportar revisión CSV</button>'+
+    '</div>'+
+    '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Cotizaciones</th>'+
+      '<th>Origen actual</th><th>Primer contacto</th><th>Primera cotización conocida</th>'+
+      '<th>Revisar</th></tr></thead><tbody>'+
+    (shown.length?shown.map(e=>'<tr>'+
+      '<td>'+escapeHtml(e.name)+'</td>'+
+      '<td>'+e.linkedQuotes+'</td>'+
+      '<td>'+escapeHtml(e.origin||'—')+'</td>'+
+      '<td>'+escapeHtml(e.date||'—')+'</td>'+
+      '<td>'+escapeHtml(e.earliest||'—')+'</td>'+
+      '<td><span style="font-size:10px">'+escapeHtml(e.flags.join(' · ')||'Documentado')+'</span> '+
+        (/^rec[A-Za-z0-9]{14}$/.test(e.id)?'<button class="btn btn-ghost btn-sm" onclick="_crmAuditOpenClient(\''+e.id+'\')">Ver cliente</button>':'')+
+      '</td></tr>').join(''):'<tr><td colspan="6" style="padding:15px">No hay registros para este filtro.</td></tr>')+
+    '</tbody></table></div>'+
+    '<div style="padding:10px 16px;font-size:11px;color:var(--text3)">Mostrando '+shown.length+
+      ' de '+rows.length+' registros. No se ha modificado Airtable.</div>'+
+    (rows.length>shown.length?
+      '<button class="btn btn-ghost btn-sm" style="margin:0 16px 12px" onclick="_crmAuditLimit+=50;renderCrmAcquisitionAudit()">Mostrar 50 más</button>':'')+
+    '</div>';
+}
+function _crmAuditExportCsv(){
+  if(!state.loaded)return toast('Los datos aún no están completos','error');
+  const {entries}=_crmAcquisitionAudit(state.clientes||[],state.cotizaciones||[]);
+  const escapeCell=value=>{
+    let str=String(value==null?'':value);
+    // Avoid spreadsheet formula injection in a locally exported review file.
+    if(/^[\s]*[=+@-]/.test(str))str="'"+str;
+    return '"'+str.replace(/"/g,'""')+'"';
+  };
+  const csv=['ID,Cliente,Origen registrado,Fecha primer contacto,Primera cotización conocida,N° cotizaciones,Revisión sugerida',
+    ...entries.map(e=>[e.id,e.name,e.origin,e.date,e.earliest,e.linkedQuotes,e.flags.join('; ')]
+      .map(escapeCell).join(','))].join('\r\n');
+  const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');
+  a.href=url;a.download='revision-origen-crm-'+hoyCL()+'.csv';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 function renderReportes(){
   if(window.OPSections)OPSections.reports();
   try{renderEstacionalidad();}catch(e){}
   try{renderCacCanal();}catch(e){}
+  try{renderCrmAcquisitionAudit();}catch(e){console.warn('[Reportes] Auditoría CRM:',e);}
   const tbody=document.getElementById('reportesTableBody');
   if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:28px"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-chart"/></svg></div><div style="margin-bottom:8px">Sin reportes aún</div><div style="font-size:11px;color:var(--text3)">Los reportes se generan automáticamente cada semana con el Agente CEO</div><button onclick="switchTab(\'agentes\')" style="margin-top:12px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ir a Agentes IA</button></div></td></tr>';return;}
   const ordenados=[...state.reportes].sort((a,b)=>{
