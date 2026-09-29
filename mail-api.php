@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-24-spam-verify');
+define('MAIL_API_BUILD', '2026-09-29-mail-security-rate-guard');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -555,6 +555,64 @@ function resend_send($from_name, $from_addr, $to, $cc, $subject, $body_html, $at
     return 'Resend (' . $code . '): ' . mb_substr((string) $msg, 0, 300);
 }
 
+// Shared-host server-side send quota: all PHP requests lock the same private
+// file before Resend, so simultaneous browser tabs cannot bypass the guard.
+// Failed/uncertain upstream responses still consume a slot (safer than
+// re-sending duplicate customer messages). No email addresses are written.
+function mail_send_reserve($user, $testFile = null) {
+    $configured = getenv('MAIL_SEND_HOURLY_LIMIT');
+    $limit = ($configured !== false && preg_match('/^[1-9][0-9]{0,3}$/', (string)$configured))
+        ? min((int)$configured, 2000) : 200;
+    $file = $testFile !== null ? $testFile : rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'tls-mail-send-guard.json';
+    $handle = @fopen($file, 'c+');
+    if (!$handle) return ['error' => 'No se pudo reservar la cuota segura de envío', 'status' => 503];
+    @chmod($file, 0600);
+    if (!@flock($handle, LOCK_EX)) {
+        fclose($handle);
+        return ['error' => 'No se pudo bloquear la cuota de correo', 'status' => 503];
+    }
+    $result = null;
+    try {
+        rewind($handle);
+        $raw = stream_get_contents($handle);
+        $data = ($raw === '') ? [] : json_decode($raw, true);
+        if (!is_array($data)) {
+            $result = ['error' => 'Cuota de correo no disponible', 'status' => 503];
+        } else {
+            $now = time();
+            foreach ($data as $key => $times) {
+                if (!is_array($times)) { unset($data[$key]); continue; }
+                $data[$key] = array_values(array_filter($times, static function ($t) use ($now) {
+                    return is_int($t) && $t > $now - 3600 && $t <= $now;
+                }));
+                if (!$data[$key]) unset($data[$key]);
+            }
+            $account = hash('sha256', strtolower(trim($user)));
+            $events = $data[$account] ?? [];
+            if (count($events) >= $limit) {
+                $retry = max(1, min(3600, ($events[0] + 3600) - $now));
+                $result = ['error' => 'Límite de envíos por casilla alcanzado. Intenta más tarde.',
+                    'status' => 429, 'retryAfter' => $retry];
+            } else {
+                $events[] = $now;
+                $data[$account] = $events;
+                $serialized = json_encode($data);
+                rewind($handle);
+                if ($serialized === false || !ftruncate($handle, 0) ||
+                    fwrite($handle, $serialized) !== strlen($serialized) || !fflush($handle)) {
+                    $result = ['error' => 'No se pudo guardar la cuota de correo', 'status' => 503];
+                } else {
+                    $result = ['allowed' => true, 'remaining' => max(0, $limit - count($events))];
+                }
+            }
+        }
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+    return $result;
+}
+
 // ── Router ────────────────────────────────────────────────────
 switch ($action) {
 
@@ -819,6 +877,17 @@ case 'send':
     if (is_array($conn)) {
         http_response_code(401);
         echo json_out(['error' => 'Credenciales de correo inválidas o cuenta no disponible.']);
+        exit;
+    }
+
+    // Reserve after IMAP authentication and BEFORE contacting Resend. A
+    // failed reservation fails closed. Client-side limits remain only UI hints.
+    $quota = mail_send_reserve($user);
+    if (empty($quota['allowed'])) {
+        imap_close($conn);
+        http_response_code($quota['status'] ?? 503);
+        if (!empty($quota['retryAfter'])) header('Retry-After: ' . (int)$quota['retryAfter']);
+        echo json_out(['error' => $quota['error'], 'retryable' => false]);
         exit;
     }
 

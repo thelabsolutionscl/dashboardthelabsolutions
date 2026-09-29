@@ -145,7 +145,7 @@ test('mail-api expone cabeceras RFC de conversación sin descargar cuerpos', () 
     assert.match(list, new RegExp("'" + key + "'"));
     assert.match(search, new RegExp("'" + key + "'"));
   }
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-spam-verify/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-rate-guard/);
 });
 
 test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
@@ -346,5 +346,5 @@ test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de
   const send=phpCase('send');
   assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
   assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-24-spam-verify/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-rate-guard/);
 });
