@@ -132,6 +132,67 @@ test('removing a mapped email also blocks its existing JWT regardless of origina
   const x=req(token,'GET','/access/me');
   assert.equal((await accessAuthorize(x.request,withoutFinance,x.path)).response.status,401);
 });
+test('sales JWT requires an explicit email-to-Airtable-seller mapping and stays read-only',async()=>{
+  const salesEnv={...cfg,
+    ACCESS_ROLE_MAP:JSON.stringify({
+      ...JSON.parse(cfg.ACCESS_ROLE_MAP),
+      'vendedor@example.com':'sales'
+    }),
+    ACCESS_SELLER_MAP:JSON.stringify({'vendedor@example.com':'nicanor'})
+  };
+  const token=jwt({email:'vendedor@example.com'});
+  const base='/v0/app1YtD74AqiPWQhy/';
+  const approved=req(token,'GET',base+'Clientes');
+  assert.deepEqual((await accessAuthorize(approved.request,salesEnv,approved.path)).identity,
+    {email:'vendedor@example.com',role:'sales',seller:'nicanor'});
+  for(const table of ['Clientes','Cotizaciones','Pedidos']){
+    assert.equal(accessAllows({role:'sales'},'GET',base+table),true,table);
+    assert.equal(accessAllows({role:'sales'},'GET',base+table+'/recABCDEFGHIJKLMN'),true,table);
+    for(const method of ['POST','PATCH','DELETE'])
+      assert.equal(accessAllows({role:'sales'},method,base+table),false,table+' '+method);
+  }
+  for(const path of [base+'Facturas',base+'Reportes',base+'Agent_Queue',
+    '/marketing/spend','/printer/session','/seo-fetch','/anthropic/v1/messages']){
+    assert.equal(accessAllows({role:'sales'},'GET',path),false,path);
+    assert.equal(accessAllows({role:'sales'},'POST',path),false,path);
+  }
+  for(const [method,path] of [
+    ['GET',base+'Facturas'],['POST',base+'Clientes'],
+    ['PATCH',base+'Pedidos/recABCDEFGHIJKLMN'],['GET','/marketing/spend']
+  ]){
+    const unauthorized=req(token,method,path);
+    assert.equal((await accessAuthorize(
+      unauthorized.request,salesEnv,unauthorized.path)).response.status,403,
+      method+' '+path);
+  }
+  // Existing operators retain their operational scope; the sales mapping
+  // cannot be inferred from an untrusted, user-supplied JWT claim.
+  const claimed=req(jwt({email:'vendedor@example.com',seller:'gustavo'}),'GET',base+'Pedidos');
+  assert.equal((await accessAuthorize(claimed.request,salesEnv,claimed.path)).identity.seller,'nicanor');
+});
+test('sales mapping fails closed on missing, invalid or unverified seller values',async()=>{
+  const salesRoles={...cfg,ACCESS_ROLE_MAP:JSON.stringify({
+    'vendedor@example.com':'sales'
+  })};
+  assert.throws(()=>accessConfig(salesRoles),/seller/i);
+  const request=req(jwt({email:'vendedor@example.com'}),'GET',
+    '/v0/app1YtD74AqiPWQhy/Clientes');
+  assert.equal((await accessAuthorize(request.request,salesRoles,request.path)).response.status,503);
+  for(const broken of [
+    'not-json','[]','["nicanor"]',
+    '{"vendedor@example.com":"florencio"}',
+    '{"Vendedor@example.com":"nicanor"}',
+    '{"vendedor@example.com":["nicanor","gustavo"]}',
+    '{"vendedor@example.com":null}'
+  ]){
+    assert.throws(()=>accessConfig({...salesRoles,ACCESS_SELLER_MAP:broken}),/seller/i);
+  }
+  assert.equal((await accessAuthorize(request.request,
+    {ACCESS_SELLER_MAP:'{"vendedor@example.com":"nicanor"}'},request.path)).response.status,503);
+  for(const seller of ['florencia','nicanor','gustavo'])
+    assert.doesNotThrow(()=>accessConfig({...salesRoles,
+      ACCESS_SELLER_MAP:JSON.stringify({'vendedor@example.com':seller})}));
+});
 test('valid RS256 JWT grants only mapped explicit role',async()=>{
   const {request,path}=req(jwt());
   const result=await accessAuthorize(request,cfg,path);
