@@ -642,7 +642,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname.startsWith('/printer/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -718,6 +718,52 @@ export default {
           headers:{...CORS,'Content-Type':'application/json','Cache-Control':'no-store'}});
       }catch(_){
         return json({error:'Portal backend response uncertain; check the client before retrying'},502,CORS);
+      }
+    }
+
+    // Issue temporary, role-scoped Farm Controller tickets from server-held
+    // credentials only. Never expose any BRIDGE_* master token to Pages.
+    // Unknown paths, redirects, missing role-specific keys fail closed.
+    if(url.pathname.startsWith('/printer/')){
+      if(!authorized.identity)
+        return json({error:'Printer tickets require an authenticated user session',
+          code:'ACCESS_REQUIRED'},503,CORS);
+      if(url.pathname!=='/printer/session'||request.method!=='POST'||url.search||
+         Number(request.headers.get('Content-Length')||0)>0)
+        return json({error:'Printer ticket route not allowed'},404,CORS);
+      const role=authorized.identity.role==='admin'?'admin':
+        authorized.identity.role==='operator'?'operator':'viewer';
+      const secretName={viewer:'PRINTER_VIEWER_TOKEN',
+        operator:'PRINTER_OPERATOR_TOKEN',admin:'PRINTER_ADMIN_TOKEN'}[role];
+      const secret=env[secretName];
+      if(typeof secret!=='string'||secret.length<24)
+        return json({error:'Farm '+role+' credential is not configured'},503,CORS);
+      const farmOrigin='https://printers.thelab.solutions';
+      try {
+        const upstream=await fetch(farmOrigin+'/farm/session',{
+          method:'POST',redirect:'manual',
+          headers:{'X-Bridge-Token':secret,'Accept':'application/json'}
+        });
+        if(upstream.status!==201)return json({
+          error:'Farm Controller did not issue a ticket; check its role tokens',
+          code:'FARM_SESSION_UNAVAILABLE'
+        },502,CORS);
+        if(Number(upstream.headers.get('Content-Length')||0)>8192)
+          return json({error:'Oversized farm session response'},502,CORS);
+        const raw=await upstream.text();
+        if(raw.length>8192||
+           !String(upstream.headers.get('Content-Type')||'').toLowerCase().includes('application/json'))
+          return json({error:'Unexpected farm session response'},502,CORS);
+        const data=JSON.parse(raw);
+        const expiresAt=Number(data.expiresAt),now=Date.now();
+        if(data.ok!==true||data.role!==role||
+           typeof data.token!=='string'||!/^[A-Za-z0-9_-]{24,200}$/.test(data.token)||
+           !Number.isFinite(expiresAt)||expiresAt<=now+5000||expiresAt>now+31*60*1000)
+          return json({error:'Farm Controller returned an invalid role or expiry'},502,CORS);
+        return json({ok:true,token:data.token,role,expiresAt},200,
+          {...CORS,'Cache-Control':'no-store','Pragma':'no-cache'});
+      }catch(_){
+        return json({error:'Farm Controller ticket unavailable'},502,CORS);
       }
     }
 
