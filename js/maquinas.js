@@ -165,9 +165,19 @@ async function _remoteBridgeReachable(force=false){
 function _remotePathFailure(ip,reason,code=0){
   return{_remotePathFail:true,ip,state:'remote',connectionError:reason||'Intermitencia en túnel/bridge remoto',httpStatus:code||0,checkedAt:Date.now()};
 }
-function getPrinterTunnel(){const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');}
+function _printerAccessMode(){return '%%PRINTER_ACCESS_MODE%%'==='true';}
+function getPrinterTunnel(){
+  // Secure ticket mode is pinned to the official Farm Controller hostname.
+  // Saved browser overrides must not receive short-lived Access tickets.
+  if(_printerAccessMode())return 'https://printers.thelab.solutions';
+  const d=(!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?
+    'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;
+  return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');
+}
 let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0;
 function _getPrinterTunnelLongToken(){
+  // Previously cached master credentials are never consulted in secure mode.
+  if(_printerAccessMode())return '';
   const d=(_DEFAULTS.PRINTER_TUNNEL_TOKEN&&!_DEFAULTS.PRINTER_TUNNEL_TOKEN.startsWith('%%'))?_DEFAULTS.PRINTER_TUNNEL_TOKEN:'';
   let local=sessionStorage.getItem('printer_tunnel_token')||'';const legacy=localStorage.getItem('printer_tunnel_token')||'';
   if(!local&&legacy){local=legacy;sessionStorage.setItem('printer_tunnel_token',legacy);localStorage.removeItem('printer_tunnel_token');}
@@ -177,7 +187,7 @@ function _getPrinterTunnelLongToken(){
 }
 function getPrinterTunnelToken(){
   if(_printerTunnelSessionToken&&Date.now()<_printerTunnelSessionExpires-15000)return _printerTunnelSessionToken;
-  return _getPrinterTunnelLongToken();
+  return _printerAccessMode()?'':_getPrinterTunnelLongToken();
 }
 function getPrinterTunnelLongToken(){return _getPrinterTunnelLongToken();}
 function getPrinterFleetForDrift(){
@@ -190,7 +200,45 @@ function getPrinterFleetForDrift(){
     });
   }catch(_){return[];}
 }
+async function _refreshPrinterAccessTicket(force=false){
+  // Purge legacy values from this browser at the first protected operation.
+  // The master key remains ONLY in the Cloudflare proxy.
+  try{localStorage.removeItem('printer_tunnel_token');sessionStorage.removeItem('printer_tunnel_token');}
+  catch(_){}
+  const now=Date.now();
+  if(_printerTunnelSessionSync)return _printerTunnelSessionSync;
+  if(!force&&_printerTunnelSessionToken&&now<_printerTunnelSessionExpires-120000)return true;
+  if(!force&&now-_printerTunnelSessionLastTry<30000)return false;
+  _printerTunnelSessionLastTry=now;
+  _printerTunnelSessionSync=(async()=>{
+    try{
+      const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+      if(!px?.url||!px?.key)throw new Error('Proxy Access requerido');
+      const endpoint=new URL(px.url);
+      if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||
+         endpoint.search||endpoint.hash)throw new Error('Proxy Access inválido');
+      const r=await fetch(endpoint.origin+endpoint.pathname.replace(/\/$/,'')+'/printer/session',{
+        method:'POST',credentials:'include',redirect:'error',cache:'no-store',
+        headers:{'X-App-Key':px.key},signal:AbortSignal.timeout(7000)
+      });
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      if(!d?.ok||!['viewer','operator','admin'].includes(d.role)||
+         !/^[A-Za-z0-9_-]{24,200}$/.test(String(d.token||''))||
+         !Number.isFinite(d.expiresAt)||d.expiresAt<=Date.now()+5000)
+        throw new Error('Ticket del taller inválido');
+      _printerTunnelSessionToken=d.token;
+      _printerTunnelSessionExpires=d.expiresAt;
+      return true;
+    }catch(_){
+      _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;
+      return false; // NEVER downgrade to the published master token.
+    }finally{_printerTunnelSessionSync=null;}
+  })();
+  return _printerTunnelSessionSync;
+}
 async function refreshPrinterTunnelSession(force=false){
+  if(_printerAccessMode())return _refreshPrinterAccessTicket(force);
   if(window._DEMO_MODE)return false;
   const longToken=_getPrinterTunnelLongToken(),base=getPrinterTunnel(),now=Date.now();
   if(!longToken||!base)return false;
@@ -222,6 +270,7 @@ function _appendBridgeToken(u){if(/[?&]bt=/.test(u))return u;const tk=getPrinter
 // Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
 async function testPrinterBridge(statusId){
   const el=document.getElementById(statusId);
+  if(_printerAccessMode())await refreshPrinterTunnelSession(false);
   const url=getPrinterTunnel(),tk=getPrinterTunnelToken();
   const set=(c,t)=>{if(el){el.style.color=c;el.textContent=t;}};
   set('var(--text3)',`Probando ${url} …`);
@@ -242,7 +291,7 @@ async function restartPrinterBridge(statusId){
   if(!tk){set('var(--warn)','Necesitas el token guardado para reiniciar el bridge.');return;}
   if(!confirm('¿Reiniciar el bridge del iMac? Se reconecta en unos segundos.'))return;
   set('var(--text3)','Reiniciando bridge…');
-  try{await fetch(url+'/restart?bt='+encodeURIComponent(tk),{method:'POST',signal:AbortSignal.timeout(7000)});}
+  try{const r=await fetch(url+'/restart?bt='+encodeURIComponent(tk),{method:'POST',signal:AbortSignal.timeout(7000)});if(_printerAccessMode()&&!r.ok){set('var(--danger)','Reinicio rechazado: se requiere sesión admin en Access');return;}}
   catch(e){/* la conexión se corta al salir el proceso: es esperado */}
   set('var(--text3)','Bridge reiniciándose… reprobando en unos segundos.');
   setTimeout(()=>testPrinterBridge(statusId),4500);
@@ -1082,8 +1131,22 @@ function _resumePrinterRealtime(){
   try{window.FarmHealth?.refresh?.(true);}catch(e){}
   try{window.FarmRegistry?.sync?.(true);window.FarmQueue?.sync?.(true);window.FarmOperations?.sync?.(true);}catch(e){}
 }
+let _printerAccessRenewTimer=null;
 function ensurePrinterRealtimeService(){
-  refreshPrinterTunnelSession(false).catch(()=>{});
+  refreshPrinterTunnelSession(false).then(ok=>{
+    if(ok&&_printerAccessMode()){
+      try{pollPrinters();reconnectAllPrinterWs();_refreshSnapshotCams(true);}catch(_){}
+    }
+  }).catch(()=>{});
+  if(_printerAccessMode()&&!_printerAccessRenewTimer){
+    _printerAccessRenewTimer=setInterval(async()=>{
+      const previous=_printerTunnelSessionToken;
+      const ok=await refreshPrinterTunnelSession(false).catch(()=>false);
+      if(ok&&previous!==_printerTunnelSessionToken){
+        try{pollPrinters();reconnectAllPrinterWs();_refreshSnapshotCams(true);}catch(_){}
+      }
+    },120000);
+  }
   if(!_monitorInterval){pollPrinters();_monitorInterval=setInterval(pollPrinters,_MONITOR_INTERVAL_MS);}
   if(!_wsHeartbeatTimer)_wsHeartbeatTimer=setInterval(_printerWsHeartbeat,_WS_HEARTBEAT_MS);
   if(!_camSnapInterval)_camSnapInterval=setInterval(()=>_refreshSnapshotCams(false),10000);
