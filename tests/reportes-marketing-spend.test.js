@@ -27,7 +27,7 @@ function fixture(){
   const ids=[];
   const env={APP_KEY:'public-test-key',CRM_MUTATION_GUARD:{
     idFromName:name=>(ids.push(name),name),
-    get:()=>guard
+    get:()=>({fetch:(url,options)=>guard.fetch(new Request(url,options))})
   }};
   const req=(method,month,body=null,endpoint='/marketing/spend')=>new Request(
     'https://proxy.example.com'+endpoint+'?month='+month,{
@@ -63,7 +63,7 @@ test('writes preserve other channels and months; zero removes a channel with sig
   const sep=await (await h.fetch('GET','2026-09')).json();
   assert.deepEqual(aug.channels,{LinkedIn:40000});
   assert.deepEqual(sep.channels,{'Google Ads':90000});
-  const audit=await (await worker.fetch(h.req('GET','2026-08',null,'/marketing/spend/history'),h.env)).json();
+  const audit=await (await worker.fetch(h.req('GET','2026-08',null,'/marketing/spend/history'),h.env,{waitUntil:()=>{}})).json();
   assert.equal(audit.events.length,3);
   assert.equal(audit.events[0].before_clp,60000);
   assert.equal(audit.events[0].after_clp,0);
@@ -97,7 +97,7 @@ test('idempotent same-value write does not create duplicate audit revisions',asy
   let r=await h.fetch('PUT','2026-09',{channel:'Meta Ads',amount_clp:100,expected_revision:1});
   let data=await r.json();
   assert.equal(data.unchanged,true);assert.equal(data.revision,1);
-  const hist=await worker.fetch(h.req('GET','2026-09',null,'/marketing/spend/history'),h.env);
+  const hist=await worker.fetch(h.req('GET','2026-09',null,'/marketing/spend/history'),h.env,{waitUntil:()=>{}});
   assert.equal((await hist.json()).events.length,1);
 });
 const index=fs.readFileSync(path.join(root,'index.html'),'utf8');
