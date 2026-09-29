@@ -44,7 +44,7 @@ test('deploy web no tiene placeholder ni fallback de key Anthropic',()=>{
 
 test('red caída no reintenta una generación de resultado desconocido',async()=>{
   let attempts=0;
-  const sandbox={AbortController,setTimeout,clearTimeout,fetch:async()=>{attempts++;throw new TypeError('network');}};
+  const sandbox={AbortController,setTimeout,clearTimeout,_proxyCredentials:()=> 'same-origin',fetch:async()=>{attempts++;throw new TypeError('network');}};
   vm.createContext(sandbox);
   vm.runInContext(html.slice(html.indexOf('async function _claudeHttp'),html.indexOf('async function _callClaudeViaProxy')),sandbox);
   await assert.rejects(sandbox._claudeHttp('https://example.test',{}, {reintentos:2}),/network/);
