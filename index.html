@@ -15889,7 +15889,7 @@ async function setGastoCanal(){
 function _canalStats(off){
   const mr=(typeof _mesRango==='function')?_mesRango(off||0):null;
   const ini=mr?mr.ini.getTime():0,fin=mr?mr.fin.getTime():Infinity;
-  const gasto=_gastoCanalVisible(off);
+  const gasto=typeof _gastoCanalVisible==='function'?_gastoCanalVisible(off):_gastoCanal(off);
   const _cid=f=>Array.isArray(f['Cliente'])?(f['Cliente'][0]||null):(f['Cliente']||null);
   // An acquisition is the first known CRM contact, not every quotation a
   // returning customer submits. If its first quote spans multiple channels,
