@@ -9,7 +9,11 @@
  * Source: Cloudflare Access JWT validation documentation. Only keys fetched
  * from the configured, strictly validated Cloudflare team domain are trusted.
  */
-const ACCESS_ROLES=new Set(['viewer','operator','finance','admin']);
+const ACCESS_ROLES=new Set(['viewer','operator','finance','admin','sales']);
+// Verified against the live Airtable single-select schemas for all three
+// commercial tables (2026-09-29). No default ownership for unassigned records.
+const ACCESS_SELLER_VALUES=new Set(['florencia','nicanor','gustavo']);
+const ACCESS_SELLER_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 const ACCESS_WRITE_TABLES={
   operator:new Set(['Clientes','Cotizaciones','Pedidos','Inventario','Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema','Proveedores']),
   finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas','Proveedores','Reportes']),
@@ -48,7 +52,8 @@ function accessConfig(env){
   // must NOT silently leave the Worker in unauthenticated legacy mode.
   const blockedRaw=String(env.ACCESS_BLOCKED_EMAILS||'').trim();
   const notBeforeRaw=String(env.ACCESS_SESSION_NOT_BEFORE||'').trim();
-  if(!domain&&!audience&&!rolesRaw&&!enabled&&!blockedRaw&&!notBeforeRaw)return null;
+  const sellersRaw=String(env.ACCESS_SELLER_MAP||'').trim();
+  if(!domain&&!audience&&!rolesRaw&&!enabled&&!blockedRaw&&!notBeforeRaw&&!sellersRaw)return null;
   if(enabled!=='true'||!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(domain)||
      !/^[A-Za-z0-9_-]{10,200}$/.test(audience)||!rolesRaw)
     throw new Error('Cloudflare Access configuration incomplete: identity protection fails closed');
@@ -79,8 +84,24 @@ function accessConfig(env){
       throw new Error('ACCESS_SESSION_NOT_BEFORE requires lowercase emails and Unix seconds');
     notBefore=Object.assign(Object.create(null),parsed);
   }
+  let sellers=Object.create(null);
+  if(sellersRaw){
+    let parsed;
+    try{parsed=JSON.parse(sellersRaw);}catch(_){throw new Error('ACCESS_SELLER_MAP must be a JSON object');}
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||
+       Object.keys(parsed).length>100||
+       !Object.entries(parsed).every(([email,name])=>
+         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&email===email.toLowerCase()&&
+         ACCESS_SELLER_VALUES.has(name)))
+      throw new Error('ACCESS_SELLER_MAP must map lowercase emails to verified Airtable Vendedor choices');
+    sellers=Object.assign(Object.create(null),parsed);
+  }
+  // Every signed sales identity must have a single, explicit owner assignment.
+  // Other roles are unchanged; there is never an implicit global sales scope.
+  if(Object.entries(source).some(([email,role])=>role==='sales'&&!Object.hasOwn(sellers,email)))
+    throw new Error('ACCESS_SELLER_MAP missing a signed sales user');
   return {domain,audience,roles:source,blockedEmails:new Set(blocked),
-    sessionNotBefore:notBefore};
+    sessionNotBefore:notBefore,sellers};
 }
 
 function accessDecode(segment){
@@ -149,7 +170,14 @@ async function accessVerify(token,config){
     if(!Number.isSafeInteger(claims.iat)||claims.iat<=cutoff)
       throw new Error('Access user session issued before revocation cutoff');
   }
-  return {email,role:config.roles[email]};
+  const role=config.roles[email];
+  if(role==='sales'){
+    const seller=config.sellers?.[email];
+    if(!ACCESS_SELLER_VALUES.has(seller))
+      throw new Error('Sales identity has no verified seller assignment');
+    return {email,role,seller};
+  }
+  return {email,role};
 }
 
 async function accessVerifyLeadService(token,config,env){
@@ -185,6 +213,11 @@ function accessAllows(identity,method,path){
   const operator=identity.role==='operator';
   const isWrite=method!=='GET';
   if(path==='/access/me')return method==='GET';
+  // Commercial identities are deliberately read-only until their write path
+  // is protected by server-side ownership and relation checks. Never grant
+  // a sales JWT the broader operator/viewer/finance scopes by default.
+  if(identity.role==='sales')
+    return method==='GET'&&ACCESS_SELLER_TABLES.has(accessTable(path));
   // Financial endpoints are explicitly constrained even for administrators.
   if(path==='/marketing/spend')return (finance||admin)&&['GET','PUT'].includes(method);
   if(path==='/marketing/spend/history')return (finance||admin)&&method==='GET';
