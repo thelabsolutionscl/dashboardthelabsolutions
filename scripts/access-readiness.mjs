@@ -20,6 +20,11 @@ export async function checkAccessReadiness(config,fetcher=fetch){
     fail('PROXY_URL must point to the approved HTTPS proxy hostname');
     return {passed,errors,manual,ready:false};
   }
+  // Reportes needs a same-site proxy for real browser Access sessions.
+  if(config.stage==='reportes'&&base!=='https://proxy.thelab.solutions'){
+    fail('Reportes Access requires the same-site proxy.thelab.solutions hostname');
+    return {passed,errors,manual,ready:false};
+  }
   if(!config.proxyKey){
     fail('PROXY_KEY missing from workflow secrets');
     return {passed,errors,manual,ready:false};
@@ -50,6 +55,39 @@ export async function checkAccessReadiness(config,fetcher=fetch){
       manual.push('Access edge blocked the unauthenticated request; verify JWT enforcement at Worker origin');
     else fail('Proxy did not deny unauthenticated /access/me');
   }catch(_){fail('Cannot probe unauthenticated Access session');}
+
+  if(config.stage==='reportes'){
+    // These checks are strictly read-only. A public shared APP_KEY must not
+    // grant financial read access, and we never PUT a test spending amount.
+    const month=new Date().toISOString().slice(0,7);
+    const paths=['/marketing/spend?month='+month,'/marketing/spend/history?month='+month];
+    try{
+      const r=await call(paths[0],{method:'OPTIONS',headers:{
+        Origin:BROWSER_ORIGIN,'Access-Control-Request-Method':'PUT',
+        'Access-Control-Request-Headers':'x-app-key,content-type'
+      }});
+      const allowed=String(r.headers.get('Access-Control-Allow-Headers')||'').toLowerCase();
+      const methods=String(r.headers.get('Access-Control-Allow-Methods')||'').toUpperCase();
+      if(![200,204].includes(r.status)||
+         r.headers.get('Access-Control-Allow-Origin')!==BROWSER_ORIGIN||
+         r.headers.get('Access-Control-Allow-Credentials')!=='true'||
+         !allowed.includes('x-app-key')||!allowed.includes('content-type')||
+         !methods.includes('PUT')){
+        fail('Marketing spend CORS preflight failed for authenticated browser updates');
+      }else ok('Marketing spend CORS preflight passed');
+    }catch(_){fail('Marketing spend CORS preflight unavailable');}
+    for(const path of paths){
+      try{
+        const r=await call(path,{method:'GET',headers:simpleHeaders});
+        if(r.status===401)ok('Unsigned marketing request denied: '+path.split('?')[0]);
+        else if([302,303,307,308,403].includes(r.status))
+          manual.push('Edge blocked unsigned marketing request; verify Worker-origin enforcement: '+path.split('?')[0]);
+        else fail('Unsigned marketing request was not denied: '+path.split('?')[0]);
+      }catch(_){fail('Cannot probe unsigned marketing request: '+path.split('?')[0]);}
+    }
+    manual.push('In two independent browsers, verify finance/admin see the same month and revision, while viewer/operator receive 403; no test spending is written.');
+    return {passed,errors,manual,ready:errors.length===0&&manual.length===1};
+  }
   try{
     const r=await call('/sii/folio/33',{headers:simpleHeaders});
     if(r.status===401)ok('Fiscal data denied without a verified human session');
