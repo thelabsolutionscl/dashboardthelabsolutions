@@ -169,3 +169,7 @@ La cola de Reportes añade el filtro específico **Contradicciones**, independie
 ## 2026-09-29 — Preflight de Access específico para Reportes (sin escrituras)
 
 El workflow manual **Verify Access rollout (read-only)** incorpora el modo `reportes` independiente de SII y del token de servicio del lead-worker. Comprueba que el proxy tiene dominio HTTPS de mismo sitio (`proxy.thelab.solutions`), CORS de navegador para operaciones con credenciales y que **la clave pública compartida por sí sola** recibe `401` al leer el mes de gastos y su historial; ningún test escribe gastos ni solicita modelos de IA. Si el proxy sigue en modo legado, no declara Access activo. Requiere después dos sesiones humanas independientes: `finance` y `admin` deben ver el mismo mes/revisión, mientras `viewer` y `operator` deben quedar denegados. No activar gasto compartido ni declarar completada la validación sin configurar Cloudflare Access y realizar esa prueba con los equipos reales.
+
+## 2026-09-29 — Altas sin fecha de contacto ficticia
+
+Las tres rutas de creación de Cliente (Nuevo lead, flujo guiado y alta rápida desde el cotizador) asignaban hoy al primer contacto aun con clientes históricos. El formulario normal y el guiado aceptan ahora una fecha opcional explícita; una fecha anterior exige referencia verificable de 12–500 caracteres que queda en Notas internas. Fecha inválida o futura bloquea el alta. El alta rápida deja la fecha vacía y el guiado omite Origen lead si el usuario no lo elige. No se modifica ningún registro histórico automáticamente.
