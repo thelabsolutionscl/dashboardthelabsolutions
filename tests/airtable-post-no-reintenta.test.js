@@ -47,6 +47,7 @@ function montar(seq) {
   };
   const deps = {
     fetch,
+    _proxyCredentials:()=> 'same-origin',
     setTimeout: (fn) => { if (fn) Promise.resolve().then(fn); return 0; },
     clearTimeout: () => {},
     AbortController: class { constructor() { this.signal = null; } abort() {} },
