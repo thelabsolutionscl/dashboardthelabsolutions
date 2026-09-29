@@ -770,6 +770,12 @@ async function maintainPrinter(a, cfg) {
   const acts = [];
   if (a.state === 'offline') { a.acts = ['offline — sin acción']; return a; }
   if (a.busy) { a.acts = [a.busyGcode ? 'ocupada (G-code/macro en curso) — NO se tocó' : 'imprimiendo — NO se tocó']; return a; }
+  // Pieza en la cama: una impresión terminada o cancelada deja la pieza puesta.
+  // G28/BED_MESH_CALIBRATE bajaría la boquilla sobre ella (y en las K1 la
+  // calienta para limpiarla), y FIRMWARE_RESTART borraría el estado "complete"
+  // que el Farm Controller usa para exigir "cama libre" antes del siguiente
+  // trabajo. Se deja intacta hasta que empiece una impresión nueva.
+  if (['complete', 'cancelled'].includes(a.state)) { a.bedOccupied = true; a.acts = [`pieza en cama (${a.state === 'complete' ? 'impresión terminada' : 'impresión cancelada'}${a.filename ? ': ' + a.filename : ''}) — NO se tocó; retirar pieza`]; return a; }
   if (a.consoleErrs && a.consoleErrs.length) acts.push('consola con error reciente: "' + a.consoleErrs[a.consoleErrs.length - 1] + '"');
   // Reinicio de firmware: preventivo a todas las libres (restartAll) o solo si
   // Klipper está en error. Siempre reverifica antes de calibrar.
@@ -841,12 +847,13 @@ async function runMaintenance(cfg) {
       console.log(`[mant]  • ${r.name}: ${r.state}${r.errored ? ' ERROR' : ''} — ${(r.acts || []).join('; ')}`);
       return r;
     }));
-    const ok = results.filter(r => !r.errored && !r.busy && r.state !== 'offline' && (!r.klState || r.klState === 'ready')).length;
-    const err = results.filter(r => r.errored).length, off = results.filter(r => r.state === 'offline').length, busy = results.filter(r => r.busy).length;
-    const resumen = `${ok} lista(s) · ${err} con error · ${busy} ocupada(s) · ${off} offline · ${results.length} total${cfg.dryRun ? ' · DRY-RUN' : ''}`;
+    const ok = results.filter(r => !r.errored && !r.busy && !r.bedOccupied && r.state !== 'offline' && (!r.klState || r.klState === 'ready')).length;
+    const err = results.filter(r => r.errored).length, off = results.filter(r => r.state === 'offline').length, busy = results.filter(r => r.busy).length, bedOcc = results.filter(r => r.bedOccupied).length;
+    const resumen = `${ok} lista(s) · ${err} con error · ${busy} ocupada(s) · ${bedOcc} con pieza en cama · ${off} offline · ${results.length} total${cfg.dryRun ? ' · DRY-RUN' : ''}`;
     const detalle = results.map(r => {
       const estado = r.errored ? 'ERROR Klipper' + (r.klMsg ? ' ' + r.klMsg : '')
         : r.busy ? (r.busyGcode ? 'ocupada (G-code/macro)' : 'imprimiendo')
+        : r.bedOccupied ? 'PIEZA EN CAMA'
         : r.state === 'offline' ? 'OFFLINE'
         : (r.klState && r.klState !== 'ready') ? `NO LISTA (Klipper ${r.klState})`
         : 'lista';

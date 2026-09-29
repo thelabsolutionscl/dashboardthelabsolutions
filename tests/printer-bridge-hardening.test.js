@@ -94,3 +94,20 @@ test('origen no permitido se corta antes de OPTIONS y antes de autenticación',(
   const auth=section.indexOf('tokenMatches(given)');
   assert.ok(cors>=0&&options>cors&&auth>options);
 });
+
+test('mantención automática no toca impresoras con pieza terminada/cancelada en la cama',async()=>{
+  const body=fn('maintainPrinter');
+  const calls=[];
+  const maintainPrinter=new Function('moonraker','_sleep','waitKlippyReady','_copyAudit','return async '+body)(
+    async(p,m,path)=>{calls.push(path);return{ok:true};},async()=>{},async()=>({klState:'ready'}),()=>{});
+  const cfg={restartAll:true,calibrate:true,dryRun:false};
+  for(const state of ['complete','cancelled']){
+    const a=await maintainPrinter({name:'K1 #1',ip:'192.168.100.95',p:{},state,errored:false,busy:false,klState:'ready',filename:'pieza'},cfg);
+    assert.equal(a.bedOccupied,true);
+    assert.match(a.acts.join(' '),/pieza en cama/);
+  }
+  assert.deepEqual(calls,[],'no debe mandar FIRMWARE_RESTART, G28 ni BED_MESH_CALIBRATE');
+  const free=await maintainPrinter({name:'K1 #2',ip:'192.168.100.22',p:{},state:'standby',errored:false,busy:false,klState:'ready'},cfg);
+  assert.ok(!free.bedOccupied);
+  assert.ok(calls.some(c=>/BED_MESH_CALIBRATE/.test(decodeURIComponent(c))),'una impresora libre sí se calibra');
+});

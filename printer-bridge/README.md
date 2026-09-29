@@ -383,7 +383,10 @@ envía el reporte. Cuando veas que el reporte de la mañana se ve bien, edita
 cambio se toma sin reiniciar el bridge.
 
 **Qué hace cada mañana, por impresora** (solo si está **libre** — nunca toca una
-imprimiendo, pausada, ni ejecutando G-code/macros, detectado vía `idle_timeout`):
+imprimiendo, pausada, ni ejecutando G-code/macros, detectado vía `idle_timeout`;
+tampoco una con **pieza en la cama** —impresión `complete` o `cancelled`—: esa
+queda intacta, sin reinicio ni calibración, y aparece como "PIEZA EN CAMA" en el
+reporte hasta que arranque una impresión nueva):
 1. **Audita** estado (Klipper, home, malla de cama, temps) y **revisa la
    consola** (`/server/gcode_store`): si hay errores `!!` de las últimas 24 h
    —los mismos que verías en Fluidd/Mainsail— los incluye en el reporte.
