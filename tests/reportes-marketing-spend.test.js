@@ -42,7 +42,7 @@ test('two browsers cannot overwrite the same month concurrently; loser receives 
   const h=fixture(),body={channel:'Google Ads',amount_clp:50000,expected_revision:0};
   const [a,b]=await Promise.all([h.fetch('PUT','2026-09',body),
     h.fetch('PUT','2026-09',{...body,amount_clp:90000})]);
-  assert.equal(a.status,200);assert.equal(b.status,409);
+  assert.equal(a.status,200,await a.clone().text());assert.equal(b.status,409,await b.clone().text());
   assert.equal((await b.json()).code,'SPEND_REVISION_CONFLICT');
   const r=await h.fetch('GET','2026-09');
   assert.deepEqual((await r.json()).channels,{'Google Ads':50000});
@@ -51,14 +51,14 @@ test('two browsers cannot overwrite the same month concurrently; loser receives 
 test('writes preserve other channels and months; zero removes a channel with signed actor audit',async()=>{
   const h=fixture();
   let a=await h.fetch('PUT','2026-08',{channel:'Google Ads',amount_clp:60000,expected_revision:0});
-  assert.equal(a.status,200);
+  assert.equal(a.status,200,await a.clone().text());
   identity={email:'admin@example.com',role:'admin'};
   a=await h.fetch('PUT','2026-08',{channel:'LinkedIn',amount_clp:40000,expected_revision:1});
-  assert.equal(a.status,200);
+  assert.equal(a.status,200,await a.clone().text());
   a=await h.fetch('PUT','2026-09',{channel:'Google Ads',amount_clp:90000,expected_revision:0});
-  assert.equal(a.status,200);
+  assert.equal(a.status,200,await a.clone().text());
   a=await h.fetch('PUT','2026-08',{channel:'Google Ads',amount_clp:0,expected_revision:2});
-  assert.equal(a.status,200);
+  assert.equal(a.status,200,await a.clone().text());
   const aug=await (await h.fetch('GET','2026-08')).json();
   const sep=await (await h.fetch('GET','2026-09')).json();
   assert.deepEqual(aug.channels,{LinkedIn:40000});
