@@ -15921,7 +15921,7 @@ function _canalStats(off){
     const raw=String(f['Fecha primer contacto']||'').slice(0,10);
     const external=/^\d{4}-\d{2}-\d{2}$/.test(raw)?new Date(raw+'T12:00:00Z').getTime():NaN;
     const q=primero.get(c.id),validExternal=Number.isFinite(external)&&
-      (!q||external<=q.t);
+      (!q||raw<=new Date(q.t).toISOString().slice(0,10));
     const candidates=[imported,validExternal?external:NaN].filter(Number.isFinite);
     if(candidates.length)alta.set(c.id,Math.min(...candidates));
     contactoVerificado.set(c.id,validExternal);
