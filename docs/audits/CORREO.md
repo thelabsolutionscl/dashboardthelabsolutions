@@ -148,3 +148,27 @@ Las pruebas activas protegen el cableado y las defensas existentes. Los defectos
 10. Destinatarios, cuerpo y adjuntos tienen límites y validación backend.
 11. Los envíos generan una auditoría mínima y trazable.
 12. Los diagnósticos `todo` se convierten en pruebas obligatorias al corregirse.
+
+## 2026-09-29 — mitigación de cuota en servidor (PR #317)
+
+El PHP ahora reserva cada envío después de autenticar la casilla con IMAP y
+antes de contactar a Resend. El cupo predeterminado es **200 envíos por casilla
+en 60 minutos**, configurable por `MAIL_SEND_HOURLY_LIMIT` (1–2000). En el
+servidor cPanel que aloja el PHP, un archivo privado en el directorio temporal
+y `flock(LOCK_EX)` serializan las reservas entre peticiones simultáneas;
+solo persisten hashes SHA-256 de los correos, jamás contraseñas ni mensajes.
+Si la reserva no puede guardarse, el envío falla cerrado con 503; al alcanzar
+el límite devuelve 429 con `Retry-After`. Los errores/tiempos agotados de
+Resend consumen reserva porque el resultado puede ser incierto. Los clientes
+no deben reintentar automáticamente un envío de resultado ambiguo.
+
+**Límite de la mitigación:** funciona si las instancias PHP comparten el mismo
+filesystem, como un único cPanel. Si se distribuye a varios hosts, sustituir
+el archivo por una reserva atómica en Redis/DB. No reemplaza la futura sesión
+HttpOnly, permisos explícitos por casilla ni cuotas por actor/IP.
+
+La implementación en GitHub NO actualiza automáticamente el `mail-api.php`
+que está en cPanel. Validar el certificado de `mail.thelab.solutions:993`,
+instalar la versión nueva y comprobar el marcador
+`2026-09-29-mail-security-rate-guard` antes de dar por cerrada la auditoría
+de producción.
