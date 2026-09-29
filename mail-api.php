@@ -131,7 +131,7 @@ define('SMTP_HOST', 'mail.thelab.solutions');
 define('SMTP_PORT', 465);
 
 function imap_str($folder = 'INBOX') {
-    return '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}' . $folder;
+    return '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/validate-cert}' . $folder;
 }
 
 function open_imap($user, $pass, $folder = 'INBOX') {
@@ -563,7 +563,7 @@ case 'folders':
     $conn = open_imap($user, $pass);
     if (is_array($conn)) { echo json_out($conn); exit; }
 
-    $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
+    $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/validate-cert}';
     $list   = imap_list($conn, $prefix, '*') ?: [];
     $result = [];
     foreach ($list as $f) {
@@ -591,7 +591,7 @@ case 'sent_addrs':
 
     // Autodetecta la carpeta de enviados si el cliente no la pasó.
     if ($folder === '') {
-        $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
+        $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/validate-cert}';
         foreach ((imap_list($conn, $prefix, '*') ?: []) as $f) {
             $nm = str_replace($prefix, '', $f);
             if (preg_match('~(^|[./])(sent|enviad|elementos enviados)~i', $nm)) { $folder = $nm; break; }
@@ -831,7 +831,7 @@ case 'send':
 
     // Guardar en carpeta Enviados via IMAP APPEND usando la conexión ya autenticada.
     if (!is_array($conn)) {
-        $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
+        $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/validate-cert}';
         $list   = imap_list($conn, $prefix, '*') ?: [];
         $sent   = 'Sent';
         foreach ($list as $f) {
@@ -875,7 +875,7 @@ case 'spam':
     $msgno = imap_msgno($conn, $uid);
     if (!$msgno) { echo json_out(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
 
-    $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
+    $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/validate-cert}';
     $list   = imap_list($conn, $prefix, '*') ?: [];
     $spam   = '';
 
@@ -949,7 +949,7 @@ case 'trash':
     if (!$msgno) { echo json_out(['error' => 'Mensaje no encontrado']); imap_close($conn); exit; }
 
     // Try to move to Trash folder first
-    $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/novalidate-cert}';
+    $prefix = '{' . IMAP_HOST . ':' . IMAP_PORT . '/imap/ssl/validate-cert}';
     $list   = imap_list($conn, $prefix, '*') ?: [];
     $trash  = '';
     foreach ($list as $f) {
