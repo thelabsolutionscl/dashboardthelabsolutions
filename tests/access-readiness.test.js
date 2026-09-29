@@ -13,7 +13,7 @@ const cors={'Access-Control-Allow-Origin':'https://dashboard.thelab.solutions',
   'Access-Control-Allow-Headers':'Content-Type,X-App-Key,X-AI-Agent',
   'Access-Control-Allow-Methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS'};
 function mock({badCors=false,legacy=false,leak=false,marketingUnavailable=false,
-  stalePages=false,unsafeOrigin=false}={}){
+  stalePages=false,unsafeOrigin=false,edgeRedirect=false}={}){
  const calls=[];
  const fetcher=async(url,init={})=>{
   calls.push({url,init});
@@ -21,6 +21,8 @@ function mock({badCors=false,legacy=false,leak=false,marketingUnavailable=false,
   if(init.method==='OPTIONS')return new Response(null,{status:badCors?403:204,
     headers:badCors?{}:unsafeOrigin&&init.headers?.Origin==='https://untrusted.example'
       ?{...cors,'Access-Control-Allow-Origin':'https://untrusted.example'}:cors});
+  if(edgeRedirect&&['/access/me','/marketing/spend','/marketing/spend/history'].includes(u.pathname))
+    return new Response(null,{status:302,headers:{Location:'https://example.cloudflareaccess.com/login'}});
   if(u.pathname==='/access/me')return Response.json({enabled:!legacy},
     {status:legacy?200:401});
   if(u.pathname.startsWith('/marketing/spend'))return Response.json({error:'unauthorized'},
@@ -83,6 +85,15 @@ test('Reportes readiness rejects stale Pages bundles and credentialed hostile-or
  assert.match(old.errors.join(' '),/Published dashboard/);
  const hostile=await checkAccessReadiness({...cfg,stage:'reportes'},mock({unsafeOrigin:true}).fetcher);
  assert.match(hostile.errors.join(' '),/Untrusted origin/);
+});
+test('Cloudflare edge redirects remain inconclusive until Worker-origin auth is proved',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const r=await checkAccessReadiness({...cfg,stage:'reportes'},mock({edgeRedirect:true}).fetcher);
+ assert.equal(r.errors.length,0);
+ assert.equal(r.ready,false);
+ assert.ok(r.manual.length>1);
+ const src=fs.readFileSync(path.join(__dirname,'../scripts/access-readiness.mjs'),'utf8');
+ assert.match(src,/process\.env\.STAGE==='reportes'&&result\.manual\.length>1/);
 });
 test('unapproved proxy URLs do not receive service credentials',async()=>{
  const {checkAccessReadiness}=await import(script.href);
