@@ -80,3 +80,12 @@ Corrección esperada: excluir el mes actual hasta cerrarlo o prorratearlo explí
 - El mes incompleto no contamina el índice estacional.
 - Los cinco `test.todo` pasan a pruebas activas.
 - Workflow `Reportes audit` en verde.
+
+
+## Avance 2026-09-29: gasto por mes, historial y estacionalidad
+
+- El gasto de marketing se consulta y edita por `AAAA-MM + canal` al alternar entre Mes cerrado y Mes en curso. La versión antigua sin fecha se migra **únicamente al mes actual**, nunca se replica sobre meses históricos. El gasto sigue siendo local al navegador hasta implementar almacenamiento compartido y auditado.
+- El historial visible de reportes se ordena por `Fecha generación` descendente y, si coinciden, por `createdTime` descendente sin reordenar el estado de Airtable.
+- El mes calendario en curso ya no participa como observación completa en los promedios ni índices de estacionalidad. Continúa mostrándose como mes futuro/proyectado en los gráficos cuando corresponda.
+
+Pruebas: `tests/reportes-period-history.test.js`. Quedan por resolver las primeras adquisiciones reales del CAC, idempotencia al guardar un reporte semanal y persistencia multiusuario de gastos.
