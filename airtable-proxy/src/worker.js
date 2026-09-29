@@ -635,9 +635,13 @@ export class CrmMutationGuard {
           return this._json({error:'Scoped patch role denied'},403);
       }
       try{
-        return await fetch(AIRTABLE_BASE+path+search,{
+        const upstream=await fetch(AIRTABLE_BASE+path+search,{
           method:'PATCH',redirect:'manual',headers,body
         });
+        if(upstream.status>=300&&upstream.status<400)
+          return this._json({error:'Unexpected CRM redirect; reread before retrying',
+            code:'CRM_PATCH_UNCERTAIN'},503);
+        return upstream;
       }catch(_){return this._json({error:'CRM patch result uncertain; reread the record',
         code:'CRM_PATCH_UNCERTAIN'},503);}
     }
