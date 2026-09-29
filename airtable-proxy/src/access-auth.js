@@ -107,7 +107,7 @@ async function accessVerify(token,config){
 
 async function accessVerifyLeadService(token,config,env){
   const expected=String(env.ACCESS_LEAD_SERVICE_CLIENT_ID||'').trim();
-  if(!/^[A-Za-z0-9._-]{8,180}\\.access$/.test(expected))
+  if(!/^[A-Za-z0-9._-]{8,180}\.access$/.test(expected))
     throw new Error('Lead service client ID not configured');
   const claims=await accessVerifyClaims(token,config);
   if(claims.type!=='app'||claims.sub!==''||claims.common_name!==expected||
