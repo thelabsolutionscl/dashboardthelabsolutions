@@ -68,7 +68,7 @@ async function accessJwks(domain,force=false){
   return keys;
 }
 
-async function accessVerify(token,config){
+async function accessVerifyClaims(token,config){
   if(typeof token!=='string'||token.length>20000)throw new Error('Missing Access JWT');
   const parts=token.split('.');
   if(parts.length!==3)throw new Error('Malformed Access JWT');
@@ -94,11 +94,27 @@ async function accessVerify(token,config){
      (claims.nbf!==undefined&&(!Number.isFinite(claims.nbf)||claims.nbf>now))||
      (claims.iat!==undefined&&(!Number.isFinite(claims.iat)||claims.iat>now+60)))
     throw new Error('Access JWT issuer/audience/lifetime invalid');
+  if(claims.type!==undefined&&claims.type!=='app')throw new Error('Only application JWTs are supported');
+  return claims;
+}
+async function accessVerify(token,config){
+  const claims=await accessVerifyClaims(token,config);
   const email=typeof claims.email==='string'?claims.email.toLowerCase():'';
-  if(!email||!Object.hasOwn(config.roles,email))throw new Error('Access identity has no assigned role');
+  if(!email||!Object.hasOwn(config.roles,email)||claims.common_name||claims.sub==='')
+    throw new Error('Access identity has no assigned role');
   return {email,role:config.roles[email]};
 }
 
+async function accessVerifyLeadService(token,config,env){
+  const expected=String(env.ACCESS_LEAD_SERVICE_CLIENT_ID||'').trim();
+  if(!/^[A-Za-z0-9._-]{8,180}\.access$/.test(expected))
+    throw new Error('Lead service client ID not configured');
+  const claims=await accessVerifyClaims(token,config);
+  if(claims.type!=='app'||claims.sub!==''||claims.common_name!==expected||
+     typeof claims.email==='string')
+    throw new Error('Access service identity mismatch');
+  return {role:'lead-service',client_id:expected};
+}
 function accessTable(path){
   const prefix='/v0/app1YtD74AqiPWQhy/';
   if(!path.startsWith(prefix))return '';
@@ -138,7 +154,26 @@ export async function accessAuthorize(request,env,path){
     return {response:new Response(JSON.stringify({error:'Access authentication misconfigured'}),{
       status:503,headers:{'Content-Type':'application/json'}})};
   }
-  if(!config)return {legacy:true};
+  const leadPath='/service/lead/anthropic/v1/messages';
+  if(!config){
+    if(path===leadPath)
+      return {response:new Response(JSON.stringify({error:'Lead service Access not activated'}),{
+        status:503,headers:{'Content-Type':'application/json'}})};
+    return {legacy:true};
+  }
+  if(path===leadPath){
+    if(request.method!=='POST')
+      return {response:new Response(JSON.stringify({error:'Method not allowed'}),{
+        status:405,headers:{'Content-Type':'application/json'}})};
+    try{
+      const serviceIdentity=await accessVerifyLeadService(
+        request.headers.get('Cf-Access-Jwt-Assertion'),config,env);
+      return {serviceIdentity};
+    }catch(_){
+      return {response:new Response(JSON.stringify({error:'Valid lead service token required'}),{
+        status:401,headers:{'Content-Type':'application/json'}})};
+    }
+  }
   let identity;
   try{identity=await accessVerify(request.headers.get('Cf-Access-Jwt-Assertion'),config);}
   catch(_){return {response:new Response(JSON.stringify({error:'Valid Cloudflare Access session required'}),{

@@ -154,3 +154,55 @@ Las pruebas automatizadas solo cubren las rutas y el código. Los bloqueos de
 cookies del navegador, la política Access, el SII y los secretos del entorno
 requieren una prueba real de extremo a extremo antes de activar
 `SII_ACCESS_MODE=true`.
+
+## Integración del Worker de leads con Cloudflare Access
+
+El `lead-worker` llama al mismo proxy Anthropic para procesar leads y
+administrar campañas. Si se protege el proxy con Access sin migrar esa
+comunicación, el proceso queda bloqueado. Por eso ahora existe la ruta
+independiente `POST /service/lead/anthropic/v1/messages`: requiere un JWT
+**firmado por Access**, con audiencia/emisor válidos y el `common_name`
+exacto de un servicio autorizado. No acepta sesiones de personas, la clave
+compartida `APP_KEY` ni acceso a Airtable, SII u otras rutas. Comparte
+el allowlist de modelos y el presupuesto atómico existente.
+
+### Activación conjunta con la cuenta de Cloudflare
+
+1. Crear un **Service Token dedicado exclusivamente al lead-worker** en
+   Zero Trust → Access controls → Service credentials → Service Tokens.
+   Registrar el `Client ID` (sufijo `.access`) y guardar el `Client Secret`
+   en una ubicación segura. **Nunca** agregarlos a `index.html`,
+   variables públicas de Pages ni al repositorio.
+2. En la aplicación Cloudflare Access del proxy, agregar una política
+   **Service Auth** que incluya solo ese Service Token. Mantener aparte
+   la política interactiva de acceso por usuarios.
+3. Configurar en el **airtable-proxy** `ACCESS_LEAD_SERVICE_CLIENT_ID`
+   con el Client ID exacto. El proxy valida el JWT de servicio por su
+   firma RS256, su `aud`, `iss` y `common_name`, incluso si recibe
+   solicitudes directamente desde `workers.dev`.
+4. Configurar en el **lead-worker** `CF_ACCESS_CLIENT_ID` y
+   `CF_ACCESS_CLIENT_SECRET` como secretos; comprobar que
+   `AI_PROXY_URL` apunta a `https://proxy.thelab.solutions` o al
+   Worker oficial existente, sin rutas ni parámetros adicionales.
+   Tras desplegar el proxy y probar la nueva ruta con el token,
+   configurar `AI_ACCESS_MODE=true` en el lead-worker.
+5. Probar un procesamiento no fiscal con una tarea de lead y verificar
+   en Cloudflare que se autoriza únicamente el token de servicio.
+   Probar también token ausente, token ajeno, vencido y ruta diferente.
+   Si falla, desactivar `AI_ACCESS_MODE` solo durante la transición,
+   sin desactivar las protecciones del proxy ni abrir una excepción
+   pública de Access.
+
+`keep_vars=true` se encuentra ahora en los archivos Wrangler de los
+dos Workers. Así, futuros despliegues de GitHub no borrarán las
+variables Access y las configuraciones de servicio agregadas en
+Cloudflare, que son independientes de sus secretos cifrados.
+
+Documentación oficial:
+- https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/
+- https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/
+- https://developers.cloudflare.com/workers/wrangler/configuration/
+
+**Este cambio no crea tokens ni activa ninguna política en Cloudflare.**
+Las claves, roles reales, validación del SII y retirada final de secretos
+del navegador siguen pendientes de la puesta en marcha supervisada.

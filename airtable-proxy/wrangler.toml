@@ -1,5 +1,9 @@
 name = "airtable-proxy"
 main = "src/worker.js"
+# Conservar variables configuradas en Cloudflare (Access/servicio) durante
+# los despliegues automáticos. Wrangler conserva secretos por defecto, pero
+# puede borrar vars no declaradas aquí salvo keep_vars=true.
+keep_vars = true
 compatibility_date = "2024-09-01"
 
 # Secrets — ejecutar una vez después del deploy:

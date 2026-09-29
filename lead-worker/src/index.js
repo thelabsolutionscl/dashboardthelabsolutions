@@ -1930,8 +1930,7 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
   // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
   if (
     env.AUTO_PROCESS_LEADS === "true" &&
-    env.AI_PROXY_URL &&
-    env.AI_PROXY_KEY &&
+    leadAiProxyConfigured(env) &&
     queueId &&
     (await autoProcessAllowed(env))
   ) {
@@ -2028,6 +2027,12 @@ Responde SOLO un objeto JSON con EXACTAMENTE estas claves:
  "resumen": "<resumen interno breve>"
 }`;
 
+function leadAiProxyConfigured(env){
+  if(!env.AI_PROXY_URL)return false;
+  return env.AI_ACCESS_MODE==='true'
+    ?!!(env.CF_ACCESS_CLIENT_ID&&env.CF_ACCESS_CLIENT_SECRET)
+    :!!env.AI_PROXY_KEY;
+}
 const CLAUDE_ALLOWED_MODELS = new Set([
   "claude-haiku-4-5",
   "claude-haiku-4-5-20251001",
@@ -2040,8 +2045,19 @@ async function callClaude(env, system, user, opts = {}) {
   // concurrencia; este Worker nunca posee una API key de Anthropic.
   const proxyUrl = String(env.AI_PROXY_URL || "").replace(/\/+$/, "");
   const proxyKey = String(env.AI_PROXY_KEY || "");
-  if (!proxyUrl || !proxyKey) {
+  const accessMode=env.AI_ACCESS_MODE==="true";
+  const serviceId=String(env.CF_ACCESS_CLIENT_ID||"");
+  const serviceSecret=String(env.CF_ACCESS_CLIENT_SECRET||"");
+  if(!proxyUrl||(accessMode?(!serviceId||!serviceSecret):!proxyKey))
     throw new Error("Proxy IA protegido no configurado; la tarea quedó sin ejecutar");
+  if(accessMode){
+    let parsed;
+    try{parsed=new URL(proxyUrl);}catch(_){throw new Error("URL del proxy Access inválida");}
+    // Never forward a machine's Access credentials to an arbitrary hostname.
+    if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||
+       parsed.hash||parsed.pathname!=='/'||
+       !['proxy.thelab.solutions','airtable-proxy.wast3dspa.workers.dev'].includes(parsed.hostname))
+      throw new Error("Destino de Cloudflare Access no autorizado");
   }
 
   const requestedModel = opts.model || env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
@@ -2049,9 +2065,15 @@ async function callClaude(env, system, user, opts = {}) {
   const maxTokens = Math.max(128, Math.min(1200, Number(opts.maxTokens) || 600));
   const source = String(opts.source || "lead-worker").toLowerCase().replace(/[^a-z0-9_.-]/g, "").slice(0, 48) || "lead-worker";
 
-  const r = await fetch(proxyUrl + "/anthropic/v1/messages", {
+  const r = await fetch(proxyUrl + (accessMode?
+    "/service/lead/anthropic/v1/messages":"/anthropic/v1/messages"), {
     method: "POST",
-    headers: {
+    redirect: "manual",
+    headers: accessMode?{
+      "Content-Type":"application/json",
+      "CF-Access-Client-Id":serviceId,
+      "CF-Access-Client-Secret":serviceSecret,
+    }:{
       "Content-Type": "application/json",
       "Origin": "https://dashboard.thelab.solutions",
       "X-App-Key": proxyKey,
@@ -3095,7 +3117,7 @@ async function adsAutopilotRun(env, { force = false } = {}) {
   if (!force && env.ADS_AUTOPILOT !== "true") return { skipped: "ADS_AUTOPILOT desactivado" };
   if (!env.ADS_ENDPOINT) return { skipped: "falta ADS_ENDPOINT" };
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return { skipped: "falta Airtable" };
-  if (!env.AI_PROXY_URL || !env.AI_PROXY_KEY) return { skipped: "falta proxy IA protegido" };
+  if (!leadAiProxyConfigured(env)) return { skipped: "falta proxy IA protegido" };
 
   const cfg = await apLoadConfig(env);
   if (cfg.enabled === false && !force) return { skipped: "kill-switch en Monitor Sistema" };

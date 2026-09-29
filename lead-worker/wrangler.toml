@@ -4,6 +4,10 @@
 
 name = "thelab-leads-worker"
 main = "src/index.js"
+# Conservar variables configuradas en Cloudflare (Access/servicio) durante
+# los despliegues automáticos. Wrangler conserva secretos por defecto, pero
+# puede borrar vars no declaradas aquí salvo keep_vars=true.
+keep_vars = true
 compatibility_date = "2024-11-01"
 
 # Observabilidad (logs/analytics del Worker)

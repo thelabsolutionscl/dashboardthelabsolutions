@@ -624,19 +624,23 @@ export default {
     // un Origin permitido bloquea abuso casual desde navegadores ajenos, pero no
     // convierte APP_KEY en identidad: clientes HTTP pueden enviar ese header.
     // /health queda libre más arriba para los monitores.
-    if (!ALLOWED_ORIGINS.includes(origin)) {
+    const leadServiceRoute=url.pathname==='/service/lead/anthropic/v1/messages';
+    if (leadServiceRoute && url.search)
+      return json({error:'Lead service query parameters not allowed'},400,CORS);
+    if (!leadServiceRoute && !ALLOWED_ORIGINS.includes(origin)) {
       return json({ error: 'Forbidden origin' }, 403, CORS);
     }
 
     // Auth — la passphrase nunca sale al cliente como un token de servicio real
     const appKey = request.headers.get('X-App-Key');
-    if (!appKey || appKey !== env.APP_KEY) {
+    if (!leadServiceRoute && (!appKey || appKey !== env.APP_KEY)) {
       return json({ error: 'Unauthorized' }, 403, CORS);
     }
     // After configuration, the shared app key is only a compatibility check.
     // Cloudflare Access signs each user's identity, and role decisions happen
     // on the server; a forged Origin or copied APP_KEY cannot grant rights.
     const authorized=await accessAuthorize(request,env,
+      leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
       url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
@@ -787,7 +791,7 @@ export default {
 
     // ── Anthropic (Claude) — la API key vive como secreto del Worker ──
     // El dashboard llama a:  <worker>/anthropic/v1/messages
-    if (url.pathname === '/anthropic/v1/messages') {
+    if (url.pathname === '/anthropic/v1/messages' || leadServiceRoute) {
       if (!env.ANTHROPIC_TOKEN) {
         return json({ error: 'Worker misconfigured: missing ANTHROPIC_TOKEN secret' }, 500, CORS);
       }
@@ -802,7 +806,8 @@ export default {
       if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > ANTHROPIC_MAX_OUTPUT_TOKENS) {
         return json({ error: `max_tokens must be between 1 and ${ANTHROPIC_MAX_OUTPUT_TOKENS}` }, 400, CORS);
       }
-      const source = sanitizeAiSource(request.headers.get('X-AI-Agent') || 'dashboard');
+      const source = leadServiceRoute?'lead-worker':
+        sanitizeAiSource(request.headers.get('X-AI-Agent') || 'dashboard');
       const reservation = await reserveAiBudget(env, payload, source);
       if (!reservation.ok) {
         return json({
@@ -813,7 +818,7 @@ export default {
           estimated_request_usd: reservation.estimated_request_usd,
         }, reservation.status || 429, CORS);
       }
-      const target = ANTHROPIC_BASE + url.pathname.replace(/^\/anthropic/, '') + url.search;
+      const target = ANTHROPIC_BASE + '/v1/messages' + (leadServiceRoute?'':url.search);
       const headers = new Headers();
       headers.set('x-api-key', env.ANTHROPIC_TOKEN);
       headers.set('anthropic-version', request.headers.get('anthropic-version') || '2023-06-01');
