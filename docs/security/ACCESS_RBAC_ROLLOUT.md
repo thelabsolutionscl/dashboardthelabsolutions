@@ -93,8 +93,16 @@ en **airtable-proxy** los cuatro valores de Access descritos arriba, más
 el hostname del proxy con Cloudflare Access y probar que las cookies funcionen
 desde `https://dashboard.thelab.solutions`.
 
-Tras configurar Cloudflare, habilitar en **GitHub → Settings → Secrets and
-variables → Actions → Variables** `SII_ACCESS_MODE=true`. No hacerlo antes
+Tras configurar Cloudflare y **comprobar realmente la sesión, las reglas
+CORS/OPTIONS, los roles y las pruebas SII en certificación**, habilitar en
+**GitHub → Settings → Secrets and variables → Actions → Variables** las dos
+variables `SII_CUTOVER_VERIFIED=true` y `SII_ACCESS_MODE=true`.
+La segunda es una puerta explícita independiente: poner solo
+`SII_ACCESS_MODE=true` bloquea el siguiente deploy sin publicar una versión
+fiscal a medio configurar. Además, `PROXY_URL` tiene que ser HTTPS en un
+subdominio de `thelab.solutions` (por ejemplo
+`https://proxy.thelab.solutions`); una URL `workers.dev` de otro sitio,
+con path o query, tampoco pasa la puerta de activación. No hacerlo antes
 de las comprobaciones previas: el próximo deploy de GitHub Pages pasará el
 formulario de Finanzas al proxy para emisión, consulta de folios y carga de
 CAF, y **dejará de insertar SII_WORKER_KEY en el HTML**. Si hay un error
