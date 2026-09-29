@@ -35,7 +35,7 @@ export async function checkAccessReadiness(config,fetcher=fetch){
   const simpleHeaders={Origin:BROWSER_ORIGIN,'X-App-Key':config.proxyKey};
   try{
     const r=await call('/access/me',{method:'OPTIONS',headers:{
-      Origin:BROWSER_ORIGIN,'Access-Control-Request-Method':'POST',
+      Origin:BROWSER_ORIGIN,'Access-Control-Request-Method':'GET',
       'Access-Control-Request-Headers':'x-app-key,content-type'
     }});
     const allowed=String(r.headers.get('Access-Control-Allow-Headers')||'').toLowerCase();
@@ -44,7 +44,7 @@ export async function checkAccessReadiness(config,fetcher=fetch){
        r.headers.get('Access-Control-Allow-Origin')!==BROWSER_ORIGIN||
        r.headers.get('Access-Control-Allow-Credentials')!=='true'||
        !allowed.includes('x-app-key')||!allowed.includes('content-type')||
-       !methods.includes('POST')){
+       !methods.includes('GET')){
       fail('CORS preflight does not permit authenticated dashboard requests');
     }else ok('Dashboard CORS preflight passed');
   }catch(_){fail('CORS preflight unavailable');}
