@@ -34,6 +34,7 @@ jobs:
           SII_WORKER_URL: ${{ secrets.SII_WORKER_URL }}
           SII_WORKER_KEY: ${{ secrets.SII_WORKER_KEY }}   # clave del worker tributario (ver sii-worker)
           SII_ACCESS_MODE: ${{ vars.SII_ACCESS_MODE }}  # opt-in: activar SOLO tras migrar Access y secretos en Cloudflare
+          SII_CUTOVER_VERIFIED: ${{ vars.SII_CUTOVER_VERIFIED }}  # segundo control: sesiones, CORS, roles y certificación comprobados
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
           PROXY_URL: ${{ secrets.PROXY_URL }}
@@ -80,6 +81,19 @@ jobs:
           fi
           sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
           if [ "${SII_ACCESS_MODE}" = "true" ]; then
+            # Prevenir activaciones accidentales que bloqueen Facturas a todo
+            # el equipo. Este segundo control se habilita SOLO tras probar
+            # Cloudflare Access, CORS/OPTIONS, roles y SII de certificación.
+            if [ "${SII_CUTOVER_VERIFIED}" != "true" ]; then
+              echo "::error::SII Access requires SII_CUTOVER_VERIFIED=true after real Cloudflare Access and certification checks."
+              exit 1
+            fi
+            # cookies CF_Authorization deben viajar entre subdominios del
+            # mismo sitio. workers.dev rompe la sesión para muchos navegadores.
+            if [[ ! "${PROXY_URL}" =~ ^https://[a-z0-9-]+\.thelab\.solutions/?$ ]]; then
+              echo "::error::SII Access requires an HTTPS same-site proxy host at *.thelab.solutions (no workers.dev, paths or queries)."
+              exit 1
+            fi
             # Nunca publicar la clave fiscal cuando el dashboard usa el puente
             # autenticado. El secreto vive únicamente en los Workers.
             sed -i "s|%%SII_WORKER_KEY%%||g" index.html
