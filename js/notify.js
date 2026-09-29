@@ -589,7 +589,7 @@ function _mailRelevantAccounts(){
     return[own,'hola@thelab.solutions'].filter((v,i,a)=>v&&v.includes('@')&&a.indexOf(v)===i);
   }catch(e){return[];}
 }
-function _mailHasPass(email){try{return!!localStorage.getItem('thelab_mail_pass_'+email);}catch(e){return false;}}
+function _mailHasPass(email){try{return!!MAIL.getMailPassFor(email);}catch(e){return false;}}
 async function _mailCheckAccount(email,opts){
   const baseline=!!opts?.baseline;
   if(!_mailHasPass(email)||typeof MAIL==='undefined'||typeof MAIL.postAs!=='function')return{attempted:false,ok:false};

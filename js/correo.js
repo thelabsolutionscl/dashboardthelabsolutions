@@ -60,9 +60,31 @@ const MAIL={
   },
 
   _mailPassKey(){const a=this.activeAccount();return a?'thelab_mail_pass_'+a:null;},
-  getMailPass(){const k=this._mailPassKey();return k?localStorage.getItem(k)||'':null;},
-  setMailPass(p){const k=this._mailPassKey();if(k) localStorage.setItem(k,p);},
-  clearMailPass(){const k=this._mailPassKey();if(k) localStorage.removeItem(k);},
+  getMailPassFor(email){
+    if(!email)return '';
+    const k='thelab_mail_pass_'+email;
+    try{
+      const existing=sessionStorage.getItem(k);
+      if(existing)return existing;
+      // One-time migration of legacy passwords. sessionStorage is scoped to
+      // this tab; a closed browser will require the user to sign in again.
+      const old=localStorage.getItem(k)||'';
+      if(!old)return '';
+      sessionStorage.setItem(k,old);
+      localStorage.removeItem(k);
+      return old;
+    }catch(_){return '';}
+  },
+  getMailPass(){return this.getMailPassFor(this.activeAccount());},
+  setMailPass(p){
+    const k=this._mailPassKey();if(!k)return;
+    sessionStorage.setItem(k,p);
+    localStorage.removeItem(k);
+  },
+  clearMailPass(){
+    const k=this._mailPassKey();if(!k)return;
+    try{sessionStorage.removeItem(k);}finally{localStorage.removeItem(k);}
+  },
 
   auth(){
     const o=this.activeAccountObj();
@@ -169,11 +191,9 @@ const MAIL={
   // por-cuenta. Si esa clave no está, cae a la cuenta activa conservando el
   // from_name pedido, y avisa desde qué casilla salió realmente.
   async postAs(fromEmail,params){
-    const pass=localStorage.getItem('thelab_mail_pass_'+fromEmail)||'';
+    const pass=this.getMailPassFor(fromEmail);
     if(!pass){
-      const a=this.activeAccount();
-      try{toast('Enviado desde '+a+' — guarda la clave de '+fromEmail+' en Correos para enviar desde esa casilla','info');}catch(e){}
-      return this.post(params);
+      return {error:'No se envió: la casilla '+fromEmail+' no tiene credenciales configuradas. Selecciónala en Correos e inicia sesión.'};
     }
     if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
     const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
@@ -1175,7 +1195,7 @@ const MAIL={
     const bccRow=document.getElementById('mailBccRow'); if(bccRow) bccRow.style.display=opts.bcc?'flex':'none';
     document.getElementById('mailCmpSubject').value=opts.subject||'';
     const sig=this.sigHtml();
-    document.getElementById('mailCmpBody').innerHTML=(opts.body||'')+sig;
+    document.getElementById('mailCmpBody').innerHTML=this._sanitizarCita(opts.body||'')+sig;
     document.getElementById('mailComposeTitle').textContent=opts.title||'Nuevo mensaje';
     document.getElementById('mailSendStatus').textContent='';
     document.getElementById('mailComposePanel').style.display='flex';
@@ -1253,7 +1273,7 @@ const MAIL={
     return fixed;
   },
   setSig(html){
-    const k=this._sigKey();if(k) localStorage.setItem(k,html);
+    const k=this._sigKey();if(k) localStorage.setItem(k,this._sanitizarCita(html,true));
     // Respaldo permanente: la firma queda también en Airtable (sobrevive a
     // limpiar el caché y aparece igual en otros dispositivos).
     this._saveSigsAirtable();
@@ -1276,7 +1296,7 @@ const MAIL={
     if(!s) return '';
     // Sin línea separadora: las firmas con diseño propio (tarjeta) traen su
     // borde, y en las de texto el espacio en blanco basta como separación.
-    return `<br><br><div class="mail-signature-block" contenteditable="false" style="margin-top:12px">${s}</div>`;
+    return `<br><br><div class="mail-signature-block" contenteditable="false" style="margin-top:12px">${this._sanitizarCita(s,true)}</div>`;
   },
 
   insertSignature(){
@@ -1290,7 +1310,7 @@ const MAIL={
   openSigModal(){
     const ed=document.getElementById('mailSigEditor'),code=document.getElementById('mailSigCode');
     const acct=document.getElementById('mailSigAcct'); if(acct) acct.textContent='· '+(this.activeAccount()||'');
-    ed.innerHTML=this.getSig()||'';
+    ed.innerHTML=this._sanitizarCita(this.getSig(),true);
     if(code){code.style.display='none';code.value='';}
     ed.style.display='block';
     const b=document.getElementById('mailSigCodeBtn');if(b)b.classList.remove('active');
@@ -1314,7 +1334,7 @@ const MAIL={
       code.value=ed.innerHTML; code.style.display='block'; ed.style.display='none';
       if(b)b.classList.add('active'); this._applyEditorBg(); code.focus();
     }else{
-      ed.innerHTML=code.value; code.style.display='none'; ed.style.display='block';
+      ed.innerHTML=this._sanitizarCita(code.value,true); code.style.display='none'; ed.style.display='block';
       if(b)b.classList.remove('active'); ed.focus();
     }
   },
@@ -1334,19 +1354,29 @@ const MAIL={
     });
   },
 
-  sigInsertImage(){
-    const url=prompt('URL de la imagen:');
-    if(!url) return;
-    document.getElementById('mailSigEditor').focus();
-    document.execCommand('insertHTML',false,`<img loading="lazy" decoding="async" src="${url}" style="max-height:100px;max-width:100%">`);
+  _insertEditorImage(editorId){
+    const candidate=prompt('URL HTTPS de la imagen:');
+    if(!candidate)return;
+    let url;
+    try{
+      url=new URL(candidate.trim());
+      if(url.protocol!=='https:'||url.username||url.password)throw Error('Invalid image URL');
+    }catch(_){toast('La imagen debe tener una URL HTTPS válida.','error');return;}
+    const editor=document.getElementById(editorId);if(!editor)return;
+    editor.focus();
+    const img=document.createElement('img');
+    img.src=url.href;img.loading='lazy';img.decoding='async';img.alt='';
+    img.style.maxWidth='100%';
+    if(editorId==='mailSigEditor')img.style.maxHeight='100px';
+    const selection=window.getSelection();
+    if(selection&&selection.rangeCount&&editor.contains(selection.anchorNode)){
+      const range=selection.getRangeAt(0);
+      range.deleteContents();range.insertNode(img);range.setStartAfter(img);
+      range.collapse(true);selection.removeAllRanges();selection.addRange(range);
+    }else editor.appendChild(img);
   },
-
-  insertImagePrompt(){
-    const url=prompt('URL de la imagen:');
-    if(!url) return;
-    document.getElementById('mailCmpBody').focus();
-    document.execCommand('insertHTML',false,`<img loading="lazy" decoding="async" src="${url}" style="max-width:100%">`);
-  },
+  sigInsertImage(){this._insertEditorImage('mailSigEditor');},
+  insertImagePrompt(){this._insertEditorImage('mailCmpBody');},
   toggleCompose(){document.getElementById('mailComposePanel').classList.toggle('collapsed');},
   toggleCc(){const r=document.getElementById('mailCcRow');r.style.display=r.style.display==='none'?'flex':'none';},
   toggleBcc(){const r=document.getElementById('mailBccRow');r.style.display=r.style.display==='none'?'flex':'none';},
@@ -1595,25 +1625,46 @@ const MAIL={
    * convierte a texto plano: se quita lo que ejecuta o navega y se conserva el
    * formato. DOMParser no ejecuta scripts ni descarga nada al analizar.
    */
-  _sanitizarCita(html){
-    const s=String(html||'');
-    if(!s) return '';
+  _sanitizarCita(html,allowImages=false){
+    const raw=String(html||'');
+    if(!raw)return '';
     try{
-      const doc=new DOMParser().parseFromString(s,'text/html');
-      // Elementos que ejecutan, cargan o reescriben el documento que los aloja.
-      doc.body.querySelectorAll('script,iframe,object,embed,link,meta,base,form,input,button,textarea,select,style,svg,math').forEach(el=>el.remove());
-      doc.body.querySelectorAll('*').forEach(el=>{
-        for(const at of [...el.attributes]){
-          const n=at.name.toLowerCase(), v=String(at.value||'');
-          if(n.startsWith('on')){ el.removeAttribute(at.name); continue; }        // onerror, onload, onclick…
-          if(n==='srcdoc'){ el.removeAttribute(at.name); continue; }
-          if(/^(href|action|formaction|xlink:href|background)$/.test(n) && /^\s*(javascript|vbscript|data):/i.test(v)){ el.removeAttribute(at.name); continue; }
-          // Las imágenes incrustadas (data:image/...) son normales en un correo;
-          // cualquier otro data: en src, no.
-          if(n==='src' && (/^\s*(javascript|vbscript):/i.test(v) || (/^\s*data:/i.test(v) && !/^\s*data:image\//i.test(v)))) el.removeAttribute(at.name);
+      const doc=new DOMParser().parseFromString(raw,'text/html');
+      const keep=new Set('p br div span b strong i em u s ul ol li blockquote table thead tbody tfoot tr td th hr h1 h2 h3 pre code a'.split(' '));
+      if(allowImages)keep.add('img');
+      const drop=new Set('script style svg math iframe object embed form input button textarea select link meta base video audio source picture template noscript'.split(' '));
+      const safe=node=>{
+        if(node.nodeType===3)return doc.createTextNode(node.textContent||'');
+        if(node.nodeType!==1)return null;
+        const tag=node.localName.toLowerCase();
+        if(drop.has(tag)||tag==='img'&&!allowImages)return null;
+        const el=keep.has(tag)?doc.createElement(tag):doc.createDocumentFragment();
+        if(tag==='a'&&keep.has(tag)){
+          try{
+            const url=new URL(node.getAttribute('href')||'');
+            if(['https:','mailto:'].includes(url.protocol)){
+              el.href=url.href;el.rel='noopener noreferrer';el.target='_blank';
+            }
+          }catch(_){}
         }
-      });
-      return doc.body.innerHTML;
-    }catch(e){ return this.esc(s); }   // ante la duda, se cita como texto plano
+        if(tag==='img'){
+          try{
+            const url=new URL(node.getAttribute('src')||'');
+            if(url.protocol!=='https:'||url.username||url.password)return null;
+            el.src=url.href;el.alt=String(node.getAttribute('alt')||'').slice(0,200);
+            el.loading='lazy';el.style.maxWidth='100%';
+          }catch(_){return null;}
+        }
+        for(const child of [...node.childNodes]){
+          const cleaned=safe(child);if(cleaned)el.appendChild(cleaned);
+        }
+        return el;
+      };
+      const out=doc.createElement('div');
+      for(const node of [...doc.body.childNodes]){
+        const cleaned=safe(node);if(cleaned)out.appendChild(cleaned);
+      }
+      return out.innerHTML;
+    }catch(_){return this.esc(raw);}
   }
 };
