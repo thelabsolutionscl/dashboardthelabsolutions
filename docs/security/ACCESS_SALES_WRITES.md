@@ -1,0 +1,5 @@
+# Commercial record updates — staged
+
+Sales updates remain disabled unless ACCESS_SALES_WRITES_ENABLED=true is explicitly configured. The authorized PATCH operations are limited to existing sales-owned records and an allowlist of notes and contact fields. Each request must include expected_fields for optimistic concurrency; the shared CRM Durable Object rechecks ownership before updating and rechecks it again before returning the record. Other signed CRM PATCH operations use the same queue.
+
+The switch must remain off until owner-changing writers outside the proxy, including direct Airtable and Make integrations, are inventoried and coordinated. Airtable does not offer an atomic owner precondition for those external writes. A post-write owner check can detect but cannot prevent every externally introduced race. Creating records, modifying owner or linked records, approval, payment and workflow state changes remain forbidden for the sales role. Real-user testing, DNS and Access configuration are reserved for the final audit rollout.
