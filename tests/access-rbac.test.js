@@ -132,7 +132,7 @@ test('removing a mapped email also blocks its existing JWT regardless of origina
   const x=req(token,'GET','/access/me');
   assert.equal((await accessAuthorize(x.request,withoutFinance,x.path)).response.status,401);
 });
-test('sales JWT requires an explicit email-to-Airtable-seller mapping and stays read-only',async()=>{
+test('sales JWT maps a verified seller; only canonical opt-in single-record PATCH may be staged',async()=>{
   const salesEnv={...cfg,
     ACCESS_ROLE_MAP:JSON.stringify({
       ...JSON.parse(cfg.ACCESS_ROLE_MAP),
@@ -150,6 +150,10 @@ test('sales JWT requires an explicit email-to-Airtable-seller mapping and stays 
     assert.equal(accessAllows({role:'sales'},'GET',base+table+'/recABCDEFGHIJKLMN'),true,table);
     for(const method of ['POST','PATCH','DELETE'])
       assert.equal(accessAllows({role:'sales'},method,base+table),false,table+' '+method);
+    assert.equal(accessAllows({role:'sales'},'PATCH',
+      base+table+'/recABCDEFGHIJKLMN'),true,'staged PATCH only for existing row');
+    assert.equal(accessAllows({role:'sales'},'PATCH',
+      base+table+'/recABCDEFGHIJKLMN/nested'),false);
   }
   for(const path of [base+'Facturas',base+'Reportes',base+'Agent_Queue',
     '/marketing/spend','/printer/session','/seo-fetch','/anthropic/v1/messages']){
@@ -158,7 +162,7 @@ test('sales JWT requires an explicit email-to-Airtable-seller mapping and stays 
   }
   for(const [method,path] of [
     ['GET',base+'Facturas'],['POST',base+'Clientes'],
-    ['PATCH',base+'Pedidos/recABCDEFGHIJKLMN'],['GET','/marketing/spend']
+    ['PUT',base+'Pedidos/recABCDEFGHIJKLMN'],['GET','/marketing/spend']
   ]){
     const unauthorized=req(token,method,path);
     assert.equal((await accessAuthorize(
@@ -189,6 +193,10 @@ test('sales mapping fails closed on missing, invalid or unverified seller values
   }
   assert.equal((await accessAuthorize(request.request,
     {ACCESS_SELLER_MAP:'{"vendedor@example.com":"nicanor"}'},request.path)).response.status,503);
+  assert.equal((await accessAuthorize(request.request,
+    {ACCESS_SALES_WRITES_ENABLED:'true'},request.path)).response.status,503,
+    'a write flag on its own must not enable legacy APP_KEY mode');
+  assert.throws(()=>accessConfig({...salesRoles,ACCESS_SALES_WRITES_ENABLED:'yes'}));
   for(const seller of ['florencia','nicanor','gustavo'])
     assert.doesNotThrow(()=>accessConfig({...salesRoles,
       ACCESS_SELLER_MAP:JSON.stringify({'vendedor@example.com':seller})}));

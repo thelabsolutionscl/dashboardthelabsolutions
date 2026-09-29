@@ -53,7 +53,11 @@ function accessConfig(env){
   const blockedRaw=String(env.ACCESS_BLOCKED_EMAILS||'').trim();
   const notBeforeRaw=String(env.ACCESS_SESSION_NOT_BEFORE||'').trim();
   const sellersRaw=String(env.ACCESS_SELLER_MAP||'').trim();
-  if(!domain&&!audience&&!rolesRaw&&!enabled&&!blockedRaw&&!notBeforeRaw&&!sellersRaw)return null;
+  const salesWrites=String(env.ACCESS_SALES_WRITES_ENABLED||'').trim().toLowerCase();
+  if(salesWrites&&salesWrites!=='true'&&salesWrites!=='false')
+    throw new Error('ACCESS_SALES_WRITES_ENABLED must be an explicit boolean');
+  if(!domain&&!audience&&!rolesRaw&&!enabled&&!blockedRaw&&!notBeforeRaw&&
+     !sellersRaw&&salesWrites!=='true')return null;
   if(enabled!=='true'||!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(domain)||
      !/^[A-Za-z0-9_-]{10,200}$/.test(audience)||!rolesRaw)
     throw new Error('Cloudflare Access configuration incomplete: identity protection fails closed');
@@ -213,11 +217,17 @@ function accessAllows(identity,method,path){
   const operator=identity.role==='operator';
   const isWrite=method!=='GET';
   if(path==='/access/me')return method==='GET';
-  // Commercial identities are deliberately read-only until their write path
-  // is protected by server-side ownership and relation checks. Never grant
-  // a sales JWT the broader operator/viewer/finance scopes by default.
-  if(identity.role==='sales')
-    return method==='GET'&&ACCESS_SELLER_TABLES.has(accessTable(path));
+  // Sales reads remain owner-scoped. The sole write shape admitted by RBAC
+  // is a single-record PATCH on an approved commercial table; the Worker
+  // applies a *separate opt-in switch*, field allowlist, optimistic precondition
+  // and serial Durable Object guard. No sales CREATE/DELETE/approval/relations.
+  if(identity.role==='sales'){
+    const table=accessTable(path);
+    if(!ACCESS_SELLER_TABLES.has(table))return false;
+    if(method==='GET')return true;
+    return method==='PATCH'&&
+      /^\/v0\/app1YtD74AqiPWQhy\/[^/]+\/rec[A-Za-z0-9]{14}$/.test(path);
+  }
   // Financial endpoints are explicitly constrained even for administrators.
   if(path==='/marketing/spend')return (finance||admin)&&['GET','PUT'].includes(method);
   if(path==='/marketing/spend/history')return (finance||admin)&&method==='GET';
