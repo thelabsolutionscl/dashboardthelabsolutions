@@ -52,6 +52,86 @@ test('missing JWT or unmapped signed identity fails closed',async()=>{
   const unknown=req(jwt({email:'unknown@example.com'}));
   assert.equal((await accessAuthorize(unknown.request,cfg,unknown.path)).response.status,401);
 });
+test('emergency email denylist rejects a previously valid signed human JWT on the next request',async()=>{
+  const blocked={...cfg,ACCESS_BLOCKED_EMAILS:JSON.stringify(['finanzas@example.com'])};
+  const valid=jwt({email:'finanzas@example.com'});
+  const finance=req(valid,'GET','/access/me');
+  assert.equal((await accessAuthorize(finance.request,blocked,finance.path)).response.status,401);
+  await assert.rejects(()=>accessVerify(valid,accessConfig(blocked)),/blocked/);
+  const other=req(jwt({email:'operador@example.com'}),'GET',
+    '/v0/app1YtD74AqiPWQhy/Pedidos');
+  const allowed=await accessAuthorize(other.request,blocked,other.path);
+  assert.deepEqual(allowed.identity,{email:'operador@example.com',role:'operator'});
+  // Blocking a human email must not lock out the separately authenticated
+  // lead-worker service identity that has no human email.
+  const leadId='lead-machine-123.access';
+  const lead=req(jwt({type:'app',sub:'',common_name:leadId,email:undefined}),
+    'POST','/service/lead/anthropic/v1/messages');
+  const service=await accessAuthorize(lead.request,
+    {...blocked,ACCESS_LEAD_SERVICE_CLIENT_ID:leadId},lead.path);
+  assert.equal(service.serviceIdentity.client_id,leadId);
+});
+test('per-email session cutoff rejects older and missing iat, permits newly issued JWTs',async()=>{
+  const now=Math.floor(Date.now()/1000);
+  const env={...cfg,ACCESS_SESSION_NOT_BEFORE:JSON.stringify({
+    'finanzas@example.com':now-15
+  })};
+  for(const token of [
+    jwt({iat:now-60}),
+    jwt({iat:now-15}),
+    jwt({iat:undefined})
+  ]){
+    const old=req(token,'GET','/access/me');
+    assert.equal((await accessAuthorize(old.request,env,old.path)).response.status,401);
+  }
+  const renewed=req(jwt({iat:now-3}),'GET','/access/me');
+  assert.deepEqual((await accessAuthorize(renewed.request,env,renewed.path)).identity,
+    {email:'finanzas@example.com',role:'finance'});
+  const unaffected=req(jwt({email:'operador@example.com',iat:now-60}),'GET',
+    '/v0/app1YtD74AqiPWQhy/Pedidos');
+  assert.equal((await accessAuthorize(unaffected.request,env,unaffected.path)).identity.role,
+    'operator');
+  const both={...env,ACCESS_BLOCKED_EMAILS:JSON.stringify(['finanzas@example.com'])};
+  assert.equal((await accessAuthorize(renewed.request,both,renewed.path)).response.status,401,
+    'fresh JWT cannot bypass a persistent emergency deny');
+});
+test('revocation settings are strict, and a standalone setting cannot enable legacy mode',async()=>{
+  const naked=req(null,'GET','/access/me');
+  for(const isolated of [
+    {ACCESS_BLOCKED_EMAILS:'["finanzas@example.com"]'},
+    {ACCESS_SESSION_NOT_BEFORE:'{"finanzas@example.com":1700000000}'}
+  ]){
+    assert.equal((await accessAuthorize(naked.request,isolated,naked.path)).response.status,503,
+      'an incomplete revocation-only rollout must fail closed');
+  }
+  for(const value of [
+    'not-json','{"finanzas@example.com":true}',
+    '["FINANZAS@example.com"]',
+    '["finanzas@example.com","finanzas@example.com"]',
+    '{"finanzas@example.com":1700000000}'
+  ]){
+    assert.throws(()=>accessConfig({...cfg,ACCESS_BLOCKED_EMAILS:value}));
+  }
+  for(const value of [
+    'not-json','[]','{"FINANZAS@example.com":1700000000}',
+    '{"finanzas@example.com":1700000000000}',
+    '{"finanzas@example.com":"1700000000"}',
+    '{"finanzas@example.com":-1}'
+  ]){
+    assert.throws(()=>accessConfig({...cfg,ACCESS_SESSION_NOT_BEFORE:value}));
+  }
+  assert.doesNotThrow(()=>accessConfig({...cfg,ACCESS_BLOCKED_EMAILS:'[]',
+    ACCESS_SESSION_NOT_BEFORE:'{}'}));
+});
+test('removing a mapped email also blocks its existing JWT regardless of original role',async()=>{
+  const token=jwt({email:'finanzas@example.com'});
+  const withoutFinance={...cfg,ACCESS_ROLE_MAP:JSON.stringify({
+    'operador@example.com':'operator',
+    'visita@example.com':'viewer'
+  })};
+  const x=req(token,'GET','/access/me');
+  assert.equal((await accessAuthorize(x.request,withoutFinance,x.path)).response.status,401);
+});
 test('valid RS256 JWT grants only mapped explicit role',async()=>{
   const {request,path}=req(jwt());
   const result=await accessAuthorize(request,cfg,path);
