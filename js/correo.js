@@ -60,9 +60,31 @@ const MAIL={
   },
 
   _mailPassKey(){const a=this.activeAccount();return a?'thelab_mail_pass_'+a:null;},
-  getMailPass(){const k=this._mailPassKey();return k?localStorage.getItem(k)||'':null;},
-  setMailPass(p){const k=this._mailPassKey();if(k) localStorage.setItem(k,p);},
-  clearMailPass(){const k=this._mailPassKey();if(k) localStorage.removeItem(k);},
+  getMailPassFor(email){
+    if(!email)return '';
+    const k='thelab_mail_pass_'+email;
+    try{
+      const existing=sessionStorage.getItem(k);
+      if(existing)return existing;
+      // One-time migration of legacy passwords. sessionStorage is scoped to
+      // this tab; a closed browser will require the user to sign in again.
+      const old=localStorage.getItem(k)||'';
+      if(!old)return '';
+      sessionStorage.setItem(k,old);
+      localStorage.removeItem(k);
+      return old;
+    }catch(_){return '';}
+  },
+  getMailPass(){return this.getMailPassFor(this.activeAccount());},
+  setMailPass(p){
+    const k=this._mailPassKey();if(!k)return;
+    sessionStorage.setItem(k,p);
+    localStorage.removeItem(k);
+  },
+  clearMailPass(){
+    const k=this._mailPassKey();if(!k)return;
+    try{sessionStorage.removeItem(k);}finally{localStorage.removeItem(k);}
+  },
 
   auth(){
     const o=this.activeAccountObj();
@@ -169,7 +191,7 @@ const MAIL={
   // por-cuenta. Si esa clave no está, cae a la cuenta activa conservando el
   // from_name pedido, y avisa desde qué casilla salió realmente.
   async postAs(fromEmail,params){
-    const pass=localStorage.getItem('thelab_mail_pass_'+fromEmail)||'';
+    const pass=this.getMailPassFor(fromEmail);
     if(!pass){
       return {error:'No se envió: la casilla '+fromEmail+' no tiene credenciales configuradas. Selecciónala en Correos e inicia sesión.'};
     }
