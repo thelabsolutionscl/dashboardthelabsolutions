@@ -210,7 +210,13 @@ test('CAC y ROI usa cotizaciones del período, canal, aprobaciones y venta neta'
   const render=functionBlock(SOURCE,'renderCacCanal');
   assert.match(calc,/_mesRango\s*\(/,'debe respetar el mes seleccionado');
   assert.match(calc,/state\.cotizaciones/);
-  assert.match(calc,/Canal solicitud/);
+  const contact=functionBlock(SOURCE,'_canalesSolicitud');
+  const origin=functionBlock(SOURCE,'_origenAdquisicion');
+  assert.match(contact,/Canal solicitud/,'the request channel is tracked separately');
+  assert.match(origin,/Origen lead/);
+  assert.match(origin,/GCLID/);
+  assert.match(calc,/Sin atribución/);
+  assert.match(calc,/quality\.reliable/);
   assert.match(calc,/Estado cotización/);
   assert.match(calc,/Aprobada/,'solo las aprobadas deben generar revenue');
   assert.match(calc,/Total final \(CLP\)/);
