@@ -167,12 +167,12 @@ test('proxy rechaza alta de Reportes si falta DO y bloquea PATCH directo',async(
       method,headers:{Origin:ORIGIN,'X-App-Key':ENV.APP_KEY,'Content-Type':'application/json'},
       body:JSON.stringify(body)
     });
-    const denied=await worker.fetch(req('POST','Reportes',report('2026-W40')),ENV,{});
+    const denied=await worker.fetch(req('POST','Reportes',report('2026-W40')),ENV,{waitUntil:()=>{}});
     assert.equal(denied.status,503);
     assert.equal(h.counts().posts,0);
-    const forbidden=await worker.fetch(req('PATCH','Reportes/rec00001',report('2026-W40')),ENV,{});
+    const forbidden=await worker.fetch(req('PATCH','Reportes/rec00001',report('2026-W40')),ENV,{waitUntil:()=>{}});
     assert.equal(forbidden.status,403);
-    const bypass=await worker.fetch(req('POST','%52eportes',report('2026-W40')),ENV,{});
+    const bypass=await worker.fetch(req('POST','%52eportes',report('2026-W40')),ENV,{waitUntil:()=>{}});
     assert.equal(bypass.status,403);
   }finally{h.restore();}
 });
