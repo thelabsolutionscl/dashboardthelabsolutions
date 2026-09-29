@@ -53,7 +53,11 @@ function accessConfig(env){
   const blockedRaw=String(env.ACCESS_BLOCKED_EMAILS||'').trim();
   const notBeforeRaw=String(env.ACCESS_SESSION_NOT_BEFORE||'').trim();
   const sellersRaw=String(env.ACCESS_SELLER_MAP||'').trim();
-  if(!domain&&!audience&&!rolesRaw&&!enabled&&!blockedRaw&&!notBeforeRaw&&!sellersRaw)return null;
+  const salesWrites=String(env.ACCESS_SALES_WRITES_ENABLED||'').trim().toLowerCase();
+  if(salesWrites&&salesWrites!=='true'&&salesWrites!=='false')
+    throw new Error('ACCESS_SALES_WRITES_ENABLED must be an explicit boolean');
+  if(!domain&&!audience&&!rolesRaw&&!enabled&&!blockedRaw&&!notBeforeRaw&&
+     !sellersRaw&&salesWrites!=='true')return null;
   if(enabled!=='true'||!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(domain)||
      !/^[A-Za-z0-9_-]{10,200}$/.test(audience)||!rolesRaw)
     throw new Error('Cloudflare Access configuration incomplete: identity protection fails closed');
