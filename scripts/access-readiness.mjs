@@ -35,7 +35,7 @@ export async function checkAccessReadiness(config,fetcher=fetch){
   const simpleHeaders={Origin:BROWSER_ORIGIN,'X-App-Key':config.proxyKey};
   try{
     const r=await call('/access/me',{method:'OPTIONS',headers:{
-      Origin:BROWSER_ORIGIN,'Access-Control-Request-Method':'POST',
+      Origin:BROWSER_ORIGIN,'Access-Control-Request-Method':'GET',
       'Access-Control-Request-Headers':'x-app-key,content-type'
     }});
     const allowed=String(r.headers.get('Access-Control-Allow-Headers')||'').toLowerCase();
@@ -44,7 +44,7 @@ export async function checkAccessReadiness(config,fetcher=fetch){
        r.headers.get('Access-Control-Allow-Origin')!==BROWSER_ORIGIN||
        r.headers.get('Access-Control-Allow-Credentials')!=='true'||
        !allowed.includes('x-app-key')||!allowed.includes('content-type')||
-       !methods.includes('POST')){
+       !methods.includes('GET')){
       fail('CORS preflight does not permit authenticated dashboard requests');
     }else ok('Dashboard CORS preflight passed');
   }catch(_){fail('CORS preflight unavailable');}
@@ -57,6 +57,17 @@ export async function checkAccessReadiness(config,fetcher=fetch){
   }catch(_){fail('Cannot probe unauthenticated Access session');}
 
   if(config.stage==='reportes'){
+    // Validate the ACTUAL published bundle, not just the merge/deploy log.
+    // An Access login page or stale Pages cache must not count as Reportes.
+    try{
+      const r=await fetcher(BROWSER_ORIGIN+'/',{method:'GET',redirect:'manual',
+        signal:AbortSignal.timeout(12000),headers:{'Cache-Control':'no-cache'}});
+      const html=r.status===200?await r.text():'';
+      const markers=['id="crmAcquisitionAuditCard"','Contradicciones','id="nl-primer-contacto"'];
+      if(r.status!==200||!markers.every(marker=>html.includes(marker)))
+        fail('Published dashboard is unavailable or does not contain the latest Reportes/CRM corrections');
+      else ok('Published Pages bundle contains Reportes contradiction filter and explicit first-contact form');
+    }catch(_){fail('Published dashboard cannot be checked from the workflow runner');}
     // These checks are strictly read-only. A public shared APP_KEY must not
     // grant financial read access, and we never PUT a test spending amount.
     const month=new Date().toISOString().slice(0,7);
@@ -76,6 +87,19 @@ export async function checkAccessReadiness(config,fetcher=fetch){
         fail('Marketing spend CORS preflight failed for authenticated browser updates');
       }else ok('Marketing spend CORS preflight passed');
     }catch(_){fail('Marketing spend CORS preflight unavailable');}
+    // An unrelated website must NEVER receive a credentialed CORS grant.
+    // Testing OPTIONS performs no financial mutation.
+    try{
+      const outsider='https://untrusted.example';
+      const r=await call(paths[0],{method:'OPTIONS',headers:{
+        Origin:outsider,'Access-Control-Request-Method':'PUT',
+        'Access-Control-Request-Headers':'x-app-key,content-type'
+      }});
+      const allowed=r.headers.get('Access-Control-Allow-Origin');
+      if(![204,403].includes(r.status)||['*','null',outsider].includes(allowed))
+        fail('Untrusted origin was allowed or hostile-origin CORS could not be verified');
+      else ok('Marketing spend does not grant credentialed CORS to an untrusted origin');
+    }catch(_){fail('Cannot verify marketing spend hostile-origin CORS');}
     for(const path of paths){
       try{
         const r=await call(path,{method:'GET',headers:simpleHeaders});
@@ -148,6 +172,16 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   for(const item of result.passed)console.log('PASS: '+item);
   for(const item of result.manual)console.log('MANUAL: '+item);
   for(const item of result.errors)console.error('FAIL: '+item);
-  if(result.errors.length)process.exitCode=1;
+  if(process.env.GITHUB_STEP_SUMMARY){
+    const {appendFileSync}=await import('node:fs');
+    const label=result.errors.length?'FAILED':result.manual.length>1?'INCONCLUSIVE':'AUTOMATED PASS';
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+      '### Access readiness — '+label+' (manual human-role checks still required)\n\n'+
+      [...result.passed.map(x=>'- PASS: '+x),...result.manual.map(x=>'- MANUAL: '+x),
+        ...result.errors.map(x=>'- FAIL: '+x)].join('\n')+'\n');
+  }
+  // Edge redirects/403 are *not* proof that the Worker itself rejects a
+  // copied APP_KEY; do not mark Reportes green until the origin is verifiable.
+  if(result.errors.length||(process.env.STAGE==='reportes'&&result.manual.length>1))process.exitCode=1;
   else console.log('Automated checks completed; real user-session tests remain mandatory.');
 }
