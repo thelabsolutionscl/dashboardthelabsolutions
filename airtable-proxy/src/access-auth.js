@@ -23,7 +23,18 @@ const ACCESS_ALLOWED_TABLES=new Set([
   'Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema',
   'Proveedores','Reportes',
   'Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones','Presupuestos',
-  'Prestamos','Préstamos','Ventas','Caja'
+  'Prestamos','Préstamos','Ventas','Caja',
+  // Explicitly observed dashboard tables: admin needs these at Access cutover.
+  // Do not automatically widen reader/operator/finance access to campaign,
+  // notification or operational logs, which can contain personal information.
+  'Automations','Agent_Queue','Agent_Log','Social_Posts',
+  'Social_Interactions','Social_Metrics',
+  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
+]);
+const ACCESS_ADMIN_ONLY_TABLES=new Set([
+  'Automations','Agent_Queue','Agent_Log','Social_Posts',
+  'Social_Interactions','Social_Metrics',
+  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
 ]);
 const ACCESS_JWKS_CACHE=new Map();
 const ACCESS_JWKS_TTL=5*60*1000;
@@ -173,6 +184,7 @@ function accessAllows(identity,method,path){
 
   const table=accessTable(path);
   if(!table)return false;
+  if(ACCESS_ADMIN_ONLY_TABLES.has(table)&&!admin)return false;
   if(ACCESS_FINANCE_TABLES.has(table)&&!finance&&!admin)return false;
   if(!isWrite)return true;
   // Admin has unrestricted access to *recognized* data tables, not to any
