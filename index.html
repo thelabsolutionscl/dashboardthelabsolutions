@@ -15963,7 +15963,7 @@ function _canalStats(off){
       cac:quality.reliable&&g>0&&nuevos>0?Math.round(g/nuevos):null,
       // Only a campaign explicitly tagged Google Ads qualifies for ad return;
       // organic Google and untagged Instagram/Meta must not be credited.
-      roi:quality.reliable&&g>0&&e.canal==='Google Ads'?e.revenue/g:null};
+      roi:quality.reliable&&g>0&&e.canal==='Google Ads'&&e.nCot>0?e.revenue/g:null};
   }).sort((a,b)=>b.revenue-a.revenue);
 }
 function _canalesSolicitud(off){
