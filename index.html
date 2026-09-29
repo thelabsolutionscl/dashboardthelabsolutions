@@ -15739,7 +15739,7 @@ function renderReportes(){
   if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:28px"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-chart"/></svg></div><div style="margin-bottom:8px">Sin reportes aún</div><div style="font-size:11px;color:var(--text3)">Los reportes se generan automáticamente cada semana con el Agente CEO</div><button onclick="switchTab(\'agentes\')" style="margin-top:12px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ir a Agentes IA</button></div></td></tr>';return;}
   const ordenados=[...state.reportes].sort((a,b)=>{
     const fa=a.fields?.['Fecha generación']||'',fb=b.fields?.['Fecha generación']||'';
-    return String(fb).localeCompare(String(fa))||String(b.createdTime||'').localeCompare(String(a.createdTime||'');
+    return String(fb).localeCompare(String(fa))||String(b.createdTime||'').localeCompare(String(a.createdTime||''));
   });
   tbody.innerHTML=ordenados.map((r,i)=>{
     const f=r.fields;
