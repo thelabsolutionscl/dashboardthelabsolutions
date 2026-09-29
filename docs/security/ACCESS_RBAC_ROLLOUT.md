@@ -243,3 +243,44 @@ puede retirar después, manteniendo el original cifrado en Cloudflare.
 
 El script solo permite destinos oficiales del proxy, no sigue
 redirecciones y no revela respuestas completas ni valores de secretos.
+
+## Portal de clientes: retirar la clave maestra del navegador (fase opt-in)
+
+El puente **`POST /portal-admin/link`** permite a usuarios autenticados con
+rol `operator`, `finance` o `admin` generar un enlace firmado. Solo
+`admin` puede ejecutar **`POST /portal-admin/revocar`**, que invalida los
+enlaces vigentes de un cliente. El proxy verifica la sesión Access,
+valida el `clienteId`, limita `dias` a 1–365, exige JSON pequeño y
+solo conecta con el `thelab-leads-worker` oficial. No permite rutas,
+parámetros ni redirecciones arbitrarias, ni reintenta una revocación incierta.
+La clave `X-Portal-Admin-Key` se agrega exclusivamente dentro del proxy;
+nunca se devuelve ni se manda desde el navegador en el modo protegido.
+
+Para activar **sin interrumpir el portal existente**, completar estos pasos
+junto con la activación general de Cloudflare Access:
+
+1. Configurar en **airtable-proxy** `LEAD_WORKER_URL` con el origen oficial
+   `https://thelab-leads-worker.<equipo>.workers.dev/` o el dominio propio
+   habilitado (`leads.thelab.solutions` o `portal.thelab.solutions`) y
+   `PORTAL_ADMIN_KEY` como secreto cifrado, con el mismo valor que usa
+   **lead-worker**. No publicar esa clave en variables de Pages ni en código.
+2. Habilitar y probar las cuatro identidades de Cloudflare Access, incluida
+   la sesión de `operator`. Un operador debe poder crear un enlace pero no
+   revocarlo; `viewer` no puede hacer ninguna de las dos acciones; `admin`
+   puede realizarlas ambas. Probar realmente que los enlaces abran en el
+   portal, y que revocar un cliente no invalide a los demás.
+3. Solo después de estas pruebas, establecer **ambas** variables de GitHub
+   Actions: `PORTAL_ACCESS_MODE=true` y
+   `PORTAL_CUTOVER_VERIFIED=true`. El workflow de GitHub Pages deniega
+   la activación si falta la segunda. Al desplegar, sustituye
+   `%%PORTAL_ADMIN_KEY%%` por vacío y enciende el modo protegido. Si Access
+   o el proxy falla, el navegador **no regresa** al lead-worker directo.
+4. Verificar el artefacto Pages realmente publicado, invalidar service
+   workers/cachés y, cuando los equipos funcionen mediante Access, **rotar**
+   `PORTAL_ADMIN_KEY` coordinadamente en lead-worker y airtable-proxy.
+   Eliminar de GitHub Secrets el antiguo valor publicado.
+
+Sin esas verificaciones, el modo nuevo permanece apagado para conservar la
+operación existente; integrar el código **no** equivale a haber retirado la
+clave de producción. La credencial maestra de impresoras y el `APP_KEY`
+compartido del dashboard siguen pendientes en el P0 de seguridad #306.

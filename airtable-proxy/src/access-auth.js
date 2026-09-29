@@ -130,6 +130,12 @@ function accessAllows(identity,method,path){
   if(identity.role==='admin')return true;
   const isWrite=method!=='GET'&&method!=='HEAD';
   if(path==='/access/me')return method==='GET';
+  // Portal administrative operations require an individual, signed session.
+  // Sales/finance can create a link; revocation invalidates active links and
+  // is limited to admins. Never authorize these using only public APP_KEY.
+  if(path==='/portal-admin/link')return method==='POST'&&
+    (identity.role==='operator'||identity.role==='finance');
+  if(path==='/portal-admin/revocar'||path.startsWith('/portal-admin/'))return false;
   // Privileged SII calls are never exposed to the legacy shared APP_KEY:
   // finance may emit/read status, only admin may upload CAF.
   if(path==='/sii/emit')return identity.role==='finance'&&method==='POST';

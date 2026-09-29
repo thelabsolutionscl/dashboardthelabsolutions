@@ -642,7 +642,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -662,6 +662,64 @@ export default {
       }));
     }
 
+
+    // The lead Worker's privileged portal key never reaches Pages. This
+    // bridge is disabled in legacy APP_KEY-only mode, and grants ONLY the
+    // two explicit portal administration actions to verified humans.
+    if(url.pathname.startsWith('/portal-admin/')){
+      if(!authorized.identity)
+        return json({error:'Portal requires a signed Access user session',code:'ACCESS_REQUIRED'},503,CORS);
+      const action=url.pathname.slice('/portal-admin/'.length);
+      if(request.method!=='POST'||url.search||!['link','revocar'].includes(action))
+        return json({error:'Portal admin route not allowed'},404,CORS);
+      if(!String(request.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json'))
+        return json({error:'Portal request must be JSON'},415,CORS);
+      const size=Number(request.headers.get('Content-Length')||0);
+      if(size>2048)return json({error:'Portal request too large'},413,CORS);
+      let payload;
+      try {
+        const raw=await request.text();
+        if(raw.length>2048)throw new Error('Payload too large');
+        payload=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid portal JSON'},400,CORS);}
+      if(!payload||typeof payload!=='object'||Array.isArray(payload)||
+         !/^rec[A-Za-z0-9]{8,32}$/.test(payload.clienteId||'')||
+         !Object.keys(payload).every(k=>k==='clienteId'||(action==='link'&&k==='dias'))||
+         (action==='link'&&payload.dias!==undefined&&
+           (!Number.isInteger(payload.dias)||payload.dias<1||payload.dias>365)))
+        return json({error:'Invalid portal client or expiry'},400,CORS);
+      let lead;
+      try {
+        lead=new URL(String(env.LEAD_WORKER_URL||''));
+        if(lead.protocol!=='https:'||lead.username||lead.password||lead.port||
+           lead.pathname!=='/'||lead.search||lead.hash||
+           !(/^thelab-leads-worker\.[a-z0-9-]+\.workers\.dev$/.test(lead.hostname)||
+             ['leads.thelab.solutions','portal.thelab.solutions'].includes(lead.hostname)))
+          throw new Error('Untrusted lead worker origin');
+      }catch(_){return json({error:'Lead Worker URL is not configured safely'},503,CORS);}
+      if(typeof env.PORTAL_ADMIN_KEY!=='string'||env.PORTAL_ADMIN_KEY.length<16)
+        return json({error:'Portal backend credential missing'},503,CORS);
+      const body=JSON.stringify(action==='link'
+        ?{clienteId:payload.clienteId,dias:payload.dias||30}
+        :{clienteId:payload.clienteId});
+      try {
+        const upstream=await fetch(lead.origin+'/portal/'+action,{
+          method:'POST',redirect:'manual',
+          headers:{'Content-Type':'application/json','X-Portal-Admin-Key':env.PORTAL_ADMIN_KEY},
+          body
+        });
+        if(upstream.status>=300&&upstream.status<400)
+          return json({error:'Unexpected portal backend redirect; check result before retry'},502,CORS);
+        const reply=await upstream.text();
+        if(reply.length>16000||
+           !String(upstream.headers.get('Content-Type')||'').toLowerCase().includes('application/json'))
+          return json({error:'Invalid portal backend response; check result before retry'},502,CORS);
+        return new Response(reply,{status:upstream.status,
+          headers:{...CORS,'Content-Type':'application/json','Cache-Control':'no-store'}});
+      }catch(_){
+        return json({error:'Portal backend response uncertain; check the client before retrying'},502,CORS);
+      }
+    }
 
     // Proxied SII is deliberately unavailable in legacy APP_KEY-only mode.
     // Access validates the signed user's identity and requires finance/admin

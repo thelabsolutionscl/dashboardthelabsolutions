@@ -46,6 +46,8 @@ jobs:
           LEAD_WORKER_URL: ${{ secrets.LEAD_WORKER_URL }}
           PUBLIC_LEAD_KEY: ${{ secrets.PUBLIC_LEAD_KEY }}
           PORTAL_ADMIN_KEY: ${{ secrets.PORTAL_ADMIN_KEY }}
+          PORTAL_ACCESS_MODE: ${{ vars.PORTAL_ACCESS_MODE }}
+          PORTAL_CUTOVER_VERIFIED: ${{ vars.PORTAL_CUTOVER_VERIFIED }}
         run: |
           # Nunca publicar un PAT de Airtable en GitHub Pages, ni siquiera
           # cuando falte el Proxy. Si no hay backend configurado se detiene
@@ -60,7 +62,20 @@ jobs:
           # su URL y PORTAL_ADMIN_KEY para pedir el link firmado de cada cliente.
           if [ -n "${LEAD_WORKER_URL}" ]; then sed -i "s|%%LEAD_WORKER_URL%%|${LEAD_WORKER_URL}|g" index.html; fi
           if [ -n "${PUBLIC_LEAD_KEY}" ]; then sed -i "s|%%PUBLIC_LEAD_KEY%%|${PUBLIC_LEAD_KEY}|g" index.html; fi
-          if [ -n "${PORTAL_ADMIN_KEY}" ]; then sed -i "s|%%PORTAL_ADMIN_KEY%%|${PORTAL_ADMIN_KEY}|g" index.html; fi
+          if [ "${PORTAL_ACCESS_MODE}" = "true" ]; then
+            # A deliberate human verification gate prevents an accidental
+            # switch while Cloudflare Access or the proxy is still unconfigured.
+            if [ "${PORTAL_CUTOVER_VERIFIED}" != "true" ]; then
+              echo "::error::Portal Access requires verified backend and signed user roles before cutover."
+              exit 1
+            fi
+            sed -i "s|%%PORTAL_ADMIN_KEY%%||g" index.html
+            sed -i "s|%%PORTAL_ACCESS_MODE%%|true|g" index.html
+            echo "Portal Access enabled: administrative portal key is absent from Pages."
+          else
+            if [ -n "${PORTAL_ADMIN_KEY}" ]; then sed -i "s|%%PORTAL_ADMIN_KEY%%|${PORTAL_ADMIN_KEY}|g" index.html; fi
+            sed -i "s|%%PORTAL_ACCESS_MODE%%|false|g" index.html
+          fi
           sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
           if [ "${SII_ACCESS_MODE}" = "true" ]; then
             # Nunca publicar la clave fiscal cuando el dashboard usa el puente
