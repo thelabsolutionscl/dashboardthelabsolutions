@@ -17,7 +17,8 @@ const ORIGIN='https://dashboard.thelab.solutions';
 function fixture(){
   const memory=new Map();
   const storage={
-    async get(k){return memory.get(k);},
+    async get(k){return Array.isArray(k)?new Map(k.filter(key=>memory.has(key))
+      .map(key=>[key,memory.get(key)]).sort(([a],[b])=>a.localeCompare(b))):memory.get(k);},
     async put(k,v){memory.set(k,structuredClone(v));},
     async delete(k){memory.delete(k);},
     async list({prefix,reverse,limit}){let items=[...memory].filter(([k])=>k.startsWith(prefix)).sort((a,b)=>a[0].localeCompare(b[0]));if(reverse)items.reverse();return new Map(items.slice(0,limit));},
@@ -90,6 +91,73 @@ test('legacy shared app key, viewer role and malformed routes are rejected witho
     assert.ok(res.status>=400);
   }
   assert.equal(h.memory.size,0);
+});
+test('paginated audit retrieves every revision beyond 100 and remains stable after concurrent updates',async()=>{
+  identity={email:'finanzas@example.com',role:'finance'};
+  const h=fixture(),month='2026-09';
+  for(let revision=0;revision<205;revision++){
+    const res=await h.fetch('PUT',month,{
+      channel:'Google Ads',amount_clp:revision+1,expected_revision:revision
+    });
+    assert.equal(res.status,200,'write '+revision);
+  }
+  const history=async before=>{
+    const suffix=before===undefined?'':'&before_revision='+before;
+    const req=new Request('https://proxy.example.com/marketing/spend/history?month='+month+suffix,{
+      headers:{Origin:ORIGIN,'X-App-Key':h.env.APP_KEY}
+    });
+    return worker.fetch(req,h.env,{waitUntil:()=>{}});
+  };
+  const a=await history();
+  assert.equal(a.status,200);
+  const first=await a.json();
+  assert.equal(first.events.length,100);
+  assert.equal(first.events[0].revision,205);
+  assert.equal(first.events[99].revision,106);
+  assert.equal(first.next_before_revision,106);
+  assert.equal(first.has_more,true);
+  assert.equal(first.latest_revision,205);
+  // A new edit after page one must never duplicate or displace old history.
+  assert.equal((await h.fetch('PUT',month,{
+    channel:'LinkedIn',amount_clp:55,expected_revision:205
+  })).status,200);
+  const second=await (await history(first.next_before_revision)).json();
+  const third=await (await history(second.next_before_revision)).json();
+  assert.equal(second.events[0].revision,105);
+  assert.equal(second.events[99].revision,6);
+  assert.equal(second.next_before_revision,6);
+  assert.deepEqual(third.events.map(e=>e.revision),[5,4,3,2,1]);
+  assert.equal(third.has_more,false);
+  assert.equal(third.next_before_revision,null);
+  assert.equal(second.latest_revision,206);
+  const all=[...first.events,...second.events,...third.events];
+  assert.equal(all.length,205);
+  assert.equal(new Set(all.map(e=>e.revision)).size,205);
+  assert.deepEqual(all.map(e=>e.revision),Array.from({length:205},(_,i)=>205-i));
+});
+test('history rejects malformed or out-of-range cursors and audits missing revisions',async()=>{
+  identity={email:'finanzas@example.com',role:'finance'};
+  const h=fixture(),month='2026-08',base='https://proxy.example.com/marketing/spend/history?month='+month;
+  const req=url=>new Request(url,{headers:{Origin:ORIGIN,'X-App-Key':h.env.APP_KEY}});
+  for(const cursor of ['0','-1','02','abc','9999999999999']){
+    assert.equal((await worker.fetch(req(base+'&before_revision='+cursor),h.env)).status,422);
+  }
+  assert.equal((await worker.fetch(req(base+'&before_revision=2&before_revision=1'),h.env)).status,422);
+  assert.equal((await worker.fetch(req(base+'&other=1'),h.env)).status,422);
+  assert.equal((await worker.fetch(req(base+'&month='+month),h.env)).status,422);
+  assert.equal((await worker.fetch(req('https://proxy.example.com/marketing/spend?month='+month+
+    '&before_revision=1'),h.env)).status,422);
+  let result=await worker.fetch(req(base),h.env);
+  assert.equal(result.status,200);
+  assert.deepEqual((await result.json()).events,[]);
+  assert.equal((await h.fetch('PUT',month,{
+    channel:'Google Ads',amount_clp:1000,expected_revision:0
+  })).status,200);
+  assert.equal((await worker.fetch(req(base+'&before_revision=4'),h.env)).status,422);
+  h.memory.delete('marketing:audit:'+month+':000000000001');
+  result=await worker.fetch(req(base),h.env);
+  assert.equal(result.status,503);
+  assert.match((await result.json()).error,/integrity/);
 });
 test('idempotent same-value write does not create duplicate audit revisions',async()=>{
   const h=fixture();
