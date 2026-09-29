@@ -44,7 +44,11 @@ function accessConfig(env){
   const audience=String(env.ACCESS_AUD||'').trim();
   const rolesRaw=String(env.ACCESS_ROLE_MAP||'').trim();
   const enabled=String(env.ACCESS_ENFORCE||'').trim().toLowerCase();
-  if(!domain&&!audience&&!rolesRaw&&!enabled)return null;
+  // Optional emergency revocation controls. Supplying only either of these
+  // must NOT silently leave the Worker in unauthenticated legacy mode.
+  const blockedRaw=String(env.ACCESS_BLOCKED_EMAILS||'').trim();
+  const notBeforeRaw=String(env.ACCESS_SESSION_NOT_BEFORE||'').trim();
+  if(!domain&&!audience&&!rolesRaw&&!enabled&&!blockedRaw&&!notBeforeRaw)return null;
   if(enabled!=='true'||!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(domain)||
      !/^[A-Za-z0-9_-]{10,200}$/.test(audience)||!rolesRaw)
     throw new Error('Cloudflare Access configuration incomplete: identity protection fails closed');
@@ -55,7 +59,28 @@ function accessConfig(env){
      !Object.entries(source).every(([email,role])=>
        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&email===email.toLowerCase()&&ACCESS_ROLES.has(role)))
     throw new Error('ACCESS_ROLE_MAP must contain explicit email-to-role entries');
-  return {domain,audience,roles:source};
+  let blocked=[],notBefore=Object.create(null);
+  if(blockedRaw){
+    try{blocked=JSON.parse(blockedRaw);}catch(_){throw new Error('ACCESS_BLOCKED_EMAILS must be a JSON array');}
+    if(!Array.isArray(blocked)||blocked.length>200||
+       !blocked.every(email=>typeof email==='string'&&
+         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&email===email.toLowerCase())||
+       new Set(blocked).size!==blocked.length)
+      throw new Error('ACCESS_BLOCKED_EMAILS must contain unique lowercase emails');
+  }
+  if(notBeforeRaw){
+    let parsed;
+    try{parsed=JSON.parse(notBeforeRaw);}catch(_){throw new Error('ACCESS_SESSION_NOT_BEFORE must be a JSON object');}
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||
+       Object.keys(parsed).length>200||
+       !Object.entries(parsed).every(([email,cutoff])=>
+         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&email===email.toLowerCase()&&
+         Number.isSafeInteger(cutoff)&&cutoff>=1000000000&&cutoff<=4102444800))
+      throw new Error('ACCESS_SESSION_NOT_BEFORE requires lowercase emails and Unix seconds');
+    notBefore=Object.assign(Object.create(null),parsed);
+  }
+  return {domain,audience,roles:source,blockedEmails:new Set(blocked),
+    sessionNotBefore:notBefore};
 }
 
 function accessDecode(segment){
@@ -113,6 +138,17 @@ async function accessVerify(token,config){
   const email=typeof claims.email==='string'?claims.email.toLowerCase():'';
   if(!email||!Object.hasOwn(config.roles,email)||claims.common_name||claims.sub==='')
     throw new Error('Access identity has no assigned role');
+  // A valid, unexpired Access JWT is not enough if the organization blocks a
+  // person after issuing it. These controls take effect on the NEXT request.
+  // Keep token cutoffs separate from the persistent email denylist: a later
+  // reauthentication can renew an old session, but cannot evade a block.
+  if(config.blockedEmails?.has(email))
+    throw new Error('Access user administratively blocked');
+  if(Object.hasOwn(config.sessionNotBefore||{},email)){
+    const cutoff=config.sessionNotBefore[email];
+    if(!Number.isSafeInteger(claims.iat)||claims.iat<=cutoff)
+      throw new Error('Access user session issued before revocation cutoff');
+  }
   return {email,role:config.roles[email]};
 }
 
