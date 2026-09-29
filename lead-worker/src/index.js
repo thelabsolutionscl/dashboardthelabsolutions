@@ -1930,8 +1930,7 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
   // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
   if (
     env.AUTO_PROCESS_LEADS === "true" &&
-    env.AI_PROXY_URL &&
-    env.AI_PROXY_KEY &&
+    leadAiProxyConfigured(env) &&
     queueId &&
     (await autoProcessAllowed(env))
   ) {
@@ -2028,6 +2027,12 @@ Responde SOLO un objeto JSON con EXACTAMENTE estas claves:
  "resumen": "<resumen interno breve>"
 }`;
 
+function leadAiProxyConfigured(env){
+  if(!env.AI_PROXY_URL)return false;
+  return env.AI_ACCESS_MODE==='true'
+    ?!!(env.CF_ACCESS_CLIENT_ID&&env.CF_ACCESS_CLIENT_SECRET)
+    :!!env.AI_PROXY_KEY;
+}
 const CLAUDE_ALLOWED_MODELS = new Set([
   "claude-haiku-4-5",
   "claude-haiku-4-5-20251001",
@@ -3112,7 +3117,7 @@ async function adsAutopilotRun(env, { force = false } = {}) {
   if (!force && env.ADS_AUTOPILOT !== "true") return { skipped: "ADS_AUTOPILOT desactivado" };
   if (!env.ADS_ENDPOINT) return { skipped: "falta ADS_ENDPOINT" };
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return { skipped: "falta Airtable" };
-  if (!env.AI_PROXY_URL || !env.AI_PROXY_KEY) return { skipped: "falta proxy IA protegido" };
+  if (!leadAiProxyConfigured(env)) return { skipped: "falta proxy IA protegido" };
 
   const cfg = await apLoadConfig(env);
   if (cfg.enabled === false && !force) return { skipped: "kill-switch en Monitor Sistema" };
