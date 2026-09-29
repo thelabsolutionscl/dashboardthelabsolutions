@@ -1418,6 +1418,8 @@
       <div class="field-group"><label class="field-label">Teléfono</label><input class="field-input" id="nl-telefono" type="tel" placeholder="+56 9 1234 5678"></div>
       <div class="field-group"><label class="field-label">Email</label><input class="field-input" id="nl-email" type="email"></div>
       <div class="field-group"><label class="field-label">Origen</label><select class="field-select" id="nl-origen"><option value="">— Sin atribución · por verificar —</option><option>Referido</option><option>Instagram</option><option>LinkedIn</option><option>Google</option><option>Contacto directo</option><option>Otro</option></select></div>
+      <div class="field-group"><label class="field-label">Primer contacto (fecha verificada, opcional)</label><input class="field-input" id="nl-primer-contacto" type="date"><small style="color:var(--text3)">Déjala vacía si aún no sabes cuándo llegó el cliente.</small></div>
+      <div class="field-group"><label class="field-label">Evidencia si la fecha es anterior a hoy</label><input class="field-input" id="nl-evidencia-contacto" placeholder="Ej: correo original del 10/08/2026"></div>
       <div class="field-group"><label class="field-label">Industria</label><select class="field-select" id="nl-industria"><option value="">— seleccionar —</option><option>Agencia / Marketing</option><option>Retail</option><option>Tecnología</option><option>Educación</option><option>Eventos</option><option>Otro</option></select></div>
       <div class="field-group form-full"><label class="field-label">Dirección</label><input class="field-input" id="nl-direccion" placeholder="Av. Ejemplo 123, of. 4"></div>
       <div class="field-group"><label class="field-label">Región</label><select class="field-select" id="nl-region" onchange="cotPopulaComunas('nl-region','nl-comuna','')"><option value="">— Seleccionar —</option><option>Arica y Parinacota</option><option>Tarapacá</option><option>Antofagasta</option><option>Atacama</option><option>Coquimbo</option><option>Valparaíso</option><option>O'Higgins</option><option>Maule</option><option>Ñuble</option><option>Biobío</option><option>La Araucanía</option><option>Los Ríos</option><option>Los Lagos</option><option>Aysén</option><option>Magallanes</option><option>Metropolitana</option></select></div>
@@ -13309,6 +13311,20 @@ function nlEmpresaKey(e){
   }else if(e.key==='Escape'){nlEmpresaCerrar();}
 }
 document.addEventListener('click',e=>{const b=document.getElementById('nlEmpresaSug');if(b&&b.style.display!=='none'&&!e.target.closest('#nlEmpresaSug')&&e.target.id!=='nl-empresa')nlEmpresaCerrar();});
+// El alta de Airtable no prueba cuándo ocurrió el primer contacto.
+function _crmNewClientProvenance(rawDate,rawProof){
+  const date=String(rawDate||'').trim(),proof=String(rawProof||'').trim();
+  if(!date){
+    if(proof)throw new Error('Indica la fecha de primer contacto para guardar su evidencia.');
+    return {date:'',note:''};
+  }
+  if(_crmAuditDate(date)!==date||date>hoyCL())
+    throw new Error('El primer contacto debe tener una fecha válida y no futura.');
+  if(proof.length>500)throw new Error('La evidencia no puede superar 500 caracteres.');
+  if(date<hoyCL()&&proof.length<12)
+    throw new Error('Para una fecha antigua, incluye una referencia verificable de al menos 12 caracteres.');
+  return {date,note:date<hoyCL()?'[Alta CRM '+hoyCL()+'] Primer contacto documentado: '+date+'. Evidencia: '+proof:''};
+}
 async function createLead(){
   const btn=document.getElementById('createLeadBtn');const empresa=document.getElementById('nl-empresa').value.trim();const contacto=document.getElementById('nl-contacto').value.trim();const email=document.getElementById('nl-email').value.trim();
   const tel=document.getElementById('nl-telefono').value.trim();const rutEl=document.getElementById('nl-rut');const rut=(rutEl?.value||'').trim();
@@ -13328,8 +13344,13 @@ async function createLead(){
   if(tel&&!validPhone(tel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
   if(rut&&!validRUT(rut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
   if(rut&&rutEl) rutEl.value=formatRUT(rut);
+  let provenance;
+  try{provenance=_crmNewClientProvenance(document.getElementById('nl-primer-contacto').value,document.getElementById('nl-evidencia-contacto').value);}
+  catch(e){toast(e.message,'error');return;}
   btn.disabled=true;btn.textContent='Creando...';
-  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':hoyCL()};
+  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0};
+  if(provenance.date)fields['Fecha primer contacto']=provenance.date;
+  if(provenance.note)fields['Notas internas']=(fields['Notas internas']?fields['Notas internas'].trimEnd()+'\n\n':'')+provenance.note;
   // No inventar canal de adquisición al crear un lead sin atribución confirmada.
   if(!fields['Origen lead']) delete fields['Origen lead'];
   if(document.getElementById('nl-industria').value) fields['Industria / Rubro']=document.getElementById('nl-industria').value;
@@ -14001,7 +14022,7 @@ async function gfClientCreate(){
   if(!empresa){toast('Empresa requerida','error');return;}
   try{
     toast('Creando cliente…','info');
-    const f={'Empresa':empresa,'Contacto':contacto||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':hoyCL()};
+    const f={'Empresa':empresa,'Contacto':contacto||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0}; // Alta rápida: fecha desconocida
     if(isVendorMode())f['Vendedor']=currentVendorId();
     const rec=await airtableWrite('Clientes','POST',null,f);
     if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}
@@ -14187,11 +14208,19 @@ function startNewClientFlow(){
     {key:'ciudad',type:'text',q:'¿Ciudad?',sub:'Opcional.',rows:1,placeholder:'Ej: Santiago'},
     {key:'web',type:'text',q:'¿Sitio web?',sub:'Opcional.',rows:1,placeholder:'https://…'},
     {key:'origen',type:'chips',q:'¿De dónde viene el lead?',options:_ORIGEN_OPTS},
+    {key:'fechaPrimerContacto',type:'date',q:'¿Cuándo fue realmente el primer contacto?',sub:'Opcional. Vacío si se desconoce: la fecha de alta no prueba adquisición.'},
+    {key:'evidenciaPrimerContacto',type:'text',q:'¿Qué evidencia confirma esa fecha antigua?',sub:'Referencia al correo, mensaje, formulario o contrato original.',rows:2,skip:a=>!a.fechaPrimerContacto||a.fechaPrimerContacto>=hoyCL()},
     {key:'notas',type:'text',q:'Notas internas',sub:'Opcional.',rows:2,placeholder:'Contexto, necesidades…'},
-    {key:'_sum',type:'summary',q:'Revisa y confirma',sub:'Verifica los datos antes de crear el cliente.',fields:_CLI_SUM},
+    {key:'_sum',type:'summary',q:'Revisa y confirma',sub:'Verifica los datos antes de crear el cliente.',fields:[..._CLI_SUM,{label:'Primer contacto',key:'fechaPrimerContacto'}]},
   ],onComplete:async(a)=>{
     if(!a.empresa){toast('La empresa es obligatoria','error');return;}
-    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Origen lead':a.origen||'','Notas internas':a.notas||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0,'Fecha primer contacto':hoyCL()};
+    let provenance;
+    try{provenance=_crmNewClientProvenance(a.fechaPrimerContacto||'',a.fechaPrimerContacto?a.evidenciaPrimerContacto||'':'');}
+    catch(e){toast(e.message,'error');return;}
+    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Notas internas':a.notas||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0};
+    if(a.origen)f['Origen lead']=a.origen;
+    if(provenance.date)f['Fecha primer contacto']=provenance.date;
+    if(provenance.note)f['Notas internas']=(f['Notas internas']?f['Notas internas'].trimEnd()+'\n\n':'')+provenance.note;
     if(isVendorMode())f['Vendedor']=currentVendorId();
     toast('Creando cliente…','info');
     let rec;
