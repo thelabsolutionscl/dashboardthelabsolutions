@@ -130,6 +130,9 @@ function accessAllows(identity,method,path){
   if(identity.role==='admin')return true;
   const isWrite=method!=='GET'&&method!=='HEAD';
   if(path==='/access/me')return method==='GET';
+  // Marketing spend is financial data: no viewer/operator access or shared-key writes.
+  if(path==='/marketing/spend')return identity.role==='finance'&&['GET','PUT'].includes(method);
+  if(path==='/marketing/spend/history')return identity.role==='finance'&&method==='GET';
   // An authenticated human may request ONLY a short-lived farm ticket.
   // The proxy maps finance/viewer to read-only, operator to printer
   // operations and admin to farm administration; shared APP_KEY cannot mint.
