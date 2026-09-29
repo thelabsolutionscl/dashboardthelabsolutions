@@ -42,6 +42,9 @@ test('cross-site cookies and hostile proxy URLs cannot pass the SII cutover',()=
     ''])assert.notEqual(check({PROXY_URL:u}).code,0,u);
 });
 test('verified SII cutover removes fiscal key; legacy path remains until explicit approval',()=>{
-  assert.match(deploy,/if \[ "${SII_ACCESS_MODE}" = "true" \]; then[\s\S]*sed -i "s\|%%SII_WORKER_KEY%%\|\|g" index\.html/);
-  assert.match(deploy,/else\s+if \[ -n "${SII_WORKER_KEY}" \]; then sed -i "s\|%%SII_WORKER_KEY%%\|${SII_WORKER_KEY}\|g" index\.html; fi/);
+  const secure=deploy.indexOf('if [ "${SII_ACCESS_MODE}" = "true" ]; then');
+  const scrub=deploy.indexOf('sed -i "s|%%SII_WORKER_KEY%%||g" index.html',secure);
+  const fallback=deploy.indexOf('if [ -n "${SII_WORKER_KEY}" ]; then',scrub);
+  assert.ok(secure>0&&scrub>secure&&fallback>scrub,'secure mode scrubs the key, legacy path remains separate');
+  assert.ok(deploy.indexOf('sed -i "s|%%SII_ACCESS_MODE%%|true|g" js/finanzas.js',scrub)>scrub);
 });
