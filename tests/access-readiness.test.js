@@ -12,13 +12,15 @@ const cors={'Access-Control-Allow-Origin':'https://dashboard.thelab.solutions',
   'Access-Control-Allow-Credentials':'true',
   'Access-Control-Allow-Headers':'Content-Type,X-App-Key,X-AI-Agent',
   'Access-Control-Allow-Methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS'};
-function mock({badCors=false,legacy=false,leak=false,marketingUnavailable=false}={}){
+function mock({badCors=false,legacy=false,leak=false,marketingUnavailable=false,
+  stalePages=false,unsafeOrigin=false}={}){
  const calls=[];
  const fetcher=async(url,init={})=>{
   calls.push({url,init});
   const u=new URL(url);
   if(init.method==='OPTIONS')return new Response(null,{status:badCors?403:204,
-    headers:badCors?{}:cors});
+    headers:badCors?{}:unsafeOrigin&&init.headers?.Origin==='https://untrusted.example'
+      ?{...cors,'Access-Control-Allow-Origin':'https://untrusted.example'}:cors});
   if(u.pathname==='/access/me')return Response.json({enabled:!legacy},
     {status:legacy?200:401});
   if(u.pathname.startsWith('/marketing/spend'))return Response.json({error:'unauthorized'},
@@ -27,7 +29,9 @@ function mock({badCors=false,legacy=false,leak=false,marketingUnavailable=false}
   if(u.pathname==='/service/lead/anthropic/v1/messages')
     return Response.json({error:'Invalid Anthropic JSON body'},{status:400});
   if(url==='https://dashboard.thelab.solutions/')
-    return new Response(leak?'test-secret-exposed-123456':'No key',{status:200});
+    return new Response(leak?'test-secret-exposed-123456':stalePages?'Old bundle':
+      '<div id="crmAcquisitionAuditCard">Contradicciones</div><input id="nl-primer-contacto">',
+      {status:200});
   throw new Error('Unexpected network target: '+url);
  };
  return {fetcher,calls};
@@ -57,6 +61,9 @@ test('Reportes readiness checks marketing authorization and PUT CORS without any
  assert.ok(r.passed.some(x=>x.includes('Marketing spend CORS')));
  assert.equal(h.calls.filter(c=>c.url.includes('/marketing/spend')&&c.init.method==='GET').length,2);
  assert.ok(h.calls.some(c=>c.url.includes('/marketing/spend')&&c.init.method==='OPTIONS'));
+ assert.ok(h.calls.some(c=>c.url==='https://dashboard.thelab.solutions/'&&c.init.method==='GET'));
+ assert.ok(r.passed.some(x=>x.includes('Published Pages bundle')));
+ assert.ok(r.passed.some(x=>x.includes('untrusted origin')));
  assert.ok(h.calls.every(c=>!['PUT','POST','PATCH','DELETE'].includes(c.init.method)));
  assert.ok(h.calls.every(c=>!c.url.includes('/sii/')&&!c.url.includes('/service/lead/')));
 });
@@ -69,6 +76,13 @@ test('Reportes readiness refuses legacy marketing mode and cross-site Worker hos
    proxyUrl:'https://airtable-proxy.wast3dspa.workers.dev'},h.fetcher);
  assert.match(wrong.errors.join(' '),/same-site/);
  assert.equal(h.calls.length,0);
+});
+test('Reportes readiness rejects stale Pages bundles and credentialed hostile-origin CORS',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const old=await checkAccessReadiness({...cfg,stage:'reportes'},mock({stalePages:true}).fetcher);
+ assert.match(old.errors.join(' '),/Published dashboard/);
+ const hostile=await checkAccessReadiness({...cfg,stage:'reportes'},mock({unsafeOrigin:true}).fetcher);
+ assert.match(hostile.errors.join(' '),/Untrusted origin/);
 });
 test('unapproved proxy URLs do not receive service credentials',async()=>{
  const {checkAccessReadiness}=await import(script.href);
