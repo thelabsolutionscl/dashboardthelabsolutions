@@ -171,9 +171,7 @@ const MAIL={
   async postAs(fromEmail,params){
     const pass=localStorage.getItem('thelab_mail_pass_'+fromEmail)||'';
     if(!pass){
-      const a=this.activeAccount();
-      try{toast('Enviado desde '+a+' — guarda la clave de '+fromEmail+' en Correos para enviar desde esa casilla','info');}catch(e){}
-      return this.post(params);
+      return {error:'No se envió: la casilla '+fromEmail+' no tiene credenciales configuradas. Selecciónala en Correos e inicia sesión.'};
     }
     if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
     const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
