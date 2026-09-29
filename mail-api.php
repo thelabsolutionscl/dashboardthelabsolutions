@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-24-spam-verify');
+define('MAIL_API_BUILD', '2026-09-29-mail-security-rate-guard');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -559,11 +559,11 @@ function resend_send($from_name, $from_addr, $to, $cc, $subject, $body_html, $at
 // file before Resend, so simultaneous browser tabs cannot bypass the guard.
 // Failed/uncertain upstream responses still consume a slot (safer than
 // re-sending duplicate customer messages). No email addresses are written.
-function mail_send_reserve($user) {
+function mail_send_reserve($user, $testFile = null) {
     $configured = getenv('MAIL_SEND_HOURLY_LIMIT');
     $limit = ($configured !== false && preg_match('/^[1-9][0-9]{0,3}$/', (string)$configured))
         ? min((int)$configured, 2000) : 200;
-    $file = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'tls-mail-send-guard.json';
+    $file = $testFile !== null ? $testFile : rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'tls-mail-send-guard.json';
     $handle = @fopen($file, 'c+');
     if (!$handle) return ['error' => 'No se pudo reservar la cuota segura de envío', 'status' => 503];
     @chmod($file, 0600);
