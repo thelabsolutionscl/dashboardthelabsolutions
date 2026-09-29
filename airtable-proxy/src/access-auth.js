@@ -16,11 +16,12 @@ const ACCESS_WRITE_TABLES={
 };
 const ACCESS_FINANCE_TABLES=new Set([
   'Facturas','Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones',
-  'Presupuestos','Prestamos','Préstamos','Ventas','Caja','Reportes','Monitor Sistema','Proveedores','Reportes'
+  'Presupuestos','Prestamos','Préstamos','Ventas','Caja','Reportes'
 ]);
 const ACCESS_ALLOWED_TABLES=new Set([
   'Clientes','Cotizaciones','Pedidos','Facturas','Inventario','Maquinas',
-  'Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos',
+  'Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema',
+  'Proveedores','Reportes',
   'Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones','Presupuestos',
   'Prestamos','Préstamos','Ventas','Caja'
 ]);
