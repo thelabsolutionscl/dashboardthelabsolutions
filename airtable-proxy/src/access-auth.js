@@ -136,7 +136,7 @@ function accessAllows(identity,method,path){
   const admin=identity.role==='admin';
   const finance=identity.role==='finance';
   const operator=identity.role==='operator';
-  const isWrite=method!=='GET'&&method!=='HEAD';
+  const isWrite=method!=='GET';
   if(path==='/access/me')return method==='GET';
   // Financial endpoints are explicitly constrained even for administrators.
   if(path==='/marketing/spend')return (finance||admin)&&['GET','PUT'].includes(method);
