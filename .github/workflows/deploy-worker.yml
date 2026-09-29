@@ -1,7 +1,7 @@
 name: Deploy Cloudflare Workers
 
-# Despliega automáticamente los Workers críticos cuando cambia su código en
-# main, para que producción no quede desincronizada del repo.
+# Despliega exclusivamente los Workers cuyo código cambió en main;
+# nunca obliga a desplegar SII por un cambio de Reportes en el proxy.
 # También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
 #
 # Requisito de una sola vez: crear el secreto CLOUDFLARE_API_TOKEN en
@@ -17,7 +17,19 @@ on:
       - 'airtable-proxy/**'
       - 'sii-worker/**'
       - '.github/workflows/deploy-worker.yml'
-  workflow_dispatch: {}
+      - 'scripts/worker-deploy-targets.sh'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy all Workers or only the selected component
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - lead
+          - proxy
+          - sii
 
 permissions:
   contents: read
@@ -27,7 +39,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      lead: ${{ steps.targets.outputs.lead }}
+      proxy: ${{ steps.targets.outputs.proxy }}
+      sii: ${{ steps.targets.outputs.sii }}
+    steps:
+      - name: Checkout commit history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect affected Workers
+        id: targets
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          TARGET: ${{ inputs.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            bash scripts/worker-deploy-targets.sh manual "$TARGET" >> "$GITHUB_OUTPUT"
+          else
+            if [[ "$BEFORE" =~ ^0+$ ]]; then
+              bash scripts/worker-deploy-targets.sh manual all >> "$GITHUB_OUTPUT"
+            else
+              git diff --name-only "$BEFORE" "$SHA" |
+                bash scripts/worker-deploy-targets.sh push >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
   deploy:
+    needs: detect
+    if: needs.detect.outputs.lead == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -60,6 +106,8 @@ jobs:
           AI_PROXY_KEY: ${{ secrets.PROXY_KEY }}
 
   deploy-proxy:
+    needs: detect
+    if: needs.detect.outputs.proxy == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -87,6 +135,8 @@ jobs:
 
 
   deploy-sii:
+    needs: detect
+    if: needs.detect.outputs.sii == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

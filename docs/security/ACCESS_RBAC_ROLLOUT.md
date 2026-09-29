@@ -348,3 +348,11 @@ Para revocación urgente, invalidar las sesiones del Farm Controller
 reiniciándolo de forma controlada, teniendo en cuenta la continuidad de las
 impresiones y los WebSockets. No se afirma despliegue ni pruebas en el iMac
 hasta verificarlos de verdad.
+
+## 2026-09-29 — Despliegues independientes por Worker
+
+Durante la corrección del historial de Reportes (#335), el workflow de Cloudflare intentó desplegar también el Worker SII sin cambios en su código. El proxy y el Worker de leads sí se desplegaron; el job SII falló por falta de `SII_WORKER_KEY` en Actions. Este fallo no significa que se haya publicado el Worker tributario ni que el cambio de Reportes dependa de la clave fiscal.
+
+El workflow distingue ahora las rutas modificadas con `git diff` y despacha exclusivamente el Worker afectado (`airtable-proxy/`, `lead-worker/` o `sii-worker/`). Un cambio solo del proxy no dispara SII, preservando sus credenciales y evitando un falso despliegue fiscal. El comando manual de Actions ofrece `all`, `lead`, `proxy` y `sii` como destinos explícitos; conserva `all` como opción por defecto para una ventana de despliegue conjunta controlada. Si solo cambian documentación o el workflow, no se publican Workers innecesarios. Pruebas unitarias validan cada combinación y las condiciones de todos los jobs.
+
+La clave SII de Actions y Cloudflare Access siguen pendientes de la fase manual final. La separación del despliegue no activa por sí misma ninguna integración fiscal ni cambia las variables de seguridad vigentes.
