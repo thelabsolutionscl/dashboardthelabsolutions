@@ -15690,21 +15690,48 @@ function _canalStats(off){
   const ini=mr?mr.ini.getTime():0,fin=mr?mr.fin.getTime():Infinity;
   const gasto=_gastoCanal(off);
   const _cid=f=>Array.isArray(f['Cliente'])&&f['Cliente'].length?f['Cliente'][0]:(f['Cliente']||null);
-  // Clientes que YA existían antes del período (cotizaron antes) → no son captación nueva.
-  const existentes=new Set();
-  (state.cotizaciones||[]).forEach(c=>{const t=c.createdTime?new Date(c.createdTime).getTime():0;if(t<ini){const id=_cid(c.fields);if(id)existentes.add(id);}});
+  // An acquisition is the first known CRM contact, not every quotation a
+  // returning customer submits. If its first quote spans multiple channels,
+  // attribute the customer ONLY to the channel of that first quote.
+  const primero=new Map();
+  (state.cotizaciones||[]).forEach(c=>{
+    const cid=_cid(c.fields||{});
+    const t=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    if(!cid||!Number.isFinite(t))return;
+    const previous=primero.get(cid);
+    if(!previous||t<previous.t||(t===previous.t&&String(c.id)<String(previous.id)))
+      primero.set(cid,{t,id:c.id});
+  });
+  // A client created before its first quote was acquired before the quote;
+  // historic clients must not be labeled new when they request fresh work.
+  const alta=new Map();
+  (state.clientes||[]).forEach(c=>{
+    const t=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    if(!c.id||!Number.isFinite(t))return;
+    const previous=alta.get(c.id);
+    if(previous===undefined||t<previous)alta.set(c.id,t);
+  });
   const by=new Map();
   (state.cotizaciones||[]).forEach(c=>{
-    const f=c.fields;const t=c.createdTime?new Date(c.createdTime).getTime():0;if(!(t>=ini&&t<fin))return;
-    const canal=(f['Canal solicitud']||'Directo').trim()||'Directo';
+    const f=c.fields||{},t=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    if(!(t>=ini&&t<fin))return;
+    const canal=String(f['Canal solicitud']||'Directo').trim()||'Directo';
     const e=by.get(canal)||{canal,nuevos:new Set(),revenue:0,nCot:0};
     e.nCot++;
-    const cid=_cid(f)||('cot:'+c.id);
-    if(!existentes.has(cid)) e.nuevos.add(cid);   // solo clientes realmente nuevos
-    if((f['Estado cotización']||'')==='Aprobada') e.revenue+=Math.round((f['Total final (CLP)']||0)/1.19);
+    const cid=_cid(f),first=cid?primero.get(cid):null,created=cid?alta.get(cid):undefined;
+    if(first&&first.id===c.id&&first.t>=ini&&first.t<fin&&
+       (created===undefined||created>=ini))e.nuevos.add(cid);
+    // Revenue belongs to the quotation's actual channel even when the
+    // customer acquisition belonged to a different channel or month.
+    if((f['Estado cotización']||'')==='Aprobada')
+      e.revenue+=Math.round((f['Total final (CLP)']||0)/1.19);
     by.set(canal,e);
   });
-  return [...by.values()].map(e=>{const g=gasto[e.canal]||0;const nuevos=e.nuevos.size;return {canal:e.canal,nCot:e.nCot,revenue:e.revenue,nuevos,gasto:g,cac:g>0&&nuevos>0?Math.round(g/nuevos):0,roi:g>0?e.revenue/g:null};}).sort((a,b)=>b.revenue-a.revenue);
+  return [...by.values()].map(e=>{
+    const g=gasto[e.canal]||0,nuevos=e.nuevos.size;
+    return {canal:e.canal,nCot:e.nCot,revenue:e.revenue,nuevos,gasto:g,
+      cac:g>0&&nuevos>0?Math.round(g/nuevos):0,roi:g>0?e.revenue/g:null};
+  }).sort((a,b)=>b.revenue-a.revenue);
 }
 function renderCacCanal(){
   const el=document.getElementById('cacCanalCard');if(!el)return;
