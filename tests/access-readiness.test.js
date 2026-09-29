@@ -1,0 +1,67 @@
+#!/usr/bin/env node
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {pathToFileURL}=require('node:url');
+const script=pathToFileURL(path.join(__dirname,'../scripts/access-readiness.mjs'));
+const cfg={proxyUrl:'https://proxy.thelab.solutions',proxyKey:'compat-test',
+  serviceClientId:'test-machine.access',serviceClientSecret:'test-only',stage:'before'};
+const cors={'Access-Control-Allow-Origin':'https://dashboard.thelab.solutions',
+  'Access-Control-Allow-Credentials':'true',
+  'Access-Control-Allow-Headers':'Content-Type,X-App-Key,X-AI-Agent',
+  'Access-Control-Allow-Methods':'GET,POST,PATCH,PUT,DELETE,OPTIONS'};
+function mock({badCors=false,legacy=false,leak=false}={}){
+ const calls=[];
+ const fetcher=async(url,init={})=>{
+  calls.push({url,init});
+  const u=new URL(url);
+  if(init.method==='OPTIONS')return new Response(null,{status:badCors?403:204,
+    headers:badCors?{}:cors});
+  if(u.pathname==='/access/me')return Response.json({enabled:!legacy},
+    {status:legacy?200:401});
+  if(u.pathname==='/sii/folio/33')return Response.json({error:'unauthorized'},{status:401});
+  if(u.pathname==='/service/lead/anthropic/v1/messages')
+    return Response.json({error:'Invalid Anthropic JSON body'},{status:400});
+  if(url==='https://dashboard.thelab.solutions/')
+    return new Response(leak?'test-secret-exposed-123456':'No key',{status:200});
+  throw new Error('Unexpected network target: '+url);
+ };
+ return {fetcher,calls};
+}
+test('read-only probes verify CORS, unsigned rejection and signed machine validation',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const h=mock(),r=await checkAccessReadiness(cfg,h.fetcher);
+ assert.equal(r.errors.length,0);
+ assert.equal(r.ready,true);
+ assert.ok(h.calls.some(c=>c.init.method==='OPTIONS'));
+ assert.ok(h.calls.some(c=>c.url.endsWith('/service/lead/anthropic/v1/messages')));
+ assert.ok(h.calls.every(c=>c.url.startsWith(cfg.proxyUrl)));
+ assert.equal(h.calls.find(c=>c.url.includes('/sii/')).init.method,undefined);
+});
+test('unsafe CORS, disabled Access or missing machine proof block readiness',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ assert.ok((await checkAccessReadiness(cfg,mock({badCors:true}).fetcher)).errors.length);
+ assert.ok((await checkAccessReadiness(cfg,mock({legacy:true}).fetcher)).errors.length);
+ assert.ok((await checkAccessReadiness({...cfg,serviceClientId:'',serviceClientSecret:''},mock().fetcher)).errors.length);
+});
+test('unapproved proxy URLs do not receive service credentials',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const h=mock();
+ const r=await checkAccessReadiness({...cfg,proxyUrl:'https://evil.example'},h.fetcher);
+ assert.ok(r.errors.length);
+ assert.equal(h.calls.length,0);
+});
+test('post-cutover catches leaked SII master key in published HTML',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const r=await checkAccessReadiness({...cfg,stage:'post',siiAccessMode:'true',
+   siiWorkerKey:'test-secret-exposed-123456'},mock({leak:true}).fetcher);
+ assert.match(r.errors.join(' '),/still contains the SII credential/);
+});
+test('manual GitHub workflow performs no writes to Airtable or SII',()=>{
+ const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/access-readiness.yml'),'utf8');
+ assert.match(workflow,/workflow_dispatch/);
+ assert.doesNotMatch(workflow,/schedule:|push:|wrangler deploy|wrangler secret put/);
+ assert.match(workflow,/node scripts\/access-readiness\.mjs/);
+});

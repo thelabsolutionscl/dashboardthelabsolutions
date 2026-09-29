@@ -206,3 +206,40 @@ Documentación oficial:
 **Este cambio no crea tokens ni activa ninguna política en Cloudflare.**
 Las claves, roles reales, validación del SII y retirada final de secretos
 del navegador siguen pendientes de la puesta en marcha supervisada.
+
+## Comprobación de activación de solo lectura (GitHub Actions)
+
+El flujo manual **Verify Access rollout (read-only)** permite revisar
+configuración antes y después del corte, sin modificar Airtable, llamar a un
+modelo ni emitir o consultar documentos en el SII con una sesión autorizada.
+
+Preparación: `PROXY_URL` y `PROXY_KEY` deben estar configurados como
+secretos de GitHub Actions. Para validar el acceso entre Workers, añadir
+temporalmente los secretos `PREFLIGHT_CF_CLIENT_ID` y
+`PREFLIGHT_CF_CLIENT_SECRET` del token dedicado a leads. Los valores nunca
+se imprimen. Este duplicado en GitHub solo es necesario para la prueba; se
+puede retirar después, manteniendo el original cifrado en Cloudflare.
+
+1. Una vez configurada la política Access, ir a **GitHub → Actions →
+   Verify Access rollout (read-only) → Run workflow**, seleccionar
+   `before` y ejecutarlo. El flujo comprueba preflight CORS, rechazo de
+   sesión ausente, restricción de lectura fiscal y autenticación efectiva
+   del servicio de leads.
+2. La comprobación firmada envía JSON deliberadamente inválido a la ruta
+   restringida del servicio y exige el error de validación **400**. El
+   payload es rechazado antes de reservar tokens o llamar a Anthropic;
+   nunca debe usarse un DTE para estas pruebas.
+3. Después de activar `SII_ACCESS_MODE=true` y desplegar Pages, ejecutar
+   el flujo con `post`. Busca en el HTML público la clave fiscal que aún
+   esté configurada en el secreto `SII_WORKER_KEY` de GitHub. Hacer esta
+   prueba **antes de rotar** la clave antigua; luego rotar coordinadamente
+   ambos Workers, limpiar caches y revisar las páginas públicas.
+4. La comprobación **no sustituye** abrir el dashboard desde equipos
+   distintos y verificar con usuarios `viewer`, `operator`, `finance`
+   y `admin`. Si Cloudflare redirige la prueba sin JWT a su login,
+   GitHub informa que debe comprobarse manualmente el rechazo directo
+   en el Worker. Los flujos de producción SII siguen pendientes de
+   certificación y conciliación de folios.
+
+El script solo permite destinos oficiales del proxy, no sigue
+redirecciones y no revela respuestas completas ni valores de secretos.
