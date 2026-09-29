@@ -118,48 +118,68 @@ async function accessVerifyLeadService(token,config,env){
 function accessTable(path){
   const prefix='/v0/app1YtD74AqiPWQhy/';
   if(!path.startsWith(prefix))return '';
-  const raw=path.slice(prefix.length).split('/')[0];
+  const parts=path.slice(prefix.length).split('/');
+  if(parts.length>2||!parts[0]||
+     (parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1])))return '';
+  const raw=parts[0];
   let segment;
   try{segment=decodeURIComponent(raw);}catch(_){return '';}
-  // Noncanonical paths, table IDs and hidden encodings cannot bypass RBAC.
+  // Both the table name and optional record ID must be canonical. In
+  // particular, an admin JWT is not a license to use the Airtable PAT as a
+  // proxy for unknown tables, subresources or path-encoded aliases.
   if(raw!==encodeURIComponent(segment)||!ACCESS_ALLOWED_TABLES.has(segment))return '';
   return segment;
 }
 
 function accessAllows(identity,method,path){
-  if(identity.role==='admin')return true;
-  const isWrite=method!=='GET'&&method!=='HEAD';
+  if(!identity||!ACCESS_ROLES.has(identity.role))return false;
+  const admin=identity.role==='admin';
+  const finance=identity.role==='finance';
+  const operator=identity.role==='operator';
+  const isWrite=method!=='GET';
   if(path==='/access/me')return method==='GET';
-  // Marketing spend is financial data: no viewer/operator access or shared-key writes.
-  if(path==='/marketing/spend')return identity.role==='finance'&&['GET','PUT'].includes(method);
-  if(path==='/marketing/spend/history')return identity.role==='finance'&&method==='GET';
-  // An authenticated human may request ONLY a short-lived farm ticket.
-  // The proxy maps finance/viewer to read-only, operator to printer
-  // operations and admin to farm administration; shared APP_KEY cannot mint.
+  // Financial endpoints are explicitly constrained even for administrators.
+  if(path==='/marketing/spend')return (finance||admin)&&['GET','PUT'].includes(method);
+  if(path==='/marketing/spend/history')return (finance||admin)&&method==='GET';
   if(path==='/printer/session')return method==='POST';
   if(path.startsWith('/printer/'))return false;
-  // Portal administrative operations require an individual, signed session.
-  // Sales/finance can create a link; revocation invalidates active links and
-  // is limited to admins. Never authorize these using only public APP_KEY.
-  if(path==='/portal-admin/link')return method==='POST'&&
-    (identity.role==='operator'||identity.role==='finance');
-  if(path==='/portal-admin/revocar'||path.startsWith('/portal-admin/'))return false;
-  // Privileged SII calls are never exposed to the legacy shared APP_KEY:
-  // finance may emit/read status, only admin may upload CAF.
-  if(path==='/sii/emit')return identity.role==='finance'&&method==='POST';
+
+  if(path==='/portal-admin/link')return method==='POST'&&(operator||finance||admin);
+  if(path==='/portal-admin/revocar')return method==='POST'&&admin;
+  if(path.startsWith('/portal-admin/'))return false;
+
+  if(path==='/sii/emit')return method==='POST'&&(finance||admin);
   if(/^\/sii\/folio\/(33|39|52|56|61)$/.test(path))
-    return identity.role==='finance'&&method==='GET';
-  if(path==='/sii/caf')return false; // handled exclusively by admin above
+    return method==='GET'&&(finance||admin);
+  if(path==='/sii/caf')return method==='PUT'&&admin;
   if(path.startsWith('/sii/'))return false;
 
-  if(path.startsWith('/v0/meta/'))return false;
-  if(path.startsWith('/anthropic/')||path.startsWith('/openai/')||path==='/seo-fetch')
-    return !isWrite||identity.role==='operator'||identity.role==='finance';
+  // The proxy itself permits only the table-list GET and validated schema
+  // bootstrap POST. Do not grant admin access to arbitrary metadata paths.
+  const meta='/v0/meta/bases/app1YtD74AqiPWQhy/tables';
+  if(path.startsWith('/v0/meta/'))return admin&&(
+    (path===meta&&['GET','POST'].includes(method))||
+    (method==='POST'&&new RegExp('^'+meta+'/tbl[A-Za-z0-9]{14}/fields$').test(path))
+  );
+
+  // Keep the supported AI/SEO routes explicit; the budget/SSRF checks remain
+  // in the Worker and are not replaced by an administrator's broad role.
+  if(path==='/anthropic/usage'||path==='/openai/usage')return method==='GET';
+  if(['/anthropic/v1/messages','/openai/v1/chat/completions',
+      '/openai/v1/images/generations','/openai/v1/images/edits'].includes(path))
+    return method==='POST'&&(operator||finance||admin);
+  if(path==='/seo-fetch')return method==='GET';
+  if(path.startsWith('/anthropic/')||path.startsWith('/openai/'))return false;
+
   const table=accessTable(path);
   if(!table)return false;
-  if(ACCESS_FINANCE_TABLES.has(table)&&identity.role!=='finance')return false;
+  if(ACCESS_FINANCE_TABLES.has(table)&&!finance&&!admin)return false;
   if(!isWrite)return true;
-  return ACCESS_WRITE_TABLES[identity.role]?.has(table)||false;
+  // Admin has unrestricted access to *recognized* data tables, not to any
+  // arbitrary upstream method, table name or nested endpoint.
+  if(admin)return ['POST','PATCH','DELETE'].includes(method);
+  return ['POST','PATCH','DELETE'].includes(method)&&
+    !!ACCESS_WRITE_TABLES[identity.role]?.has(table);
 }
 
 export async function accessAuthorize(request,env,path){

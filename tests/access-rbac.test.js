@@ -12,7 +12,7 @@ const {accessConfig,accessVerify,accessVerifyLeadService,accessAllows,accessAuth
 const cfg={
   ACCESS_ENFORCE:'true',ACCESS_TEAM_DOMAIN:'https://tls-test.cloudflareaccess.com',
   ACCESS_AUD:'a'.repeat(32),
-  ACCESS_ROLE_MAP:JSON.stringify({'finanzas@example.com':'finance','operador@example.com':'operator','visita@example.com':'viewer'})
+  ACCESS_ROLE_MAP:JSON.stringify({'finanzas@example.com':'finance','operador@example.com':'operator','visita@example.com':'viewer','administrador@example.com':'admin'})
 };
 const {publicKey,privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
 const jwk=publicKey.export({format:'jwk'});
@@ -102,7 +102,7 @@ test('finance can write Facturas, operator and viewer cannot',async()=>{
   assert.equal(accessAllows({role:'operator'},'POST',path),false);
   assert.equal(accessAllows({role:'viewer'},'GET',path),false);
   assert.equal(accessAllows({role:'viewer'},'POST','/v0/app1YtD74AqiPWQhy/Clientes'),false);
-  assert.equal(accessAllows({role:'operator'},'PATCH','/v0/app1YtD74AqiPWQhy/Pedidos/recABC123'),true);
+  assert.equal(accessAllows({role:'operator'},'PATCH','/v0/app1YtD74AqiPWQhy/Pedidos/recABCDEFGHIJKLMN'),true);
   assert.equal(accessAllows({role:'operator'},'PATCH',path),false);
 });
 test('privileged SII bridge only permits finance emission/status and admin CAF',()=>{
@@ -131,26 +131,84 @@ test('portal administration requires explicit signed roles',()=>{
   assert.equal(accessAllows({role:'finance'},'POST','/portal-admin/revocar'),false);
   assert.equal(accessAllows({role:'viewer'},'POST','/portal-admin/link'),false);
   assert.equal(accessAllows({role:'admin'},'POST','/portal-admin/revocar'),true);
-  assert.equal(accessAllows({role:'admin'},'GET','/portal-admin/revocar'),true); // Outer route rejects non-POST.
+  assert.equal(accessAllows({role:'admin'},'GET','/portal-admin/revocar'),false);
   assert.equal(accessAllows({role:'finance'},'POST','/portal-admin/other'),false);
 });
 test('operational supplier/monitoring tables work with Access, reports remain financial',()=>{
   const base='/v0/app1YtD74AqiPWQhy/';
   assert.equal(accessAllows({role:'operator'},'GET',base+'Monitor%20Sistema'),true);
-  assert.equal(accessAllows({role:'operator'},'PATCH',base+'Proveedores/recABC12345'),true);
+  assert.equal(accessAllows({role:'operator'},'PATCH',base+'Proveedores/recABCDEFGHIJKLMN'),true);
   assert.equal(accessAllows({role:'operator'},'GET',base+'Reportes'),false);
   assert.equal(accessAllows({role:'finance'},'GET',base+'Reportes'),true);
   assert.equal(accessAllows({role:'finance'},'POST',base+'Reportes'),true);
   assert.equal(accessAllows({role:'viewer'},'GET',base+'Reportes'),false);
-  assert.equal(accessAllows({role:'viewer'},'PATCH',base+'Monitor%20Sistema/recABC12345'),false);
+  assert.equal(accessAllows({role:'viewer'},'PATCH',base+'Monitor%20Sistema/recABCDEFGHIJKLMN'),false);
 });
 test('unknown tables, metadata and path aliases fail closed for non-admin',()=>{
   assert.equal(accessTable('/v0/app1YtD74AqiPWQhy/%46acturas'),'');
   assert.equal(accessTable('/v0/app1YtD74AqiPWQhy/tblABCDEFGHIJKLMN'),'');
   assert.equal(accessAllows({role:'finance'},'GET','/v0/meta/bases/app1YtD74AqiPWQhy/tables'),false);
   assert.equal(accessAllows({role:'operator'},'DELETE','/v0/app1YtD74AqiPWQhy/Unknown'),false);
-  assert.equal(accessAllows({role:'admin'},'DELETE','/v0/app1YtD74AqiPWQhy/Unknown'),true);
+  assert.equal(accessAllows({role:'admin'},'DELETE','/v0/app1YtD74AqiPWQhy/Unknown'),false);
   assert.equal(accessTable('/v0/app1YtD74AqiPWQhy/Pr%C3%A9stamos'),'Préstamos');
+});
+test('admin has no blanket bypass for undocumented routes or HTTP methods',()=>{
+  const admin={role:'admin'},base='/v0/app1YtD74AqiPWQhy/';
+  const yes=[
+    ['GET',base+'Clientes'],['GET',base+'Facturas'],['POST',base+'Pedidos'],
+    ['PATCH',base+'Pedidos/recABCDEFGHIJKLMN'],
+    ['DELETE',base+'Clientes/recABCDEFGHIJKLMN'],
+    ['GET','/access/me'],['GET','/marketing/spend/history'],
+    ['PUT','/marketing/spend'],['POST','/printer/session'],
+    ['POST','/portal-admin/link'],['POST','/portal-admin/revocar'],
+    ['POST','/sii/emit'],['GET','/sii/folio/33'],['PUT','/sii/caf'],
+    ['GET','/anthropic/usage'],['POST','/anthropic/v1/messages'],
+    ['GET','/openai/usage'],['POST','/openai/v1/images/edits'],
+    ['GET','/seo-fetch'],
+    ['GET','/v0/meta/bases/app1YtD74AqiPWQhy/tables'],
+    ['POST','/v0/meta/bases/app1YtD74AqiPWQhy/tables'],
+    ['POST','/v0/meta/bases/app1YtD74AqiPWQhy/tables/tblABCDEFGHIJKLMN/fields']
+  ];
+  for(const [method,path] of yes)
+    assert.equal(accessAllows(admin,method,path),true,method+' '+path);
+  const no=[
+    ['GET','/unknown'],['POST','/unknown'],
+    ['DELETE',base+'Unknown'],['GET',base+'tblABCDEFGHIJKLMN'],
+    ['GET',base+'%46acturas'],['GET',base+'Facturas/recABCDEFGHIJKLMN/attachments'],
+    ['GET',base+'Facturas/recshort'],['GET',base+'Facturas/'],['GET',base+'Facturas//'],
+    ['GET',base+'Facturas%2f../Clientes'],['GET','/v0/meta/bases/other/tables'],
+    ['DELETE','/v0/meta/bases/app1YtD74AqiPWQhy/tables'],
+    ['POST','/v0/meta/bases/app1YtD74AqiPWQhy/tables/tblABCDEFGHIJKLMN/delete'],
+    ['GET','/printer/restart'],['POST','/printer/restart'],
+    ['GET','/portal-admin/revocar'],['POST','/portal-admin/anything'],
+    ['POST','/sii/folio/33'],['GET','/sii/folio/999'],['DELETE','/sii/caf'],
+    ['PUT','/marketing/spend/history'],['DELETE','/marketing/spend'],
+    ['POST','/seo-fetch'],['POST','/anthropic/usage'],
+    ['POST','/anthropic/models'],['POST','/openai/v1/models'],
+    ['PUT',base+'Clientes'],['HEAD',base+'Pedidos']
+  ];
+  for(const [method,path] of no)
+    assert.equal(accessAllows(admin,method,path),false,method+' '+path);
+  assert.equal(accessAllows({role:'superadmin'},'GET',base+'Clientes'),false);
+  assert.equal(accessAllows(null,'GET',base+'Clientes'),false);
+  assert.equal(accessAllows({role:'viewer'},'GET',base+'Clientes'),true);
+  assert.equal(accessAllows({role:'operator'},'PATCH',base+'Pedidos/recABCDEFGHIJKLMN'),true);
+  assert.equal(accessAllows({role:'finance'},'POST',base+'Reportes'),true);
+});
+test('signed admin JWT cannot request an unknown table or unrelated privileged endpoint',async()=>{
+  const token=jwt({email:'administrador@example.com'}),base='/v0/app1YtD74AqiPWQhy/';
+  for(const [method,path] of [
+    ['GET',base+'SecretTable'],['DELETE',base+'tblABCDEFGHIJKLMN'],
+    ['DELETE','/marketing/spend'],['GET','/portal-admin/revocar'],
+    ['POST','/printer/restart'],['POST','/sii/random'],
+    ['GET','/v0/meta/bases/other/tables']
+  ]){
+    const r=req(token,method,path);
+    assert.equal((await accessAuthorize(r.request,cfg,r.path)).response.status,403,method+' '+path);
+  }
+  const legal=req(token,'POST',base+'Facturas');
+  assert.deepEqual((await accessAuthorize(legal.request,cfg,legal.path)).identity,
+    {role:'admin',email:'administrador@example.com'});
 });
 test('valid JWT but insufficient role is explicitly forbidden',async()=>{
   const x=req(jwt({email:'visita@example.com'}),'POST');
