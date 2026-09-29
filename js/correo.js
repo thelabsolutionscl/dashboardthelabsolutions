@@ -1173,7 +1173,7 @@ const MAIL={
     const bccRow=document.getElementById('mailBccRow'); if(bccRow) bccRow.style.display=opts.bcc?'flex':'none';
     document.getElementById('mailCmpSubject').value=opts.subject||'';
     const sig=this.sigHtml();
-    document.getElementById('mailCmpBody').innerHTML=(opts.body||'')+sig;
+    document.getElementById('mailCmpBody').innerHTML=this._sanitizarCita(opts.body||'')+sig;
     document.getElementById('mailComposeTitle').textContent=opts.title||'Nuevo mensaje';
     document.getElementById('mailSendStatus').textContent='';
     document.getElementById('mailComposePanel').style.display='flex';
@@ -1251,7 +1251,7 @@ const MAIL={
     return fixed;
   },
   setSig(html){
-    const k=this._sigKey();if(k) localStorage.setItem(k,html);
+    const k=this._sigKey();if(k) localStorage.setItem(k,this._sanitizarCita(html,true));
     // Respaldo permanente: la firma queda también en Airtable (sobrevive a
     // limpiar el caché y aparece igual en otros dispositivos).
     this._saveSigsAirtable();
@@ -1274,7 +1274,7 @@ const MAIL={
     if(!s) return '';
     // Sin línea separadora: las firmas con diseño propio (tarjeta) traen su
     // borde, y en las de texto el espacio en blanco basta como separación.
-    return `<br><br><div class="mail-signature-block" contenteditable="false" style="margin-top:12px">${s}</div>`;
+    return `<br><br><div class="mail-signature-block" contenteditable="false" style="margin-top:12px">${this._sanitizarCita(s,true)}</div>`;
   },
 
   insertSignature(){
@@ -1288,7 +1288,7 @@ const MAIL={
   openSigModal(){
     const ed=document.getElementById('mailSigEditor'),code=document.getElementById('mailSigCode');
     const acct=document.getElementById('mailSigAcct'); if(acct) acct.textContent='· '+(this.activeAccount()||'');
-    ed.innerHTML=this.getSig()||'';
+    ed.innerHTML=this._sanitizarCita(this.getSig(),true);
     if(code){code.style.display='none';code.value='';}
     ed.style.display='block';
     const b=document.getElementById('mailSigCodeBtn');if(b)b.classList.remove('active');
@@ -1312,7 +1312,7 @@ const MAIL={
       code.value=ed.innerHTML; code.style.display='block'; ed.style.display='none';
       if(b)b.classList.add('active'); this._applyEditorBg(); code.focus();
     }else{
-      ed.innerHTML=code.value; code.style.display='none'; ed.style.display='block';
+      ed.innerHTML=this._sanitizarCita(code.value,true); code.style.display='none'; ed.style.display='block';
       if(b)b.classList.remove('active'); ed.focus();
     }
   },
