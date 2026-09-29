@@ -68,7 +68,7 @@ async function accessJwks(domain,force=false){
   return keys;
 }
 
-async function accessVerify(token,config){
+async function accessVerifyClaims(token,config){
   if(typeof token!=='string'||token.length>20000)throw new Error('Missing Access JWT');
   const parts=token.split('.');
   if(parts.length!==3)throw new Error('Malformed Access JWT');
@@ -94,8 +94,14 @@ async function accessVerify(token,config){
      (claims.nbf!==undefined&&(!Number.isFinite(claims.nbf)||claims.nbf>now))||
      (claims.iat!==undefined&&(!Number.isFinite(claims.iat)||claims.iat>now+60)))
     throw new Error('Access JWT issuer/audience/lifetime invalid');
+  if(claims.type!==undefined&&claims.type!=='app')throw new Error('Only application JWTs are supported');
+  return claims;
+}
+async function accessVerify(token,config){
+  const claims=await accessVerifyClaims(token,config);
   const email=typeof claims.email==='string'?claims.email.toLowerCase():'';
-  if(!email||!Object.hasOwn(config.roles,email))throw new Error('Access identity has no assigned role');
+  if(!email||!Object.hasOwn(config.roles,email)||claims.common_name||claims.sub==='')
+    throw new Error('Access identity has no assigned role');
   return {email,role:config.roles[email]};
 }
 
