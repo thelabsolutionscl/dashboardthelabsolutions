@@ -384,7 +384,8 @@ test('OPTIONS (preflight) responde 204 sin tocar upstream', async () => {
 
 test('el chequeo ya no depende de que el Origin exista', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'airtable-proxy', 'src', 'worker.js'), 'utf8');
-  assert.match(src, /if \(!ALLOWED_ORIGINS\.includes\(origin\)\) \{/, 'exige Origin en la lista');
+  assert.match(src, /if \(!leadServiceRoute && !ALLOWED_ORIGINS\.includes\(origin\)\) \{/, 'exige Origin en todo el tráfico del navegador');
+  assert.match(src, /leadServiceRoute\?\x27\/service\/lead\/anthropic\/v1\/messages\x27/, 'la única excepción requiere JWT de servicio');
   assert.doesNotMatch(src, /if \(origin && !ALLOWED_ORIGINS\.includes\(origin\)\)/, 'ya no está el guard con agujero');
 });
 
