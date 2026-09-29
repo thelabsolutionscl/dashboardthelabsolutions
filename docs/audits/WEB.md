@@ -116,3 +116,21 @@ para no seguir enlaces desde `thelab.solutions` hacia orígenes ajenos.
 Solo admite HTTPS al dominio canónico o su variante `www`; corta a
 4 solicitudes y 2 MiB de HTML. No realiza fetch a terceros aunque el
 primer enlace sea legítimo. Regresión automatizada: `tests/seo-proxy-ssrf.test.js`.
+
+## 2026-09-29 — control de credenciales y modo demo (PR #319)
+
+- Contraseña de WordPress y secreto de mutaciones de Google Ads: migración al
+  primer uso desde `localStorage` a `sessionStorage`. A partir de esta versión
+  el almacenamiento persistente de `ads_config` conserva solamente endpoint y
+  Customer ID, y las nuevas claves WP no se guardan entre sesiones.
+- El modo demo aplica también cuando un dashboard real cae a datos de ejemplo
+  por fallo del endpoint. Un aviso permanente indica **SOLO LECTURA**, y se
+  bloquean creación/edición/eliminación de campañas, mutaciones en cola,
+  presupuesto, negativos, reintentos y aprobaciones de piloto. Los snapshots
+  de Airtable nunca se escriben desde datos de demostración.
+- Ninguna contraseña se rota automáticamente. `sessionStorage` es mitigación
+  transitoria, legible por scripts activos del mismo origen: la solución final
+  requiere un backend autenticado con secretos protegidos. El webhook y la
+  clave de `ADS_MAKE_SHELL` continúan expuestos por compatibilidad con la ruta
+  de creación existente; deben sustituirse por un puente servidor y rotarse en
+  un corte coordinado, sin romper campañas en curso.
