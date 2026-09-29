@@ -1593,25 +1593,46 @@ const MAIL={
    * convierte a texto plano: se quita lo que ejecuta o navega y se conserva el
    * formato. DOMParser no ejecuta scripts ni descarga nada al analizar.
    */
-  _sanitizarCita(html){
-    const s=String(html||'');
-    if(!s) return '';
+  _sanitizarCita(html,allowImages=false){
+    const raw=String(html||'');
+    if(!raw)return '';
     try{
-      const doc=new DOMParser().parseFromString(s,'text/html');
-      // Elementos que ejecutan, cargan o reescriben el documento que los aloja.
-      doc.body.querySelectorAll('script,iframe,object,embed,link,meta,base,form,input,button,textarea,select,style,svg,math').forEach(el=>el.remove());
-      doc.body.querySelectorAll('*').forEach(el=>{
-        for(const at of [...el.attributes]){
-          const n=at.name.toLowerCase(), v=String(at.value||'');
-          if(n.startsWith('on')){ el.removeAttribute(at.name); continue; }        // onerror, onload, onclick…
-          if(n==='srcdoc'){ el.removeAttribute(at.name); continue; }
-          if(/^(href|action|formaction|xlink:href|background)$/.test(n) && /^\s*(javascript|vbscript|data):/i.test(v)){ el.removeAttribute(at.name); continue; }
-          // Las imágenes incrustadas (data:image/...) son normales en un correo;
-          // cualquier otro data: en src, no.
-          if(n==='src' && (/^\s*(javascript|vbscript):/i.test(v) || (/^\s*data:/i.test(v) && !/^\s*data:image\//i.test(v)))) el.removeAttribute(at.name);
+      const doc=new DOMParser().parseFromString(raw,'text/html');
+      const keep=new Set('p br div span b strong i em u s ul ol li blockquote table thead tbody tfoot tr td th hr h1 h2 h3 pre code a'.split(' '));
+      if(allowImages)keep.add('img');
+      const drop=new Set('script style svg math iframe object embed form input button textarea select link meta base video audio source picture template noscript'.split(' '));
+      const safe=node=>{
+        if(node.nodeType===3)return doc.createTextNode(node.textContent||'');
+        if(node.nodeType!==1)return null;
+        const tag=node.localName.toLowerCase();
+        if(drop.has(tag)||tag==='img'&&!allowImages)return null;
+        const el=keep.has(tag)?doc.createElement(tag):doc.createDocumentFragment();
+        if(tag==='a'&&keep.has(tag)){
+          try{
+            const url=new URL(node.getAttribute('href')||'');
+            if(['https:','mailto:'].includes(url.protocol)){
+              el.href=url.href;el.rel='noopener noreferrer';el.target='_blank';
+            }
+          }catch(_){}
         }
-      });
-      return doc.body.innerHTML;
-    }catch(e){ return this.esc(s); }   // ante la duda, se cita como texto plano
+        if(tag==='img'){
+          try{
+            const url=new URL(node.getAttribute('src')||'');
+            if(url.protocol!=='https:'||url.username||url.password)return null;
+            el.src=url.href;el.alt=String(node.getAttribute('alt')||'').slice(0,200);
+            el.loading='lazy';el.style.maxWidth='100%';
+          }catch(_){return null;}
+        }
+        for(const child of [...node.childNodes]){
+          const cleaned=safe(child);if(cleaned)el.appendChild(cleaned);
+        }
+        return el;
+      };
+      const out=doc.createElement('div');
+      for(const node of [...doc.body.childNodes]){
+        const cleaned=safe(node);if(cleaned)out.appendChild(cleaned);
+      }
+      return out.innerHTML;
+    }catch(_){return this.esc(raw);}
   }
 };
