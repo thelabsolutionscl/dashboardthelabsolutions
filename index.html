@@ -15581,9 +15581,13 @@ async function aplicarConsumo(){
 function _estacionalidad(){
   const MES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const bucket=Array.from({length:12},()=>({rev:0,n:0,years:new Set()}));
+  // The current month is incomplete: including it as a full observation
+  // artificially depresses its seasonal average and forecast.
+  const now=new Date();
   (state.pedidos||[]).forEach(p=>{
     const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;
     const d=p.createdTime?new Date(p.createdTime):null;if(!d||isNaN(d))return;
+    if(d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth())return;
     const neto=(f['Monto total (CLP)']||0)/1.19;if(neto<=0)return;
     const m=d.getMonth();bucket[m].rev+=neto;bucket[m].n++;bucket[m].years.add(d.getFullYear());
   });
@@ -15593,7 +15597,7 @@ function _estacionalidad(){
   const media=activos.length?activos.reduce((s,m)=>s+m.avg,0)/activos.length:0;
   meses.forEach(m=>m.idx=media>0?m.avg/media:0);   // índice de estacionalidad (1 = promedio)
   // ritmo reciente: promedio de revenue neto de los últimos 3 meses con datos
-  const now=new Date();const recent=[];
+  const recent=[];
   for(let k=1;k<=3;k++){const dt=new Date(now.getFullYear(),now.getMonth()-k,1);const mm=dt.getMonth(),yy=dt.getFullYear();
     const rev=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime):null;return d&&d.getMonth()===mm&&d.getFullYear()===yy;}).reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
     recent.push(rev);}
@@ -15644,22 +15648,47 @@ function renderEstacionalidad(){
 // → costo de adquisición (CAC = gasto/nuevos) y ROI (revenue/gasto). El canal
 // sale del "Canal solicitud" de las cotizaciones del período.
 const _GASTO_CANAL_KEY='thelab_gasto_canal_v1';
-function _gastoCanal(){try{return JSON.parse(localStorage.getItem(_GASTO_CANAL_KEY)||'{}');}catch(e){return{};}}
+const _GASTO_CANAL_V2_KEY='thelab_gasto_canal_por_mes_v2';
+function _gastoCanal(off=0){
+  const key=_mesRango(off).key;
+  let all={};
+  try{all=JSON.parse(localStorage.getItem(_GASTO_CANAL_V2_KEY)||'{}');}catch(e){}
+  if(!all||typeof all!=='object'||Array.isArray(all))all={};
+  // Historic v1 has NO date: migrate only to the current month, never
+  // attribute the same spending to a different period.
+  if(!localStorage.getItem(_GASTO_CANAL_V2_KEY)){
+    let old={};try{old=JSON.parse(localStorage.getItem(_GASTO_CANAL_KEY)||'{}');}catch(e){}
+    if(old&&typeof old==='object'&&!Array.isArray(old)){
+      all[_mesRango(0).key]=old;
+      try{localStorage.setItem(_GASTO_CANAL_V2_KEY,JSON.stringify(all));}catch(e){}
+    }
+  }
+  const period=all[key];
+  return period&&typeof period==='object'&&!Array.isArray(period)?{...period}:{};
+}
 function setGastoCanal(){
-  const canal=(prompt('¿Para qué canal registras el gasto? (ej: Google Ads, Instagram, WhatsApp)')||'').trim();
+  const el=document.getElementById('cacCanalCard');
+  const off=parseInt(el?.dataset.off||'0',10);
+  const period=_mesRango(Number.isFinite(off)?off:0);
+  const canal=(prompt('¿Para qué canal registras el gasto de '+period.label+'? (ej: Google Ads, Instagram, WhatsApp)')||'').trim();
   if(!canal)return;
-  const g=_gastoCanal();const cur=g[canal]||'';
-  const v=prompt(`Gasto mensual de marketing en "${canal}" (CLP):`,cur?String(cur):'');
-  if(v===null)return;const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
+  const g=_gastoCanal(off);const cur=g[canal]||'';
+  const v=prompt(`Gasto de "${canal}" en ${period.label} (CLP):`,cur?String(cur):'');
+  if(v===null)return;
+  const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
   if(n>0)g[canal]=n;else delete g[canal];
-  try{localStorage.setItem(_GASTO_CANAL_KEY,JSON.stringify(g));}catch(e){}
-  toast(n>0?`✓ Gasto de ${canal}: ${formatCLP(n)}`:'Gasto quitado','success');
+  try{
+    const all=JSON.parse(localStorage.getItem(_GASTO_CANAL_V2_KEY)||'{}');
+    all[period.key]=g;
+    localStorage.setItem(_GASTO_CANAL_V2_KEY,JSON.stringify(all));
+  }catch(e){toast('No se pudo guardar el gasto del período','error');return;}
+  toast(n>0?`✓ Gasto de ${canal} en ${period.label}: ${formatCLP(n)}`:'Gasto del período quitado','success');
   try{renderCacCanal();}catch(e){}
 }
 function _canalStats(off){
   const mr=(typeof _mesRango==='function')?_mesRango(off||0):null;
   const ini=mr?mr.ini.getTime():0,fin=mr?mr.fin.getTime():Infinity;
-  const gasto=_gastoCanal();
+  const gasto=_gastoCanal(off);
   const _cid=f=>Array.isArray(f['Cliente'])&&f['Cliente'].length?f['Cliente'][0]:(f['Cliente']||null);
   // Clientes que YA existían antes del período (cotizaron antes) → no son captación nueva.
   const existentes=new Set();
@@ -15708,7 +15737,11 @@ function renderReportes(){
   try{renderCacCanal();}catch(e){}
   const tbody=document.getElementById('reportesTableBody');
   if(!state.reportes.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:28px"><div class="empty-icon"><svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-chart"/></svg></div><div style="margin-bottom:8px">Sin reportes aún</div><div style="font-size:11px;color:var(--text3)">Los reportes se generan automáticamente cada semana con el Agente CEO</div><button onclick="switchTab(\'agentes\')" style="margin-top:12px;background:var(--accent);color:#000;border:none;border-radius:7px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">→ Ir a Agentes IA</button></div></td></tr>';return;}
-  tbody.innerHTML=state.reportes.map((r,i)=>{
+  const ordenados=[...state.reportes].sort((a,b)=>{
+    const fa=a.fields?.['Fecha generación']||'',fb=b.fields?.['Fecha generación']||'';
+    return String(fb).localeCompare(String(fa))||String(b.createdTime||'').localeCompare(String(a.createdTime||''));
+  });
+  tbody.innerHTML=ordenados.map((r,i)=>{
     const f=r.fields;
     const mp=f['Margen promedio semana (%)']||0,m=mp<=1?mp*100:mp;
     const cp=f['Tasa conversión (%)']||0,cv=cp<=1?cp*100:cp;
