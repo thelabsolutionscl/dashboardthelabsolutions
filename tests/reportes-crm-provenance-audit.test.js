@@ -15,8 +15,8 @@ function client(id,name,origin,date,created,other={}){
   return {id,createdTime:created,fields:{Empresa:name,...(origin?{'Origen lead':origin}:{}),
     ...(date?{'Fecha primer contacto':date}:{}),...other}};
 }
-function quote(id,clientIds,date,created){
-  return {id,createdTime:created,fields:{Cliente:clientIds,
+function quote(id,clientIds,date,created,number=''){
+  return {id,createdTime:created,fields:{Cliente:clientIds,'N° Cotización':number,
     ...(date?{'Fecha cotización':date}:{})}};
 }
 const fixtures={
@@ -32,7 +32,7 @@ const fixtures={
     client(ids[4],'Cliente sin actividad',null,null,'2026-09-01T10:00:00Z')
   ],
   quotes:[
-    quote('recQUOTE000000001',[ids[0]],'2026-08-25','2026-09-10T12:00:00Z'),
+    quote('recQUOTE000000001',[ids[0]],'2026-08-25','2026-09-10T12:00:00Z','260801'),
     quote('recQUOTE000000002',[ids[1]],null,'2026-09-11T12:00:00Z'),
     quote('recQUOTE000000003',[ids[2]],'2025-02-10','2026-09-11T12:00:00Z'),
     quote('recQUOTE000000004',[ids[3]],'2026-09-01','2026-09-11T12:00:00Z'),
@@ -78,6 +78,7 @@ test('CRM audit separates chronological contradictions from incomplete fields wi
   assert.equal(entries[0].id,ids[0],'chronological contradiction is priority one');
   assert.ok(entries[0].flags.includes('Fecha posterior a una cotización'));
   assert.equal(entries[0].earliest,'2026-08-25','explicit quote date beats record import');
+  assert.equal(entries[0].originalQuoteNumber,'260801');
   assert.equal(entries[1].id,ids[1],'GCLID evidence without a known origin is next');
   assert.equal(entries.find(e=>e.id===ids[2]).olderThanImport,true);
   assert.equal(unlinkedQuotes.length,1);
@@ -122,6 +123,9 @@ test('review panel escapes customer labels, shows evidence counts and does not o
   assert.equal(panel.innerHTML.includes('<img src=x'),false);
   assert.equal(panel.innerHTML.includes('Airtable no'),false);
   assert.ok(!/reparar todos|actualizar todo/i.test(panel.innerHTML));
+  assert.match(panel.innerHTML,/Cotización original: 2026-08-25 · N° 260801/);
+  api._crmAuditFilterChange('conflicts');
+  assert.match(panel.innerHTML,/Mostrando 1 de 1 registros/);
   api._crmAuditFilterChange('origin');
   assert.match(panel.innerHTML,/Mostrando 3 de 3 registros/);
 });
@@ -139,6 +143,8 @@ test('review export is local, contains five customers and protects against CSV f
   assert.equal(clicked,1);
   assert.match(csv,/Revisión sugerida/);
   assert.match(csv,/Tipo evidencia primera cotización/);
+  assert.match(csv,/Fecha cotización original,N° cotización original/);
+  assert.match(csv,/"260801"/);
   assert.match(csv,/Alta Airtable \(fecha original desconocida\)/);
   assert.match(csv,/"'=HYPERLINK\(/,'formula-like client name must be escaped');
   assert.equal(csv.split('\r\n').length,6);

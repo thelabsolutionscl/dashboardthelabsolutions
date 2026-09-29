@@ -16079,7 +16079,7 @@ function _crmAcquisitionAudit(clients,quotes){
     if(!ids.length){orphans.push(q.id);continue;}
     for(const id of ids){
       const arr=byClient.get(String(id))||[];
-      arr.push({id:q.id,date:evidence,source:explicit?'quote_date':'record_created'});
+      arr.push({id:q.id,date:evidence,number:String(f['N° Cotización']||'').trim(),source:explicit?'quote_date':'record_created'});
       byClient.set(String(id),arr);
     }
   }
@@ -16097,8 +16097,9 @@ function _crmAcquisitionAudit(clients,quotes){
     const earliest=known[0]||null;
     // A quote's Airtable createdTime might reflect migration, not its actual date.
     // Only an explicit original quote date can establish a chronology conflict.
-    const originalDates=linked.filter(q=>q.source==='quote_date').map(q=>q.date).filter(Boolean).sort();
-    const earliestOriginal=originalDates[0]||null;
+    const earliestOriginalQuote=linked.filter(q=>q.source==='quote_date'&&q.date)
+      .sort((a,b)=>a.date.localeCompare(b.date)||String(a.id).localeCompare(String(b.id)))[0]||null;
+    const earliestOriginal=earliestOriginalQuote?.date||null;
     const earliestSource=earliest&&linked.some(q=>q.date===earliest&&q.source==='quote_date')?'quote_date':earliest?'record_created':null;
     const inconsistent=!!(date&&earliestOriginal&&date>earliestOriginal);
     const adsEvidence=!!(String(f['GCLID']||'').trim()||
@@ -16128,7 +16129,8 @@ function _crmAcquisitionAudit(clients,quotes){
       missingOrigin||missingContact?3:4;
     entries.push({
       id:String(c.id||''),name:String(f['Empresa']||f['Contacto']||'Cliente sin nombre'),
-      origin,date,earliest,earliestOriginal,earliestSource,linkedQuotes:linked.length,flags,priority,
+      origin,date,earliest,earliestOriginal,earliestSource,
+      originalQuoteNumber:earliestOriginalQuote?.number||'',linkedQuotes:linked.length,flags,priority,
       acquisitionEvidence:adsEvidence,olderThanImport
     });
   }
@@ -16138,7 +16140,7 @@ function _crmAcquisitionAudit(clients,quotes){
   return {stats,entries,unlinkedQuotes:orphans};
 }
 function _crmAuditFilterChange(next){
-  if(!['priority','date','origin','unlinked','all'].includes(next))return;
+  if(!['priority','conflicts','date','origin','unlinked','all'].includes(next))return;
   _crmAuditFilter=next;_crmAuditLimit=30;renderCrmAcquisitionAudit();
 }
 function _crmAuditOpenClient(id){
@@ -16161,13 +16163,14 @@ function renderCrmAcquisitionAudit(){
   const {stats,entries}=data;
   const rows=entries.filter(e=>_crmAuditFilter==='all'?true:
     _crmAuditFilter==='priority'?e.priority<=2:
+    _crmAuditFilter==='conflicts'?e.flags.includes('Fecha posterior a una cotización'):
     _crmAuditFilter==='date'?e.flags.includes('Fecha posterior a una cotización')||
       e.flags.includes('Sin primer contacto'):
     _crmAuditFilter==='origin'?e.flags.includes('Sin origen'):
     _crmAuditFilter==='unlinked'?e.linkedQuotes===0:false);
   const shown=rows.slice(0,_crmAuditLimit);
   const pct=(num,den)=>den?Math.round(100*num/den)+'%':'—';
-  const options=[['priority','Prioritarios'],['date','Fechas'],['origin','Orígenes faltantes'],
+  const options=[['priority','Prioritarios'],['conflicts','Contradicciones'],['date','Fechas'],['origin','Orígenes faltantes'],
     ['unlinked','Sin cotizaciones'],['all','Todos']];
   el.innerHTML='<div class="card"><div class="card-header"><span class="card-title">🧾 Conciliación de origen CRM</span>'+
     '<span style="margin-left:auto;font-size:11px;color:var(--warn)">Solo lectura · sin correcciones automáticas</span></div>'+
@@ -16196,7 +16199,7 @@ function renderCrmAcquisitionAudit(){
       '<td>'+e.linkedQuotes+'</td>'+
       '<td>'+escapeHtml(e.origin||'—')+'</td>'+
       '<td>'+escapeHtml(e.date||'—')+'</td>'+
-      '<td>'+escapeHtml(e.earliest||'—')+'<br><small style="color:var(--text3)">'+escapeHtml(e.earliestSource==='quote_date'?'Fecha original de cotización':e.earliestSource==='record_created'?'Alta en Airtable · no confirma fecha original':'Sin fecha')+'</small></td>'+
+      '<td>'+escapeHtml(e.earliest||'—')+'<br><small style="color:var(--text3)">'+escapeHtml(e.earliestSource==='quote_date'?'Fecha original de cotización':e.earliestSource==='record_created'?'Alta en Airtable · no confirma fecha original':'Sin fecha')+'</small>'+(e.earliestOriginal?'<br><small style="color:var(--text3)">Cotización original: '+escapeHtml(e.earliestOriginal)+(e.originalQuoteNumber?' · N° '+escapeHtml(e.originalQuoteNumber):'')+'</small>':'')+'</td>'+
       '<td><span style="font-size:10px">'+escapeHtml(e.flags.join(' · ')||'Documentado')+'</span> '+
         (/^rec[A-Za-z0-9]{14}$/.test(e.id)?'<button class="btn btn-ghost btn-sm" onclick="_crmAuditOpenClient(\''+e.id+'\')">Ver cliente</button>':'')+
       '</td></tr>').join(''):'<tr><td colspan="6" style="padding:15px">No hay registros para este filtro.</td></tr>')+
@@ -16216,8 +16219,8 @@ function _crmAuditExportCsv(){
     if(/^[\s]*[=+@-]/.test(str))str="'"+str;
     return '"'+str.replace(/"/g,'""')+'"';
   };
-  const csv=['ID,Cliente,Origen registrado,Fecha primer contacto,Primera cotización conocida,Tipo evidencia primera cotización,N° cotizaciones,Revisión sugerida',
-    ...entries.map(e=>[e.id,e.name,e.origin,e.date,e.earliest,e.earliestSource==='quote_date'?'Fecha original':e.earliestSource==='record_created'?'Alta Airtable (fecha original desconocida)':'Sin fecha',e.linkedQuotes,e.flags.join('; ')]
+  const csv=['ID,Cliente,Origen registrado,Fecha primer contacto,Primera cotización conocida,Tipo evidencia primera cotización,Fecha cotización original,N° cotización original,N° cotizaciones,Revisión sugerida',
+    ...entries.map(e=>[e.id,e.name,e.origin,e.date,e.earliest,e.earliestSource==='quote_date'?'Fecha original':e.earliestSource==='record_created'?'Alta Airtable (fecha original desconocida)':'Sin fecha',e.earliestOriginal,e.originalQuoteNumber,e.linkedQuotes,e.flags.join('; ')]
       .map(escapeCell).join(','))].join('\r\n');
   const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');
