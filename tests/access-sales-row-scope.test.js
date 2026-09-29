@@ -56,18 +56,82 @@ test('signed salesperson only sees records with matching server-side Vendedor fo
     assert.equal(h.calls[0].redirect,'manual');
   }
 });
-test('existing customer formula ANDs with ownership and fetches Vendedor for independent verification',async()=>{
+test('field projection supports approved columns, always requests Vendedor and preserves paging',async()=>{
   const params=new URLSearchParams();
-  params.set('filterByFormula','{Estado pedido}="Confirmado"');
   params.set('pageSize','75');
   params.append('fields[]','Estado pedido');
   const h=await browse(base+'Pedidos?'+params,{records:[own]});
   assert.equal(h.response.status,200);
   const upstream=new URL(h.calls[0].url).searchParams;
-  assert.equal(upstream.get('filterByFormula'),
-    'AND({Vendedor}="nicanor",({Estado pedido}="Confirmado"))');
+  assert.equal(upstream.get('filterByFormula'),'{Vendedor}="nicanor"');
   assert.deepEqual(upstream.getAll('fields[]'),['Estado pedido','Vendedor']);
   assert.equal(upstream.get('pageSize'),'75');
+  const all=await browse(base+'Clientes',{records:[own]});
+  const columns=new URL(all.calls[0].url).searchParams.getAll('fields[]');
+  assert.ok(columns.includes('Empresa'));
+  assert.ok(columns.includes('Vendedor'));
+  assert.ok(!columns.includes('Datos pago / banco'));
+  assert.ok(!columns.includes('Facturas vencidas'));
+  assert.ok(!columns.includes('FINANZAS - Ventas'));
+  assert.ok(!columns.includes('Pedidos'),'unverified linked record IDs must not leak');
+});
+test('owned sales data is projected: bank details, margins and production costs never leave the proxy',async()=>{
+  const restricted={
+    Clientes:['Datos pago / banco','Facturas vencidas','Revenue total cliente (CLP)',
+      'FINANZAS - Ventas','Pedidos','Cotizaciones','Adjuntos'],
+    Cotizaciones:['Margen real (%)','Detalle JSON','Detalle productos','Ficha Propuesta',
+      'Cliente','Pedido','Adjuntos'],
+    Pedidos:['Costo real total (CLP)','Costo material real (CLP)',
+      'Costo mano de obra (CLP)','Análisis FINANCE_AGENT','Factura URL',
+      'Cliente','Cotizaciones','Adjuntos','Anticipo pagado (50%)']
+  };
+  for(const table of Object.keys(restricted)){
+    const fields={Empresa:'Own client','N° Cotización':'COT-123','N° Pedido':'PED-123',
+      'Notas internas':'Visible note','Notas cotización':'Visible quote note',
+      Vendedor:'nicanor'};
+    for(const key of restricted[table])
+      fields[key]=key==='Cliente'||key==='Cotizaciones'||key==='Pedido'?
+        ['recBBBBBBBBBBBBBB']:'TOP SECRET';
+    const upstream={records:[{id:own.id,fields,createdTime:'2026-09-29T12:00:00Z',
+      secret:'row-secret'}],offset:'next_cursor',secret:'page-secret'};
+    const h=await browse(base+table,upstream);
+    assert.equal(h.response.status,200,table);
+    assert.equal(h.body.secret,undefined,table+' top-level');
+    assert.equal(h.body.offset,'next_cursor');
+    const row=h.body.records[0];
+    assert.equal(row.secret,undefined,table+' row');
+    assert.equal(row.fields.Vendedor,'nicanor');
+    for(const key of restricted[table])
+      assert.ok(!Object.hasOwn(row.fields,key),table+' leaked '+key);
+    for(const name of Object.keys(row.fields))
+      assert.ok(['Empresa','N° Cotización','N° Pedido','Notas internas',
+        'Notas cotización','Vendedor'].includes(name),'unknown field leaked: '+name);
+    const single=await browse(base+table+'/'+own.id,upstream.records[0]);
+    assert.equal(single.response.status,200);
+    assert.deepEqual(single.body,row,'record-by-ID must have the same projection');
+  }
+});
+test('sales cannot probe hidden field values using filters, sort order, views or field projection',async()=>{
+  for(const params of [
+    'filterByFormula='+encodeURIComponent('{Datos pago / banco}!=""'),
+    'filterByFormula='+encodeURIComponent('{Margen real (%)}>0'),
+    'sort[0][field]=Costo+real+total+%28CLP%29',
+    'sort[0][direction]=desc',
+    'view=Financial+Clients',
+    'fields%5B%5D='+encodeURIComponent('Datos pago / banco'),
+    'fields%5B%5D='+encodeURIComponent('Margen real (%)'),
+    'fields%5B%5D='+encodeURIComponent('Detalle JSON'),
+    'fields%5B%5D='+encodeURIComponent('Cliente'),
+    'fields%5B%5D=Vendedor&fields%5B%5D=Vendedor&'+'fields%5B%5D=x'
+  ]){
+    const h=await browse(base+'Clientes?'+params,{records:[own]});
+    assert.equal(h.response.status,422,params);
+    assert.equal(h.calls.length,0,'no upstream fetch for hidden-field probes');
+  }
+  const page=await browse(base+'Clientes?pageSize=25&maxRecords=50&offset=itr_test',
+    {records:[own]});
+  assert.equal(page.response.status,200);
+  assert.equal(new URL(page.calls[0].url).searchParams.get('offset'),'itr_test');
 });
 test('a malformed or noncompliant upstream never leaks another salesperson or an unassigned customer',async()=>{
   for(const reply of [
@@ -102,6 +166,7 @@ test('no unscoped fallback on forbidden table, metadata, record path or mutation
     ['GET',base+'Clientes/'+own.id+'?fields[]=Empresa'],
     ['GET',base+'Clientes?returnFieldsByFieldId=true'],
     ['GET',base+'Clientes?filterByFormula=TRUE()&filterByFormula=FALSE()'],
+    ['GET',base+'Clientes?sort%5B0%5D%5Bfield%5D=Datos+pago+%2F+banco'],
     ['GET',base+'Clientes?pageSize=200'],['GET',base+'Clientes?maxRecords=501'],
     ['POST',base+'Clientes'],['PATCH',base+'Pedidos/'+own.id],
     ['DELETE',base+'Cotizaciones/'+own.id],['GET','/v0/meta/bases/app1YtD74AqiPWQhy/tables']
