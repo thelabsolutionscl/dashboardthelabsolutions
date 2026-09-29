@@ -1332,19 +1332,29 @@ const MAIL={
     });
   },
 
-  sigInsertImage(){
-    const url=prompt('URL de la imagen:');
-    if(!url) return;
-    document.getElementById('mailSigEditor').focus();
-    document.execCommand('insertHTML',false,`<img loading="lazy" decoding="async" src="${url}" style="max-height:100px;max-width:100%">`);
+  _insertEditorImage(editorId){
+    const candidate=prompt('URL HTTPS de la imagen:');
+    if(!candidate)return;
+    let url;
+    try{
+      url=new URL(candidate.trim());
+      if(url.protocol!=='https:'||url.username||url.password)throw Error('Invalid image URL');
+    }catch(_){toast('La imagen debe tener una URL HTTPS válida.','error');return;}
+    const editor=document.getElementById(editorId);if(!editor)return;
+    editor.focus();
+    const img=document.createElement('img');
+    img.src=url.href;img.loading='lazy';img.decoding='async';img.alt='';
+    img.style.maxWidth='100%';
+    if(editorId==='mailSigEditor')img.style.maxHeight='100px';
+    const selection=window.getSelection();
+    if(selection&&selection.rangeCount&&editor.contains(selection.anchorNode)){
+      const range=selection.getRangeAt(0);
+      range.deleteContents();range.insertNode(img);range.setStartAfter(img);
+      range.collapse(true);selection.removeAllRanges();selection.addRange(range);
+    }else editor.appendChild(img);
   },
-
-  insertImagePrompt(){
-    const url=prompt('URL de la imagen:');
-    if(!url) return;
-    document.getElementById('mailCmpBody').focus();
-    document.execCommand('insertHTML',false,`<img loading="lazy" decoding="async" src="${url}" style="max-width:100%">`);
-  },
+  sigInsertImage(){this._insertEditorImage('mailSigEditor');},
+  insertImagePrompt(){this._insertEditorImage('mailCmpBody');},
   toggleCompose(){document.getElementById('mailComposePanel').classList.toggle('collapsed');},
   toggleCc(){const r=document.getElementById('mailCcRow');r.style.display=r.style.display==='none'?'flex':'none';},
   toggleBcc(){const r=document.getElementById('mailBccRow');r.style.display=r.style.display==='none'?'flex':'none';},
