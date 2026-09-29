@@ -46,7 +46,7 @@ function cuerpo(nombre, src) {
 
 const ESC = CORREO.match(/esc\(s\)\{[^}]*\}/)[0];
 // El saneador real del módulo, sin copiar ni una línea.
-const FUENTE_CITA = `return {${ESC},${cuerpo('_sanitizarCita(html){')}};`;
+const FUENTE_CITA = `return {${ESC},${cuerpo('_sanitizarCita(html,allowImages=false){')}};`;
 // La línea real que pinta el chip de un adjunto.
 const LINEA_CHIP = CORREO.split('\n').find((l) => l.includes('mail-att-chip') && l.includes('downloadAtt')).trim();
 
@@ -156,26 +156,25 @@ test('saneada, la cita no ejecuta nada y conserva el formato', async (t) => {
     assert.doesNotMatch(limpio, /javascript:/i, `${nombre}: sobrevivió un javascript: → ${limpio}`);
     assert.doesNotMatch(limpio, /data:text\/html/i, `${nombre}: sobrevivió un data:text/html → ${limpio}`);
   }
-  // Un correo real trae negritas, listas, colores, el logo incrustado y enlaces.
-  for (const trozo of ['<b>referencia</b>', '<li>Ítem</li>', 'style="color', 'data:image/png', 'thelab.solutions']) {
-    assert.ok(r.legitimo.includes(trozo), `se perdió formato legítimo: ${trozo} → ${r.legitimo}`);
+  // Quotes preserve safe text and links, but intentionally strip tracking
+  // images and arbitrary inline styles.
+  for(const token of ['<b>referencia</b>','<li>Ítem</li>','thelab.solutions']){
+    assert.ok(r.legitimo.includes(token),'se perdió formato seguro: '+token);
   }
+  assert.doesNotMatch(r.legitimo,/<img\b|data:image\/|style=/i,
+    'remote quotes must not load images or retain untrusted inline CSS');
 });
 
-test('la lista de elementos prohibidos cubre lo que ejecuta o navega', () => {
-  const fn = cuerpo('_sanitizarCita(html){');
-  for (const tag of ['script', 'iframe', 'object', 'embed', 'form', 'base', 'style', 'svg']) {
-    assert.ok(fn.includes(tag), `falta ${tag} en la lista de elementos removidos`);
-  }
-  assert.match(fn, /n\.startsWith\('on'\)/, 'deben caer los manejadores on*');
-  assert.match(fn, /srcdoc/, 'y el srcdoc de un iframe superviviente');
-  assert.match(fn, /javascript\|vbscript\|data/, 'y los esquemas de URL peligrosos');
-  // Las imágenes incrustadas son normales en un correo y deben pasar.
-  assert.match(fn, /data:image\\\//, 'data:image debe seguir permitido en src');
-  // DOMParser no ejecuta ni descarga nada al analizar: es la pieza que hace
-  // seguro sanear sin usar innerHTML.
-  assert.match(fn, /new DOMParser\(\)\.parseFromString/);
-  assert.match(fn, /catch\(e\)\{ return this\.esc\(s\); \}/, 'ante la duda, texto plano');
+test('the sanitizer rebuilds the DOM from an allowlist, not copied attributes',()=>{
+  const fn=cuerpo('_sanitizarCita(html,allowImages=false){');
+  for(const tag of ['script','iframe','object','embed','form','base','style','svg'])
+    assert.ok(fn.includes(tag),'falta '+tag);
+  assert.match(fn,/const keep=new Set/);
+  assert.match(fn,/const drop=new Set/);
+  assert.match(fn,/new DOMParser\(\)\.parseFromString/);
+  assert.match(fn,/doc\.createElement\(tag\)/);
+  assert.doesNotMatch(fn,/setAttribute\(at\.name/);
+  assert.match(fn,/url\.protocol!=='https:'/);
 });
 
 // ── 2. Leer un mensaje ──────────────────────────────────────────────────
