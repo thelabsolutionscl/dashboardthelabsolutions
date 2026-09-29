@@ -219,3 +219,21 @@
   global.OPSections={mount,clients,reports,clientInfo};
   document.addEventListener('DOMContentLoaded',mount);
 })(window);
+
+/* Reportes audit is an optional, isolated adapter: the legacy KPI and editor
+ * remain untouched. Inherit the current build query to avoid stale Pages JS. */
+(function loadReportesSpendHistory(root){
+  const doc=root?.document;
+  if(!doc?.createElement)return;
+  const version=String(doc.currentScript?.src||'').split('?')[1]||'';
+  const init=()=>{
+    if(doc.getElementById('reportesSpendHistoryScript'))return;
+    const script=doc.createElement('script');
+    script.id='reportesSpendHistoryScript';
+    script.src='js/reportes-marketing-history.js'+(version?'?'+version:'');
+    script.async=true;
+    doc.head.appendChild(script);
+  };
+  if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
+})(typeof window!=='undefined'?window:null);
