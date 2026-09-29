@@ -414,7 +414,7 @@ export class CrmMutationGuard {
     if(request.method!=='POST')return this._json({error:'Internal method'},405);
     let data;
     try{data=await request.json();}catch(_){return this._json({error:'Malformed request'},400);}
-    const {op,month,actor,channel,amount_clp,expected_revision}=data||{};
+    const {op,month,actor,channel,amount_clp,expected_revision,before_revision}=data||{};
     if(!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month||'')||
        !actor||!['finance','admin'].includes(actor.role)||
        typeof actor.email!=='string'||actor.email.length>254||
@@ -428,8 +428,29 @@ export class CrmMutationGuard {
       return this._json(row||blank(),200);
     }
     if(op==='history') {
-      const history=await this.state.storage.list({prefix:auditPrefix,reverse:true,limit:100});
-      return this._json({month,events:[...history.values()]},200);
+      // Audit entries use contiguous revision-addressed keys. Bulk get keeps
+      // memory bounded and makes it impossible to silently drop older events
+      // when a month exceeds 100 edits. Cursor excludes its revision.
+      const current=await this.state.storage.get(key)||blank();
+      if(before_revision!==undefined&&
+         (!Number.isSafeInteger(before_revision)||before_revision<1||
+          before_revision>current.revision+1))
+        return this._json({error:'Invalid history cursor'},422);
+      const last=before_revision===undefined?current.revision:
+        Math.min(current.revision,before_revision-1);
+      const first=Math.max(1,last-99);
+      const keys=[];
+      for(let rev=last;rev>=first;rev--)
+        keys.push(auditPrefix+String(rev).padStart(12,'0'));
+      const records=keys.length?await this.state.storage.get(keys):new Map();
+      // Fail closed if an expected immutable audit record is missing.
+      if(keys.some(k=>!records.has(k)))
+        return this._json({error:'Marketing audit integrity check failed'},503);
+      return this._json({
+        month,events:keys.map(k=>records.get(k)),
+        latest_revision:current.revision,has_more:first>1&&keys.length>0,
+        next_before_revision:first>1&&keys.length>0?first:null
+      },200);
     }
     if(typeof channel!=='string'||channel.length<1||channel.length>65||
        channel!==channel.trim()||/[\x00-\x1f<>]/.test(channel)||
@@ -841,14 +862,19 @@ export default {
       if(!((isSpend&&['GET','PUT'].includes(method))||(isHistory&&method==='GET')))
         return json({error:'Method not allowed'},405,CORS);
       const pairs=[...url.searchParams.entries()];
-      if(pairs.length!==1||pairs[0][0]!=='month'||
-         !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(pairs[0][1]))
-        return json({error:'A single valid month parameter is required'},422,CORS);
+      const months=url.searchParams.getAll('month');
+      const cursors=url.searchParams.getAll('before_revision');
+      if(months.length!==1||!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(months[0])||
+         pairs.length!==1+cursors.length||cursors.length>(isHistory?1:0)||
+         pairs.some(([name])=>name!=='month'&&name!=='before_revision')||
+         (cursors.length>0&&!/^[1-9]\d{0,11}$/.test(cursors[0])))
+        return json({error:'Expected month and optional history cursor'},422,CORS);
       if(!env.CRM_MUTATION_GUARD)
         return json({error:'Marketing spending guard unavailable'},503,CORS);
       let payload={op:isHistory?'history':method==='PUT'?'put':'get',
-        month:pairs[0][1],actor:{
+        month:months[0],actor:{
           role:authorized.identity.role,email:authorized.identity.email}};
+      if(isHistory&&cursors.length)payload.before_revision=Number(cursors[0]);
       if(method==='PUT'){
         if(!String(request.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json')||
            Number(request.headers.get('Content-Length')||0)>1024)
