@@ -45,7 +45,7 @@ test('el filtro por vencer excluye aprobadas y expiradas; el buscador se combina
 });
 test('buscar FEDESKI encuentra las 7 cotizaciones del cliente aunque dos tengan títulos distintos',()=>{
   const {context,op,element,search,click}=setup();
-  const id='recPsfFcRwaTWG39l';
+  const id='recClienteFedeski';
   const company=record(id,{Empresa:'Federación de Ski y Snowboard de Chile',Vendedor:'propio'});
   context.state.clientes=[company];
   context.state.clientesByIdRec={[id]:company};
