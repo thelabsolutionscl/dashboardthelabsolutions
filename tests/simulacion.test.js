@@ -28,7 +28,7 @@ function cargar() {
       };
     })(),
     navigator: { clipboard: { writeText: () => Promise.resolve() } },
-    console,
+    console, URL,
     escapeHtml: (s) => String(s),
     toast: () => {},
   };
@@ -384,29 +384,48 @@ test('_simExpandir cruza conceptos por precios y respeta el tope', () => {
   assert.equal(S._simExpandir(muchos, [1, 2, 3, 4, 5]).length, S.SIM_MAX_CONCEPTOS, 'el tope se aplica tras expandir');
 });
 
-test('el respaldo remoto no se intenta si el rol no puede escribir', () => {
-  const llamadas = [];
-  S._monitorUpsert = (...a) => { llamadas.push(a); return Promise.resolve(); };
+test('sincronización remota queda acotada a roles locales con Simulación', () => {
   S.AUTH = { getUser: () => ({ role: 'marketing' }) };
-  S.RBAC = { canWriteTable: (rol) => rol !== 'marketing' };
-  S._simRespaldar([]);
-  assert.equal(llamadas.length, 0, 'marketing no debe disparar la escritura');
-
+  assert.equal(S._simCanSync(), true, 'marketing debe poder sincronizar su historial');
   S.AUTH = { getUser: () => ({ role: 'admin' }) };
-  S._simRespaldar([]);
-  assert.equal(llamadas.length, 1, 'admin sí respalda');
+  assert.equal(S._simCanSync(), true);
+  S.AUTH = { getUser: () => ({ role: 'gerencia' }) };
+  assert.equal(S._simCanSync(), true);
+  S.AUTH = { getUser: () => ({ role: 'finanzas' }) };
+  assert.equal(S._simCanSync(), false);
+  S.window = { _DEMO_MODE: true };
+  S.AUTH = { getUser: () => ({ role: 'admin' }) };
+  assert.equal(S._simCanSync(), false, 'demo nunca debe escribir historial real');
+  delete S.window;
 });
 
-test('el respaldo remoto no deja rechazos sin atrapar', async () => {
-  S._monitorUpsert = () => Promise.reject(new Error('RBAC: escritura no permitida'));
+test('Simulación usa /shared/simulation y no vuelve a Monitor Sistema desde el navegador', () => {
+  assert.match(SRC, /\/shared\/simulation/);
+  assert.match(SRC, /credentials:\s*'include'/);
+  assert.doesNotMatch(SRC, /_monitorUpsert\(['"]SIMULACION['"]/);
+  assert.doesNotMatch(SRC, /canWriteTable\([^\n]*Monitor Sistema/);
+  assert.match(SRC, /_simHydrateRemote\(\)\.catch/);
+});
+
+test('tombstone remoto impide que una caché vieja reviva corridas borradas', () => {
+  const stale={id:'old',fecha:'2026-09-01',ts:1000,linea:'L',lineaKey:'lamparas',publico:'ambos',panel:1,nPerfiles:44,barrido:[],items:[]};
+  const fresh={...stale,id:'new',ts:3000,fecha:'2026-09-02'};
+  const cleared={version:1,updatedAt:2000,clearedAt:2000,runs:[]};
+  assert.deepEqual(plano(S._simMergeDocs(cleared,{version:1,updatedAt:1000,clearedAt:0,runs:[stale]}).runs),[]);
+  assert.deepEqual(plano(S._simMergeDocs(cleared,{version:1,updatedAt:3000,clearedAt:0,runs:[fresh]}).runs),[fresh]);
+});
+
+test('el respaldo remoto absorbe fallos de red y no deja rechazos sin atrapar', async () => {
   S.AUTH = { getUser: () => ({ role: 'admin' }) };
-  S.RBAC = { canWriteTable: () => true };
+  S._proxyCfg = () => ({ url: 'https://proxy.example.com', key: 'fixture-key' });
+  S.fetch = () => Promise.reject(new Error('sin red'));
   let suelto = null;
   const onRej = (e) => { suelto = e; };
   process.on('unhandledRejection', onRej);
-  S._simRespaldar([]);
-  await new Promise((r) => setTimeout(r, 30));
+  const ok=await S._simRespaldar([]);
+  await new Promise((r) => setTimeout(r, 10));
   process.off('unhandledRejection', onRej);
+  assert.equal(ok,false);
   assert.equal(suelto, null, 'el rechazo debe quedar atrapado, no escaparse');
 });
 
