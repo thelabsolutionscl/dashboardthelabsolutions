@@ -2,6 +2,223 @@ import { accessAuthorize } from './access-auth.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
 
 
+
+/* Strict nonadmin mutation catalog, verified against Airtable field types.
+ * Columns not named here (notably Vendedor, banking, payments, margins,
+ * real costs, raw DTE data and future fields) cannot be sent by operator.
+ */
+const OPERATOR_WRITE_FIELDS=Object.freeze({
+  Clientes:Object.freeze({
+    'Empresa':'text','Contacto':'text','Cargo contacto':'text',
+    'Teléfono':'phone','Email':'email','Fecha primer contacto':'date',
+    'Dirección':'text','Comuna':'text','Región':'text','Sitio web':'url',
+    'Industria / Rubro':'select','Fecha último pedido':'date',
+    'Etapa venta':'select','Origen lead':'select',
+    'Notas internas':'notes','Notas followup':'notes',
+    'Tipo de cliente':'select','Servicio interés':'select',
+    'Próxima acción IA':'notes','Validado':'flag','Reactivado':'flag',
+    'Fecha reactivación':'date'
+  }),
+  Cotizaciones:Object.freeze({
+    'N° Cotización':'text','Cliente':'links','Pedido':'links',
+    'Estado cotización':'select','Fecha cotización':'date',
+    'Fecha vencimiento':'date','Fecha aprobación':'date',
+    'Solicitud cliente (texto libre)':'notes',
+    'Detalle productos':'notes','Subtotal (CLP)':'money',
+    'Urgencia (+25%)':'flag','Total final (CLP)':'money',
+    'Notas cotización':'notes','Canal solicitud':'select',
+    'Cantidad':'number','Forma de pago':'select',
+    'Tiempo de producción':'number','Tipo días producción':'text',
+    'Alias / Título':'text','Tiempo de producción máx':'number',
+    'Fecha de entrega':'date','Fecha límite cotización':'date'
+  }),
+  Pedidos:Object.freeze({
+    'N° Pedido':'text','Cliente':'links','Cotizaciones':'links',
+    'Fecha ingreso':'date','Fecha entrega':'date','Urgente':'flag',
+    'Fecha despacho':'date','Instrucciones fabricación':'notes',
+    'Tiempo estimado (horas)':'number','Monto total (CLP)':'money',
+    'Checklist QA':'notes','Observaciones QA':'notes',
+    'Dirección despacho':'text','N° seguimiento courier':'text',
+    'Resultado QA':'select','Prioridad':'select',
+    'Motivo rechazo QA':'notes','Texto a grabar / imprimir':'notes',
+    'Texto confirmado por cliente':'flag','Material':'select',
+    'Cantidad':'number','Estado pedido':'select',
+    'Etapa producción':'select','Equipo asignado':'select',
+    'Tipo despacho':'select','Tipo documento':'select',
+    'Notas pedido':'notes','Proveedor':'text','Ficha Tecnica':'notes',
+    'FT Material':'select','FT Color':'text','FT Acabado':'select',
+    'FT Cantidad':'number','FT Impresora':'text','FT Altura capa':'text',
+    'FT Relleno (%)':'number','FT Soportes':'select',
+    'FT Peso estimado (g)':'number','FT Tiempo impresión':'text',
+    'FT Notas producción':'notes','FT Actualizado':'date',
+    'Notas QA':'notes','Foto QA URL':'url','Fecha objetivo interna':'date',
+    'Historial fechas calendario':'notes'
+  }),
+  Proveedores:Object.freeze({
+    'Nombre':'text','Categoría':'choices','Contacto':'text',
+    'Cargo':'text','Teléfono':'phone','Email':'email',
+    'Sitio Web':'url','Comuna':'text','Región':'text',
+    'Reputación':'number','Estado':'text','Plazo de entrega (días)':'number',
+    'Productos':'notes','WhatsApp':'phone','Estado postulación':'select'
+  })
+});
+function operatorFieldValueAllowed(kind,value,key){
+  if(value===null)return !['N° Pedido','N° Cotización','Empresa','Nombre'].includes(key);
+  if(kind==='flag')return typeof value==='boolean';
+  if(kind==='number'||kind==='money')
+    return typeof value==='number'&&Number.isFinite(value)&&value>=0&&
+      value<=(kind==='money'?1e11:1e7)&&
+      (key!=='FT Relleno (%)'||value<=100)&&
+      (key!=='Reputación'||value<=10);
+  if(kind==='links')return Array.isArray(value)&&value.length<=10&&
+    (key!=='Cliente'||value.length<=1)&&
+    (key!=='Pedido'||value.length<=1)&&
+    value.every(id=>typeof id==='string'&&/^rec[A-Za-z0-9]{14}$/.test(id))&&
+    new Set(value).size===value.length;
+  if(kind==='choices')return Array.isArray(value)&&value.length<=12&&
+    value.every(v=>typeof v==='string'&&v.length>0&&v.length<=120)&&
+    new Set(value).size===value.length;
+  if(typeof value!=='string'||/[\x00-\x08\x0b\x0e-\x1f]/.test(value))return false;
+  if(kind==='notes')return value.length<=20000;
+  if(kind==='date')return !value||/^\d{4}-\d{2}-\d{2}$/.test(value)&&
+    !Number.isNaN(Date.parse(value+'T12:00:00Z'));
+  if(kind==='email')return !value||value.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  if(kind==='phone')return value.length<=80;
+  if(kind==='url'){
+    if(!value)return true;
+    if(value.length>1024)return false;
+    try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&
+      !u.username&&!u.password;}catch(_){return false;}
+  }
+  return value.length<=(kind==='select'?160:2048);
+}
+function operatorWritePayloadAllowed(table,method,payload){
+  const catalog=OPERATOR_WRITE_FIELDS[table];
+  if(!catalog||!['POST','PATCH'].includes(method)||!payload||
+     typeof payload!=='object'||Array.isArray(payload))return false;
+  const keys=Object.keys(payload);
+  if(keys.some(k=>!['fields','records','typecast'].includes(k))||
+     (payload.typecast!==undefined&&payload.typecast!==false))return false;
+  const fieldsOK=(fields,creating)=>{
+    if(!fields||typeof fields!=='object'||Array.isArray(fields))return false;
+    const keys=Object.keys(fields);
+    if(!keys.length||keys.length>40||keys.some(k=>!Object.hasOwn(catalog,k)||
+       (!creating&&['N° Pedido','N° Cotización'].includes(k))||
+       !operatorFieldValueAllowed(catalog[k],fields[k],k)))return false;
+    if(creating){
+      const required={Clientes:'Empresa',Cotizaciones:'N° Cotización',
+        Pedidos:'N° Pedido',Proveedores:'Nombre'}[table];
+      if(!required||typeof fields[required]!=='string'||
+         !fields[required].trim())return false;
+    }
+    return true;
+  };
+  if(method==='POST'||Object.hasOwn(payload,'fields'))
+    return !Object.hasOwn(payload,'records')&&
+      fieldsOK(payload.fields,method==='POST');
+  if(!Array.isArray(payload.records)||!payload.records.length||
+     payload.records.length>10)return false;
+  const seen=new Set();
+  return payload.records.every(row=>row&&typeof row==='object'&&
+    !Array.isArray(row)&&Object.keys(row).length===2&&
+    Object.hasOwn(row,'id')&&Object.hasOwn(row,'fields')&&
+    typeof row.id==='string'&&/^rec[A-Za-z0-9]{14}$/.test(row.id)&&
+    !seen.has(row.id)&&seen.add(row.id)&&fieldsOK(row.fields,false));
+}
+async function operatorSafeMutationResponse(upstream,table,CORS){
+  if(!upstream)return json({error:'Operational mutation outcome uncertain'},503,CORS);
+  if(!upstream.ok){
+    // Do not return internal Airtable errors that can echo denied columns.
+    if([400,401,403,404,409,422].includes(upstream.status))
+      return json({error:'Operational mutation rejected',code:'OPERATOR_WRITE_REJECTED'},
+        upstream.status,CORS);
+    return json({error:'Operational mutation outcome uncertain; reread before retrying',
+      code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);
+  }
+  let body;
+  try{body=await upstream.json();}catch(_){
+    return json({error:'Operational mutation result uncertain; reread before retrying',
+      code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);
+  }
+  const single=body&&typeof body==='object'&&!Array.isArray(body)&&
+    typeof body.id==='string'&&body.fields&&typeof body.fields==='object'&&
+    !Array.isArray(body.fields);
+  const batch=body&&Array.isArray(body.records)&&body.records.length>0&&
+    body.records.length<=10&&body.records.every(row=>row&&typeof row.id==='string'&&
+      /^rec[A-Za-z0-9]{14}$/.test(row.id)&&row.fields&&
+      typeof row.fields==='object'&&!Array.isArray(row.fields));
+  if(single&&!/^rec[A-Za-z0-9]{14}$/.test(body.id))return json({
+    error:'Operational mutation outcome uncertain',code:'OPERATOR_WRITE_UNCERTAIN'
+  },503,CORS);
+  if(!single&&!batch)return json({
+    error:'Operational mutation outcome uncertain; reread before retrying',
+    code:'OPERATOR_WRITE_UNCERTAIN'
+  },503,CORS);
+  const projected=single?viewerProjectRecord(body,table,OPERATOR_READ_FIELDS):
+    {records:body.records.map(row=>viewerProjectRecord(row,table,OPERATOR_READ_FIELDS))};
+  return json(projected,upstream.status,{...CORS,'Cache-Control':'private, no-store'});
+}
+async function operatorScopedWrite(request,url,identity,env,CORS){
+  if(!['POST','PATCH'].includes(request.method))
+    return json({error:'Operator mutation denied'},403,CORS);
+  const prefix='/v0/app1YtD74AqiPWQhy/';
+  const path=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+  if(!path.startsWith(prefix)||url.search)
+    return json({error:'Operator mutation route denied'},403,CORS);
+  const parts=path.slice(prefix.length).split('/');
+  let table;
+  try{table=decodeURIComponent(parts[0]);}catch(_){}
+  if(!Object.hasOwn(OPERATOR_WRITE_FIELDS,table||'')||
+     parts[0]!==encodeURIComponent(table)||
+     (request.method==='POST'&&parts.length!==1)||
+     (request.method==='PATCH'&&(parts.length>2||
+       parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1]))))
+    return json({error:'Operator mutation route denied'},403,CORS);
+  if(!env.AIRTABLE_TOKEN)return json({error:'CRM unavailable'},503,CORS);
+  if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+     Number(request.headers.get('Content-Length')||0)>131072)
+    return json({error:'Operator mutation expects bounded JSON'},415,CORS);
+  let raw,body;
+  try{raw=await request.text();if(raw.length>131072)throw Error('Large payload');
+    body=JSON.parse(raw);}catch(_){
+    return json({error:'Invalid operator mutation body'},422,CORS);
+  }
+  if(!operatorWritePayloadAllowed(table,request.method,body))
+    return json({error:'Unapproved operator fields or mutation shape'},422,CORS);
+  const guarded=table==='Cotizaciones'||table==='Pedidos';
+  if((guarded||request.method==='PATCH'&&table==='Clientes')&&
+     !env.CRM_MUTATION_GUARD)return json({error:'CRM write guard unavailable'},503,CORS);
+  const headers={'Content-Type':'application/json'};
+  const actor={email:identity.email,role:'operator'};
+  try{
+    if(guarded&&request.method==='POST'){
+      const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-crm-global'));
+      const upstream=await stub.fetch('https://crm-write.internal/create',{
+        method:'POST',headers,
+        body:JSON.stringify({table,body,search:'',actor})
+      });
+      return operatorSafeMutationResponse(upstream,table,CORS);
+    }
+    if(request.method==='PATCH'&&table!=='Proveedores'){
+      const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-crm-global'));
+      const upstream=await stub.fetch('https://crm-write.internal/scoped-patch',{
+        method:'POST',headers,
+        body:JSON.stringify({table,method:'PATCH',body:raw,path,search:'',actor})
+      });
+      return operatorSafeMutationResponse(upstream,table,CORS);
+    }
+    const upstream=await fetch(AIRTABLE_BASE+path,{
+      method:request.method,redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,...headers},body:raw
+    });
+    if(upstream.status>=300&&upstream.status<400)return json({
+      error:'Unexpected CRM redirect; reread before retrying',
+      code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);
+    return operatorSafeMutationResponse(upstream,table,CORS);
+  }catch(_){return json({error:'Operational mutation outcome uncertain; reread before retrying',
+    code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);}
+}
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -1461,6 +1678,21 @@ export default {
         if(table&&Object.hasOwn(OPERATOR_READ_FIELDS,table))
           return viewerScopedRead(request,url,env,CORS,OPERATOR_READ_FIELDS);
       }
+    }
+    // All signed operator writes to CRM/suppliers are field/type guarded;
+    // non-reviewed mutation tables are denied by RBAC, never forwarded here.
+    if(authorized.identity?.role==='operator'&&request.method!=='GET'){
+      const opPath=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+      const prefix='/v0/app1YtD74AqiPWQhy/';
+      let table='';
+      if(opPath.startsWith(prefix)){
+        const raw=opPath.slice(prefix.length).split('/')[0];
+        try{table=decodeURIComponent(raw);}catch(_){}
+      }
+      if(Object.hasOwn(OPERATOR_WRITE_FIELDS,table))
+        return operatorScopedWrite(request,url,authorized.identity,env,CORS);
+      if(request.method==='DELETE'&&opPath.startsWith(prefix))
+        return json({error:'Operator deletion denied'},403,CORS);
     }
     // The new sales role has a dedicated owner-scoped Airtable read path.
     // It cannot reach AI, printers, SII, portal, schema or generic CRM writes.
