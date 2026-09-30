@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-29-mail-security-resend-status');
+define('MAIL_API_BUILD', '2026-09-30-resend-send-evidence');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -492,6 +492,24 @@ function resend_api_key() {
     $cached = $find();
     return $cached;
 }
+function resend_health_file() {
+    return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'tls-resend-health.json';
+}
+function resend_health_mark_ok($key) {
+    $payload = json_encode(['ts'=>time(),'key_hash'=>hash('sha256',(string)$key)]);
+    if ($payload === false) return;
+    @file_put_contents(resend_health_file(), $payload, LOCK_EX);
+    @chmod(resend_health_file(), 0600);
+}
+function resend_health_recent($key, $maxAge = 2592000) {
+    $f = resend_health_file();
+    if (!is_file($f)) return false;
+    $raw = @file_get_contents($f);
+    $d = is_string($raw) ? json_decode($raw, true) : null;
+    if (!is_array($d) || empty($d['ts']) || empty($d['key_hash'])) return false;
+    if (!hash_equals((string)$d['key_hash'], hash('sha256',(string)$key))) return false;
+    return (time() - (int)$d['ts']) <= $maxAge;
+}
 function _http_post_json($url, $headers, $bodyJson) {
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
@@ -550,7 +568,7 @@ function resend_send($from_name, $from_addr, $to, $cc, $subject, $body_html, $at
     );
     if ($resp === null) return 'No se pudo contactar a Resend: ' . $cerr;
     $json = json_decode($resp, true);
-    if ($code >= 200 && $code < 300 && !empty($json['id'])) return null; // éxito
+    if ($code >= 200 && $code < 300 && !empty($json['id'])) { resend_health_mark_ok($key); return null; } // éxito
     $msg = is_array($json) ? ($json['message'] ?? ($json['error']['message'] ?? ($json['name'] ?? $resp))) : $resp;
     return 'Resend (' . $code . '): ' . mb_substr((string) $msg, 0, 300);
 }
@@ -627,6 +645,13 @@ case 'resend_status':
     if (!function_exists('curl_init')) {
         echo json_out(['ok'=>false,'verified'=>false,'configured'=>true]); exit;
     }
+    // Si esta misma clave ya envió correctamente por Resend recientemente,
+    // esa es una prueba más fuerte que consultar /domains y además funciona
+    // con claves "Sending access". No enviamos correo de prueba.
+    if (resend_health_recent($key)) {
+        echo json_out(['ok'=>true,'verified'=>true,'configured'=>true,'evidence'=>'recent_send']);
+        exit;
+    }
     $ch = curl_init('https://api.resend.com/domains');
     curl_setopt_array($ch, [
         CURLOPT_HTTPGET=>true, CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key],
@@ -638,9 +663,10 @@ case 'resend_status':
     curl_close($ch);
     $payload = is_string($body) ? json_decode($body, true) : null;
     $verified = $http >= 200 && $http < 300 && is_array($payload) && isset($payload['data']) && is_array($payload['data']);
-    // No se devuelven cuerpos del proveedor, dominios ni la API key.
+    // Sending-access de Resend puede enviar pero no listar dominios. En 403 no
+    // elevamos permisos solo para el monitor: pedimos evidencia de un envío real.
     echo json_out(['ok'=>$verified,'verified'=>$verified,'configured'=>true,
-        'error_code'=>$verified?'':($http===401?'unauthorized':($http===403?'forbidden':'unverified'))]);
+        'error_code'=>$verified?'':($http===401?'unauthorized':($http===403?'send_only_or_forbidden':'unverified'))]);
     exit;
 
 // ── folders ──────────────────────────────────────────────────
