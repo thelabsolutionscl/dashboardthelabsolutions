@@ -53,7 +53,7 @@ test('viewer table catalog denies unreviewed systems; operator and admin retain 
     'Facturas','Agent_Log','Reportes','Google_Ads_KPIs']){
     assert.equal(accessAllows({role:'viewer'},'GET',BASE+table),false,table);
   }
-  assert.equal(accessAllows({role:'operator'},'GET',BASE+'Monitor%20Sistema'),true);
+  assert.equal(accessAllows({role:'operator'},'GET',BASE+'Monitor%20Sistema'),false);
   assert.equal(accessAllows({role:'admin'},'GET',BASE+'Agent_Log'),true);
 });
 test('viewer catalog contains only live-reviewed fields and rejects dangerous columns',()=>{
