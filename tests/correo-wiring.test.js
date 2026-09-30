@@ -177,7 +177,9 @@ test('el polling respeta al hosting y baja la cadencia ante errores repetidos', 
 
 test('Correo mantiene vínculos trazables con CRM y cotizaciones', () => {
   assert.match(MAIL, /vendorOwnsRecord/, 'el vendedor no debe autocompletar clientes ajenos');
-  assert.match(MAIL, /_monitorUpsert\(['"]MAIL_SENT_ADDRESSES['"]/, 'direcciones enviadas deben respaldarse con upsert');
+  assert.match(methodBlock('_saveSentAddrsAirtable'), /_writeSharedMail\(['"]sent-addresses['"]/,
+    'direcciones enviadas deben usar la ruta compartida acotada');
+  assert.doesNotMatch(methodBlock('_saveSentAddrsAirtable'), /_monitorUpsert|Monitor Sistema/);
   const register = methodBlock('_registrarCotEnviada');
   assert.match(register, /Estado cotizaci[oó]n/);
   assert.match(register, /Fecha cotizaci[oó]n/);
