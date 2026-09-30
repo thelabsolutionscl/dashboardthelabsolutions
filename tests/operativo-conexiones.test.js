@@ -127,7 +127,7 @@ test('IMAP verifica carpetas y Resend solo su token sin enviar correos',async()=
   }finally{Object.assign(global,prev);}
 });
 
-test('los 16 servicios tienen Conectar/configurar y Verificar conexión',()=>{
+test('los 15 servicios tienen Conectar/configurar y Verificar conexión',()=>{
   assert.match(source,/button\('Verificar conexión','check',s\.id\)/);
   assert.match(source,/button\(connectLabel,'connect',s\.id\)/);
   assert.match(source,/if\(action==='connect'\)connectService\(id\)/);
@@ -199,6 +199,26 @@ test('Comprobar ahora revisa todas las conexiones en una sola pasada sin bloqueo
   assert.match(source,/Promise\.allSettled\(workers\)/);
   assert.match(source,/await check\(service\.id,mode\)/);
   assert.doesNotMatch(source,/for\(const s of list\).*await check\(s\.id/);
+});
+
+
+test('el arranque hace una comprobación completa equivalente al botón sin abrir OAuth',async()=>{
+  assert.match(source,/setTimeout\(\(\)=>\{if\(!DOC\.hidden&&user\(\)\)void sweep\(false,true\);\},1800\)/);
+  assert.match(source,/const manual=mode==='manual'\|\|mode==='startup'/);
+  assert.match(source,/visibleServices\(\)\.filter\(s=>manual\|\|includeAll\|\|s\.auto\)/);
+  assert.match(source,/const mode=manual\?'manual':includeAll\?'startup':'auto'/);
+
+  const previous={AUTH:global.AUTH,_DEMO_MODE:global._DEMO_MODE,_calClientId:global._calClientId,
+    _calTokenVigente:global._calTokenVigente,_driveGetClientId:global._driveGetClientId};
+  try{
+    global.AUTH={getUser:()=>({username:'startup-test',role:'admin'})};global._DEMO_MODE=false;
+    global._calClientId=()=>'valid.apps.googleusercontent.com';
+    global._calTokenVigente=()=>false;
+    global._driveGetClientId=()=>'valid.apps.googleusercontent.com';
+    assert.equal((await center.probe('calendar','startup')).status,'gray');
+    assert.equal((await center.probe('drive','startup')).status,'gray');
+    assert.doesNotMatch(source,/requestAccessToken\(/);
+  }finally{Object.assign(global,previous);}
 });
 
 test('cada diagnóstico tiene timeout aislado para no frenar las demás tarjetas',()=>{
