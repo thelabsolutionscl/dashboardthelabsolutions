@@ -20,7 +20,8 @@ function fixture(response){
   const calls=[],env={APP_KEY:'public-test',AIRTABLE_TOKEN:'private-test'};
   global.fetch=async(url,opts={})=>{
     calls.push({url:String(url),opts});
-    assert.equal(opts.headers.Authorization,'Bearer '+env.AIRTABLE_TOKEN);
+    const auth=opts.headers instanceof Headers?opts.headers.get('Authorization'):opts.headers.Authorization;
+    assert.equal(auth,'Bearer '+env.AIRTABLE_TOKEN);
     return typeof response==='function'?response(url,opts):Response.json(response);
   };
   async function run(path,role='operator'){
