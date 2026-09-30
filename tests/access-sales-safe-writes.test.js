@@ -97,12 +97,27 @@ test('opt-in safe sales PATCH verifies original owner, expected fields and post-
     ['Pedidos','Notas internas','original','confirmado por ventas']
   ]){
     const f=fixture();
+    // A PATCH must never return the unfiltered Airtable postflight row.
+    Object.assign(f.rows.get(rec).fields,{
+      'Datos pago / banco':'SECRET ACCOUNT',
+      'Facturas vencidas':4,
+      'Margen real (%)':98,
+      'Costo real total (CLP)':999999,
+      'Cliente':[other],
+      'Pedido':[other],
+      'Cotizaciones':[other],
+      'Nueva columna futura':'PRIVATE'
+    });
     const response=await f.run(f.request(table,rec,{[field]:next},{[field]:old}));
     assert.equal(response.status,200,await response.clone().text());
     const saved=await response.json();
     assert.equal(saved.id,rec);
     assert.equal(saved.fields[field],next);
     assert.equal(saved.fields.Vendedor,'nicanor');
+    for(const hidden of ['Datos pago / banco','Facturas vencidas',
+      'Margen real (%)','Costo real total (CLP)','Cliente','Pedido',
+      'Cotizaciones','Nueva columna futura'])
+      assert.equal(saved.fields[hidden],undefined,table+' PATCH leaked '+hidden);
     assert.deepEqual(f.calls.map(c=>c.method),['GET','PATCH','GET']);
     assert.equal(f.calls[1].body,JSON.stringify({fields:{[field]:next}}),
       'untrusted expected_fields and owner must not reach Airtable');
