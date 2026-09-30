@@ -38,9 +38,16 @@ test('historial de nivelación usa el mismo límite dedicado y no record ids Air
   }
   assert.match(write,/if\(!saved\)continue/,'solo un 409 confirmado puede rebasarse');
 });
-test('configuración de automatización y costos exige permiso de configuración local',()=>{
-  const save=block(OPS,'saveIntelligenceConfig');
-  assert.match(save,/RBAC\.canConfigRole/);
-  assert.match(save,/Solo administración puede cambiar automatización y costos de MachineOps/);
-  assert.ok(save.indexOf('canConfigRole')<save.indexOf('data().automation'),'el guard debe ejecutarse antes de mutar');
+test('toda configuración privilegiada exige permiso local antes de mutar',()=>{
+  assert.match(OPS,/function canConfigureMachineOps\(/);
+  const automation=block(OPS,'saveIntelligenceConfig');
+  const safety=block(OPS,'saveSafetyConfig');
+  const maintenance=block(OPS,'updateMaintProfile');
+  for(const src of [automation,safety,maintenance]){
+    assert.match(src,/canConfigureMachineOps\(\)/);
+    assert.ok(src.indexOf('canConfigureMachineOps')<src.indexOf('data()'),'el guard debe ejecutarse antes de mutar');
+  }
+  assert.match(automation,/renderAutomationConfig/);
+  assert.match(safety,/renderSafety/);
+  assert.match(maintenance,/renderMaintenanceProfiles/);
 });
