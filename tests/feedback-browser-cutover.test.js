@@ -13,7 +13,7 @@ assert.ok(a>0&&b>a&&c>b&&d>c);
 const frag=SRC.slice(a,b),share=SRC.slice(c,d);
 const ID='recPE0000000000A1',TOKEN=ID+'.t5f940.'+'a'.repeat(43);
 const lead='https://thelab-leads-worker.wast3dspa.workers.dev';
-function harness({active=true,fail=false,review='',issuerUrl=lead+'/nps?p='+TOKEN}={}){
+function harness({active=true,fail=false,review='',issuerUrl=null}={}){
  const events=[],calls=[],popups=[];
  const window={open(url,target){events.push('open:'+url);
    const p={location:{replace(x){events.push('navigate:'+x);}},close(){events.push('close');}};
@@ -28,8 +28,9 @@ function harness({active=true,fail=false,review='',issuerUrl=lead+'/nps?p='+TOKE
      events.push('fetch');
      calls.push({url,options});
      if(fail)throw Error('issuer unreachable');
-     return Response.json({ok:true,url:issuerUrl,purpose:
-       JSON.parse(options.body).purpose,expires_at:Math.floor(Date.now()/1000)+1200});
+     const purpose=JSON.parse(options.body).purpose;
+     return Response.json({ok:true,url:issuerUrl||(lead+'/'+purpose+'?p='+TOKEN),
+       purpose,expires_at:Math.floor(Date.now()/1000)+1200});
    },
    toast:(msg,variant)=>events.push('toast:'+variant),
    state:{pedidos:[{id:ID,fields:{'N° Pedido':'PED-042'}}],pedidosById:{}},
@@ -93,12 +94,14 @@ test('NPS and POD share distinct signed links and preserve a popup through async
  assert.deepEqual(JSON.parse(h.calls[0].options.body),{
    recordId:ID,purpose:'pod',days:30
  });
- assert.ok(h.events.some(e=>e.startsWith('navigate:https://wa.me/')&&e.includes('/pod')));
+ assert.ok(h.events.some(e=>e.startsWith('navigate:https://wa.me/')&&
+   new URL(e.slice('navigate:'.length)).searchParams.get('text').includes('/pod')));
  const n=harness();
  await n.pdWhatsApp(ID);
  assert.equal(JSON.parse(n.calls[0].options.body).purpose,'nps');
  assert.equal(n.marks,1);
- assert.ok(n.events.some(e=>e.startsWith('navigate:https://wa.me/')&&e.includes('/nps')));
+ assert.ok(n.events.some(e=>e.startsWith('navigate:https://wa.me/')&&
+   new URL(e.slice('navigate:'.length)).searchParams.get('text').includes('/nps')));
  const fail=harness({fail:true});
  await fail.pdWhatsApp(ID);
  assert.equal(fail.marks,0);
@@ -109,7 +112,8 @@ test('legacy mode keeps existing links without requesting privileged issuer',asy
  await h.compartirSeguimiento(ID);
  assert.equal(h.calls.length,0);
  assert.ok(h.events.some(e=>e.startsWith('open:https://wa.me/')&&
-   e.includes(encodeURIComponent(Buffer.from(ID).toString('base64')))));
+   new URL(e.slice('open:'.length)).searchParams.get('text')
+     .includes(Buffer.from(ID).toString('base64'))));
  const n=harness({active:false});
  await n.pdWhatsApp(ID);
  assert.equal(n.calls.length,0);
