@@ -145,7 +145,7 @@ test('mail-api expone cabeceras RFC de conversación sin descargar cuerpos', () 
     assert.match(list, new RegExp("'" + key + "'"));
     assert.match(search, new RegExp("'" + key + "'"));
   }
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-rate-guard/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-resend-status/);
 });
 
 test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
@@ -346,5 +346,16 @@ test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de
   const send=phpCase('send');
   assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
   assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-rate-guard/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-resend-status/);
+});
+
+test('verificación Resend exige IMAP, usa GET dominios y no envía mensajes',()=>{
+  assert.match(PHP,/case 'resend_status':/);
+  const branch=PHP.slice(PHP.indexOf("case 'resend_status':"),PHP.indexOf("case 'folders':"));
+  assert.match(branch,/open_imap\(\$user, \$pass\)/);
+  assert.match(branch,/if \(is_array\(\$conn\)\)/);
+  assert.match(branch,/CURLOPT_HTTPGET\s*=>\s*true/);
+  assert.match(branch,/https:\/\/api\.resend\.com\/domains/);
+  assert.doesNotMatch(branch,/resend_send\(/);
+  assert.doesNotMatch(branch,/CURLOPT_POST/);
 });
