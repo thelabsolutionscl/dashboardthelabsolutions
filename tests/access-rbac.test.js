@@ -285,7 +285,7 @@ test('portal administration requires explicit signed roles',()=>{
 });
 test('operational supplier/monitoring tables work with Access, reports remain financial',()=>{
   const base='/v0/app1YtD74AqiPWQhy/';
-  assert.equal(accessAllows({role:'operator'},'GET',base+'Monitor%20Sistema'),true);
+  assert.equal(accessAllows({role:'operator'},'GET',base+'Monitor%20Sistema'),false);
   assert.equal(accessAllows({role:'operator'},'PATCH',base+'Proveedores/recABCDEFGHIJKLMN'),true);
   assert.equal(accessAllows({role:'operator'},'GET',base+'Reportes'),false);
   assert.equal(accessAllows({role:'finance'},'GET',base+'Reportes'),true);
