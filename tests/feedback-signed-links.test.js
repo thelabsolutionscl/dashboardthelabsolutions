@@ -14,6 +14,7 @@ let calls=[];
 const env=()=>({
  AIRTABLE_TOKEN:'PAT_TEST_ONLY',AIRTABLE_BASE_ID:'appTEST',
  FEEDBACK_LINK_SECRET:SECRET,FEEDBACK_SIGNED_ONLY:'true',
+ FEEDBACK_ISSUER_ENABLED:'true',
  PORTAL_ADMIN_KEY:'private-test-portal-admin-key-'.repeat(2),
  WORKER_PUBLIC_URL:BASE,
  RL:(()=>{const kv=new Map();return{
@@ -43,6 +44,15 @@ const issue=async(worker,e,purpose,days=undefined,opts={})=>{
      'X-Portal-Admin-Key':e.PORTAL_ADMIN_KEY},
    body:JSON.stringify(body)}),e,ctx);
 };
+test('issuer is OFF by default even when the old public portal admin key is known',async()=>{
+ stubAirtable();
+ const worker=(await import(WORKER)).default,e=env();
+ delete e.FEEDBACK_ISSUER_ENABLED;
+ assert.equal((await issue(worker,e,'nps')).status,503);
+ e.FEEDBACK_ISSUER_ENABLED='tru';
+ assert.equal((await issue(worker,e,'nps')).status,503);
+ assert.equal(calls.filter(c=>c.method==='PATCH').length,0);
+});
 test('a private admin credential is required; invalid purpose, record and expiry fail closed',async()=>{
  stubAirtable();
  const worker=(await import(WORKER)).default,e=env();
