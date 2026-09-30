@@ -17,7 +17,7 @@ function setup(role='admin'){
     renderCotizaciones:()=>{},renderPedidos:()=>{},_pagosProg:()=>[],ldGetAll:()=>[],
     console,Date,Number,Math};
   vm.createContext(context);vm.runInContext(fs.readFileSync('js/operativo-visual.js','utf8'),context);context.OP=context.window.OP;
-  return {context,op:context.OP,element,click:(action,arg='')=>listeners.click({target:{closest:()=>({dataset:{op:action,arg}})}})};
+  return {context,op:context.OP,element,click:(action,arg='')=>listeners.click({target:{closest:()=>({dataset:{op:action,arg}})}}),search:value=>listeners.input({target:{id:'opQuoteSearch',value}})};
 }
 const record=(id,fields)=>({id,fields});
 test('saldo parcial usa el abono registrado y distingue la estimación del 50%',()=>{
@@ -43,6 +43,46 @@ test('el filtro por vencer excluye aprobadas y expiradas; el buscador se combina
   context.state.cotizaciones=rows;click('cot-filter','expiring');assert.deepEqual(Array.from(op.filterQuotes(rows),r=>r.id),['a']);op.quotes(op.filterQuotes(rows));assert.match(element('opQuotes').innerHTML,/ABC/);
   click('cot-filter','awaiting');assert.equal(op.filterQuotes(rows).length,2);
 });
+test('buscar FEDESKI encuentra las 7 cotizaciones del cliente aunque dos tengan títulos distintos',()=>{
+  const {context,op,element,search,click}=setup();
+  const id='recClienteFedeski';
+  const company=record(id,{Empresa:'Federación de Ski y Snowboard de Chile',Vendedor:'propio'});
+  context.state.clientes=[company];
+  context.state.clientesByIdRec={[id]:company};
+  const titles=[
+    ['260706','MEDALLAS FEDESKI (ALPINO)','Enviada'],
+    ['260707','MEDALLAS FEDESKI (PARA ALPINO)','Aprobada'],
+    ['260708','MEDALLAS FEDESKI (FS&SB)','Aprobada'],
+    ['260709','MEDALLAS FEDESKI (CROSS COUNTRY)','Aprobada'],
+    ['260710','MEDALLAS FEDESKI (COPITO)','Aprobada'],
+    ['260723','TROFEOS ESPECIALES','Aprobada'],
+    ['260908','Sin título','Enviada']
+  ];
+  const rows=titles.map(([idCot,title,status])=>record(idCot,{
+    'N° Cotización':idCot,'Alias / Título':title,'Estado cotización':status,Cliente:[id]
+  }));
+  rows.push(record('ajena',{'N° Cotización':'260999','Alias / Título':'Trofeo',
+    'Estado cotización':'Aprobada',Cliente:['recOtroCliente']}));
+  context.state.cotizaciones=rows;
+  const matches=()=>Array.from(op.filterQuotes(rows),c=>c.id);
+  search(' FEDESKI ');
+  assert.deepEqual(matches(),titles.map(([id])=>id));
+  op.quotes(op.filterQuotes(rows));
+  assert.match(element('opQuoteSelection').textContent,/7 cotizaciones/);
+  assert.match(element('opQuotes').innerHTML,/260908/);
+  search('federacion');
+  assert.equal(matches().length,7,'busca sin tilde aun cuando Empresa tiene tilde');
+  search('medallas');
+  assert.deepEqual(matches(),titles.slice(0,5).map(([id])=>id),'buscar un producto no arrastra las otras cotizaciones del cliente');
+  search('260908');
+  assert.deepEqual(matches(),['260908'],'buscar por número sigue siendo exacto en su selección');
+  search('fedeski');
+  click('cot-filter','awaiting');
+  assert.deepEqual(matches(),['260706','260908'],'el filtro de estado también se aplica a todos los resultados del cliente');
+  search('');
+  assert.equal(matches().length,2,'al limpiar la búsqueda se conserva el filtro de estado');
+});
+
 test('una aprobada sin pedido muestra la acción de recuperación correcta',()=>{
   const missing=setup();missing.context._pedidoDeCot=()=>null;
   const cot=record('c',{'Estado cotización':'Aprobada','Cliente':'ABC','Total final (CLP)':119000});
