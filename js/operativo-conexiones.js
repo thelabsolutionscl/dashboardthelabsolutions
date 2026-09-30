@@ -22,7 +22,7 @@
     {id:'wordpress',name:'WordPress · Sitio web',group:'Marketing y web',page:'web',impact:'Contenido del sitio y diagnóstico SEO',guide:'Revisar WEB y la API REST de WordPress. La validación de edición requiere un permiso de sitio; el monitor no modifica entradas.',auto:false}
   ];
   const byId=Object.fromEntries(catalog.map(s=>[s.id,s]));
-  const store={results:{},history:[],lastGood:{},lastSweep:0,busy:new Set(),snapshot:null,active:'Todas',mounted:false,autoStarted:false};
+  const store={results:{},history:[],lastGood:{},lastSweep:0,busy:new Set(),snapshot:null,active:'Todas',mounted:false,autoStarted:false,userKey:null};
   const label={green:'Operativo',yellow:'Advertencia',red:'Error confirmado',gray:'Sin verificar'};
   function user(){
     try{return typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;}catch(_){return null;}
@@ -323,7 +323,13 @@
       dlg.innerHTML='<div class="tls-conn-dialog-head"><div><span class="tls-conn-eyebrow">THE LAB SOLUTIONS</span><h2>Conexiones y diagnóstico</h2><p>Rojo: fallo confirmado. Amarillo: advertencia. Gris: no probado o no configurado.</p></div><button class="tls-conn-close" type="button" data-tls-conn="close" aria-label="Cerrar">✕</button></div><div class="tls-conn-tools"><button type="button" id="tlsConnCheckAll" class="tls-conn-open" data-tls-conn="check-all">Comprobar ahora</button><span id="tlsConnBusy" aria-live="polite"></span></div><nav class="tls-conn-filters" id="tlsConnFilters" aria-label="Filtrar conexiones"></nav><div id="tlsConnServices" class="tls-conn-services"></div><details class="tls-conn-history"><summary>Historial de incidencias de este navegador</summary><div id="tlsConnHistory"></div></details><p class="tls-conn-foot">Los diagnósticos se hacen solo con lecturas autorizadas. Los fallos de red/CORS no se confunden con una caída confirmada. Las claves nunca se muestran ni se guardan aquí.</p><section class="tls-conn-guide" id="tlsConnGuide" hidden><button type="button" data-tls-conn="close-guide" aria-label="Cerrar ayuda">✕</button><h3 id="tlsConnGuideTitle"></h3><p id="tlsConnGuideBody"></p></section>';
       DOC.body.append(dlg);
     }
-    if(!store.mounted){store.mounted=true;restore();}
+    // Un cambio de usuario no debe enseñar resultados/historial de otra sesión.
+    const key=stateKey();
+    if(store.userKey!==key){
+      store.userKey=key;store.results={};store.history=[];store.lastGood={};
+      store.snapshot=null;store.lastSweep=0;store.active='Todas';restore();
+    }
+    if(!store.mounted)store.mounted=true;
     render();
     startMonitoring();
   }
