@@ -283,11 +283,18 @@
     return {status:'gray',message:'Aún no dispone de comprobación segura'};
   }
   const pending=new Map();
+  function probeWithTimeout(id,mode,timeoutMs=12000){
+    let timer;
+    const timeout=new Promise(resolve=>{
+      timer=setTimeout(()=>resolve({status:'yellow',message:'La comprobación tardó demasiado; vuelve a intentarlo'}),timeoutMs);
+    });
+    return Promise.race([Promise.resolve().then(()=>probe(id,mode)),timeout]).finally(()=>clearTimeout(timer));
+  }
   function check(id,mode){
     if(!byId[id])return Promise.resolve(null);
     if(pending.has(id))return pending.get(id);
     store.busy.add(id);render();
-    const promise=Promise.resolve().then(()=>probe(id,mode)).catch(()=>({status:'yellow',message:'Error inesperado en el diagnóstico'}))
+    const promise=probeWithTimeout(id,mode).catch(()=>({status:'yellow',message:'Error inesperado en el diagnóstico'}))
       .then(r=>result(id,r.status,r.message,mode)).finally(()=>{pending.delete(id);store.busy.delete(id);render();});
     pending.set(id,promise);return promise;
   }
@@ -296,9 +303,21 @@
     if(!manual&&store.lastSweep&&Date.now()-store.lastSweep<FIVE_MIN)return;
     store.lastSweep=Date.now();
     const list=visibleServices().filter(s=>manual||s.auto);
-    // Serial para limitar concurrencia, sin ejecutar solicitudes pagadas ni
-    // abrir OAuth de fondo. El resto permanece explícitamente "sin verificar".
-    for(const s of list){if(!user()||root._DEMO_MODE||(!manual&&DOC?.hidden))break;await check(s.id,manual?'manual':'auto');}
+    const mode=manual?'manual':'auto';
+    // "Comprobar ahora" no debe depender del orden de las tarjetas. Antes las
+    // pruebas corrían en serie: una API lenta podía dejar solo las primeras
+    // conexiones verificadas y obligar a volver a pulsar el botón. Ejecutamos
+    // en paralelo limitado (4) para que una integración lenta no bloquee al
+    // resto, sin abrir OAuth ni hacer escrituras o llamadas de inferencia.
+    const queue=list.slice();
+    const workers=Array.from({length:Math.min(4,queue.length)},async()=>{
+      while(queue.length){
+        if(!user()||root._DEMO_MODE||(!manual&&DOC?.hidden))return;
+        const service=queue.shift();if(!service)continue;
+        await check(service.id,mode);
+      }
+    });
+    await Promise.allSettled(workers);
     render();
   }
   function el(tag,className,textValue){

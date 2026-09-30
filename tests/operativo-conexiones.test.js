@@ -191,3 +191,18 @@ test('no hay ficha, acciones ni verificación del proveedor retirado',()=>{
   assert.ok(!center.catalog.some(s=>s.id==='wordpress'));
   for(const legacy of ['verifyWordPress','wp-json','wpConfigPanel'])assert.equal(source.includes(legacy),false,legacy);
 });
+
+
+test('Comprobar ahora revisa todas las conexiones en una sola pasada sin bloqueo serial',()=>{
+  assert.match(source,/const queue=list\.slice\(\)/);
+  assert.match(source,/Math\.min\(4,queue\.length\)/);
+  assert.match(source,/Promise\.allSettled\(workers\)/);
+  assert.match(source,/await check\(service\.id,mode\)/);
+  assert.doesNotMatch(source,/for\(const s of list\).*await check\(s\.id/);
+});
+
+test('cada diagnóstico tiene timeout aislado para no frenar las demás tarjetas',()=>{
+  assert.match(source,/function probeWithTimeout\(id,mode,timeoutMs=12000\)/);
+  assert.match(source,/Promise\.race\(\[Promise\.resolve\(\)\.then\(\(\)=>probe\(id,mode\)\),timeout\]\)/);
+  assert.match(source,/La comprobación tardó demasiado/);
+});
