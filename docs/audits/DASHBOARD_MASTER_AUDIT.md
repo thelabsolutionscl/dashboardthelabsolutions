@@ -334,7 +334,7 @@ Al materializar la respuesta del Worker se busca tipo DTE + folio en el estado a
 
 La repo ya declara deuda técnica explícita que se incorpora a esta auditoría:
 
-- **Web/Ads:** restaurar título SEO tras diagnóstico; sacar credenciales WordPress/Ads de localStorage; no exponer webhooks/keys de Make; ordenar correctamente creación/cola; verificar escritura real antes de mostrar éxito.
+- **Web/Ads:** conservar auditoría SEO real de Next.js, proteger secretos de Google Ads, no exponer webhooks/keys de Make y asegurar el orden e idempotencia de creación/cola. La integración del CMS anterior y sus credenciales quedaron retiradas.
 - **Correo:** validar To/CC/BCC y cantidad de destinatarios; restringir From; bloquear recursos remotos por defecto; sanitizar HTML/URLs; detectar frontend/backend desfasados.
 - **Finanzas:** await/rollback en ventas; persistencia compartida de libro/caja/pagos/préstamos; IVA basado en documentos tributarios; DTE idempotente y reconciliable.
 - **Visual AI:** sandbox mínimo, referrerpolicy, noopener, postMessage con allowlist, timeout y retry.
