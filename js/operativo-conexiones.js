@@ -6,7 +6,7 @@
   const catalog=[
     {id:'proxy',name:'Cloudflare · Proxy CRM',group:'Datos y seguridad',page:'overview',impact:'Clientes, Cotizaciones, Pedidos, Agentes y Reportes',guide:'Comprobar DNS y ruta /health del proxy. Las credenciales deben permanecer en Cloudflare; no pegarlas en este panel.',auto:true},
     {id:'airtable',name:'Airtable · Base CRM',group:'Datos y seguridad',page:'clientes',impact:'Clientes, Cotizaciones, Pedidos y Reportes',guide:'Revisar el estado del proxy, los permisos del token en Cloudflare y la base autorizada. Reintentar una lectura antes de editar datos.',auto:true},
-    {id:'github',name:'GitHub · Despliegue Pages',group:'Datos y seguridad',page:'overview',impact:'Publicación de nuevas versiones del dashboard',guide:'Abrir GitHub Actions > Deploy Dashboard. Revisar la última ejecución y que el commit publicado coincida con la versión cargada.',auto:true},
+    {id:'github',name:'GitHub · Despliegue Pages',group:'Datos y seguridad',page:'overview',impact:'Publicación de nuevas versiones del dashboard',guide:'Verifica que GitHub Pages responda y que la versión publicada coincida con la cargada. Si aparece una versión más nueva, recarga el dashboard; Actions queda solo como diagnóstico avanzado.',auto:true},
     {id:'calendar',name:'Google Calendar',group:'Google y comunicación',page:'calendario',impact:'Agenda y sincronización de eventos',guide:'Reconectar la cuenta usando OAuth. Después, abrir Calendario para revisar la sincronización real de eventos. Una prueba de acceso no confirma que todos los eventos se sincronizaron.',auto:true,oauth:true},
     {id:'drive',name:'Google Drive',group:'Google y comunicación',page:'cotizaciones',impact:'Archivos, carpetas y propuestas',guide:'Reconectar mediante el botón OAuth. Revisar el Client ID autorizado y las carpetas desde una cotización; la lectura no crea archivos.',auto:true,oauth:true},
     {id:'imap',name:'Correos · Entrada IMAP',group:'Google y comunicación',page:'correo',impact:'Recepción, carpetas y lectura de correos',guide:'Abrir Correos, elegir la cuenta afectada y volver a introducir la clave en esa sesión. El diagnóstico solo consulta carpetas, nunca marca mensajes como leídos.',auto:false},
@@ -265,16 +265,30 @@
       return d.airtable===false?{status:'yellow',message:'Worker activo, sin token Airtable configurado'}:{status:'green',message:'Worker activo; captura de leads no probada'};
     }
     if(id==='github'){
-      const r=await getJson('https://api.github.com/repos/thelabsolutionscl/dashboardthelabsolutions/actions/workflows/deploy.yml/runs?branch=main&per_page=1',{headers:{Accept:'application/vnd.github+json'}});
-      if(r.status!=='green')return r;
-      const run=r.data?.workflow_runs?.[0];
-      if(!run)return {status:'gray',message:'GitHub respondió sin información de despliegue'};
-      if(run.status!=='completed')return {status:'yellow',message:'Hay una publicación en curso'};
-      if(run.conclusion!=='success')return {status:'yellow',message:'La última publicación no concluyó correctamente'};
-      const version=(DOC?.querySelector('script[src*="operativo-visual.js"]')?.src||'').match(/[?&]v=([0-9a-f]{7,40})/i)?.[1];
-      if(version&&run.head_sha&&!run.head_sha.startsWith(version))
-        return {status:'yellow',message:'GitHub publicó otra versión; recarga antes de comparar'};
-      return {status:'green',message:'Última ejecución de Pages correcta'+(version?' y versión coincidente':' (versión no contrastada)')};
+      // Verificación independiente de la API privada de GitHub: comprobamos la
+      // versión que GitHub Pages está sirviendo realmente y la comparamos con
+      // la versión cargada en esta pestaña. Así funciona igual en móvil y
+      // escritorio, sin PAT ni sesión de GitHub en el navegador.
+      const loadedVersion=(DOC?.querySelector('script[src*="operativo-visual.js"]')?.src||'').match(/[?&]v=([0-9a-f]{7,40})/i)?.[1]||'';
+      let base;
+      try{base=DOC?.baseURI||root.location?.href||'';}catch(_){base='';}
+      if(!base)return {status:'gray',message:'No se pudo determinar la URL publicada'};
+      let url;
+      try{url=new URL('index.html',base);url.searchParams.set('_tls_build_check',String(Date.now()));}
+      catch(_){return {status:'yellow',message:'No se pudo construir la URL de comprobación de Pages'};}
+      try{
+        const resp=await fetch(url.toString(),{method:'GET',cache:'no-store',credentials:'same-origin',headers:{Accept:'text/html'}});
+        if(!resp.ok)return {status:'yellow',message:'GitHub Pages respondió '+resp.status};
+        const html=await resp.text();
+        const publishedVersion=(html.match(/operativo-visual\.js\?v=([0-9a-f]{7,40})/i)||
+          html.match(/styles\.css\?v=([0-9a-f]{7,40})/i)||[])[1]||'';
+        if(!publishedVersion)return {status:'yellow',message:'Pages respondió, pero no expuso una versión publicada'};
+        if(loadedVersion&&publishedVersion!==loadedVersion)
+          return {status:'yellow',message:'Hay una versión más nueva publicada; recarga el dashboard'};
+        return {status:'green',message:'GitHub Pages responde y la versión publicada coincide'+(loadedVersion?'':' (versión local no contrastada)')};
+      }catch(_){
+        return {status:'yellow',message:'No fue posible comprobar la versión publicada de GitHub Pages'};
+      }
     }
     if(['anthropic','openai','make','meta'].includes(id)){
       if(manual)return verifyServerService(id);
