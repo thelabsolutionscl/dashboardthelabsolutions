@@ -278,7 +278,7 @@ test('MachineOps no entra en loop por conservar 500 auditorías locales y 250 re
   assert.match(OPS,/function _remoteSnapshot\(raw\)/);
   assert.match(OPS,/audit:d\.audit\.slice\(0,REMOTE_ROW_LIMITS\.audit\)/);
   assert.match(OPS,/const l=_remoteSnapshot\(local\),r=_remoteSnapshot\(remote\)/);
-  assert.match(OPS,/JSON\.stringify\(_remoteSnapshot\(data\(\)\)\)/);
+  assert.match(OPS,/MachineOpsStorage\.writeSnapshot\(_remoteSnapshot\(data\(\)\)\)/);
   assert.doesNotMatch(OPS,/audit:data\(\)\.audit\.slice\(0,250\)/,'push y comparación deben usar la misma proyección remota');
 });
 

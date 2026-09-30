@@ -6,7 +6,7 @@
 'use strict';
 
 const STORAGE_KEY='thelab_machine_ops_v2';
-const REMOTE_NAME='MACHINE_OPS_V2';
+const REMOTE_NAME='MACHINE_OPS_V2'; // nombre lógico legado; transporte real: MachineOpsStorage
 const DB_NAME='thelab-machine-ops';
 const DB_STORE='queues';
 const MODELS=['K1','K2','K2 Plus','Ender-5 Max','Giga'];
@@ -80,6 +80,10 @@ const fmtMoney=v=>typeof formatCLP==='function'?formatCLP(Math.round(num(v))):'$
 const fmtStamp=v=>v?new Date(v).toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'}):'';
 const dateValue=v=>v?new Date(v+'T12:00:00').getTime():Infinity;
 const actor=()=>{try{const u=AUTH.getUser();return u?.name||u?.username||'Sistema';}catch(_){return'Sistema';}};
+function canConfigureMachineOps(){
+  try{return typeof RBAC!=='undefined'&&typeof RBAC.canConfigRole==='function'&&RBAC.canConfigRole(AUTH.getUser()?.role);}
+  catch(_){return false;}
+}
 const hashText=value=>{let h=2166136261;for(const c of String(value||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return(h>>>0).toString(16).padStart(8,'0');};
 const postStageMeta=key=>POST_STAGES.find(s=>s.key===key)||{key,label:key,icon:'•'};
 
@@ -279,14 +283,13 @@ async function saveRemote(force=false){
   if(!_remoteDirty&&!force)return true;
   const revision=_remoteRevision;
   _remoteSaving=(async()=>{
-    if(typeof _monitorUpsert!=='function'){
+    if(typeof window.MachineOpsStorage?.writeSnapshot!=='function'){
       _remoteSetError('Sin acceso al almacenamiento compartido');_scheduleRemoteRetry();return false;
     }
     _remoteSync.state='pushing';_remoteSync.lastError='';_renderRemoteSyncIndicator();
     try{
       await loadRemote({render:false,requeueLocal:false});
-      const payload=JSON.stringify(_remoteSnapshot(data()));
-      await _monitorUpsert(REMOTE_NAME,payload,'machineOpsRecordId');
+      await window.MachineOpsStorage.writeSnapshot(_remoteSnapshot(data()));
       _remoteSync.lastPushAt=Date.now();_remoteSync.state='synced';_remoteSync.lastError='';_remoteRetryMs=2500;
       if(revision===_remoteRevision)_remoteDirty=false;
       else setTimeout(()=>saveRemote(),0);
@@ -302,15 +305,13 @@ async function loadRemote({render=false,requeueLocal=true}={}){
   if(window._DEMO_MODE)return false;
   if(_remotePulling)return _remotePulling;
   _remotePulling=(async()=>{
-    if(typeof airtableFetch!=='function'){_remoteSetError('Airtable no disponible');return false;}
+    if(typeof window.MachineOpsStorage?.readSnapshot!=='function'){_remoteSetError('MachineOps compartido no disponible');return false;}
     _remoteSync.state=_remoteDirty?'pending':'pulling';
     try{
       const localBefore=data();
-      const res=await airtableFetch('Monitor Sistema',200);
-      const rec=(res.records||[]).find(r=>r.fields?.Name===REMOTE_NAME);
-      if(!rec){_remoteSetError('No existe el registro compartido de MachineOps');return false;}
-      state.machineOpsRecordId=rec.id;
-      const remote=JSON.parse(rec.fields?.Notes||'{}'),needsPush=_localNeedsRemotePush(localBefore,remote);
+      const remote=await window.MachineOpsStorage.readSnapshot();
+      if(!remote||typeof remote!=='object'){_remoteSetError('No existe un snapshot compartido de MachineOps');return false;}
+      const needsPush=_localNeedsRemotePush(localBefore,remote);
       const before=JSON.stringify(localBefore);
       _data=mergeData(localBefore,remote);writeLocal();
       const changed=JSON.stringify(_data)!==before;
@@ -879,6 +880,11 @@ async function checkBridgeHealth(silent=true){
   writeLocal();renderIntelligence();updateNavCounts();return _bridgeHealth.state==='up';
 }
 function saveIntelligenceConfig(){
+  if(!canConfigureMachineOps()){
+    toast('Solo administración puede cambiar automatización y costos de MachineOps','error');
+    try{renderAutomationConfig();}catch(_){}
+    return false;
+  }
   data().automation={...data().automation,enabled:!!input('mopsAutoEnabled')?.checked,autoLink:!!input('mopsAutoLink')?.checked,autoIncident:!!input('mopsAutoIncident')?.checked,
     stallMinutes:clamp(num(inputVal('mopsAutoStall'),12),3,120),offlineMinutes:clamp(num(inputVal('mopsAutoOffline'),2),1,30),tempTolerance:clamp(num(inputVal('mopsAutoTemp'),18),5,60),bridgeIntervalSeconds:clamp(num(inputVal('mopsBridgeInterval'),60),30,600)};
   data().costConfig={...data().costConfig,electricityClpKwh:Math.max(0,num(inputVal('mopsCostElectricity'))),machineKw:Math.max(0,num(inputVal('mopsCostKw'))),laborClpHour:Math.max(0,num(inputVal('mopsCostLabor'))),operatorMinutes:Math.max(0,num(inputVal('mopsCostOperator'))),wearClpHour:Math.max(0,num(inputVal('mopsCostWear'))),failureOverheadPct:clamp(num(inputVal('mopsCostFailure')),0,100)};
@@ -2236,6 +2242,11 @@ function canAutoStart(id,secs=0){
   if(d.blockers.length||d.warnings.length){audit('Auto-inicio detenido por seguridad',id,[...d.blockers,...d.warnings].join(' '),'warn');writeLocal();scheduleRemote();toast('Cola detenida: requiere revisión de seguridad','error');renderSafety();return false;}return true;
 }
 function saveSafetyConfig(){
+  if(!canConfigureMachineOps()){
+    toast('Solo administración puede cambiar la configuración de seguridad','error');
+    try{renderSafety();}catch(_){}
+    return false;
+  }
   const cfg=data().safetyConfig;cfg.enforce=!!input('mopsSafetyEnforce')?.checked;cfg.cameraRequired=!!input('mopsSafetyCamera')?.checked;cfg.ventilationRequired=!!input('mopsSafetyVent')?.checked;cfg.smokeRequired=!!input('mopsSafetySmoke')?.checked;
   cfg.maxTemperature=clamp(num(inputVal('mopsSafetyMaxTemp'),38),20,60);cfg.maxHumidity=clamp(num(inputVal('mopsSafetyMaxHumidity'),75),20,100);cfg.maxVoc=clamp(num(inputVal('mopsSafetyMaxVoc'),600),50,5000);
   const url=inputVal('mopsSafetyUrl').trim();if(url&&!/^https?:\/\//i.test(url)){toast('La URL del sensor debe comenzar con http:// o https://','error');return;}cfg.sensorUrl=url;cfg.updatedAt=Date.now();
@@ -2281,6 +2292,11 @@ function maintenanceThreshold(machineId,type){
 }
 function updateMaintProfile(model,type,value){
   if(!MODELS.includes(model)||!MAINT_KEYS.includes(type))return;
+  if(!canConfigureMachineOps()){
+    toast('Solo administración puede cambiar umbrales de mantención','error');
+    try{renderMaintenanceProfiles();}catch(_){}
+    return false;
+  }
   if(!data().maintenanceProfiles[model])data().maintenanceProfiles[model]={...DEFAULT_MAINT[model]};
   data().maintenanceProfiles[model][type]=clamp(num(value,DEFAULT_MAINT[model][type]),10,5000);
   persist('Perfil de mantención actualizado');try{renderMaintenanceTable();}catch(_){}

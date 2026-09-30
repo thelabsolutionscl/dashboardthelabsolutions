@@ -101,17 +101,14 @@ test('splitPayload falla de forma explícita si el snapshot actual por sí solo 
   assert.throws(()=>t.splitPayload({version:4,updatedAt:1,audit:impossible}),/excede el límite seguro de Notes/);
 });
 
-test('wrapper divide MACHINE_OPS_V2 y escribe meta al final',async()=>{
-  const calls=[];
-  const root={
-    airtableFetch:async()=>({records:[]}),
-    _monitorUpsert:async(name,notes,idKey)=>{calls.push({name,notes,idKey});return true;},
-  };
-  assert.equal(adapter.install(root),true);
-  await root._monitorUpsert('MACHINE_OPS_V2',JSON.stringify({version:4,updatedAt:999,jobs:[{id:'wrapped'}],spools:[]}), 'machineOpsRecordId');
-  assert.equal(calls.some(c=>c.name==='MACHINE_OPS_V2'),false);
-  assert.ok(calls.some(c=>c.name==='MACHINE_OPS_V3:jobs'));
-  assert.equal(calls.at(-1).name,'MACHINE_OPS_V3:meta');
+test('adaptador expone transporte dedicado sin envolver helpers Airtable globales',()=>{
+  assert.equal(typeof adapter.readSnapshot,'function');
+  assert.equal(typeof adapter.writeSnapshot,'function');
+  assert.equal(typeof adapter.readRecord,'function');
+  assert.equal(typeof adapter.writeRecord,'function');
+  assert.doesNotMatch(String(adapter.install),/airtableFetch|_monitorUpsert/);
+  assert.match(String(adapter.readSnapshot),/sharedRequest/);
+  assert.match(String(adapter.writeSnapshot),/sharedRequest/);
 });
 
 
