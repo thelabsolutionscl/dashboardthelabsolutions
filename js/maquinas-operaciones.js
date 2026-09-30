@@ -80,6 +80,10 @@ const fmtMoney=v=>typeof formatCLP==='function'?formatCLP(Math.round(num(v))):'$
 const fmtStamp=v=>v?new Date(v).toLocaleString('es-CL',{dateStyle:'short',timeStyle:'short'}):'';
 const dateValue=v=>v?new Date(v+'T12:00:00').getTime():Infinity;
 const actor=()=>{try{const u=AUTH.getUser();return u?.name||u?.username||'Sistema';}catch(_){return'Sistema';}};
+function canConfigureMachineOps(){
+  try{return typeof RBAC!=='undefined'&&typeof RBAC.canConfigRole==='function'&&RBAC.canConfigRole(AUTH.getUser()?.role);}
+  catch(_){return false;}
+}
 const hashText=value=>{let h=2166136261;for(const c of String(value||'')){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return(h>>>0).toString(16).padStart(8,'0');};
 const postStageMeta=key=>POST_STAGES.find(s=>s.key===key)||{key,label:key,icon:'•'};
 
@@ -876,9 +880,10 @@ async function checkBridgeHealth(silent=true){
   writeLocal();renderIntelligence();updateNavCounts();return _bridgeHealth.state==='up';
 }
 function saveIntelligenceConfig(){
-  const role=typeof AUTH!=='undefined'?AUTH.getUser()?.role:'';
-  if(typeof RBAC!=='undefined'&&typeof RBAC.canConfigRole==='function'&&!RBAC.canConfigRole(role)){
-    toast('Solo administración puede cambiar automatización y costos de MachineOps','error');return false;
+  if(!canConfigureMachineOps()){
+    toast('Solo administración puede cambiar automatización y costos de MachineOps','error');
+    try{renderAutomationConfig();}catch(_){}
+    return false;
   }
   data().automation={...data().automation,enabled:!!input('mopsAutoEnabled')?.checked,autoLink:!!input('mopsAutoLink')?.checked,autoIncident:!!input('mopsAutoIncident')?.checked,
     stallMinutes:clamp(num(inputVal('mopsAutoStall'),12),3,120),offlineMinutes:clamp(num(inputVal('mopsAutoOffline'),2),1,30),tempTolerance:clamp(num(inputVal('mopsAutoTemp'),18),5,60),bridgeIntervalSeconds:clamp(num(inputVal('mopsBridgeInterval'),60),30,600)};
@@ -2237,6 +2242,11 @@ function canAutoStart(id,secs=0){
   if(d.blockers.length||d.warnings.length){audit('Auto-inicio detenido por seguridad',id,[...d.blockers,...d.warnings].join(' '),'warn');writeLocal();scheduleRemote();toast('Cola detenida: requiere revisión de seguridad','error');renderSafety();return false;}return true;
 }
 function saveSafetyConfig(){
+  if(!canConfigureMachineOps()){
+    toast('Solo administración puede cambiar la configuración de seguridad','error');
+    try{renderSafety();}catch(_){}
+    return false;
+  }
   const cfg=data().safetyConfig;cfg.enforce=!!input('mopsSafetyEnforce')?.checked;cfg.cameraRequired=!!input('mopsSafetyCamera')?.checked;cfg.ventilationRequired=!!input('mopsSafetyVent')?.checked;cfg.smokeRequired=!!input('mopsSafetySmoke')?.checked;
   cfg.maxTemperature=clamp(num(inputVal('mopsSafetyMaxTemp'),38),20,60);cfg.maxHumidity=clamp(num(inputVal('mopsSafetyMaxHumidity'),75),20,100);cfg.maxVoc=clamp(num(inputVal('mopsSafetyMaxVoc'),600),50,5000);
   const url=inputVal('mopsSafetyUrl').trim();if(url&&!/^https?:\/\//i.test(url)){toast('La URL del sensor debe comenzar con http:// o https://','error');return;}cfg.sensorUrl=url;cfg.updatedAt=Date.now();
@@ -2282,6 +2292,11 @@ function maintenanceThreshold(machineId,type){
 }
 function updateMaintProfile(model,type,value){
   if(!MODELS.includes(model)||!MAINT_KEYS.includes(type))return;
+  if(!canConfigureMachineOps()){
+    toast('Solo administración puede cambiar umbrales de mantención','error');
+    try{renderMaintenanceProfiles();}catch(_){}
+    return false;
+  }
   if(!data().maintenanceProfiles[model])data().maintenanceProfiles[model]={...DEFAULT_MAINT[model]};
   data().maintenanceProfiles[model][type]=clamp(num(value,DEFAULT_MAINT[model][type]),10,5000);
   persist('Perfil de mantención actualizado');try{renderMaintenanceTable();}catch(_){}
