@@ -1,7 +1,7 @@
 /* js/correo-shared-features.js
  * Extensiones de Correos:
  * - CC/CCO con autocompletado multi-destinatario por token.
- * - Plantillas compartidas entre todos los usuarios vía Monitor Sistema.
+ * - Plantillas compartidas entre todos los usuarios vía /shared/mail.
  */
 (function(root,factory){
   const api=factory();
@@ -12,12 +12,12 @@
 
 const SHARED_TEMPLATE_KEY='thelab_mail_tpl_shared_v1';
 const REMOTE_TEMPLATE_NAME='MAIL_TEMPLATES';
-const REMOTE_TEMPLATE_ID_KEY='mailTemplatesRecordId';
 const RECIPIENT_FIELDS=['mailCmpCc','mailCmpBcc'];
 const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let target=null,installed=false,mailPatched=false,recipientUiInstalled=false;
 let templatesHydrated=false,remoteRecordFound=false,lastRemoteRead=0;
 let pendingBeforeHydration=null,writeTimer=null,writeChain=Promise.resolve(),hydratePromise=null;
+let templateRevision=null;
 
 function cleanText(v){return String(v??'').trim();}
 function dedupeStrings(values){
@@ -75,6 +75,16 @@ function parseTemplatePayload(raw){
   }catch(_){return[];}
 }
 function templatesEqual(a,b){return JSON.stringify(normalizeTemplates(a))===JSON.stringify(normalizeTemplates(b));}
+function templateFingerprint(t){
+  const n=normalizeTemplate(t);return n?[n.name,n.subject,n.body].join('\u0000').toLowerCase():'';
+}
+function rebaseTemplateDelta(previous,desired,remote){
+  const prev=normalizeTemplates(previous),next=normalizeTemplates(desired),cur=normalizeTemplates(remote);
+  const desiredFp=new Set(next.map(templateFingerprint)),prevFp=new Set(prev.map(templateFingerprint));
+  const removed=new Set(prev.filter(t=>!desiredFp.has(templateFingerprint(t))).map(templateFingerprint));
+  const added=next.filter(t=>!prevFp.has(templateFingerprint(t)));
+  return mergeTemplates(cur.filter(t=>!removed.has(templateFingerprint(t))),added);
+}
 function readSharedCache(){
   try{return normalizeTemplates(JSON.parse(target?.localStorage?.getItem(SHARED_TEMPLATE_KEY)||'[]'));}catch(_){return[];}
 }
@@ -86,31 +96,77 @@ function writeSharedCache(list){
 function readLegacyCache(key){
   try{return key?normalizeTemplates(JSON.parse(target?.localStorage?.getItem(key)||'[]')):[];}catch(_){return[];}
 }
-function getAirtableFetch(){
-  try{if(typeof airtableFetch==='function')return airtableFetch;}catch(_){}
-  return typeof target?.airtableFetch==='function'?target.airtableFetch:null;
+function getSharedMailConfig(){
+  try{
+    let px=null;
+    try{if(typeof _proxyCfg==='function')px=_proxyCfg();}catch(_){}
+    if(!px&&typeof target?._proxyCfg==='function')px=target._proxyCfg();
+    if(!px?.url||!px?.key)return null;
+    const url=new URL(px.url);
+    if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+       url.search||url.hash)return null;
+    if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+    return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+  }catch(_){return null;}
 }
-function getMonitorUpsert(){
-  try{if(typeof _monitorUpsert==='function')return _monitorUpsert;}catch(_){}
-  return typeof target?._monitorUpsert==='function'?target._monitorUpsert:null;
+async function sharedTemplateRequest(method,body){
+  const cfg=getSharedMailConfig();
+  if(!target||target._DEMO_MODE||!cfg)throw new Error('Proxy compartido no configurado');
+  return target.fetch(cfg.base+'/shared/mail?resource=templates',{
+    method,credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+    ...(body?{body:JSON.stringify(body)}:{})
+  });
 }
-function setRemoteRecordId(recordId){
-  if(!recordId)return;
-  try{if(typeof state!=='undefined'&&state&&typeof state==='object')state[REMOTE_TEMPLATE_ID_KEY]=recordId;}catch(_){}
-  try{if(target?.state&&typeof target.state==='object')target.state[REMOTE_TEMPLATE_ID_KEY]=recordId;}catch(_){}
+async function fetchRemoteTemplateRecord(){
+  if(!target||target._DEMO_MODE)return{record:null,templates:[]};
+  const r=await sharedTemplateRequest('GET');
+  if(!r.ok)throw new Error('Plantillas compartidas no disponibles');
+  const doc=await r.json();
+  if(!doc||doc.ok!==true||doc.resource!=='templates'||
+     typeof doc.revision!=='string')throw new Error('Respuesta de plantillas inválida');
+  templateRevision=doc.revision;
+  return{record:doc.exists?{scoped:true}:null,templates:parseTemplatePayload(doc.data),doc};
 }
-async function writeRemoteTemplates(list){
-  const upsert=getMonitorUpsert();
-  if(!target||target._DEMO_MODE||typeof upsert!=='function')return false;
-  const clean=normalizeTemplates(list);
-  await upsert(REMOTE_TEMPLATE_NAME,JSON.stringify(templatePayload(clean)),REMOTE_TEMPLATE_ID_KEY);
-  return true;
+async function writeRemoteTemplates(list,previous){
+  if(!target||target._DEMO_MODE)return false;
+  let desired=normalizeTemplates(list),base=normalizeTemplates(previous);
+  if(typeof templateRevision!=='string'){
+    const current=await fetchRemoteTemplateRecord();
+    base=current.templates;
+    desired=rebaseTemplateDelta(previous||base,desired,current.templates);
+  }
+  for(let attempt=0;attempt<2;attempt++){
+    const data=templatePayload(desired);
+    const r=await sharedTemplateRequest('PUT',{
+      resource:'templates',data,expectedRevision:templateRevision||''
+    });
+    let doc={};try{doc=await r.json();}catch(_){}
+    if(r.ok){
+      if(!doc||doc.ok!==true||doc.resource!=='templates'||
+         typeof doc.revision!=='string')return false;
+      templateRevision=doc.revision;remoteRecordFound=true;
+      applyRemoteTemplates(parseTemplatePayload(doc.data));
+      return true;
+    }
+    if(r.status===409&&attempt===0&&doc?.code==='MAIL_REVISION_CONFLICT'&&
+       doc.resource==='templates'&&typeof doc.revision==='string'){
+      const remote=parseTemplatePayload(doc.data);
+      templateRevision=doc.revision;
+      desired=rebaseTemplateDelta(base,desired,remote);
+      base=remote;
+      continue;
+    }
+    return false; // timeout/5xx/resultado incierto: nunca reintentar a ciegas
+  }
+  return false;
 }
-function queueRemoteWrite(list){
-  const snapshot=normalizeTemplates(list);
+function queueRemoteWrite(list,previous){
+  const snapshot=normalizeTemplates(list),before=normalizeTemplates(previous);
   clearTimeout(writeTimer);
   writeTimer=setTimeout(()=>{
-    writeChain=writeChain.then(()=>writeRemoteTemplates(snapshot)).catch(e=>console.warn('[Correo] respaldo de plantillas compartidas pendiente',e));
+    writeChain=writeChain.then(()=>writeRemoteTemplates(snapshot,before))
+      .catch(e=>console.warn('[Correo] respaldo de plantillas compartidas pendiente',e));
   },350);
 }
 function applyRemoteTemplates(list){
@@ -119,14 +175,7 @@ function applyRemoteTemplates(list){
   if(menu&&menu.style.display!=='none')menu.style.display='none';
   return clean;
 }
-async function fetchRemoteTemplateRecord(){
-  const fetcher=getAirtableFetch();
-  if(!target||target._DEMO_MODE||typeof fetcher!=='function')return{record:null,templates:[]};
-  const res=await fetcher('Monitor Sistema',200);
-  const record=(res?.records||[]).find(r=>r?.fields?.Name===REMOTE_TEMPLATE_NAME)||null;
-  if(record)setRemoteRecordId(record.id);
-  return{record,templates:record?parseTemplatePayload(record.fields?.Notes||''):[]};
-}
+
 async function hydrateSharedTemplates(){
   if(hydratePromise)return hydratePromise;
   hydratePromise=(async()=>{
@@ -147,9 +196,9 @@ async function hydrateSharedTemplates(){
     templatesHydrated=true;
 
     if(pendingBeforeHydration){
-      try{await writeRemoteTemplates(next);remoteRecordFound=true;}catch(e){console.warn('[Correo] no se pudieron publicar plantillas compartidas',e);}
+      try{await writeRemoteTemplates(next,remote);remoteRecordFound=true;}catch(e){console.warn('[Correo] no se pudieron publicar plantillas compartidas',e);}
     }else if(!record&&sharedCache.length){
-      try{await writeRemoteTemplates(next);remoteRecordFound=true;}catch(e){console.warn('[Correo] no se pudieron publicar plantillas compartidas',e);}
+      try{await writeRemoteTemplates(next,[]);remoteRecordFound=true;}catch(e){console.warn('[Correo] no se pudieron publicar plantillas compartidas',e);}
     }
     pendingBeforeHydration=null;
     return next;
@@ -183,7 +232,7 @@ function startLegacyMigration(originalTplKey){
     if(!remoteRecordFound&&legacy.length){
       const merged=mergeTemplates(readSharedCache(),legacy);applyRemoteTemplates(merged);
       try{
-        if(await writeRemoteTemplates(merged)){remoteRecordFound=true;target.localStorage?.setItem(migrationKey,'1');}
+        if(await writeRemoteTemplates(merged,[])){remoteRecordFound=true;target.localStorage?.setItem(migrationKey,'1');}
       }catch(e){console.warn('[Correo] migración de plantillas locales pendiente',e);}
       return;
     }
@@ -221,9 +270,9 @@ function patchMail(mail){
     const clean=writeSharedCache(list);
     if(!templatesHydrated){
       const removed=previous.some(old=>!clean.some(t=>templatesEqual([old],[t])));
-      pendingBeforeHydration={list:clean,authoritative:removed||clean.length===0};
+      pendingBeforeHydration={list:clean,previous,authoritative:removed||clean.length===0};
       hydrateSharedTemplates();
-    }else queueRemoteWrite(clean);
+    }else queueRemoteWrite(clean,previous);
   };
 
   hydrateSharedTemplates();
@@ -344,7 +393,7 @@ function install(root){
   root.document?.addEventListener?.('DOMContentLoaded',run,{once:true});
   return true;
 }
-function status(){return{installed,mailPatched,recipientUiInstalled,templatesHydrated,remoteRecordFound,remoteName:REMOTE_TEMPLATE_NAME,lastRemoteRead};}
+function status(){return{installed,mailPatched,recipientUiInstalled,templatesHydrated,remoteRecordFound,remoteName:REMOTE_TEMPLATE_NAME,lastRemoteRead,templateRevision};}
 
-return{install,status,_test:{splitRecipients,normalizeRecipientValue,validRecipients,mergeRecipient,activeRecipientToken,normalizeTemplates,mergeTemplates,parseTemplatePayload,templatesEqual,SHARED_TEMPLATE_KEY,REMOTE_TEMPLATE_NAME}};
+return{install,status,_test:{splitRecipients,normalizeRecipientValue,validRecipients,mergeRecipient,activeRecipientToken,normalizeTemplates,mergeTemplates,parseTemplatePayload,templatesEqual,rebaseTemplateDelta,SHARED_TEMPLATE_KEY,REMOTE_TEMPLATE_NAME}};
 });

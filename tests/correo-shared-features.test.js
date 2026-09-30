@@ -57,3 +57,25 @@ test('el payload remoto MAIL_TEMPLATES conserva todas las plantillas', () => {
   assert.equal(parsed.length, 2);
   assert.equal(parsed[1].name, 'Dos');
 });
+
+
+test('rebase de plantillas conserva altas concurrentes y aplica el delta local', () => {
+  const previous=[{name:'Base',subject:'A',body:'1'}];
+  const desired=[...previous,{name:'Local',subject:'B',body:'2'}];
+  const remote=[...previous,{name:'Remota',subject:'C',body:'3'}];
+  assert.deepEqual(t.rebaseTemplateDelta(previous,desired,remote),[
+    {name:'Base',subject:'A',body:'1'},
+    {name:'Remota',subject:'C',body:'3'},
+    {name:'Local',subject:'B',body:'2'}
+  ]);
+});
+
+test('rebase de plantillas propaga borrados sin borrar altas de otro equipo', () => {
+  const base={name:'Base',subject:'A',body:'1'};
+  const borrar={name:'Borrar',subject:'B',body:'2'};
+  const remota={name:'Remota',subject:'C',body:'3'};
+  assert.deepEqual(
+    t.rebaseTemplateDelta([base,borrar],[base],[base,borrar,remota]),
+    [base,remota]
+  );
+});
