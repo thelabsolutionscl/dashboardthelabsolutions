@@ -1267,7 +1267,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -1417,6 +1417,78 @@ export default {
       }catch(_){
         return json({error:'Portal backend response uncertain; check the client before retrying'},502,CORS);
       }
+    }
+
+    // Mint short-lived, purpose-bound NPS/POD/order-tracking links. The
+    // dashboard sends only an order record ID to this signed-role bridge;
+    // the private portal-admin key and HMAC secret never enter GitHub Pages.
+    // Legacy APP_KEY mode cannot issue signed links.
+    if(url.pathname==='/feedback/link'){
+      if(!authorized.identity)
+        return json({error:'Signed Access required to issue feedback links',
+          code:'ACCESS_REQUIRED'},503,CORS);
+      if(request.method!=='POST'||url.search||
+         !String(request.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json')||
+         Number(request.headers.get('Content-Length')||0)>1024)
+        return json({error:'Invalid feedback link request'},422,CORS);
+      let payload;
+      try{
+        const raw=await request.text();
+        if(raw.length>1024)throw Error('Oversized request');
+        payload=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid feedback JSON'},400,CORS);}
+      if(!payload||typeof payload!=='object'||Array.isArray(payload)||
+         !/^rec[A-Za-z0-9]{14}$/.test(payload.recordId||'')||
+         !['nps','pod','pedido'].includes(payload.purpose)||
+         !Object.keys(payload).every(k=>['recordId','purpose','days'].includes(k))||
+         (payload.days!==undefined&&
+           (!Number.isInteger(payload.days)||payload.days<1||payload.days>90)))
+        return json({error:'Invalid feedback purpose, record or expiry'},422,CORS);
+      let lead;
+      try{
+        lead=new URL(String(env.LEAD_WORKER_URL||''));
+        if(lead.protocol!=='https:'||lead.username||lead.password||lead.port||
+           lead.pathname!=='/'||lead.search||lead.hash||
+           !(/^thelab-leads-worker\.[a-z0-9-]+\.workers\.dev$/.test(lead.hostname)||
+             ['leads.thelab.solutions','portal.thelab.solutions'].includes(lead.hostname)))
+          throw Error('Untrusted lead worker origin');
+      }catch(_){return json({error:'Lead Worker URL is not configured safely'},503,CORS);}
+      if(typeof env.PORTAL_ADMIN_KEY!=='string'||env.PORTAL_ADMIN_KEY.length<16)
+        return json({error:'Feedback backend credential missing'},503,CORS);
+      try{
+        const upstream=await fetch(lead.origin+'/feedback/link',{
+          method:'POST',redirect:'manual',
+          headers:{'Content-Type':'application/json','X-Portal-Admin-Key':env.PORTAL_ADMIN_KEY},
+          body:JSON.stringify({
+            recordId:payload.recordId,purpose:payload.purpose,
+            days:payload.days===undefined?30:payload.days
+          })
+        });
+        if(upstream.status!==200||
+           !String(upstream.headers.get('Content-Type')||'').toLowerCase().includes('application/json')||
+           Number(upstream.headers.get('Content-Length')||0)>4096)
+          return json({error:'Feedback issuer unavailable or misconfigured'},502,CORS);
+        const raw=await upstream.text();
+        if(raw.length>4096)throw Error('Oversized feedback response');
+        const signed=JSON.parse(raw);
+        const issued=new URL(String(signed?.url||''));
+        if(signed?.ok!==true||signed.purpose!==payload.purpose||
+           !/^https:$/.test(issued.protocol)||issued.username||issued.password||
+           issued.port||issued.hash||issued.pathname!=='/'+payload.purpose||
+           (issued.origin!==lead.origin&&
+             !['https://leads.thelab.solutions','https://portal.thelab.solutions'].includes(issued.origin))||
+           [...issued.searchParams.keys()].some(k=>k!=='p')||
+           issued.searchParams.getAll('p').length!==1||
+           !/^rec[A-Za-z0-9]{14}\.[0-9a-z]{6,9}\.[A-Za-z0-9_-]{43}$/.test(
+             issued.searchParams.get('p')||'')||
+           !Number.isSafeInteger(signed.expires_at)||
+           signed.expires_at<=Date.now()/1000||
+           signed.expires_at>Date.now()/1000+91*86400)
+          throw Error('Invalid feedback issuer response');
+        return json({ok:true,url:issued.toString(),
+          expires_at:signed.expires_at,purpose:payload.purpose},200,
+          {...CORS,'Cache-Control':'no-store'});
+      }catch(_){return json({error:'Cannot verify feedback issuer response'},502,CORS);}
     }
 
     // Issue temporary, role-scoped Farm Controller tickets from server-held
