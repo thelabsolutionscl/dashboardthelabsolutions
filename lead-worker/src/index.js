@@ -2397,7 +2397,36 @@ function buildNotes(n) {
 /* ════════════════════════════════════════════════════════════════════════
  * Airtable helpers (tolerantes a campos inexistentes)
  * ══════════════════════════════════════════════════════════════════════ */
+// Ownership and CRM link edits must not originate in the externally callable
+// lead/portal Worker. These confirmed Airtable names and field IDs are
+// deliberately immutable in ALL its generic create/PATCH helpers: only the
+// signed CRM administration workflow may assign or relate records.
+// This does not block ordinary lead capture, NPS/POD or portal decisions.
+const EXTERNAL_CRM_IMMUTABLE_FIELDS = Object.freeze({
+  Clientes: new Set([
+    "Vendedor", "Pedidos", "Cotizaciones",
+    "fldT2NeOO6YjQgVns", "fldG06Nnt8AUYYhsJ", "fldhKmcjZOeFFhaDM",
+  ]),
+  Cotizaciones: new Set([
+    "Vendedor", "Cliente", "Pedido",
+    "flde5UJLkiJzXLd4l", "fldGBITDrhh7l5Ktd", "fldbSn3RCRCKh4HSm",
+  ]),
+  Pedidos: new Set([
+    "Vendedor", "Cliente", "Cotizaciones",
+    "fldftHk62GM6kzPSt", "fldDxnFAs3sjM4IMy", "fldoLYes7JqA6cowK",
+  ]),
+});
+function assertExternalCrmOwnershipImmutable(table, fields) {
+  const restricted = EXTERNAL_CRM_IMMUTABLE_FIELDS[table];
+  if (!restricted) return;
+  if (!fields || typeof fields !== "object" || Array.isArray(fields))
+    throw new Error("Invalid external CRM mutation fields");
+  if (Object.keys(fields).some((key) => restricted.has(key)))
+    throw new Error("External CRM owner and relationship changes are forbidden");
+}
+
 async function airtableCreate(env, table, fields) {
+  assertExternalCrmOwnershipImmutable(table, fields);
   const r = await fetch(
     `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent(table)}`,
     {
@@ -2413,6 +2442,7 @@ async function airtableCreate(env, table, fields) {
 }
 
 async function airtableUpdate(env, table, recordId, fields) {
+  assertExternalCrmOwnershipImmutable(table, fields);
   const r = await fetch(
     `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent(table)}/${recordId}`,
     {
@@ -2492,6 +2522,7 @@ async function airtableCreateTolerant(env, table, fields, maxTries = 8) {
 }
 
 async function airtableUpdateTolerant(env, table, recordId, fields, maxTries = 8) {
+  assertExternalCrmOwnershipImmutable(table, fields);
   let f = { ...fields };
   if (Object.keys(f).length === 0) return null;
   for (let i = 0; i < maxTries; i++) {
