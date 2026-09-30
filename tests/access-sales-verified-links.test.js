@@ -19,7 +19,8 @@ const ids={customer:'recAAAAAAAAAAAAAA',quote:'recBBBBBBBBBBBBBB',
   order:'recCCCCCCCCCCCCCC',foreign:'recDDDDDDDDDDDDDD',
   unassigned:'recEEEEEEEEEEEEEE',missing:'recFFFFFFFFFFFFFF'};
 function linkRow(id,seller){return {id,fields:seller?{Vendedor:seller}:{}};}
-function fixture(table,sourceFields,{badTarget=null,failTarget=false,foreignSource=false}={}){
+function fixture(table,sourceFields,{badTarget=null,failTarget=false,foreignSource=false,
+  reassignOnRecheck=false,changeLinksOnRecheck=false,failSourceRecheck=false}={}){
   const tableId={Clientes:ids.customer,Cotizaciones:ids.quote,Pedidos:ids.order}[table];
   const source={id:tableId,fields:{Vendedor:foreignSource?'florencia':'nicanor',
     ...sourceFields,'Datos pago / banco':'PRIVATE BANK',
@@ -43,6 +44,7 @@ function fixture(table,sourceFields,{badTarget=null,failTarget=false,foreignSour
     ])
   };
   const calls=[];
+  let sourceReads=0;
   global.fetch=async (u,opts)=>{
     const url=new URL(String(u));
     assert.equal(url.hostname,'api.airtable.com');
@@ -51,7 +53,18 @@ function fixture(table,sourceFields,{badTarget=null,failTarget=false,foreignSour
     calls.push({path:url.pathname,search:url.searchParams});
     const suffix=url.pathname.slice(base.length);
     const [target,id]=suffix.split('/');
-    if(id)return Response.json(source);
+    if(id){
+      sourceReads++;
+      if(sourceReads===2){
+        if(failSourceRecheck)return Response.json({error:'temporary outage'},{status:503});
+        if(reassignOnRecheck)source.fields.Vendedor='florencia';
+        if(changeLinksOnRecheck){
+          const field=Object.keys(sourceFields).find(k=>['Cliente','Pedido','Pedidos','Cotizaciones'].includes(k));
+          source.fields[field]=[];
+        }
+      }
+      return Response.json(structuredClone(source));
+    }
     if(failTarget)return Response.json({error:'upstream failure'},{status:503});
     if(badTarget){
       return Response.json(badTarget==='offset'?
@@ -88,7 +101,7 @@ test('one owned customer reveals only verified related quotes and orders',async(
   for(const secret of ['Datos pago / banco','Margen real (%)',
     'Costo real total (CLP)','Nueva columna futura'])
     assert.equal(row.fields[secret],undefined,secret);
-  assert.equal(f.calls.length,3,'one source lookup plus two bounded joins');
+  assert.equal(f.calls.length,4,'source lookup, two bounded joins, and source recheck');
   assert.ok(f.calls.some(c=>c.path===base+'Pedidos'&&
     c.search.get('filterByFormula').includes(ids.order)));
   assert.ok(f.calls.some(c=>c.path===base+'Cotizaciones'&&
@@ -110,7 +123,7 @@ test('owned quotes and orders resolve links solely to same-owner CRM records',as
     const row=await res.json();
     for(const [field,value] of Object.entries(expected))
       assert.deepEqual(row.fields[field],value,table+' '+field);
-    assert.equal(f.calls.length,3);
+    assert.equal(f.calls.length,4);
   }
 });
 test('normal owned reads never return links or trigger additional queries',async()=>{
@@ -166,4 +179,25 @@ test('tampered, malformed, oversized and failed relationship verification fail c
     assert.deepEqual(await res.json(),{error:'Cannot verify related CRM ownership'});
     assert.equal(f.calls.length,1,'malformed relationship rejected before fetching targets');
   }
+});
+
+test('a source owner reassignment or link edit during joins aborts the entire response',async()=>{
+  for(const options of [
+    {reassignOnRecheck:true},{changeLinksOnRecheck:true},{failSourceRecheck:true}
+  ]){
+    const f=fixture('Clientes',{Pedidos:[ids.order],Cotizaciones:[ids.quote]},options);
+    const res=await f.run(f.req());
+    assert.equal(res.status,502,JSON.stringify(options));
+    assert.deepEqual(await res.json(),{error:'Cannot verify related CRM ownership'});
+    assert.equal(f.calls.length,4,'recheck must run after the verified target lookups');
+    assert.equal(f.calls.at(-1).path,base+'Clientes/'+ids.customer);
+  }
+});
+test('unmodified source is rechecked after link ownership and returns updated projected fields',async()=>{
+  const f=fixture('Clientes',{Pedidos:[ids.order]});
+  const res=await f.run(f.req());
+  assert.equal(res.status,200,await res.clone().text());
+  assert.deepEqual((await res.json()).fields.Pedidos,[ids.order]);
+  assert.equal(f.calls.length,3,'source lookup, one link-target lookup, source recheck');
+  assert.equal(f.calls[0].path,f.calls.at(-1).path);
 });
