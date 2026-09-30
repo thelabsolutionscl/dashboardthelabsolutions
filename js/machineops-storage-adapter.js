@@ -1,10 +1,9 @@
 /* js/machineops-storage-adapter.js
- * Persistencia normalizada para MachineOps sobre la tabla "Monitor Sistema".
+ * Persistencia normalizada de MachineOps mediante /shared/machineops.
  *
- * MachineOps sigue viendo/produciendo el snapshot legado MACHINE_OPS_V2, pero
- * este adaptador lo divide en registros independientes por dominio. Así un
- * cambio en rollos no reescribe trabajos, QA, incidentes y configuración a la
- * vez. El registro V2 anterior se conserva como respaldo de migración.
+ * El navegador ya no lee ni escribe la tabla completa "Monitor Sistema".
+ * El proxy entrega únicamente registros MachineOps allowlisted y conserva
+ * MACHINE_OPS_V2 como fallback de migración; las escrituras V3 son por dominio.
  */
 (function(root,factory){
   const api=factory();
@@ -16,7 +15,6 @@
 const LEGACY_NAME='MACHINE_OPS_V2';
 const PREFIX='MACHINE_OPS_V3:';
 const SCHEMA=3;
-const TABLE='Monitor Sistema';
 const DOMAINS=[
   'jobs','spools','qa','workflows','profiles','safetyReadings','incidents','audit',
   'alertAcks','ignoredPrints','bedClearAcks','automation','costConfig','safetyConfig','maintenanceProfiles'
@@ -24,7 +22,9 @@ const DOMAINS=[
 const META_DOMAIN='meta';
 const hashes=new Map();
 const committedSnapshots=new Map();
-let installed=false,lastReadAt=0,lastWriteAt=0,lastMode='legacy';
+const CONFIG_DOMAINS=new Set(['automation','costConfig','safetyConfig','maintenanceProfiles']);
+let installed=false,lastReadAt=0,lastWriteAt=0,lastMode='legacy',runtimeTarget=null;
+const remoteRevisions=new Map();
 
 function stable(value){
   if(value===null||typeof value!=='object')return JSON.stringify(value);
@@ -146,39 +146,124 @@ function syntheticRecord(records,payload){
     fields:{...(legacy?.fields||{}),Name:LEGACY_NAME,Notes:JSON.stringify(payload)}
   };
 }
+function proxyConfig(){
+  const target=runtimeTarget;
+  if(!target)return null;
+  try{
+    let px=null;
+    try{if(typeof target._proxyCfg==='function')px=target._proxyCfg();}catch(_){}
+    if(!px?.url||!px?.key)return null;
+    const url=new URL(px.url);
+    if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+       url.search||url.hash)return null;
+    if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+    return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+  }catch(_){return null;}
+}
+async function sharedRequest(method,record='',body=null){
+  const cfg=proxyConfig();if(!cfg)throw new Error('Proxy compartido no configurado');
+  const query=record?'?record='+encodeURIComponent(record):'';
+  const response=await runtimeTarget.fetch(cfg.base+'/shared/machineops'+query,{
+    method,credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+    ...(body?{body:JSON.stringify(body)}:{})
+  });
+  return response;
+}
+function acceptRevisions(doc){
+  if(!doc||doc.ok!==true||!doc.revisions||typeof doc.revisions!=='object')return false;
+  for(const [name,revision] of Object.entries(doc.revisions)){
+    if(typeof name==='string'&&typeof revision==='string'&&/^[a-f0-9]{64}$/.test(revision))
+      remoteRevisions.set(name,revision);
+  }
+  return true;
+}
+function remoteRecords(doc){
+  if(!acceptRevisions(doc)||!Array.isArray(doc.records))throw new Error('Respuesta MachineOps inválida');
+  return doc.records.map(row=>{
+    if(!row||typeof row.name!=='string'||typeof row.notes!=='string'||
+       typeof row.revision!=='string'||!/^[a-f0-9]{64}$/.test(row.revision))
+      throw new Error('Registro MachineOps inválido');
+    remoteRevisions.set(row.name,row.revision);
+    return{fields:{Name:row.name,Notes:row.notes}};
+  });
+}
+async function readSnapshot(){
+  if(!runtimeTarget||runtimeTarget._DEMO_MODE)return null;
+  const response=await sharedRequest('GET');
+  if(!response.ok)throw new Error('No se pudo leer MachineOps compartido');
+  const doc=await response.json(),records=remoteRecords(doc);
+  const composed=composePayload(records);
+  lastReadAt=Date.now();
+  return composed.data;
+}
+async function writeSnapshot(raw){
+  if(!runtimeTarget||runtimeTarget._DEMO_MODE)return true;
+  if(!remoteRevisions.size)await readSnapshot();
+  const {fragments,meta}=splitPayload(raw);
+  const role=runtimeTarget.AUTH?.getUser?.()?.role||'';
+  const canConfig=runtimeTarget.RBAC?.canConfigRole?.(role)===true;
+  const changed=fragments.filter(f=>hashes.get(f.domain)!==f.hash);
+  const writes=[];
+  for(const f of changed){
+    if(CONFIG_DOMAINS.has(f.domain)&&!canConfig)continue;
+    const expectedRevision=remoteRevisions.get(f.name);
+    if(typeof expectedRevision!=='string')throw new Error('Falta revisión remota de '+f.domain);
+    writes.push({domain:f.domain,data:f.data,expectedRevision});
+  }
+  if(!writes.length)return true;
+  const response=await sharedRequest('PUT','',{
+    writes,meta:{version:Number(raw?.version||4),updatedAt:Number(raw?.updatedAt||0)}
+  });
+  let doc={};try{doc=await response.json();}catch(_){}
+  if(response.status===409&&doc?.code==='MACHINEOPS_REVISION_CONFLICT'){
+    acceptRevisions(doc);
+    const err=new Error('MachineOps cambió en otro equipo; se releerá antes de reintentar');
+    err.code='MACHINEOPS_REVISION_CONFLICT';throw err;
+  }
+  if(!response.ok)throw new Error(doc?.error||'No se pudo guardar MachineOps compartido');
+  remoteRecords(doc);
+  const byName=new Map((doc.records||[]).map(row=>[row.name,row]));
+  for(const f of changed){
+    if(!writes.some(w=>w.domain===f.domain))continue;
+    hashes.set(f.domain,f.hash);
+    const row=byName.get(f.name);
+    let writtenAt=Date.now();
+    try{writtenAt=Number(JSON.parse(row?.notes||'{}').writtenAt)||writtenAt;}catch(_){}
+    committedSnapshots.set(f.domain,{writtenAt,data:f.data});
+  }
+  hashes.set(META_DOMAIN,meta.hash);
+  lastWriteAt=Date.now();lastMode='normalized';
+  return true;
+}
+async function readRecord(name){
+  if(name!=='BED_LEVEL_HISTORY_V2')throw new Error('Registro compartido no permitido');
+  if(!runtimeTarget||runtimeTarget._DEMO_MODE)return{data:[],revision:'',exists:false};
+  const response=await sharedRequest('GET',name);
+  if(!response.ok)throw new Error('No se pudo leer '+name);
+  const doc=await response.json(),records=remoteRecords(doc),row=records[0]||null;
+  let data=[];if(row){try{data=JSON.parse(row.fields.Notes||'[]');}catch(_){}}
+  lastReadAt=Date.now();
+  return{data:Array.isArray(data)?data:[],revision:remoteRevisions.get(name)||'',exists:!!row};
+}
+async function writeRecord(name,data){
+  if(name!=='BED_LEVEL_HISTORY_V2')throw new Error('Registro compartido no permitido');
+  if(!runtimeTarget||runtimeTarget._DEMO_MODE)return true;
+  if(!remoteRevisions.has(name))await readRecord(name);
+  const expectedRevision=remoteRevisions.get(name);
+  if(typeof expectedRevision!=='string')throw new Error('Falta revisión remota de '+name);
+  const response=await sharedRequest('PUT',name,{data,expectedRevision});
+  let doc={};try{doc=await response.json();}catch(_){}
+  if(response.status===409&&doc?.code==='MACHINEOPS_REVISION_CONFLICT'){
+    acceptRevisions(doc);
+    return false;
+  }
+  if(!response.ok)throw new Error(doc?.error||'No se pudo guardar '+name);
+  remoteRecords(doc);lastWriteAt=Date.now();return true;
+}
 function install(target){
   if(installed||!target)return false;
-  const originalFetch=target.airtableFetch;
-  const originalUpsert=target._monitorUpsert;
-  if(typeof originalFetch!=='function'||typeof originalUpsert!=='function')return false;
-  installed=true;
-
-  target.airtableFetch=async function(table){
-    const res=await originalFetch.apply(this,arguments);
-    if(table!==TABLE||!res||!Array.isArray(res.records))return res;
-    const composed=composePayload(res.records);
-    if(!composed.normalized)return res;
-    const records=res.records.filter(r=>r?.fields?.Name!==LEGACY_NAME);
-    records.push(syntheticRecord(res.records,composed.data));
-    return{...res,records};
-  };
-
-  target._monitorUpsert=async function(name,notes,idKey){
-    if(name!==LEGACY_NAME)return originalUpsert.apply(this,arguments);
-    let raw;try{raw=JSON.parse(notes||'{}');}catch(_){return originalUpsert.apply(this,arguments);}
-    const {fragments,meta}=splitPayload(raw);
-    const changed=fragments.filter(f=>hashes.get(f.domain)!==f.hash);
-    for(const f of changed){
-      await originalUpsert(f.name,f.notes,'machineOpsV3_'+f.domain+'RecordId');
-      hashes.set(f.domain,f.hash);
-    }
-    await originalUpsert(meta.name,meta.notes,'machineOpsV3_metaRecordId');
-    hashes.set(META_DOMAIN,meta.hash);
-    for(const f of changed)committedSnapshots.set(f.domain,{writtenAt:f.writtenAt,data:f.data});
-    lastWriteAt=Date.now();lastMode='normalized';
-    return true;
-  };
-  return true;
+  runtimeTarget=target;installed=true;return true;
 }
 function installWhenReady(target,attempts=40){
   if(install(target)||installed)return true;
@@ -186,9 +271,10 @@ function installWhenReady(target,attempts=40){
   setTimeout(()=>installWhenReady(target,attempts-1),250);
   return false;
 }
-function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWriteAt,knownDomains:[...hashes.keys()]};}
+function status(){return{installed,mode:lastMode,schema:SCHEMA,lastReadAt,lastWriteAt,knownDomains:[...hashes.keys()],knownRevisions:remoteRevisions.size};}
 
-return{install,installWhenReady,status,_test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,recoverableDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS,NOTES_SAFE_LIMIT}};
+return{install,installWhenReady,status,readSnapshot,writeSnapshot,readRecord,writeRecord,
+  _test:{stable,hashText,domainHash,recordName,splitPayload,composePayload,bestDomainSnapshot,recoverableDomainSnapshot,LEGACY_NAME,PREFIX,SCHEMA,DOMAINS,CONFIG_DOMAINS,NOTES_SAFE_LIMIT}};
 });
 
 // PrinterHistory se puede cargar de forma independiente: si este módulo falla,
