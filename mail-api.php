@@ -627,7 +627,7 @@ case 'resend_status':
     if (!function_exists('curl_init')) {
         echo json_out(['ok'=>false,'verified'=>false,'configured'=>true]); exit;
     }
-    $ch = curl_init('https://api.resend.com/domains?limit=1');
+    $ch = curl_init('https://api.resend.com/domains');
     curl_setopt_array($ch, [
         CURLOPT_HTTPGET=>true, CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key],
         CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>8, CURLOPT_CONNECTTIMEOUT=>4,
