@@ -407,6 +407,114 @@ async function sharedAgendaLoad(env,scope){
     revision:await sharedCalendarDigest(JSON.stringify(data))};
 }
 
+
+const SHARED_MAIL_RECORDS=Object.freeze({
+  signature:'MAIL_SIGNATURES',
+  'sent-addresses':'MAIL_SENT_ADDRESSES',
+  templates:'MAIL_TEMPLATES'
+});
+function sharedMailEmailAllowed(email){
+  return typeof email==='string'&&email.length<=254&&email===email.toLowerCase()&&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+function sharedMailMailboxAllowed(identity,account,legacy){
+  if(!sharedMailEmailAllowed(account))return false;
+  if(legacy)return true;
+  if(!identity||typeof identity!=='object'||!sharedMailEmailAllowed(identity.email))return false;
+  if(account===identity.email||account==='hola@thelab.solutions')return true;
+  if(identity.role==='admin'&&account.endsWith('@thelab.solutions'))return true;
+  if(identity.role==='finance'&&account==='pagos@thelab.solutions')return true;
+  return false;
+}
+function sharedMailSignatureAllowed(value){
+  return typeof value==='string'&&value.length<=60000&&
+    !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value);
+}
+function sharedMailAddressesAllowed(value){
+  if(!Array.isArray(value)||value.length>300)return false;
+  const seen=new Set();
+  return value.every(email=>{
+    if(!sharedMailEmailAllowed(email)||seen.has(email))return false;
+    seen.add(email);return true;
+  });
+}
+const SHARED_MAIL_TEMPLATE_KEYS=new Set(['name','subject','body']);
+function sharedMailTemplatesAllowed(value){
+  if(!value||typeof value!=='object'||Array.isArray(value)||
+     Object.keys(value).some(k=>!['version','updatedAt','templates'].includes(k))||
+     value.version!==1||typeof value.updatedAt!=='number'||!Number.isFinite(value.updatedAt)||
+     value.updatedAt<0||!Array.isArray(value.templates)||value.templates.length>80||
+     JSON.stringify(value).length>90000)return false;
+  const text=(v,max)=>typeof v==='string'&&v.length<=max&&
+    !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(v);
+  return value.templates.every(t=>
+    t&&typeof t==='object'&&!Array.isArray(t)&&
+    !Object.keys(t).some(k=>!SHARED_MAIL_TEMPLATE_KEYS.has(k))&&
+    text(t.name,180)&&!!t.name.trim()&&text(t.subject,1000)&&text(t.body,24000)
+  );
+}
+function sharedMailMapAllowed(resource,value){
+  if(!value||typeof value!=='object'||Array.isArray(value)||
+     Object.keys(value).length>120||JSON.stringify(value).length>95000)return false;
+  return Object.entries(value).every(([email,data])=>
+    sharedMailEmailAllowed(email)&&
+    (resource==='signature'?sharedMailSignatureAllowed(data):sharedMailAddressesAllowed(data))
+  );
+}
+function sharedMailDefault(resource){
+  return resource==='signature'?'':resource==='sent-addresses'?[]:
+    {version:1,updatedAt:0,templates:[]};
+}
+function sharedMailDataAllowed(resource,data){
+  return resource==='signature'?sharedMailSignatureAllowed(data):
+    resource==='sent-addresses'?sharedMailAddressesAllowed(data):
+      resource==='templates'?sharedMailTemplatesAllowed(data):false;
+}
+async function sharedMailLoad(env,resource,account){
+  const recordName=SHARED_MAIL_RECORDS[resource];
+  if(!env.AIRTABLE_TOKEN||!recordName||
+     (resource!=='templates'&&!sharedMailEmailAllowed(account)))
+    return {error:'invalid-config'};
+  const query=new URLSearchParams();
+  query.set('maxRecords','2');
+  query.set('filterByFormula',"{Name}='"+recordName+"'");
+  query.append('fields[]','Name');query.append('fields[]','Notes');
+  let response;
+  try{
+    response=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+'?'+query.toString(),{
+        method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+      });
+  }catch(_){return {error:'network'};}
+  if(!response.ok||response.status>=300&&response.status<400)
+    return {error:'upstream'};
+  let body;try{body=await response.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>1)
+    return {error:body?.records?.length>1?'duplicate':'invalid-shape'};
+  if(!body.records.length){
+    const data=sharedMailDefault(resource);
+    return {recordId:'',exists:false,raw:'',all:resource==='templates'?null:{},data,
+      revision:await sharedCalendarDigest(JSON.stringify(data))};
+  }
+  const record=body.records[0];
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(record.id||''))||
+     record.fields?.Name!==recordName||typeof record.fields?.Notes!=='string')
+    return {error:'invalid-record'};
+  let parsed;try{parsed=JSON.parse(record.fields.Notes);}catch(_){return {error:'invalid-payload'};}
+  let data,all=null;
+  if(resource==='templates'){
+    if(Array.isArray(parsed))parsed={version:1,updatedAt:0,templates:parsed};
+    if(!sharedMailTemplatesAllowed(parsed))return {error:'invalid-payload'};
+    data=parsed;
+  }else{
+    if(!sharedMailMapAllowed(resource,parsed))return {error:'invalid-payload'};
+    all=parsed;data=Object.hasOwn(parsed,account)?parsed[account]:sharedMailDefault(resource);
+  }
+  return {recordId:record.id,exists:true,raw:record.fields.Notes,all,data,
+    revision:await sharedCalendarDigest(JSON.stringify(data))};
+}
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -1282,8 +1390,9 @@ export class CrmMutationGuard {
     const run = this._queue.then(() => path==='/marketing/spend'
       ?this._handleSpend(request):path==='/shared-calendar'
         ?this._handleSharedCalendar(request):path==='/shared-agenda'
-          ?this._handleSharedAgenda(request):path==='/scoped-patch'
-            ?this._handleScopedPatch(request):this._handle(request));
+          ?this._handleSharedAgenda(request):path==='/shared-mail'
+            ?this._handleSharedMail(request):path==='/scoped-patch'
+              ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
   }
@@ -1381,6 +1490,69 @@ export class CrmMutationGuard {
       return this._json({error:'Agenda write succeeded but verification is uncertain',
         code:'AGENDA_WRITE_UNCERTAIN'},503);
     return this._json({ok:true,scope,revision:verified.revision,data:verified.data},200);
+  }
+
+
+  async _handleSharedMail(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Shared mail guard unavailable'},503);
+    let payload;try{payload=await request.json();}catch(_){
+      return this._json({error:'Invalid shared mail request'},422);
+    }
+    const {resource,account,data,expectedRevision}=payload||{};
+    const actor=payload?.actor;
+    const signed=actor&&typeof actor.email==='string'&&
+      ['sales','operator','finance','admin'].includes(actor.role);
+    const legacy=actor?.legacy===true;
+    if(!Object.hasOwn(SHARED_MAIL_RECORDS,resource)||
+       resource!=='templates'&&!sharedMailMailboxAllowed(signed?actor:null,account,legacy)||
+       resource==='templates'&&account!==undefined||
+       !sharedMailDataAllowed(resource,data)||
+       typeof expectedRevision!=='string'||expectedRevision.length>64||
+       !signed&&!legacy)
+      return this._json({error:'Shared mail write denied'},403);
+    const current=await sharedMailLoad(this.env,resource,account);
+    if(current.error)return this._json({error:'Shared mail unavailable'},503);
+    if(current.revision!==expectedRevision)
+      return this._json({error:'Mail state changed on another device',
+        code:'MAIL_REVISION_CONFLICT',resource,
+        ...(resource==='templates'?{}:{account}),
+        exists:current.exists,revision:current.revision,data:current.data},409);
+    let raw;
+    if(resource==='templates'){
+      raw=JSON.stringify(data);
+    }else{
+      const all=Object.assign(Object.create(null),current.all||{});
+      all[account]=data;
+      if(!sharedMailMapAllowed(resource,all))
+        return this._json({error:'Shared mail payload too large or invalid'},413);
+      raw=JSON.stringify(all);
+    }
+    if(raw.length>95000)return this._json({error:'Shared mail payload too large'},413);
+    const recordName=SHARED_MAIL_RECORDS[resource];
+    const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+
+      (current.recordId?'/'+current.recordId:'');
+    const body={fields:{Name:recordName,Notes:raw}};
+    let upstream;
+    try{
+      upstream=await fetch(target,{method:current.recordId?'PATCH':'POST',
+        redirect:'manual',headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,
+          'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }catch(_){return this._json({error:'Mail write outcome uncertain; reread before retrying',
+      code:'MAIL_WRITE_UNCERTAIN'},503);}
+    if([400,401,403,404,422].includes(upstream.status))
+      return this._json({error:'Mail write rejected',code:'MAIL_WRITE_REJECTED'},422);
+    if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+      return this._json({error:'Mail write outcome uncertain; reread before retrying',
+        code:'MAIL_WRITE_UNCERTAIN'},503);
+    const verified=await sharedMailLoad(this.env,resource,account);
+    if(verified.error||JSON.stringify(verified.data)!==JSON.stringify(data))
+      return this._json({error:'Mail write succeeded but verification is uncertain',
+        code:'MAIL_WRITE_UNCERTAIN'},503);
+    return this._json({ok:true,resource,
+      ...(resource==='templates'?{}:{account}),exists:true,
+      revision:verified.revision,data:verified.data},200);
   }
 
   // This shares tls-crm-global with guarded Pedidos/Cotizaciones creation.
@@ -1930,7 +2102,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -2087,6 +2259,66 @@ export default {
         Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
         return new Response(guarded.body,{status:guarded.status,headers});
       }catch(_){return json({error:'Agenda write guard unavailable'},503,scopedHeaders);}
+    }
+
+
+    // Shared mail metadata gets a narrow resource endpoint. Signatures and
+    // sent-recipient history are mailbox-scoped; templates are company-wide.
+    if(url.pathname==='/shared/mail'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      const keys=[...url.searchParams.keys()];
+      if(keys.some(k=>!['resource','account'].includes(k))||
+         url.searchParams.getAll('resource').length!==1||
+         url.searchParams.getAll('account').length>1)
+        return json({error:'Mail query parameters invalid'},422,scopedHeaders);
+      const resource=url.searchParams.get('resource')||'';
+      if(!Object.hasOwn(SHARED_MAIL_RECORDS,resource))
+        return json({error:'Unknown mail resource'},404,scopedHeaders);
+      const account=url.searchParams.get('account')||'';
+      if(resource==='templates'&&account)
+        return json({error:'Templates do not accept a mailbox'},422,scopedHeaders);
+      if(resource!=='templates'&&!sharedMailMailboxAllowed(
+        authorized.identity,account,authorized.legacy===true))
+        return json({error:'Mailbox scope denied'},403,scopedHeaders);
+      if(request.method==='GET'){
+        const current=await sharedMailLoad(env,resource,account);
+        if(current.error)return json({error:'Shared mail unavailable'},503,scopedHeaders);
+        return json({ok:true,resource,
+          ...(resource==='templates'?{}:{account}),exists:current.exists,
+          revision:current.revision,data:current.data},200,scopedHeaders);
+      }
+      if(request.method!=='PUT')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>100000)
+        return json({error:'Mail expects bounded JSON'},415,scopedHeaders);
+      let body;try{
+        const raw=await request.text();if(raw.length>100000)throw Error('large');
+        body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid mail JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>!['resource','account','data','expectedRevision'].includes(k))||
+         body.resource!==resource||
+         (resource==='templates'?body.account!==undefined:body.account!==account)||
+         !sharedMailDataAllowed(resource,body.data)||
+         typeof body.expectedRevision!=='string'||body.expectedRevision.length>64)
+        return json({error:'Invalid mail document'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)
+        return json({error:'Mail write guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(
+          env.CRM_MUTATION_GUARD.idFromName('tls-shared-mail'));
+        const guarded=await stub.fetch('https://crm-write.internal/shared-mail',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({resource,
+            ...(resource==='templates'?{}:{account}),
+            data:body.data,expectedRevision:body.expectedRevision,
+            actor:authorized.identity
+              ?{email:authorized.identity.email,role:authorized.identity.role}
+              :{legacy:true}})
+        });
+        const headers=new Headers(guarded.headers);
+        Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Mail write guard unavailable'},503,scopedHeaders);}
     }
 
     // A signed read-only viewer never receives the full Airtable CRM row.
