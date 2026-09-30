@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-29-mail-security-rate-guard');
+define('MAIL_API_BUILD', '2026-09-29-mail-security-resend-status');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -615,6 +615,33 @@ function mail_send_reserve($user, $testFile = null) {
 
 // ── Router ────────────────────────────────────────────────────
 switch ($action) {
+
+// ── Diagnóstico Resend: sin envío de mensajes ───────────────────
+// Exige credenciales IMAP reales antes de consultar la clave global del servidor.
+case 'resend_status':
+    $conn = open_imap($user, $pass);
+    if (is_array($conn)) { echo json_out(['ok'=>false, 'verified'=>false]); exit; }
+    imap_close($conn);
+    $key = resend_api_key();
+    if (!$key) { echo json_out(['ok'=>false,'verified'=>false,'configured'=>false]); exit; }
+    if (!function_exists('curl_init')) {
+        echo json_out(['ok'=>false,'verified'=>false,'configured'=>true]); exit;
+    }
+    $ch = curl_init('https://api.resend.com/domains');
+    curl_setopt_array($ch, [
+        CURLOPT_HTTPGET=>true, CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key],
+        CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>8, CURLOPT_CONNECTTIMEOUT=>4,
+        CURLOPT_FOLLOWLOCATION=>false,
+    ]);
+    $body = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $payload = is_string($body) ? json_decode($body, true) : null;
+    $verified = $http >= 200 && $http < 300 && is_array($payload) && isset($payload['data']) && is_array($payload['data']);
+    // No se devuelven cuerpos del proveedor, dominios ni la API key.
+    echo json_out(['ok'=>$verified,'verified'=>$verified,'configured'=>true,
+        'error_code'=>$verified?'':($http===401?'unauthorized':($http===403?'forbidden':'unverified'))]);
+    exit;
 
 // ── folders ──────────────────────────────────────────────────
 case 'folders':

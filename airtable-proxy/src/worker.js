@@ -1655,7 +1655,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -1668,6 +1668,58 @@ export default {
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
+    // Diagnóstico bajo demanda: GET exclusivamente, lista fija de proveedores
+    // y solicitudes de identidad/metadatos. No ejecuta modelos ni envía eventos.
+    // Requiere APP_KEY y origen autorizados antes de este bloque; Access, si
+    // está activado, exige además una sesión administrativa firmada.
+    if(url.pathname==='/integrations/check'){
+      const headers={...CORS,'Cache-Control':'no-store'};
+      if(request.method!=='GET'||url.searchParams.size!==1||
+         url.searchParams.getAll('service').length!==1)
+        return json({error:'Consulta de diagnóstico no permitida'},405,headers);
+      if(authorized.identity&&authorized.identity.role!=='admin')
+        return json({error:'Diagnóstico reservado a administración'},403,headers);
+      const service=url.searchParams.get('service');
+      const specs={
+        anthropic:{secret:env.ANTHROPIC_TOKEN,url:'https://api.anthropic.com/v1/models?limit=1',
+          headers:()=>({'x-api-key':env.ANTHROPIC_TOKEN,'anthropic-version':'2023-06-01'})},
+        openai:{secret:env.OPENAI_TOKEN,url:'https://api.openai.com/v1/models',
+          headers:()=>({Authorization:'Bearer '+env.OPENAI_TOKEN})},
+        make:{secret:env.MAKE_API_TOKEN,
+          url:'https://'+(env.MAKE_API_ZONE||'eu1')+'.make.com/api/v2/enums/timezones',
+          headers:()=>({Authorization:'Token '+env.MAKE_API_TOKEN})},
+        meta:{secret:env.META_ACCESS_TOKEN,url:'https://graph.facebook.com/v23.0/me?fields=id',
+          headers:()=>({Authorization:'Bearer '+env.META_ACCESS_TOKEN})}
+      };
+      if(!Object.hasOwn(specs,service))
+        return json({error:'Servicio no admitido'},404,headers);
+      const cfg=specs[service];
+      if(service==='make'&&!['eu1','eu2','us1','us2','ca1','au1'].includes(env.MAKE_API_ZONE||'eu1'))
+        return json({status:'gray',verified:false,message:'Zona API de Make no configurada correctamente'},200,headers);
+      if(!cfg.secret)
+        return json({status:'gray',verified:false,message:'Falta la credencial del servicio en Cloudflare'},200,headers);
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),6000);
+      try{
+        const upstream=await fetch(cfg.url,{method:'GET',headers:cfg.headers(),
+          redirect:'manual',signal:controller.signal});
+        // No se reenvían ni guardan cuerpos o cabeceras del proveedor.
+        // Los 401/403 confirman credenciales/permisos inválidos; 429 y
+        // respuestas 5xx son transitorias y no confirman caída definitiva.
+        const status=upstream.ok?'green':
+          (upstream.status===401||upstream.status===403)?'red':'yellow';
+        try{await upstream.body?.cancel?.();}catch(_){}
+        return json({status,verified:upstream.ok,
+          message:upstream.ok?'Autenticación de solo lectura verificada':
+            upstream.status===401?'Clave rechazada por el proveedor':
+            upstream.status===403?'El proveedor rechazó los permisos':
+            upstream.status===429?'Límite de solicitudes del proveedor':
+            'No se pudo verificar; respuesta del proveedor'},200,headers);
+      }catch(_){
+        return json({status:'yellow',verified:false,message:'Proveedor no verificable en este momento'},200,headers);
+      }finally{clearTimeout(timeout);}
+    }
+
     if(authorized.identity&&request.method!=='GET'){
       console.log('[Access audit]',JSON.stringify({
         email:authorized.identity.email,role:authorized.identity.role,

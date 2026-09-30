@@ -10,20 +10,33 @@
     {id:'calendar',name:'Google Calendar',group:'Google y comunicación',page:'calendario',impact:'Agenda y sincronización de eventos',guide:'Reconectar la cuenta usando OAuth. Después, abrir Calendario para revisar la sincronización real de eventos. Una prueba de acceso no confirma que todos los eventos se sincronizaron.',auto:true,oauth:true},
     {id:'drive',name:'Google Drive',group:'Google y comunicación',page:'cotizaciones',impact:'Archivos, carpetas y propuestas',guide:'Reconectar mediante el botón OAuth. Revisar el Client ID autorizado y las carpetas desde una cotización; la lectura no crea archivos.',auto:true,oauth:true},
     {id:'imap',name:'Correos · Entrada IMAP',group:'Google y comunicación',page:'correo',impact:'Recepción, carpetas y lectura de correos',guide:'Abrir Correos, elegir la cuenta afectada y volver a introducir la clave en esa sesión. El diagnóstico solo consulta carpetas, nunca marca mensajes como leídos.',auto:false},
-    {id:'resend',name:'Correos · Salida Resend',group:'Google y comunicación',page:'correo',impact:'Envío de correos desde el dashboard',guide:'La salida utiliza Resend. Verificar la clave en el servidor y los registros de entrega en Resend. No se envían correos de prueba automáticamente.',auto:false},
+    {id:'resend',name:'Correos · Salida Resend',group:'Google y comunicación',page:'correo',impact:'Envío de correos desde el dashboard',guide:'Instala el mail-api.php actualizado y configura RESEND_API_KEY únicamente en el servidor de correo. Autentica una casilla y pulsa Verificar conexión: se consultan dominios, sin enviar mensajes. Una clave limitada al envío puede no autorizar la prueba.',auto:false},
     {id:'printer',name:'Bridge de impresoras',group:'Operaciones',page:'maquinas',impact:'Telemetría y cámaras de las impresoras',guide:'Comprobar el bridge y el túnel. Si está disponible, revisar luego las cámaras y la autenticación en Máquinas; /healthz por sí solo no certifica cada impresora.',auto:true},
     {id:'sii',name:'SII · Emisor electrónico',group:'Operaciones',page:'finanzas',impact:'Facturas, certificado y emisión de DTE',guide:'Revisar configuración y certificados del Worker SII desde el entorno seguro. El diagnóstico jamás emite DTE ni consume folios.',auto:true},
     {id:'leads',name:'Leads · Worker web',group:'Marketing y web',page:'clientes',impact:'Formulario web, nuevos leads y newsletter',guide:'Comprobar /health y la credencial Airtable en el Worker. Para verificar un envío real del formulario, realizar una prueba controlada fuera de este monitor.',auto:true},
-    {id:'anthropic',name:'Claude API',group:'IA y automatización',page:'reporte',impact:'Agentes e informes IA',guide:'Comprobar desde el servidor la validez y saldo de Anthropic. El monitor solo verifica si existe la configuración; nunca genera tokens.',auto:false},
-    {id:'openai',name:'OpenAI API',group:'IA y automatización',page:'reporte',impact:'Funciones IA habilitadas mediante proxy',guide:'Comprobar la configuración de la clave en Cloudflare y el servicio de facturación. El monitor no llama a modelos de pago.',auto:false},
-    {id:'make',name:'Make · Automatizaciones',group:'IA y automatización',page:'overview',impact:'Escenarios de automatización y notificaciones',guide:'Abrir el historial de ejecuciones de Make y revisar escenarios fallidos. No llamar al webhook para probarlo: podría crear registros o enviar mensajes.',auto:false},
-    {id:'ads',name:'Google Ads',group:'Marketing y web',page:'web',impact:'Campañas, gasto y reportes publicitarios',guide:'Verificar autorización en Google Ads y la última sincronización en WEB. Las credenciales y los permisos comerciales no se prueban por una solicitud pública.',auto:false},
-    {id:'meta',name:'Meta / Redes sociales',group:'Marketing y web',page:'redes',impact:'Publicaciones, integraciones y métricas sociales',guide:'Abrir Redes y revisar autorizaciones de Meta. Evitar publicar mensajes de prueba desde una comprobación de salud.',auto:false},
-    {id:'wordpress',name:'WordPress · Sitio web',group:'Marketing y web',page:'web',impact:'Contenido del sitio y diagnóstico SEO',guide:'Revisar WEB y la API REST de WordPress. La validación de edición requiere un permiso de sitio; el monitor no modifica entradas.',auto:false}
+    {id:'anthropic',name:'Claude API',group:'IA y automatización',page:'reporte',impact:'Agentes e informes IA',guide:'Configura ANTHROPIC_TOKEN como secreto del Worker proxy en Cloudflare. Pulsa Verificar conexión para autenticar la clave mediante lectura de modelos, sin consumir tokens. El saldo y los límites se consultan en Anthropic Console.',auto:false},
+    {id:'openai',name:'OpenAI API',group:'IA y automatización',page:'reporte',impact:'Funciones IA habilitadas mediante proxy',guide:'Configura OPENAI_TOKEN como secreto del Worker proxy en Cloudflare. Pulsa Verificar conexión para autenticar la clave mediante lectura de modelos, sin generar respuestas. Revisa saldo y facturación en OpenAI Platform.',auto:false},
+    {id:'make',name:'Make · Automatizaciones',group:'IA y automatización',page:'overview',impact:'Escenarios de automatización y notificaciones',guide:'Crea una API key de solo lectura en Make con scope organization:read. Configura MAKE_API_TOKEN y MAKE_API_ZONE (eu1, eu2, us1, us2, ca1 o au1) como secreto/variable del Worker en Cloudflare. Verificar conexión usa únicamente GET, sin llamar webhooks.',auto:false},
+    {id:'ads',name:'Google Ads',group:'Marketing y web',page:'web',impact:'Campañas, gasto y reportes publicitarios',guide:'Abre Configurar Ads, comprueba la URL de Google Apps Script y el ID de cliente. Verificar conexión realiza una consulta de lectura, sin modificar campañas. El permiso para editar campañas se comprueba por separado.',auto:false},
+    {id:'meta',name:'Meta / Redes sociales',group:'Marketing y web',page:'redes',impact:'Publicaciones, integraciones y métricas sociales',guide:'Configura META_ACCESS_TOKEN en el Worker de Cloudflare con permisos de lectura de identidad. Verificar conexión consulta GET /me sin publicar ni modificar nada. Revisa permisos y activos en Meta Business Settings.',auto:false},
+    {id:'wordpress',name:'WordPress · Legado',group:'Marketing y web',page:'web',impact:'Contenido del sitio y diagnóstico SEO',guide:'Revisar WEB y la API REST de WordPress. La validación de edición requiere un permiso de sitio; el monitor no modifica entradas.',auto:false}
   ];
   const byId=Object.fromEntries(catalog.map(s=>[s.id,s]));
   const store={results:{},history:[],lastGood:{},lastSweep:0,lastCheckAt:0,busy:new Set(),snapshot:null,active:'Todas',mounted:false,autoStarted:false,userKey:null};
-  const label={green:'Operativo',yellow:'Advertencia',red:'Error confirmado',gray:'Sin verificar'};
+  const label={green:'Conexión verificada',yellow:'Requiere atención',red:'Error confirmado',gray:'Pendiente de conectar o verificar'};
+  const officialPortals=Object.freeze({
+    github:'https://github.com/thelabsolutionscl/dashboardthelabsolutions/actions',
+    anthropic:'https://console.anthropic.com/settings/keys',
+    openai:'https://platform.openai.com/api-keys',
+    make:'https://www.make.com/en/login',
+    meta:'https://business.facebook.com/settings',
+    ads:'https://ads.google.com/',
+    resend:'https://resend.com/api-keys',
+    wordpress:'https://thelab.solutions/',
+    proxy:'https://dash.cloudflare.com/',airtable:'https://dash.cloudflare.com/',
+    sii:'https://dash.cloudflare.com/',leads:'https://dash.cloudflare.com/',
+    printer:'https://dash.cloudflare.com/'
+  });
   function user(){
     try{return typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;}catch(_){return null;}
   }
@@ -129,6 +142,60 @@
       return {status:'yellow',message:e?.name==='AbortError'?'La comprobación agotó el tiempo':'No fue posible verificarlo desde este navegador'};
     }finally{clearTimeout(timer);}
   }
+  // Lecturas autenticadas, nunca generar IA ni crear registros para probarla.
+  function proxyCredentials(){
+    try{if(typeof _proxyCfg==='function'){
+      const p=_proxyCfg();if(p?.key&&configuredUrl(p.url))return {url:configuredUrl(p.url),key:p.key};
+    }}catch(_){}
+    const d=defs();let url='',key='';
+    try{url=localStorage.getItem('proxy_url')||'';key=localStorage.getItem('proxy_key')||'';}catch(_){}
+    url=configuredUrl(url||d.PROXY_URL||'');key=key||d.PROXY_KEY||'';
+    return url&&key&&!key.includes('%%')?{url,key}:null;
+  }
+  async function verifyServerService(id){
+    const p=proxyCredentials();
+    if(!p)return {status:'gray',message:'Configura la URL y la clave del proxy seguro'};
+    const r=await getJson(p.url+'/integrations/check?service='+encodeURIComponent(id),
+      {credentials:'include',headers:{'X-App-Key':p.key}});
+    if(r.status!=='green')return r;
+    const d=r.data||{};
+    if(!['green','yellow','red','gray'].includes(d.status))
+      return {status:'yellow',message:'El proxy aún no incorpora esta verificación'};
+    return {status:d.status,message:String(d.message||'Prueba sin detalles'),verified:d.verified===true};
+  }
+  async function verifyAds(){
+    if(typeof getAdsConfig!=='function')return {status:'gray',message:'El módulo Ads no está cargado'};
+    const cfg=getAdsConfig();let url;
+    try{
+      url=new URL(cfg.endpoint);
+      if(url.protocol!=='https:'||url.hostname!=='script.google.com'||
+        !/^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname)||
+        url.username||url.password||url.search||url.hash)throw Error('invalid');
+    }catch(_){return {status:'gray',message:'Configura el endpoint oficial de Google Apps Script'};}
+    url.searchParams.set('days','1');
+    if(cfg.customerId)url.searchParams.set('customerId',String(cfg.customerId).replace(/[^0-9]/g,''));
+    const r=await getJson(url.toString());
+    if(r.status!=='green')return r;
+    return r.data?.ok===true?
+      {status:'green',message:'Consulta Ads correcta; permiso para modificar campañas no comprobado'}:
+      {status:'yellow',message:'El Script no confirmó una conexión válida con Google Ads'};
+  }
+  async function verifyWordPress(){
+    if(typeof getWPConfig!=='function')return {status:'gray',message:'WordPress legado no configurado'};
+    const cfg=getWPConfig();
+    if(!cfg?.user||!cfg?.pass)return {status:'gray',message:'No hay credenciales WordPress en esta sesión'};
+    let url;
+    try{url=new URL(cfg.url);if(url.protocol!=='https:'||
+      !['thelab.solutions','www.thelab.solutions'].includes(url.hostname)||
+      url.username||url.password||url.port)throw Error('invalid');}
+    catch(_){return {status:'gray',message:'Se requiere la URL HTTPS autorizada del sitio'};}
+    const r=await getJson(url.origin+'/wp-json/wp/v2/users/me?context=edit',
+      {headers:{Authorization:'Basic '+btoa(cfg.user+':'+cfg.pass)}});
+    if(r.status!=='green')return r;
+    return r.data?.id?
+      {status:'green',message:'WordPress confirmó autenticación de solo lectura'}:
+      {status:'yellow',message:'WordPress no confirmó identidad'};
+  }
   async function probe(id,mode){
     const manual=mode==='manual',u=user();
     if(!u||root._DEMO_MODE)return {status:'gray',message:'Inicia sesión fuera del modo DEMO para diagnosticar'};
@@ -173,7 +240,18 @@
       try{const d=await MAIL.post({action:'folders'});return d&&Array.isArray(d.folders)?{status:'green',message:'IMAP autenticado y carpetas disponibles'}:{status:'yellow',message:'No fue posible leer las carpetas de la cuenta'};}
       catch(_){return {status:'yellow',message:'No se pudo comprobar la cuenta IMAP'};}
     }
-    if(id==='resend')return {status:'gray',message:'No se envían correos automáticamente; revisa las entregas en Resend'};
+    if(id==='resend'){
+      if(typeof MAIL==='undefined'||!MAIL.getMailPass?.())
+        return {status:'gray',message:'Autentica primero la casilla en Correos'};
+      if(!manual)return {status:'gray',message:'Resend se verifica bajo demanda (sin enviar mensajes)'};
+      try{
+        const d=await MAIL.post({action:'resend_status'});
+        if(d?.verified===true&&d?.ok===true)
+          return {status:'green',message:'Resend autenticado en el servidor; no se envió ningún correo'};
+        if(d?.configured===false)return {status:'gray',message:'Falta la clave Resend en el servidor de correo'};
+        return {status:'yellow',message:'No se pudo verificar Resend; comprueba el servicio o la versión de mail-api'};
+      }catch(_){return {status:'yellow',message:'Resend no se pudo verificar desde Correos'};}
+    }
     if(id==='printer'){
       const url=workerUrl('printer');if(!url)return {status:'gray',message:'No hay túnel de impresoras válido'};
       const r=await getJson(url+'/healthz');
@@ -211,17 +289,17 @@
         return {status:'yellow',message:'GitHub publicó otra versión; recarga antes de comparar'};
       return {status:'green',message:'Última ejecución de Pages correcta'+(version?' y versión coincidente':' (versión no contrastada)')};
     }
-    if(id==='anthropic'||id==='openai'){
+    if(['anthropic','openai','make','meta'].includes(id)){
+      if(manual)return verifyServerService(id);
+      if(id==='make'||id==='meta')return {status:'gray',message:'Pulsa Verificar conexión para probar la API desde Cloudflare'};
       if(!proxyUrl())return {status:'gray',message:'Primero configura el proxy seguro'};
       if(!store.snapshot){const p=await probe('proxy',mode);if(p.status!=='green')return {status:'gray',message:'No se puede comprobar la configuración sin el proxy'};}
       const set=id==='anthropic'?store.snapshot?.anthropic:store.snapshot?.openai;
-      return set===true?{status:'yellow',message:'Credencial configurada en el servidor; saldo y validez sin verificar'}:
-        {status:'gray',message:'No hay una credencial configurada en el servidor'};
+      return set===true?{status:'yellow',message:'Credencial presente; pulsa Verificar conexión para autenticarla sin tokens'}:
+        {status:'gray',message:'No existe la credencial del proveedor en Cloudflare'};
     }
-    if(id==='make')return {status:'gray',message:'Sin endpoint de lectura fiable; comprobar el historial en Make'};
-    if(id==='ads')return {status:'gray',message:'Revisa la última sincronización y permisos en WEB'};
-    if(id==='meta')return {status:'gray',message:'Revisa autorizaciones y métricas en Redes'};
-    if(id==='wordpress')return {status:'gray',message:'Revisa WEB y el diagnóstico SEO; la edición no se prueba'};
+    if(id==='ads')return manual?verifyAds():{status:'gray',message:'Pulsa Verificar conexión para consultar Google Ads'};
+    if(id==='wordpress')return manual?verifyWordPress():{status:'gray',message:'WordPress es legado; configúralo solo si sigue en uso'};
     return {status:'gray',message:'Aún no dispone de comprobación segura'};
   }
   const pending=new Map();
@@ -287,8 +365,12 @@
       info.append(el('span','','Afecta: '+s.impact),el('span','','Comprobado: '+formatTime(r.checkedAt)));
       if(store.lastGood[s.id])info.append(el('span','','Último OK: '+formatTime(store.lastGood[s.id])));
       const actions=el('div','tls-conn-service-actions');
-      const test=button('Diagnosticar','check',s.id);test.disabled=store.busy.has(s.id);actions.append(test);
-      if(s.oauth&&configured(s.id)){const oauth=button('Reconectar OAuth','oauth',s.id);oauth.disabled=store.busy.has(s.id);actions.append(oauth);}
+      const test=button('Verificar conexión','check',s.id);test.disabled=store.busy.has(s.id);actions.append(test);
+      const connectLabel=s.oauth?'Conectar / reconectar':s.id==='imap'?'Iniciar sesión':s.id==='ads'?'Configurar Ads':
+        ['anthropic','openai','make','meta','resend','proxy','airtable','sii','leads'].includes(s.id)?
+          'Conectar / configurar':'Conectar / configurar';
+      const connect=button(connectLabel,'connect',s.id);
+      connect.disabled=store.busy.has(s.id);actions.append(connect);
       const guide=button('Cómo resolver','guide',s.id);actions.append(guide);
       if(permitted(s.page)&&s.page!=='overview')actions.append(button('Ir a '+s.page,'navigate',s.id));
       item.append(top,info,actions);list.append(item);
@@ -350,6 +432,12 @@
     const node=DOC.getElementById('tlsConnGuide');if(!node)return;
     DOC.getElementById('tlsConnGuideTitle').textContent=s.name;
     DOC.getElementById('tlsConnGuideBody').textContent=s.guide;
+    node.querySelector('[data-tls-portal]')?.remove?.();
+    if(officialPortals[id]){
+      const link=el('a','tls-conn-button tls-conn-portal','Abrir configuración oficial ↗');
+      link.href=officialPortals[id];link.target='_blank';link.rel='noopener noreferrer';
+      link.dataset.tlsPortal=id;node.append(link);
+    }
     node.hidden=false;node.scrollIntoView({block:'nearest'});
   }
   async function reconnect(id){
@@ -367,11 +455,57 @@
       result(id,'yellow','La autorización no se completó. Revisa la cuenta y vuelve a intentar','manual');guide(id);
     }
   }
+  function connectService(id){
+    // El gesto de usuario inicia OAuth de manera síncrona; un sondeo no puede
+    // abrir ventanas ni modificar configuraciones o secretos.
+    if(!byId[id]||!user()||root._DEMO_MODE)return;
+    if(id==='calendar'||id==='drive'){
+      if(!configured(id)){
+        guide(id);
+        const setting=DOC.getElementById('tlsConnGuideBody');
+        if(setting)setting.textContent='Falta el Google Client ID. Abre Mi cuenta y configura Google OAuth antes de conectar.';
+        return;
+      }
+      void reconnect(id);return;
+    }
+    if(id==='imap'){
+      if(typeof MAIL!=='undefined'&&typeof MAIL.showPassModal==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();MAIL.showPassModal();
+      }else guide(id);
+      return;
+    }
+    if(id==='ads'){
+      if(permitted('web')&&typeof switchTab==='function'&&typeof toggleAdsConfig==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();switchTab('web');
+        const panel=DOC.getElementById('adsConfigPanel');
+        if(panel&&panel.style.display==='none')toggleAdsConfig();
+        panel?.scrollIntoView?.({block:'center'});
+      }else guide(id);
+      return;
+    }
+    if(id==='printer'||id==='proxy'||id==='airtable'){
+      if(typeof openUserMenu==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();openUserMenu();
+      }else guide(id);
+      return;
+    }
+    if(id==='wordpress'){
+      const panel=DOC.getElementById('wpConfigPanel');
+      if(panel&&permitted('web')&&typeof switchTab==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();switchTab('web');
+        panel.style.display='block';panel.scrollIntoView?.({block:'nearest'});
+      }else guide(id);
+      return;
+    }
+    // Keys de IA, Make y Meta viven exclusivamente en Cloudflare; la salida
+    // Resend se configura exclusivamente en el backend de correo.
+    guide(id);
+  }
   function bootstrap(){
     if(!DOC)return;
     mount();
   }
-  const api={catalog,counts,displayStatus,configuredUrl,formatTime,mount,open,check,sweep,summary,probe,result,getJson};
+  const api={catalog,counts,displayStatus,configuredUrl,formatTime,mount,open,check,sweep,summary,probe,result,getJson,connectService,verifyServerService};
   if(typeof module!=='undefined'&&module.exports){module.exports=api;return;}
   root.TLSConnections=api;
   DOC?.addEventListener('click',e=>{
@@ -382,6 +516,7 @@
     if(action==='check')void check(id,'manual');
     if(action==='check-all')void sweep(true);
     if(action==='oauth')void reconnect(id);
+    if(action==='connect')connectService(id);
     if(action==='guide')guide(id);
     if(action==='close-guide')DOC.getElementById('tlsConnGuide').hidden=true;
     if(action==='filter'){store.active=b.dataset.group;renderDialog();}
