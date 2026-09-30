@@ -331,7 +331,7 @@
   // hidratar para que no mantengan una dependencia lateral del acceso genérico.
   const originalApply=global._applyMonitorSistema;
   if(typeof originalApply==='function'){
-    const scopedNames=new Set(['AGENDA','MAIL_SIGNATURES','MAIL_SENT_ADDRESSES','MAIL_TEMPLATES']);
+    const scopedNames=new Set(['AGENDA','MAIL_SIGNATURES','MAIL_SENT_ADDRESSES','MAIL_TEMPLATES','SIMULACION']);
     global._applyMonitorSistema=function agendaMonitorFiltered(records){
       return originalApply((records||[]).filter(r=>!scopedNames.has(r?.fields?.Name)));
     };

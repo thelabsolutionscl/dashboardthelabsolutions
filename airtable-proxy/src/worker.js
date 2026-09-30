@@ -725,6 +725,128 @@ async function sharedMachineOpsLoad(env,recordName=''){
   return {records,revisions,recordMap:map};
 }
 
+
+const SHARED_SIMULATION_NAME='SIMULACION';
+const SHARED_SIMULATION_VERSION=1;
+const SHARED_SIMULATION_LINE_KEYS=new Set(['lamparas','trofeos','merch','senaletica','nfc','deco3d','otra']);
+const SHARED_SIMULATION_PUBLICS=new Set(['ambos','consumidor','negocio']);
+const SHARED_SIMULATION_VERDICTS=new Set(['descartar','dudoso','prototipar','incompleto','error']);
+const SHARED_SIMULATION_RUN_KEYS=new Set([
+  'id','fecha','ts','linea','lineaKey','publico','panel','nPerfiles','barrido','items'
+]);
+const SHARED_SIMULATION_ITEM_KEYS=new Set([
+  'concepto','base','precio','veredicto','pctCompra','promedio','cobertura',
+  'esperados','frenos','comprador','precioSugerido'
+]);
+function sharedSimulationText(v,max,{empty=true}={}){
+  return typeof v==='string'&&v.length<=max&&(empty||v.trim().length>0)&&
+    !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(v);
+}
+function sharedSimulationNum(v,min,max){
+  return typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
+}
+function sharedSimulationItemAllowed(item){
+  if(!item||typeof item!=='object'||Array.isArray(item)||
+     Object.keys(item).some(k=>!SHARED_SIMULATION_ITEM_KEYS.has(k))||
+     !sharedSimulationText(item.concepto,600,{empty:false})||
+     (item.base!==undefined&&!sharedSimulationText(item.base,600))||
+     !sharedSimulationNum(item.precio,0,100000000)||
+     !SHARED_SIMULATION_VERDICTS.has(item.veredicto)||
+     !sharedSimulationNum(item.pctCompra,0,100)||
+     !sharedSimulationNum(item.promedio,0,5)||
+     (item.cobertura!==undefined&&!sharedSimulationNum(item.cobertura,0,100))||
+     (item.esperados!==undefined&&!sharedSimulationNum(item.esperados,0,100))||
+     !sharedSimulationText(item.frenos||'',2500)||
+     !sharedSimulationText(item.comprador||'',1500)||
+     !sharedSimulationText(item.precioSugerido||'',1500))
+    return false;
+  return true;
+}
+function sharedSimulationRunAllowed(run){
+  if(!run||typeof run!=='object'||Array.isArray(run)||
+     Object.keys(run).some(k=>!SHARED_SIMULATION_RUN_KEYS.has(k))||
+     !sharedSimulationText(run.id,160,{empty:false})||
+     !/^\d{4}-\d{2}-\d{2}$/.test(String(run.fecha||''))||
+     !sharedSimulationNum(run.ts,0,9999999999999)||
+     !sharedSimulationText(run.linea,300,{empty:false})||
+     !SHARED_SIMULATION_LINE_KEYS.has(run.lineaKey)||
+     !SHARED_SIMULATION_PUBLICS.has(run.publico)||
+     !Number.isInteger(run.panel)||!sharedSimulationNum(run.panel,1,100)||
+     !Number.isInteger(run.nPerfiles)||!sharedSimulationNum(run.nPerfiles,1,100)||
+     (run.barrido!==undefined&&(!Array.isArray(run.barrido)||run.barrido.length>5||
+       run.barrido.some(v=>!sharedSimulationNum(v,0,100000000))))||
+     !Array.isArray(run.items)||run.items.length>10||
+     !run.items.every(sharedSimulationItemAllowed))
+    return false;
+  return true;
+}
+function sharedSimulationRunsAllowed(runs){
+  if(!Array.isArray(runs)||runs.length>30)return false;
+  const ids=new Set();
+  for(const run of runs){
+    if(!sharedSimulationRunAllowed(run)||ids.has(run.id))return false;
+    ids.add(run.id);
+  }
+  try{return JSON.stringify(runs).length<=90000;}catch(_){return false;}
+}
+function sharedSimulationDocumentAllowed(doc){
+  if(!doc||typeof doc!=='object'||Array.isArray(doc)||
+     Object.keys(doc).some(k=>!['version','updatedAt','clearedAt','runs'].includes(k))||
+     doc.version!==SHARED_SIMULATION_VERSION||
+     !sharedSimulationNum(doc.updatedAt,0,9999999999999)||
+     !sharedSimulationNum(doc.clearedAt,0,9999999999999)||
+     doc.clearedAt>doc.updatedAt||
+     !sharedSimulationRunsAllowed(doc.runs)||
+     doc.runs.some(run=>run.ts<=doc.clearedAt))
+    return false;
+  try{return JSON.stringify(doc).length<=95000;}catch(_){return false;}
+}
+function sharedSimulationNormalize(value){
+  if(Array.isArray(value)){
+    if(!sharedSimulationRunsAllowed(value))return null;
+    const updatedAt=value.reduce((m,r)=>Math.max(m,Number(r.ts)||0),0);
+    return{version:SHARED_SIMULATION_VERSION,updatedAt,clearedAt:0,runs:value};
+  }
+  return sharedSimulationDocumentAllowed(value)?value:null;
+}
+async function sharedSimulationLoad(env){
+  if(!env.AIRTABLE_TOKEN)return {error:'invalid-config'};
+  const query=new URLSearchParams();
+  query.set('maxRecords','2');
+  query.set('filterByFormula',"{Name}='"+SHARED_SIMULATION_NAME+"'");
+  query.append('fields[]','Name');query.append('fields[]','Notes');
+  let response;
+  try{
+    response=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+'?'+query.toString(),{
+        method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+      });
+  }catch(_){return {error:'network'};}
+  if(!response.ok||response.status>=300&&response.status<400)return {error:'upstream'};
+  let body;try{body=await response.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>1)
+    return {error:body?.records?.length>1?'duplicate':'invalid-shape'};
+  if(!body.records.length){
+    const data={version:SHARED_SIMULATION_VERSION,updatedAt:0,clearedAt:0,runs:[]};
+    return{recordId:'',exists:false,raw:'',data,revision:await sharedCalendarDigest('')};
+  }
+  const record=body.records[0];
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(record.id||''))||
+     record.fields?.Name!==SHARED_SIMULATION_NAME||typeof record.fields?.Notes!=='string')
+    return {error:'invalid-record'};
+  let parsed;try{parsed=JSON.parse(record.fields.Notes);}catch(_){return {error:'invalid-payload'};}
+  const data=sharedSimulationNormalize(parsed);
+  if(!data)return {error:'invalid-payload'};
+  return{recordId:record.id,exists:true,raw:record.fields.Notes,data,
+    revision:await sharedCalendarDigest(record.fields.Notes)};
+}
+function sharedSimulationActorAllowed(actor){
+  return actor?.legacy===true||
+    (actor&&typeof actor.email==='string'&&
+      (actor.role==='admin'||actor.email==='marketing@thelab.solutions'));
+}
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -1602,8 +1724,9 @@ export class CrmMutationGuard {
         ?this._handleSharedCalendar(request):path==='/shared-agenda'
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/shared-machineops'
-              ?this._handleSharedMachineOps(request):path==='/scoped-patch'
-                ?this._handleScopedPatch(request):this._handle(request));
+              ?this._handleSharedMachineOps(request):path==='/shared-simulation'
+                ?this._handleSharedSimulation(request):path==='/scoped-patch'
+                  ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
   }
@@ -1898,6 +2021,48 @@ export class CrmMutationGuard {
     return this._json({ok:true,
       records:verified.records.filter(r=>wanted.has(r.name)),
       revisions:Object.fromEntries(Object.entries(verified.revisions).filter(([name])=>wanted.has(name)))},200);
+  }
+
+
+  async _handleSharedSimulation(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Simulation history guard unavailable'},503);
+    let payload;try{payload=await request.json();}catch(_){
+      return this._json({error:'Invalid simulation history request'},422);
+    }
+    if(!payload||!sharedSimulationActorAllowed(payload.actor)||
+       !sharedSimulationDocumentAllowed(payload.data)||
+       typeof payload.expectedRevision!=='string'||
+       !/^[a-f0-9]{64}$/.test(payload.expectedRevision))
+      return this._json({error:'Simulation history write denied'},403);
+    const current=await sharedSimulationLoad(this.env);
+    if(current.error)return this._json({error:'Simulation history unavailable'},503);
+    if(current.revision!==payload.expectedRevision)
+      return this._json({error:'Simulation history changed on another device',
+        code:'SIMULATION_REVISION_CONFLICT',exists:current.exists,
+        revision:current.revision,data:current.data},409);
+    const raw=JSON.stringify(payload.data);
+    if(raw.length>95000)return this._json({error:'Simulation history too large'},413);
+    const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+
+      (current.recordId?'/'+current.recordId:'');
+    let upstream;
+    try{
+      upstream=await fetch(target,{method:current.recordId?'PATCH':'POST',redirect:'manual',
+        headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:{Name:SHARED_SIMULATION_NAME,Notes:raw}})});
+    }catch(_){return this._json({error:'Simulation history write uncertain; reread before retrying',
+      code:'SIMULATION_WRITE_UNCERTAIN'},503);}
+    if([400,401,403,404,422].includes(upstream.status))
+      return this._json({error:'Simulation history write rejected',
+        code:'SIMULATION_WRITE_REJECTED'},422);
+    if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+      return this._json({error:'Simulation history write uncertain; reread before retrying',
+        code:'SIMULATION_WRITE_UNCERTAIN'},503);
+    const verified=await sharedSimulationLoad(this.env);
+    if(verified.error||JSON.stringify(verified.data)!==JSON.stringify(payload.data))
+      return this._json({error:'Simulation history verification uncertain',
+        code:'SIMULATION_WRITE_UNCERTAIN'},503);
+    return this._json({ok:true,exists:true,revision:verified.revision,data:verified.data},200);
   }
 
   // This shares tls-crm-global with guarded Pedidos/Cotizaciones creation.
@@ -2447,7 +2612,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -2718,6 +2883,48 @@ export default {
         Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
         return new Response(guarded.body,{status:guarded.status,headers});
       }catch(_){return json({error:'MachineOps write guard unavailable'},503,scopedHeaders);}
+    }
+
+
+    // Synthetic demand history gets a dedicated, redacted document endpoint.
+    // Only admin or the explicit Marketing identity may use it under Access.
+    if(url.pathname==='/shared/simulation'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search)return json({error:'Simulation query parameters not allowed'},422,scopedHeaders);
+      if(request.method==='GET'){
+        const current=await sharedSimulationLoad(env);
+        if(current.error)return json({error:'Simulation history unavailable'},503,scopedHeaders);
+        return json({ok:true,exists:current.exists,revision:current.revision,data:current.data},
+          200,scopedHeaders);
+      }
+      if(request.method!=='PUT')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>100000)
+        return json({error:'Simulation history expects bounded JSON'},415,scopedHeaders);
+      let body;try{
+        const raw=await request.text();if(raw.length>100000)throw Error('large');
+        body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid simulation history JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>!['data','expectedRevision'].includes(k))||
+         !sharedSimulationDocumentAllowed(body.data)||
+         typeof body.expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(body.expectedRevision))
+        return json({error:'Invalid simulation history document'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)
+        return json({error:'Simulation history guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(
+          env.CRM_MUTATION_GUARD.idFromName('tls-shared-simulation'));
+        const guarded=await stub.fetch('https://crm-write.internal/shared-simulation',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({data:body.data,expectedRevision:body.expectedRevision,
+            actor:authorized.identity
+              ?{email:authorized.identity.email,role:authorized.identity.role}
+              :{legacy:true}})
+        });
+        const headers=new Headers(guarded.headers);
+        Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Simulation history guard unavailable'},503,scopedHeaders);}
     }
 
     // A signed read-only viewer never receives the full Airtable CRM row.
