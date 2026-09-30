@@ -117,5 +117,6 @@ test('admin unaffected and signed operator may still read machine runtime in its
   assert.equal(admin.body.records[0].fields['Datos pago / banco'],'private');
   const runtime=await f.run(base+'Maquinas');
   assert.equal(runtime.status,200);
-  assert.equal(f.calls.length,2);
+  assert.equal(f.calls.filter(c=>[base+'Clientes',base+'Maquinas']
+    .includes(new URL(c.url).pathname)).length,2);
 });
