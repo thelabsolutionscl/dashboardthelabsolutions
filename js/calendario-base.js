@@ -177,39 +177,95 @@ function _calReconcile(all){
     return changed;
   }catch(e){return false;}
 }
+let _calSharedRevision='';
+function _calSharedConfig(){
+  try{
+    const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+    if(!px?.url||!px?.key)return null;
+    const url=new URL(px.url);
+    if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+       url.search||url.hash)return null;
+    if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+    return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+  }catch(_){return null;}
+}
+async function _calSharedRequest(method,body){
+  const cfg=_calSharedConfig();if(!cfg)throw new Error('Proxy compartido no configurado');
+  return fetch(cfg.base+'/shared/calendar',{
+    method,credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+    ...(body?{body:JSON.stringify(body)}:{})
+  });
+}
+function _calBuildSharedData(){
+  let prev={};try{prev=JSON.parse(state._calRemote||'{}');}catch(e){}
+  const gm=_calGmap();
+  const gmapMts=Math.max(gm.mts,+(prev.gmapMts||0));
+  const gmap=gm.mts>=+(prev.gmapMts||0)?gm.map:(prev.gmap||gm.map);
+  const crmSync=_calCrmMetaMerge(_calCrmMeta(),prev.crmSync||{});
+  _calCrmMetaSave(crmSync);
+  const extraBytes=JSON.stringify({gmap,gmapMts,crmSync}).length+2000;
+  const events=_calFitBudget(_calPrune(_calMerge(
+    _calAll(),Array.isArray(prev.events)?prev.events:[])),extraBytes);
+  _calSaveLocal(events);
+  return{events,gmap,gmapMts,crmSync};
+}
+function _calAcceptShared(doc){
+  if(!doc||doc.ok!==true||typeof doc.revision!=='string'||!doc.data||
+     typeof doc.data!=='object'||!Array.isArray(doc.data.events))return false;
+  _calSharedRevision=doc.revision;
+  state._calRemote=JSON.stringify(doc.data);
+  _calReconcile(doc.data);
+  return true;
+}
 async function _calBackup(){
   try{
-    const u=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser())||{};if(!u.username)return;
-    let prev={};try{prev=JSON.parse(state._calRemote||'{}');}catch(e){}
-    const gm=_calGmap();
-    const gmapMts=Math.max(gm.mts,+(prev.gmapMts||0));
-    const gmap=gm.mts>=+(prev.gmapMts||0)?gm.map:(prev.gmap||gm.map);
-    const crmSync=_calCrmMetaMerge(_calCrmMeta(),prev.crmSync||{});
-    _calCrmMetaSave(crmSync);
-    const extraBytes=JSON.stringify({gmap,gmapMts,crmSync}).length+2000;
-    const events=_calFitBudget(_calPrune(_calMerge(_calAll(),Array.isArray(prev.events)?prev.events:[])),extraBytes);
-    _calSaveLocal(events);
-    const notes=JSON.stringify({events,gmap,gmapMts,crmSync});
-    if(notes.length>95000)return;
-    await _monitorUpsert('CALENDARIO',notes,'calRecordId');
-    state._calRemote=notes;
-  }catch(e){}
+    const u=(typeof AUTH!=='undefined'&&AUTH.getUser&&AUTH.getUser())||{};
+    if(!u.username)return false;
+    for(let attempt=0;attempt<2;attempt++){
+      const data=_calBuildSharedData();
+      const raw=JSON.stringify(data);if(raw.length>95000)return false;
+      const r=await _calSharedRequest('PUT',{
+        data,expectedRevision:_calSharedRevision
+      });
+      let doc={};try{doc=await r.json();}catch(_){}
+      if(r.ok){
+        if(!_calAcceptShared(doc))return false;
+        return true;
+      }
+      // Sólo un 409 confirmado autoriza una nueva escritura. Integramos el
+      // documento actual del otro equipo y reconstruimos el payload una vez.
+      if(r.status===409&&attempt===0&&
+         doc?.code==='CALENDAR_REVISION_CONFLICT'&&
+         typeof doc.revision==='string'&&doc.data&&
+         typeof doc.data==='object'&&Array.isArray(doc.data.events)){
+        _calSharedRevision=doc.revision;
+        state._calRemote=JSON.stringify(doc.data);
+        _calReconcile(doc.data);
+        continue;
+      }
+      return false; // timeout/5xx/resultado incierto: nunca reintentar a ciegas
+    }
+  }catch(e){return false;}
+  return false;
 }
-// Poll liviano: relee SÓLO el registro CALENDARIO cada 20s con la pestaña visible.
+// Poll liviano del documento CALENDARIO. No necesita acceso genérico a
+// Monitor Sistema ni conocer el recordId de Airtable.
 async function _calPoll(){
   try{
-    if(document.visibilityState!=='visible'||!navigator.onLine) return;
-    if(typeof hasAirtableAccess==='function'&&!hasAirtableAccess()) return;
-    if(!state.calRecordId||!(AUTH.getUser&&AUTH.getUser())) return;
-    const r=await _atFetch(`/${BASE_ID}/${encodeURIComponent('Monitor Sistema')}/${state.calRecordId}`,{headers:{}});
-    if(!r||!r.ok) return;
-    const rec=await r.json();
-    const notes=(rec&&rec.fields&&rec.fields['Notes'])||'{}';
-    state._calRemote=notes;
-    _calReconcile(JSON.parse(notes));
-  }catch(e){}
+    if(document.visibilityState!=='visible'||!navigator.onLine)return false;
+    if(!(AUTH.getUser&&AUTH.getUser()))return false;
+    const r=await _calSharedRequest('GET');
+    if(!r||!r.ok)return false;
+    const doc=await r.json();
+    return _calAcceptShared(doc);
+  }catch(e){return false;}
 }
-function startCalSync(){ if(_calPollTimer) clearInterval(_calPollTimer); _calPollTimer=setInterval(_calPoll,20000); }
+function startCalSync(){
+  if(_calPollTimer)clearInterval(_calPollTimer);
+  _calPoll().catch(()=>{});
+  _calPollTimer=setInterval(_calPoll,20000);
+}
 
 // ── Google Calendar (OAuth GIS, mismo Client ID que Drive) ────────────────────
 let _calTokenClient=null,_calAccessToken=null,_calTokenExp=0;
