@@ -329,6 +329,7 @@ function initSimulacion(){
   simLineaChange();
   simEstimar();
   renderSimHistorial();
+  _simHydrateRemote().catch(()=>{});
   const av = document.getElementById('simAviso');
   if(av && !simHasIA()) av.textContent = 'Sin acceso a la IA — configura el Proxy Worker en Mi cuenta para poder correr el panel.';
 }
@@ -624,40 +625,146 @@ function simCopiarResumen(){
 }
 
 // ── HISTORIAL ──────────────────────────────────────────────────
-// localStorage + respaldo en Monitor Sistema (mismo patrón que la agenda), para
-// que el historial sobreviva a limpiar la caché sin pedir una tabla nueva.
+// localStorage + /shared/simulation. El documento remoto incluye un tombstone
+// de borrado para que un equipo con caché vieja no reviva corridas eliminadas.
 const SIM_HIST_KEY = 'thelab_simulacion_v1';
+const SIM_CLEAR_KEY = 'thelab_simulacion_cleared_at_v1';
 const SIM_HIST_MAX = 30;
+let _simRemoteRevision = null;
+let _simHydratePromise = null;
 
-function _simHist(){ try{ return JSON.parse(localStorage.getItem(SIM_HIST_KEY)||'[]'); }catch(e){ return []; } }
+function _simHist(){ try{ const v=JSON.parse(localStorage.getItem(SIM_HIST_KEY)||'[]');return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+function _simClearAt(){ const n=Number(localStorage.getItem(SIM_CLEAR_KEY)||0);return Number.isFinite(n)&&n>0?n:0; }
+function _simSetLocalDoc(doc){
+  const runs=Array.isArray(doc?.runs)?doc.runs.slice(0,SIM_HIST_MAX):[];
+  try{
+    localStorage.setItem(SIM_HIST_KEY,JSON.stringify(runs));
+    localStorage.setItem(SIM_CLEAR_KEY,String(Math.max(0,Number(doc?.clearedAt)||0)));
+  }catch(_){}
+  return runs;
+}
+function _simLocalDoc(runs=_simHist()){
+  const clearedAt=_simClearAt();
+  const clean=(Array.isArray(runs)?runs:[])
+    .filter(r=>r&&Number(r.ts)>clearedAt)
+    .sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0))
+    .slice(0,SIM_HIST_MAX);
+  const newest=clean.reduce((m,r)=>Math.max(m,Number(r.ts)||0),0);
+  return{version:1,updatedAt:Math.max(clearedAt,newest),clearedAt,runs:clean};
+}
+function _simMergeDocs(a,b){
+  const left=a&&typeof a==='object'?a:{version:1,updatedAt:0,clearedAt:0,runs:[]};
+  const right=b&&typeof b==='object'?b:{version:1,updatedAt:0,clearedAt:0,runs:[]};
+  const clearedAt=Math.max(0,Number(left.clearedAt)||0,Number(right.clearedAt)||0);
+  const map=new Map();
+  for(const run of [...(Array.isArray(left.runs)?left.runs:[]),...(Array.isArray(right.runs)?right.runs:[])]){
+    if(!run||!run.id||!(Number(run.ts)>clearedAt))continue;
+    const prev=map.get(run.id);
+    if(!prev||Number(run.ts)>=Number(prev.ts))map.set(run.id,run);
+  }
+  const runs=[...map.values()].sort((x,y)=>(Number(y.ts)||0)-(Number(x.ts)||0)).slice(0,SIM_HIST_MAX);
+  const newest=runs.reduce((m,r)=>Math.max(m,Number(r.ts)||0),0);
+  return{version:1,updatedAt:Math.max(clearedAt,newest,Number(left.updatedAt)||0,Number(right.updatedAt)||0),clearedAt,runs};
+}
+function _simCanSync(){
+  try{
+    if(typeof window!=='undefined'&&window._DEMO_MODE)return false;
+    const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
+    return !!u&&['admin','gerencia','marketing'].includes(u.role);
+  }catch(_){return false;}
+}
+function _simSharedConfig(){
+  try{
+    const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+    if(!px?.url||!px?.key)return null;
+    const url=new URL(px.url);
+    if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)return null;
+    if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+    return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+  }catch(_){return null;}
+}
+async function _simSharedRequest(method,body){
+  const cfg=_simSharedConfig();if(!cfg)throw new Error('Proxy compartido no configurado');
+  return fetch(cfg.base+'/shared/simulation',{
+    method,credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+    ...(body?{body:JSON.stringify(body)}:{})
+  });
+}
+function _simAcceptRemote(doc){
+  if(!doc||doc.ok!==true||typeof doc.revision!=='string'||!/^[a-f0-9]{64}$/.test(doc.revision)||
+     !doc.data||doc.data.version!==1||!Array.isArray(doc.data.runs))return false;
+  _simRemoteRevision=doc.revision;return true;
+}
+async function _simReadRemote(){
+  if(!_simCanSync())return null;
+  const r=await _simSharedRequest('GET');
+  if(!r.ok)return null;
+  const doc=await r.json();
+  return _simAcceptRemote(doc)?doc:null;
+}
+async function _simHydrateRemote(){
+  if(_simHydratePromise)return _simHydratePromise;
+  if(!_simCanSync())return false;
+  _simHydratePromise=(async()=>{
+    const remote=await _simReadRemote();if(!remote)return false;
+    const local=_simLocalDoc(),merged=_simMergeDocs(remote.data,local);
+    _simSetLocalDoc(merged);renderSimHistorial();
+    // Si este equipo tiene una corrida o un borrado más nuevo, lo publica con
+    // la revisión recién leída. Si no, la lectura es completamente side-effect free.
+    if(JSON.stringify(merged)!==JSON.stringify(remote.data))
+      await _simWriteRemote(merged,false);
+    return true;
+  })().catch(()=>false).finally(()=>{_simHydratePromise=null;});
+  return _simHydratePromise;
+}
+async function _simWriteRemote(desired,authoritative){
+  if(!_simCanSync())return false;
+  let next=desired;
+  if(typeof _simRemoteRevision!=='string'){
+    const remote=await _simReadRemote();if(!remote)return false;
+    next=authoritative?next:_simMergeDocs(remote.data,next);
+  }
+  for(let attempt=0;attempt<2;attempt++){
+    const r=await _simSharedRequest('PUT',{data:next,expectedRevision:_simRemoteRevision||''});
+    let doc={};try{doc=await r.json();}catch(_){}
+    if(r.ok){
+      if(!_simAcceptRemote(doc))return false;
+      _simSetLocalDoc(doc.data);renderSimHistorial();return true;
+    }
+    if(r.status===409&&attempt===0&&doc?.code==='SIMULATION_REVISION_CONFLICT'&&
+       typeof doc.revision==='string'&&/^[a-f0-9]{64}$/.test(doc.revision)&&doc.data){
+      _simRemoteRevision=doc.revision;
+      next=authoritative?next:_simMergeDocs(doc.data,next);
+      _simSetLocalDoc(next);
+      continue;
+    }
+    return false; /* timeout/5xx/resultado incierto: nunca reintentar a ciegas */
+  }
+  return false;
+}
 
-// Guarda solo el agregado, no los 44 votos crudos de cada concepto: el respaldo
-// remoto tiene tope de tamaño y el detalle no se usa para comparar corridas.
+// Guarda solo el agregado, no los 44 votos crudos de cada concepto.
 function simGuardar(run){
   const liviano = {
     id:run.id, fecha:run.fecha, ts:run.ts, linea:run.linea, lineaKey:run.lineaKey,
     publico:run.publico, panel:run.panel, nPerfiles:run.nPerfiles, barrido:run.barrido||[],
     items: run.items.map(i=>({concepto:i.concepto, base:i.base, precio:i.precio, veredicto:i.veredicto, pctCompra:i.pctCompra, promedio:i.promedio, cobertura:i.cobertura, esperados:i.esperados, frenos:i.frenos, comprador:i.comprador, precioSugerido:i.precioSugerido})),
   };
-  const arr = [liviano, ..._simHist()].slice(0, SIM_HIST_MAX);
+  const arr = [liviano, ..._simHist().filter(r=>r?.id!==liviano.id)].slice(0, SIM_HIST_MAX);
   try{ localStorage.setItem(SIM_HIST_KEY, JSON.stringify(arr)); }catch(e){}
   renderSimHistorial();
   _simRespaldar(arr);
 }
 
-// Respaldo remoto best-effort. Dos cuidados:
-//  · _monitorUpsert devuelve una promesa: un try/catch síncrono NO atrapa su
-//    rechazo y se escapa como unhandled rejection.
-//  · marketing no tiene escritura global y 'Monitor Sistema' no está en los
-//    carve-outs de Redes/Newsletter, así que airtableWrite lanza y saca un toast
-//    rojo en cada corrida. Si el rol no puede escribir, ni se intenta.
-function _simRespaldar(arr){
+// Respaldo best-effort por la ruta dedicada. Devuelve una promesa que absorbe
+// fallos: guardar una simulación local nunca queda bloqueado por la red.
+function _simRespaldar(arr,authoritative=false){
   try{
-    if(typeof _monitorUpsert !== 'function') return;
-    const u = (typeof AUTH !== 'undefined' && AUTH.getUser) ? AUTH.getUser() : null;
-    if(u && typeof RBAC !== 'undefined' && RBAC.canWriteTable && !RBAC.canWriteTable(u.role, 'Monitor Sistema')) return;
-    Promise.resolve(_monitorUpsert('SIMULACION', JSON.stringify(arr).slice(0,95000), 'simRecordId')).catch(()=>{});
-  }catch(e){}
+    if(!_simCanSync())return Promise.resolve(false);
+    const doc=_simLocalDoc(arr);
+    return Promise.resolve(_simWriteRemote(doc,authoritative)).catch(()=>false);
+  }catch(_){return Promise.resolve(false);}
 }
 
 // Corrida INMEDIATAMENTE ANTERIOR de la misma línea, indexada por concepto.
@@ -712,8 +819,12 @@ function simVerHistorial(id){
 
 function simBorrarHistorial(){
   if(!confirm('¿Borrar el historial completo de corridas? No se puede deshacer.')) return;
-  try{ localStorage.removeItem(SIM_HIST_KEY); }catch(e){}
-  _simRespaldar([]);
+  const clearedAt=Date.now();
+  try{
+    localStorage.removeItem(SIM_HIST_KEY);
+    localStorage.setItem(SIM_CLEAR_KEY,String(clearedAt));
+  }catch(e){}
+  _simRespaldar([],true);
   renderSimHistorial();
   toast('Historial borrado','info');
 }
