@@ -6,7 +6,7 @@ El panel OVERVIEW ofrece dos acciones separadas por integración: **Conectar / c
 
 - Claude: el proxy llama a `GET https://api.anthropic.com/v1/models?limit=1` con su secreto `ANTHROPIC_TOKEN`. No ejecuta mensajes ni consume tokens de inferencia.
 - OpenAI: el proxy llama a `GET https://api.openai.com/v1/models` con `OPENAI_TOKEN`. No genera chat, imágenes ni embeddings.
-- Make: requiere los nuevos secretos de Cloudflare `MAKE_API_TOKEN` y `MAKE_API_ZONE` (uno de `eu1`, `eu2`, `us1`, `us2`, `ca1`, `au1`; por defecto `eu1`). El token necesita `organization:read` para `GET /api/v2/enums/timezones`. El monitor NO dispara webhooks.
+- Make: requiere los nuevos secretos de Cloudflare `MAKE_API_TOKEN` y `MAKE_API_ZONE` (uno de `eu1`, `eu2`, `us1`, `us2`, `ca1`, `au1`; por defecto `eu1`). El token necesita `organizations:read` para `GET /api/v2/organizations`. El monitor NO dispara webhooks.
 - Meta: opcional `META_ACCESS_TOKEN` en el proxy, con permiso de lectura de identidad. GET `/me?fields=id`; no publica.
 - Resend: agregar el `mail-api.php` actualizado al servidor **mail-api.thelab.solutions**. Verifica mediante `GET /domains` desde PHP (la clave no abandona el servidor), solo después de autenticar una cuenta IMAP. Si se usa una API key restringida al envío, la verificación de dominios puede resultar amarilla aunque el envío funcione.
 - Google Ads: GET existente al endpoint de Google Apps Script (`days=1`). Solo se permiten URLs de `script.google.com`. El éxito certifica lectura, no permiso para editar campañas.
