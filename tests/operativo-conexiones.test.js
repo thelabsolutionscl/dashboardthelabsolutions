@@ -33,6 +33,7 @@ test('el semáforo no conserva verde tras vencer la validez de la prueba',()=>{
     Date.now=()=>at+16*60000;
     assert.equal(center.displayStatus('proxy').status,'yellow');
     assert.match(center.displayStatus('proxy').message,/desactualizada/);
+    assert.equal(center.counts(center.catalog).green,0,'el resumen no debe dejar verde un diagnóstico vencido');
   }finally{Date.now=now;}
 });
 
