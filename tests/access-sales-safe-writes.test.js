@@ -93,7 +93,6 @@ test('sales PATCH is OFF by default even with a valid signed identity, and never
 test('opt-in safe sales PATCH verifies original owner, expected fields and post-write owner',async()=>{
   for(const [table,field,old,next] of [
     ['Clientes','Notas internas','original','contactado'],
-    ['Cotizaciones','Notas cotización','old','en revisión'],
     ['Pedidos','Notas pedido','original','confirmado por ventas']
   ]){
     const f=fixture();
@@ -184,6 +183,8 @@ test('sales cannot edit owner, relationships, financial totals, approvals or wor
     ['Clientes',{Vendedor:'nicanor'}],
     ['Clientes',{Cotizaciones:['recBBBBBBBBBBBBBB']}],
     ['Clientes',{'Revenue total cliente (CLP)':90000000}],
+    ['Clientes',{'Cargo contacto':'Jefatura comercial'}],
+    ['Cotizaciones',{'Notas cotización':'No sobrescribir el comentario de portal'}],
     ['Cotizaciones',{'Estado cotización':'Aprobada'}],
     ['Cotizaciones',{Cliente:['recBBBBBBBBBBBBBB']}],
     ['Cotizaciones',{'Total final (CLP)':9999999}],
