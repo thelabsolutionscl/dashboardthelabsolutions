@@ -1413,11 +1413,10 @@ export default {
 
     // A signed read-only viewer never receives the full Airtable CRM row.
     // Unreviewed tables fail closed; Access remains optional until cutover.
-    if(authorized.identity?.role==='viewer'){
-      const vPath=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
-      if(vPath.startsWith('/v0/app1YtD74AqiPWQhy/'))
-        return viewerScopedRead(request,url,env,CORS);
-    }
+    if(authorized.identity?.role==='viewer'&&
+       (url.pathname.startsWith('/v0/')||
+        url.pathname.startsWith('/app1YtD74AqiPWQhy/')))
+      return viewerScopedRead(request,url,env,CORS);
     // The new sales role has a dedicated owner-scoped Airtable read path.
     // It cannot reach AI, printers, SII, portal, schema or generic CRM writes.
     if(authorized.identity?.role==='sales')
