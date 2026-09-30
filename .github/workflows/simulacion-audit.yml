@@ -6,16 +6,24 @@ on:
     paths:
       - 'index.html'
       - 'js/simulacion.js'
+      - 'js/operativo-secciones.js'
+      - 'airtable-proxy/src/access-auth.js'
+      - 'airtable-proxy/src/worker.js'
       - 'docs/SIMULACION.md'
       - 'tests/simulacion.test.js'
+      - 'tests/access-simulation-shared-route.test.js'
       - 'tests/fechas-chile.test.js'
       - '.github/workflows/simulacion-audit.yml'
   pull_request:
     paths:
       - 'index.html'
       - 'js/simulacion.js'
+      - 'js/operativo-secciones.js'
+      - 'airtable-proxy/src/access-auth.js'
+      - 'airtable-proxy/src/worker.js'
       - 'docs/SIMULACION.md'
       - 'tests/simulacion.test.js'
+      - 'tests/access-simulation-shared-route.test.js'
       - 'tests/fechas-chile.test.js'
       - '.github/workflows/simulacion-audit.yml'
   workflow_dispatch:
@@ -44,6 +52,9 @@ jobs:
 
       - name: Audit panel, veredicto y cableado
         run: node --test tests/simulacion.test.js
+
+      - name: Audit scoped simulation history
+        run: node --test tests/access-simulation-shared-route.test.js
 
       # El panel guarda la fecha de cada corrida: si vuelve a colarse un
       # toISOString(), el historial queda fechado un día adelante.
