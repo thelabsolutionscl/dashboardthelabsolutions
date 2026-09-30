@@ -930,6 +930,12 @@ async function feedbackVerifyToken(env, raw, purpose) {
   return feedbackSignedOnly(env) ? null : _npsDecodeToken(text);
 }
 async function handleFeedbackLink(request, env, cors) {
+  // This key may still be present in historical Pages bundles before the
+  // portal Access cutover. Never allow minting merely because it matches:
+  // a separate final-review switch and freshly rotated private credential
+  // are required. This remains OFF in every existing deployment.
+  if (String(env.FEEDBACK_ISSUER_ENABLED || "").trim().toLowerCase() !== "true")
+    return json({ok:false,error:"Feedback issuance not activated"},503,cors);
   const expected = String(env.PORTAL_ADMIN_KEY || "");
   const key = String(request.headers.get("X-Portal-Admin-Key") || "");
   if (expected.length < 16 || !timingSafeEqual(key, expected))
