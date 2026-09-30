@@ -111,8 +111,12 @@ async function sellerVerifiedLinks(row,table,seller,env){
 
 
 const SELLER_SAFE_PATCH_FIELDS=Object.freeze({
-  Clientes:new Set(['Notas internas','Notas followup','Contacto','Cargo contacto','Teléfono']),
-  Cotizaciones:new Set(['Notas cotización']),
+  // Direct lead-worker updates Cargo contacto for returning leads; exclude it
+  // until that writer is serialized through the same guard.
+  Clientes:new Set(['Notas internas','Notas followup','Contacto','Teléfono']),
+  // The public customer portal writes Notas cotización on rejection. No
+  // overlapping sales edits until its writer participates in the same lock.
+  Cotizaciones:new Set(),
   // Pedidos' internal production notes are deliberately absent from the
   // sales read projection; permit only the visible customer-facing notes.
   Pedidos:new Set(['Notas pedido'])
