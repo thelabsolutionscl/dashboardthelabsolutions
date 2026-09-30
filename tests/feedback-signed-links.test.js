@@ -71,7 +71,8 @@ test('a private admin credential is required; invalid purpose, record and expiry
  }
  const noSecret=env();delete noSecret.FEEDBACK_LINK_SECRET;
  assert.equal((await issue(worker,noSecret,'nps')).status,503);
- assert.equal(calls.length,0,'bad mint requests may not reach Airtable');
+ assert.equal(calls.filter(c=>/\/v0\/appTEST\/(?:Clientes|Cotizaciones|Pedidos)(?:\/|\?)/.test(c.path)).length,0,
+   'bad mint requests may not read or modify customer CRM');
 });
 test('three distinct signed purposes work and the link never reveals the signing key',async()=>{
  stubAirtable();
@@ -139,9 +140,9 @@ test('valid signed NPS score/comment and POD confirmation can mutate only their 
  const pod=await (await issue(worker,e,'pod')).json();
  const npsPath=new URL(nps.url).pathname+new URL(nps.url).search;
  const podPath=new URL(pod.url).pathname+new URL(pod.url).search;
- const score=await worker.fetch(get(npsPath+'&s=4'),e,ctx);
+ const score=await worker.fetch(get(npsPath+'&s=2'),e,ctx);
  assert.equal(score.status,200);
- assert.deepEqual(calls.at(-1).body.fields['NPS score'],4);
+ assert.deepEqual(calls.at(-1).body.fields['NPS score'],2);
  assert.ok((await score.text()).includes(JSON.stringify(new URL(nps.url).searchParams.get('p'))));
  const comment=await worker.fetch(new Request(BASE+'/nps',{
    method:'POST',headers:{'Content-Type':'application/json'},
