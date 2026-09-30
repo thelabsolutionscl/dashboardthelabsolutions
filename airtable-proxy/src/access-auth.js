@@ -223,6 +223,8 @@ function accessAllows(identity,method,path){
   const operator=identity.role==='operator';
   const isWrite=method!=='GET';
   if(path==='/access/me')return method==='GET';
+  // Solo administradores verificados consultan las claves de servicios externos.
+  if(path==='/integrations/check')return admin&&method==='GET';
   // Sales reads remain owner-scoped. The sole write shape admitted by RBAC
   // is a single-record PATCH on an approved commercial table; the Worker
   // applies a *separate opt-in switch*, field allowlist, optimistic precondition
