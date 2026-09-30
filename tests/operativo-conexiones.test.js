@@ -156,4 +156,9 @@ test('el centro aparece una sola vez en OVERVIEW y carga CSS con el hash del bui
   assert.equal(styles[0].href,'https://dashboard.example/js/operativo-conexiones.css?v=abc12345');
   root.TLSConnections.mount();
   assert.equal(inserted.length,1,'no duplicar el panel al actualizar el overview');
+  root.TLSConnections.result('proxy','red','Error simulado','manual');
+  assert.equal(root.TLSConnections.summary().red,1);
+  sandbox.AUTH.getUser=()=>({username:'otro@ejemplo.cl',role:'admin'});
+  root.TLSConnections.mount();
+  assert.equal(root.TLSConnections.summary().red,0,'cambiar de usuario no muestra errores de otra sesión');
 });
