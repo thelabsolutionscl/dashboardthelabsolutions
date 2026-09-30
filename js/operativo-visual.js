@@ -163,12 +163,67 @@
     if(awaiting&&expires!==null&&expires<0)next='Revisar propuesta vencida';
     return {e,expires,age,awaiting,pending,next,linkedOrder};
   }
+  // Busca también por el nombre comercial del cliente, sin depender de que
+  // cada cotización repita su apodo en "Alias / Título". Una denominación como
+  // "Federación de Ski..." permite encontrar "FEDESKI" (FEDE + SKI).
+  function cotSearchKey(value){
+    return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLocaleLowerCase('es').replace(/\s+/g,' ').trim();
+  }
+  function cotClientIds(value){
+    return (Array.isArray(value)?value:[value]).map(v=>typeof v==='string'?v:v?.id).filter(Boolean);
+  }
+  function cotClientNames(c,clientsById){
+    const raw=c.fields?.['Cliente'];
+    const names=[resolveClienteName(raw)];
+    for(const id of cotClientIds(raw)){
+      const cliente=clientsById.get(id);
+      if(!cliente)continue;
+      const f=cliente.fields||{};
+      names.push(f.Empresa,f.Contacto,f['Nombre comercial'],f['Razón social']);
+    }
+    return names.filter(Boolean).map(cotSearchKey);
+  }
+  function cotClientMatches(names,query){
+    if(names.some(name=>name.includes(query)))return true;
+    // Abreviatura formada por los cuatro primeros caracteres de la primera
+    // palabra significativa y la segunda ("Federación de Ski" -> "fedeski").
+    // Se calcula desde el cliente vinculado, NO desde títulos de productos:
+    // buscar "medallas" debe seguir mostrando solo cotizaciones con ese ítem.
+    const ignored=new Set(['de','del','la','las','el','los','y','e','the','and','&']);
+    return names.some(name=>{
+      const parts=name.split(/[^a-z0-9]+/).filter(part=>part&&!ignored.has(part));
+      return parts.length>=2&&parts[0].length>=4&&
+        (parts[0].slice(0,4)+parts[1]).includes(query);
+    });
+  }
   function filterQuotes(rows){
+    const query=cotSearchKey(ui.search);
+    // Solo nombres de clientes visibles para la sesión actual.
+    const clientsById=new Map(own(state.clientes||[]).map(c=>[c.id,c]));
+    const byRecord=state.clientesByIdRec||{};
+    const matchedClients=new Set();
+    const namesByQuote=new Map();
+    if(query){
+      rows.forEach(c=>{
+        const ids=cotClientIds(c.fields?.['Cliente']);
+        for(const id of ids){
+          if(clientsById.has(id))continue;
+          const client=byRecord[id];
+          if(client&&own([client]).length)clientsById.set(id,client);
+        }
+        const names=cotClientNames(c,clientsById);
+        namesByQuote.set(c.id,names);
+        if(cotClientMatches(names,query))ids.forEach(id=>matchedClients.add(id));
+      });
+    }
     return rows.filter(c=>{
       const q=quoteInfo(c),f=c.fields;
-      const match=ui.cot==='all'||ui.cot==='open'&&(q.pending||q.awaiting)||ui.cot==='pending'&&q.pending||ui.cot==='awaiting'&&q.awaiting||ui.cot==='expiring'&&q.awaiting&&q.expires!==null&&q.expires>=0&&q.expires<=3;
-      const text=[f['N° Cotización'],f['Alias / Título'],resolveClienteName(f['Cliente'])].join(' ').toLocaleLowerCase('es');
-      return match&&(!ui.search||text.includes(ui.search.toLocaleLowerCase('es')));
+      const match=ui.cot==='all'||ui.cot==='open'&&(q.pending||q.awaiting)||ui.cot==='pending'&&q.pending||ui.cot==='awaiting'&&q.awaiting||ui.cot==='expiring'&&q.awaiting&&q.expires!==null&&q.expires<=3;
+      if(!match||!query)return match;
+      const direct=[f['N° Cotización'],f['Alias / Título']].some(v=>cotSearchKey(v).includes(query));
+      return direct||cotClientMatches(namesByQuote.get(c.id)||[],query)||
+        cotClientIds(f['Cliente']).some(id=>matchedClients.has(id));
     });
   }
   function stepper(e){const current=stages.indexOf(e);return `<ol class="op-stages" aria-label="Etapas de producción">${stages.map((s,i)=>`<li class="${current>=i?'is-done':''}"${i===current?' aria-current="step"':''}><span>${esc(s)}</span></li>`).join('')}</ol>`;}
