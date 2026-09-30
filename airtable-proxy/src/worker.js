@@ -306,8 +306,31 @@ async function sellerScopedRead(request,url,identity,env,CORS){
   };
   if(includeVerifiedLinks){
     try{
-      Object.assign(safe.fields,
-        await sellerVerifiedLinks(body,table,identity.seller,env));
+      const links=await sellerVerifiedLinks(body,table,identity.seller,env);
+      // The source owner and its links might have changed while its related
+      // rows were being verified, particularly via Airtable/Make writers that
+      // do not enter our Durable Object. Re-fetch the source before releasing
+      // either its projected fields or any verified linked IDs.
+      const refreshed=await fetch(target,{method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+      if(!refreshed.ok||refreshed.status>=300&&refreshed.status<400)
+        throw Error('CRM source recheck failed');
+      const latest=await refreshed.json();
+      if(!latest||latest.id!==body.id||!latest.fields||
+         typeof latest.fields!=='object'||Array.isArray(latest.fields)||
+         sellerFieldName(latest)!==identity.seller)
+        throw Error('CRM source owner changed during linked-record verification');
+      for(const field of Object.keys(SELLER_LINK_TABLES[table])){
+        const before=body.fields[field]??[],after=latest.fields[field]??[];
+        if(!Array.isArray(before)||!Array.isArray(after)||
+           before.length!==after.length||
+           before.some((id,i)=>id!==after[i]))
+          throw Error('CRM source relations changed during verification');
+      }
+      // Release the most recent safe projection, not stale source attributes.
+      const latestSafe=sellerProjectRecord(latest,table);
+      Object.assign(latestSafe.fields,links);
+      return json(latestSafe,200,{...CORS,'Cache-Control':'private, no-store'});
     }catch(_){
       // A partial or unverifiable join must not return its source row as if
       // the requested verification had succeeded.
