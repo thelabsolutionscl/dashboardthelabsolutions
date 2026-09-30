@@ -80,8 +80,12 @@ function operatorFieldValueAllowed(kind,value,key){
     new Set(value).size===value.length;
   if(typeof value!=='string'||/[\x00-\x08\x0b\x0e-\x1f]/.test(value))return false;
   if(kind==='notes')return value.length<=20000;
-  if(kind==='date')return !value||/^\d{4}-\d{2}-\d{2}$/.test(value)&&
-    !Number.isNaN(Date.parse(value+'T12:00:00Z'));
+  if(kind==='date'){
+    if(!value)return true;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+    const parsed=new Date(value+'T12:00:00Z');
+    return !Number.isNaN(parsed.getTime())&&parsed.toISOString().slice(0,10)===value;
+  }
   if(kind==='email')return !value||value.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   if(kind==='phone')return value.length<=80;
   if(kind==='url'){
@@ -183,7 +187,9 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
     body=JSON.parse(raw);}catch(_){
     return json({error:'Invalid operator mutation body'},422,CORS);
   }
-  if(!operatorWritePayloadAllowed(table,request.method,body))
+  if(!operatorWritePayloadAllowed(table,request.method,body)||
+     (request.method==='PATCH'&&
+       (parts.length===1)!==Object.hasOwn(body,'records')))
     return json({error:'Unapproved operator fields or mutation shape'},422,CORS);
   const guarded=table==='Cotizaciones'||table==='Pedidos';
   if((guarded||request.method==='PATCH'&&table==='Clientes')&&
@@ -258,12 +264,13 @@ const OPERATOR_READ_FIELDS=Object.freeze({
   Clientes:new Set([...VIEWER_READ_FIELDS.Clientes,
     'Dirección','Notas followup','Notas internas','Valoración cliente',
     'Lead Score IA','Servicio interés','Validado','Estado cuenta',
-    'Pedidos','Cotizaciones'
+    'Pedidos','Cotizaciones','Próxima acción IA'
   ]),
   Cotizaciones:new Set([...VIEWER_READ_FIELDS.Cotizaciones,
     'Solicitud cliente (texto libre)','Detalle productos','Subtotal (CLP)',
     'Total final (CLP)','Urgencia (+25%)','Canal solicitud','Forma de pago',
-    'Tiempo de producción máx','Descuento (%)','Notas cotización','Estado cotización'
+    'Tiempo de producción máx','Descuento (%)','Notas cotización','Estado cotización',
+    'Fecha aprobación'
   ]),
   Pedidos:new Set([...VIEWER_READ_FIELDS.Pedidos,
     'Instrucciones fabricación','Tiempo estimado (horas)',
@@ -274,10 +281,12 @@ const OPERATOR_READ_FIELDS=Object.freeze({
     'Ficha Tecnica','FT Material','FT Color','FT Acabado','FT Cantidad',
     'FT Impresora','FT Altura capa','FT Relleno (%)','FT Soportes',
     'FT Peso estimado (g)','FT Tiempo impresión',
-    'FT Notas producción','Fecha despacho','Fecha objetivo interna'
+    'FT Notas producción','Fecha despacho','Fecha objetivo interna',
+    'N° seguimiento courier','Proveedor','Foto QA URL','Notas QA',
+    'Historial fechas calendario','FT Actualizado'
   ]),
   Proveedores:new Set([...VIEWER_READ_FIELDS.Proveedores,
-    'WhatsApp','Estado postulación'
+    'WhatsApp','Estado postulación','Productos'
   ])
 });
 
