@@ -219,7 +219,7 @@
     }
     return rows.filter(c=>{
       const q=quoteInfo(c),f=c.fields;
-      const match=ui.cot==='all'||ui.cot==='open'&&(q.pending||q.awaiting)||ui.cot==='pending'&&q.pending||ui.cot==='awaiting'&&q.awaiting||ui.cot==='expiring'&&q.awaiting&&q.expires!==null&&q.expires<=3;
+      const match=ui.cot==='all'||ui.cot==='open'&&(q.pending||q.awaiting)||ui.cot==='pending'&&q.pending||ui.cot==='awaiting'&&q.awaiting||ui.cot==='expiring'&&q.awaiting&&q.expires!==null&&q.expires>=0&&q.expires<=3;
       if(!match||!query)return match;
       const direct=[f['N° Cotización'],f['Alias / Título']].some(v=>cotSearchKey(v).includes(query));
       return direct||cotClientMatches(namesByQuote.get(c.id)||[],query)||
