@@ -178,7 +178,7 @@
       {status:'yellow',message:'El Script no confirmó una conexión válida con Google Ads'};
   }
   async function probe(id,mode){
-    const manual=mode==='manual',u=user();
+    const manual=mode==='manual'||mode==='startup',u=user();
     if(!u||root._DEMO_MODE)return {status:'gray',message:'Inicia sesión fuera del modo DEMO para diagnosticar'};
     if(id==='proxy'){
       const url=proxyUrl();if(!url)return {status:'gray',message:'Proxy sin URL válida configurada'};
@@ -298,12 +298,12 @@
       .then(r=>result(id,r.status,r.message,mode)).finally(()=>{pending.delete(id);store.busy.delete(id);render();});
     pending.set(id,promise);return promise;
   }
-  async function sweep(manual){
+  async function sweep(manual,includeAll=false){
     if(!user()||root._DEMO_MODE||(!manual&&DOC?.hidden))return;
     if(!manual&&store.lastSweep&&Date.now()-store.lastSweep<FIVE_MIN)return;
     store.lastSweep=Date.now();
-    const list=visibleServices().filter(s=>manual||s.auto);
-    const mode=manual?'manual':'auto';
+    const list=visibleServices().filter(s=>manual||includeAll||s.auto);
+    const mode=manual?'manual':includeAll?'startup':'auto';
     // "Comprobar ahora" no debe depender del orden de las tarjetas. Antes las
     // pruebas corrían en serie: una API lenta podía dejar solo las primeras
     // conexiones verificadas y obligar a volver a pulsar el botón. Ejecutamos
@@ -414,7 +414,7 @@
     // Puede iniciarse después de DOMContentLoaded si el login fue asíncrono.
     if(store.autoStarted||!user()||root._DEMO_MODE)return;
     store.autoStarted=true;
-    setTimeout(()=>{if(!DOC.hidden&&user())void sweep(false);},1300);
+    setTimeout(()=>{if(!DOC.hidden&&user())void sweep(false,true);},1800);
     setInterval(()=>{if(!DOC.hidden&&permitted('overview'))void sweep(false);},FIVE_MIN);
     DOC.addEventListener('visibilitychange',()=>{
       if(!DOC.hidden&&Date.now()-store.lastSweep>=FIVE_MIN)void sweep(false);
