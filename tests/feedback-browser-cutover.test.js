@@ -113,7 +113,7 @@ test('legacy mode keeps existing links without requesting privileged issuer',asy
  assert.equal(h.calls.length,0);
  assert.ok(h.events.some(e=>e.startsWith('open:https://wa.me/')&&
    new URL(e.slice('open:'.length)).searchParams.get('text')
-     .includes(Buffer.from(ID).toString('base64'))));
+     .includes(encodeURIComponent(Buffer.from(ID).toString('base64')))));
  const n=harness({active:false});
  await n.pdWhatsApp(ID);
  assert.equal(n.calls.length,0);
