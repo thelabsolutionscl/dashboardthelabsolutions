@@ -113,7 +113,9 @@ async function sellerVerifiedLinks(row,table,seller,env){
 const SELLER_SAFE_PATCH_FIELDS=Object.freeze({
   Clientes:new Set(['Notas internas','Notas followup','Contacto','Cargo contacto','Teléfono']),
   Cotizaciones:new Set(['Notas cotización']),
-  Pedidos:new Set(['Notas internas'])
+  // Pedidos' internal production notes are deliberately absent from the
+  // sales read projection; permit only the visible customer-facing notes.
+  Pedidos:new Set(['Notas pedido'])
 });
 const SELLER_SAFE_PATCH_MAX_BYTES=12288;
 const SCOPED_CRM_PREFIX='/v0/app1YtD74AqiPWQhy/';
@@ -128,7 +130,8 @@ function sellerScopedPatchShape(table,body){
   if(!keys.length||keys.length>5||Object.keys(expected).length!==keys.length)return false;
   const allowed=SELLER_SAFE_PATCH_FIELDS[table];
   return !!allowed&&keys.every(key=>
-    allowed.has(key)&&Object.hasOwn(expected,key)&&
+    allowed.has(key)&&SELLER_READ_FIELDS[table]?.has(key)&&
+    Object.hasOwn(expected,key)&&
     typeof fields[key]==='string'&&
     typeof expected[key]==='string'&&
     fields[key].length<=(key.includes('Notas')?4000:256)&&
