@@ -283,11 +283,18 @@
     return {status:'gray',message:'Aún no dispone de comprobación segura'};
   }
   const pending=new Map();
+  function probeWithTimeout(id,mode,timeoutMs=12000){
+    let timer;
+    const timeout=new Promise(resolve=>{
+      timer=setTimeout(()=>resolve({status:'yellow',message:'La comprobación tardó demasiado; vuelve a intentarlo'}),timeoutMs);
+    });
+    return Promise.race([Promise.resolve().then(()=>probe(id,mode)),timeout]).finally(()=>clearTimeout(timer));
+  }
   function check(id,mode){
     if(!byId[id])return Promise.resolve(null);
     if(pending.has(id))return pending.get(id);
     store.busy.add(id);render();
-    const promise=Promise.resolve().then(()=>probe(id,mode)).catch(()=>({status:'yellow',message:'Error inesperado en el diagnóstico'}))
+    const promise=probeWithTimeout(id,mode).catch(()=>({status:'yellow',message:'Error inesperado en el diagnóstico'}))
       .then(r=>result(id,r.status,r.message,mode)).finally(()=>{pending.delete(id);store.busy.delete(id);render();});
     pending.set(id,promise);return promise;
   }
