@@ -1,6 +1,37 @@
 import { accessAuthorize } from './access-auth.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
 
+
+// A company-wide operator needs operational CRM data, including business
+// quote/order totals, but NOT bank details, margins, private AI finance
+// analysis, raw proposal JSON, production costs or newly created fields.
+const OPERATOR_READ_FIELDS=Object.freeze({
+  Clientes:new Set([...VIEWER_READ_FIELDS.Clientes,
+    'Dirección','Notas followup','Notas internas','Valoración cliente',
+    'Lead Score IA','Servicio interés','Validado','Estado cuenta',
+    'Pedidos','Cotizaciones'
+  ]),
+  Cotizaciones:new Set([...VIEWER_READ_FIELDS.Cotizaciones,
+    'Solicitud cliente (texto libre)','Detalle productos','Subtotal (CLP)',
+    'Total final (CLP)','Urgencia (+25%)','Canal solicitud','Forma de pago',
+    'Tiempo de producción máx','Descuento (%)','Notas cotización','Estado cotización'
+  ]),
+  Pedidos:new Set([...VIEWER_READ_FIELDS.Pedidos,
+    'Instrucciones fabricación','Tiempo estimado (horas)',
+    'Anticipo pagado (50%)','Saldo pagado (50%)',
+    'Monto total (CLP)','Checklist QA','Observaciones QA','Resultado QA',
+    'Motivo rechazo QA','Texto a grabar / imprimir',
+    'Texto confirmado por cliente','Forma de pago','Notas pedido',
+    'Ficha Tecnica','FT Material','FT Color','FT Acabado','FT Cantidad',
+    'FT Impresora','FT Altura capa','FT Relleno (%)','FT Soportes',
+    'FT Peso estimado (g)','FT Tiempo impresión',
+    'FT Notas producción','Fecha despacho','Fecha objetivo interna'
+  ]),
+  Proveedores:new Set([...VIEWER_READ_FIELDS.Proveedores,
+    'WhatsApp','Estado postulación'
+  ])
+});
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -33,14 +64,14 @@ const VIEWER_READ_FIELDS=Object.freeze({
   Maquinas_Eventos:new Set(['maquina_id','fecha','tipo','tiempo']),
   Maquinas_Mant:new Set(['maquina_id','tipo','print_hours','fecha'])
 });
-function viewerProjectRecord(row,table){
-  const allowed=VIEWER_READ_FIELDS[table];
+function viewerProjectRecord(row,table,fieldsByTable=VIEWER_READ_FIELDS){
+  const allowed=fieldsByTable[table];
   const fields=Object.fromEntries(Object.entries(row.fields)
     .filter(([key])=>allowed.has(key)));
   return {id:row.id,fields,
     ...(typeof row.createdTime==='string'?{createdTime:row.createdTime}:{})};
 }
-async function viewerScopedRead(request,url,env,CORS){
+async function viewerScopedRead(request,url,env,CORS,fieldsByTable=VIEWER_READ_FIELDS){
   if(request.method!=='GET'||!env.AIRTABLE_TOKEN)
     return json({error:'Viewer access unavailable'},403,CORS);
   const prefix='/v0/app1YtD74AqiPWQhy/';
@@ -49,7 +80,7 @@ async function viewerScopedRead(request,url,env,CORS){
   const parts=path.slice(prefix.length).split('/');
   let table;
   try{table=decodeURIComponent(parts[0]);}catch(_){}
-  if(!Object.hasOwn(VIEWER_READ_FIELDS,table||'')||
+  if(!Object.hasOwn(fieldsByTable,table||'')||
      parts[0]!==encodeURIComponent(table)||parts.length>2||
      (parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1])))
     return json({error:'Viewer route denied'},403,CORS);
@@ -62,7 +93,7 @@ async function viewerScopedRead(request,url,env,CORS){
        [...new Set(keys.filter(key=>key!=='fields[]'))]
          .some(key=>query.getAll(key).length!==1)||
        fields.length>30||new Set(fields).size!==fields.length||
-       fields.some(field=>!VIEWER_READ_FIELDS[table].has(field))||
+       fields.some(field=>!fieldsByTable[table].has(field))||
        [...query.values()].some(value=>value.length>600))
       return json({error:'Unsafe viewer query denied'},422,CORS);
     for(const key of ['pageSize','maxRecords']){
@@ -71,7 +102,7 @@ async function viewerScopedRead(request,url,env,CORS){
         return json({error:'Invalid viewer page size'},422,CORS);
     }
     query.delete('fields[]');
-    for(const field of (fields.length?fields:VIEWER_READ_FIELDS[table]))
+    for(const field of (fields.length?fields:fieldsByTable[table]))
       query.append('fields[]',field);
   }
   let upstream;
@@ -96,8 +127,8 @@ async function viewerScopedRead(request,url,env,CORS){
   if(!single&&(data.offset!==undefined&&
        (typeof data.offset!=='string'||data.offset.length>600)))
     return json({error:'Viewer pagination integrity failure'},502,CORS);
-  const safe=single?viewerProjectRecord(data,table):{
-    records:rows.map(row=>viewerProjectRecord(row,table)),
+  const safe=single?viewerProjectRecord(data,table,fieldsByTable):{
+    records:rows.map(row=>viewerProjectRecord(row,table,fieldsByTable)),
     ...(data.offset===undefined?{}:{offset:data.offset})
   };
   return json(safe,200,{...CORS,'Cache-Control':'private, no-store'});
@@ -1417,6 +1448,19 @@ export default {
        (url.pathname.startsWith('/v0/')||
         url.pathname.startsWith('/app1YtD74AqiPWQhy/')))
       return viewerScopedRead(request,url,env,CORS);
+    // Signed operators may read company-wide commercial data, but financial
+    // columns and unreviewed schema additions never reach their browsers.
+    if(authorized.identity?.role==='operator'&&request.method==='GET'){
+      const opPath=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+      const prefix='/v0/app1YtD74AqiPWQhy/';
+      if(opPath.startsWith(prefix)){
+        const raw=opPath.slice(prefix.length).split('/')[0];
+        let table;
+        try{table=decodeURIComponent(raw);}catch(_){}
+        if(table&&Object.hasOwn(OPERATOR_READ_FIELDS,table))
+          return viewerScopedRead(request,url,env,CORS,OPERATOR_READ_FIELDS);
+      }
+    }
     // The new sales role has a dedicated owner-scoped Airtable read path.
     // It cannot reach AI, printers, SII, portal, schema or generic CRM writes.
     if(authorized.identity?.role==='sales')
