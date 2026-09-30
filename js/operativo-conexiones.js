@@ -22,7 +22,7 @@
     {id:'wordpress',name:'WordPress · Sitio web',group:'Marketing y web',page:'web',impact:'Contenido del sitio y diagnóstico SEO',guide:'Revisar WEB y la API REST de WordPress. La validación de edición requiere un permiso de sitio; el monitor no modifica entradas.',auto:false}
   ];
   const byId=Object.fromEntries(catalog.map(s=>[s.id,s]));
-  const store={results:{},history:[],lastGood:{},lastSweep:0,busy:new Set(),snapshot:null,active:'Todas',mounted:false,autoStarted:false,userKey:null};
+  const store={results:{},history:[],lastGood:{},lastSweep:0,lastCheckAt:0,busy:new Set(),snapshot:null,active:'Todas',mounted:false,autoStarted:false,userKey:null};
   const label={green:'Operativo',yellow:'Advertencia',red:'Error confirmado',gray:'Sin verificar'};
   function user(){
     try{return typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;}catch(_){return null;}
@@ -50,7 +50,7 @@
     return catalog.filter(s=>s.page==='overview'||permitted(s.page)||isAdmin());
   }
   function counts(items){
-    return items.reduce((a,s)=>{const status=store.results[s.id]?.status||'gray';a[status]=(a[status]||0)+1;return a;},{green:0,yellow:0,red:0,gray:0});
+    return items.reduce((a,s)=>{const status=displayStatus(s.id).status;a[status]=(a[status]||0)+1;return a;},{green:0,yellow:0,red:0,gray:0});
   }
   function formatTime(ms){
     if(!Number.isFinite(Number(ms))||!ms)return 'Sin registro';
@@ -68,7 +68,8 @@
     if(!byId[id])return;
     const before=store.results[id],now=Date.now();
     const next={status,message,checkedAt:now};
-    store.results[id]=next;
+    store.results[id]=next;store.lastCheckAt=now;
+    if(id==='proxy'&&status!=='green')store.snapshot=null;
     if(status==='green')store.lastGood[id]=now;
     if(before?.status!==status&&status!=='gray'){
       store.history.unshift({id,status,at:now,trigger:mode==='manual'?'manual':'automático'});
@@ -252,7 +253,7 @@
   }
   function summary(){
     const items=visibleServices(),c=counts(items),last=store.lastSweep;
-    return {total:items.length,green:c.green,yellow:c.yellow,red:c.red,gray:c.gray,last};
+    return {total:items.length,green:c.green,yellow:c.yellow,red:c.red,gray:c.gray,last:store.lastCheckAt||last};
   }
   function renderSummary(){
     const box=DOC?.getElementById('tlsConnOverviewMetrics');if(!box)return;
@@ -322,7 +323,7 @@
     const key=stateKey();
     if(store.userKey!==key){
       store.userKey=key;store.results={};store.history=[];store.lastGood={};
-      store.snapshot=null;store.lastSweep=0;store.active='Todas';restore();
+      store.snapshot=null;store.lastSweep=0;store.lastCheckAt=0;store.active='Todas';restore();
     }
     if(!store.mounted)store.mounted=true;
     render();
