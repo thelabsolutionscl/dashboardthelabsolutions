@@ -124,3 +124,36 @@ test('OVERVIEW integra script y estilos versionados con panel fuera del render c
   assert.match(css,/\.tls-conn-kpi-green/);assert.match(css,/\.tls-conn-kpi-yellow/);
   assert.match(css,/\.tls-conn-kpi-red/);assert.match(css,/\.tls-conn-kpi-gray/);
 });
+
+test('el centro aparece una sola vez en OVERVIEW y carga CSS con el hash del build',()=>{
+  const vm=require('node:vm'),ids=new Map(),listeners={},inserted=[],styles=[];
+  function element(tag){
+    const node={tag,dataset:{},children:[],hidden:false,
+      setAttribute(){},classList:{toggle(){}},append(...x){this.children.push(...x);},
+      appendChild(x){this.children.push(x);},replaceChildren(...x){this.children=x;},
+      insertAdjacentElement(pos,x){inserted.push({pos,x});},closest(){return null;},
+      scrollIntoView(){},showModal(){this.open=true;},close(){this.open=false;}};
+    Object.defineProperty(node,'id',{get(){return this._id;},set(x){this._id=x;ids.set(x,this);}});
+    return node;
+  }
+  const overview=element('section');overview.id='tab-overview';
+  const today=element('div');today.id='opToday';
+  const doc={readyState:'loading',hidden:false,currentScript:{src:'https://dashboard.example/js/operativo-conexiones.js?v=abc12345'},
+    head:{append:x=>styles.push(x)},body:{append:x=>{}},
+    getElementById:id=>ids.get(id)||null,createElement:element,addEventListener:(name,cb)=>{listeners[name]=cb;}};
+  const root={_DEMO_MODE:true};
+  const sandbox={document:doc,window:root,URL,console,
+    AUTH:{getUser:()=>({username:'usuario@ejemplo.cl',role:'admin'})},
+    RBAC:{tabs:{admin:['overview','clientes','cotizaciones','pedidos','finanzas','calendario','correo','maquinas','web','redes','reporte']}},
+    localStorage:{getItem:()=>null,setItem(){}},
+    setTimeout:()=>{},setInterval:()=>{}};
+  vm.runInNewContext(source,sandbox);
+  assert.equal(typeof root.TLSConnections.mount,'function');
+  listeners.DOMContentLoaded();
+  assert.equal(inserted.length,1);
+  assert.equal(inserted[0].x.id,'tlsConnectionsPanel');
+  assert.equal(styles.length,1);
+  assert.equal(styles[0].href,'https://dashboard.example/js/operativo-conexiones.css?v=abc12345');
+  root.TLSConnections.mount();
+  assert.equal(inserted.length,1,'no duplicar el panel al actualizar el overview');
+});
