@@ -7,8 +7,8 @@ const css=fs.readFileSync('js/operativo-conexiones.css','utf8');
 
 test('catálogo tiene 15 servicios independientes, sin estados verdes ficticios',()=>{
   assert.equal(center.catalog.length,15);
-  assert.equal(new Set(center.catalog.map(x=>x.id)).size,16);
-  for(const id of ['proxy','airtable','calendar','drive','imap','resend','printer','sii','leads','github','anthropic','openai','make','ads' ,'meta']){
+  assert.equal(new Set(center.catalog.map(x=>x.id)).size,15);
+  for(const id of ['proxy','airtable','calendar','drive','imap','resend','printer','sii','leads','github','anthropic','openai','make','ads','meta']){
     assert.ok(center.catalog.some(x=>x.id===id),id);
   }
   const c=center.counts(center.catalog);
