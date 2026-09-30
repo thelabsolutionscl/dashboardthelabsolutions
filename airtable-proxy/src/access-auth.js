@@ -14,6 +14,12 @@ const ACCESS_ROLES=new Set(['viewer','operator','finance','admin','sales']);
 // commercial tables (2026-09-29). No default ownership for unassigned records.
 const ACCESS_SELLER_VALUES=new Set(['florencia','nicanor','gustavo']);
 const ACCESS_SELLER_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
+// Only tables with a reviewed, field-level viewer projection may be read.
+// The signed viewer role never inherits future tables or private system logs.
+const ACCESS_VIEWER_TABLES=new Set([
+  'Clientes','Cotizaciones','Pedidos','Proveedores','Maquinas',
+  'Maquinas_Eventos','Maquinas_Mant'
+]);
 const ACCESS_WRITE_TABLES={
   operator:new Set(['Clientes','Cotizaciones','Pedidos','Inventario','Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema','Proveedores']),
   finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas','Proveedores','Reportes']),
@@ -264,6 +270,7 @@ function accessAllows(identity,method,path){
 
   const table=accessTable(path);
   if(!table)return false;
+  if(identity.role==='viewer')return method==='GET'&&ACCESS_VIEWER_TABLES.has(table);
   if(ACCESS_ADMIN_ONLY_TABLES.has(table)&&!admin)return false;
   if(ACCESS_FINANCE_TABLES.has(table)&&!finance&&!admin)return false;
   if(!isWrite)return true;
