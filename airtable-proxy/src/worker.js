@@ -2,6 +2,107 @@ import { accessAuthorize } from './access-auth.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
 
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
+
+/* Signed, non-financial viewer field scope. These names were checked against
+ * the current Airtable base; absent/future columns are hidden by default.
+ * No arbitrary formulas, views or sorts: result counts can reveal hidden data.
+ * Other signed roles retain their existing table-specific authorization.
+ */
+const VIEWER_READ_FIELDS=Object.freeze({
+  Clientes:new Set([
+    'Empresa','Contacto','Cargo contacto','Teléfono','Email','Comuna','Región',
+    'Sitio web','Industria / Rubro','Etapa venta','Tipo de cliente','Vendedor',
+    'Servicio interés','Fecha primer contacto','Fecha último pedido'
+  ]),
+  Cotizaciones:new Set([
+    'N° Cotización','Estado cotización','Fecha cotización','Fecha vencimiento',
+    'Fecha de entrega','Fecha límite cotización','Alias / Título','Cantidad',
+    'Tiempo de producción','Tipo días producción','Vendedor','Cliente','Pedido'
+  ]),
+  Pedidos:new Set([
+    'N° Pedido','Fecha ingreso','Fecha entrega','Urgente','Fecha despacho',
+    'Estado pedido','Etapa producción','Equipo asignado','Prioridad','Material',
+    'Cantidad','Tipo despacho','Fecha objetivo interna','Vendedor',
+    'Cliente','Cotizaciones'
+  ]),
+  Proveedores:new Set([
+    'Nombre','Categoría','Contacto','Cargo','Teléfono','Email','Sitio Web',
+    'Comuna','Región','Reputación','Estado','Plazo de entrega (días)'
+  ]),
+  Maquinas:new Set(['id','nombre','num','numG','modelo','color','estado']),
+  Maquinas_Eventos:new Set(['maquina_id','fecha','tipo','tiempo']),
+  Maquinas_Mant:new Set(['maquina_id','tipo','print_hours','fecha'])
+});
+function viewerProjectRecord(row,table){
+  const allowed=VIEWER_READ_FIELDS[table];
+  const fields=Object.fromEntries(Object.entries(row.fields)
+    .filter(([key])=>allowed.has(key)));
+  return {id:row.id,fields,
+    ...(typeof row.createdTime==='string'?{createdTime:row.createdTime}:{})};
+}
+async function viewerScopedRead(request,url,env,CORS){
+  if(request.method!=='GET'||!env.AIRTABLE_TOKEN)
+    return json({error:'Viewer access unavailable'},403,CORS);
+  const prefix='/v0/app1YtD74AqiPWQhy/';
+  const path=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+  if(!path.startsWith(prefix))return json({error:'Viewer route denied'},403,CORS);
+  const parts=path.slice(prefix.length).split('/');
+  let table;
+  try{table=decodeURIComponent(parts[0]);}catch(_){}
+  if(!Object.hasOwn(VIEWER_READ_FIELDS,table||'')||
+     parts[0]!==encodeURIComponent(table)||parts.length>2||
+     (parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1])))
+    return json({error:'Viewer route denied'},403,CORS);
+  const single=parts.length===2;
+  const query=new URLSearchParams(url.search);
+  if(single&&url.search)return json({error:'Viewer record queries are not supported'},422,CORS);
+  if(!single){
+    const keys=[...query.keys()],fields=query.getAll('fields[]');
+    if(keys.some(key=>!['pageSize','maxRecords','offset','fields[]'].includes(key))||
+       [...new Set(keys.filter(key=>key!=='fields[]'))]
+         .some(key=>query.getAll(key).length!==1)||
+       fields.length>30||new Set(fields).size!==fields.length||
+       fields.some(field=>!VIEWER_READ_FIELDS[table].has(field))||
+       [...query.values()].some(value=>value.length>600))
+      return json({error:'Unsafe viewer query denied'},422,CORS);
+    for(const key of ['pageSize','maxRecords']){
+      if(query.has(key)&&(!/^[1-9]\d{0,2}$/.test(query.get(key))||
+         Number(query.get(key))>(key==='pageSize'?100:500)))
+        return json({error:'Invalid viewer page size'},422,CORS);
+    }
+    query.delete('fields[]');
+    for(const field of (fields.length?fields:VIEWER_READ_FIELDS[table]))
+      query.append('fields[]',field);
+  }
+  let upstream;
+  try{
+    upstream=await fetch(AIRTABLE_BASE+path+(single?'':'?'+query.toString()),{
+      method:'GET',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+    });
+  }catch(_){return json({error:'Viewer upstream unavailable'},502,CORS);}
+  if(upstream.status===404)return json({error:'Record not found'},404,CORS);
+  if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+    return json({error:'Viewer upstream rejected request'},502,CORS);
+  let data;
+  try{data=await upstream.json();}catch(_){
+    return json({error:'Viewer upstream response invalid'},502,CORS);
+  }
+  const rows=single?[data]:data?.records;
+  if(!Array.isArray(rows)||rows.length>(single?1:100)||
+     rows.some(row=>!row||!/^rec[A-Za-z0-9]{14}$/.test(row.id)||
+       !row.fields||typeof row.fields!=='object'||Array.isArray(row.fields)))
+    return json({error:'Viewer response integrity failure'},502,CORS);
+  if(!single&&(data.offset!==undefined&&
+       (typeof data.offset!=='string'||data.offset.length>600)))
+    return json({error:'Viewer pagination integrity failure'},502,CORS);
+  const safe=single?viewerProjectRecord(data,table):{
+    records:rows.map(row=>viewerProjectRecord(row,table)),
+    ...(data.offset===undefined?{}:{offset:data.offset})
+  };
+  return json(safe,200,{...CORS,'Cache-Control':'private, no-store'});
+}
+
 const SELLER_SCOPE_NAMES=new Set(['florencia','nicanor','gustavo']);
 
 /* Strict, schema-verified response projection for signed sales sessions.
@@ -1310,6 +1411,13 @@ export default {
       }));
     }
 
+    // A signed read-only viewer never receives the full Airtable CRM row.
+    // Unreviewed tables fail closed; Access remains optional until cutover.
+    if(authorized.identity?.role==='viewer'){
+      const vPath=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
+      if(vPath.startsWith('/v0/app1YtD74AqiPWQhy/'))
+        return viewerScopedRead(request,url,env,CORS);
+    }
     // The new sales role has a dedicated owner-scoped Airtable read path.
     // It cannot reach AI, printers, SII, portal, schema or generic CRM writes.
     if(authorized.identity?.role==='sales')
