@@ -176,13 +176,8 @@
     if(id==='printer'){
       const url=workerUrl('printer');if(!url)return {status:'gray',message:'No hay túnel de impresoras válido'};
       const r=await getJson(url+'/healthz');
-      if(r.status==='green')return {status:'green',message:'El bridge responde; cámaras y máquinas se comprueban aparte'};
-      // healthz puede responder texto y no JSON
-      if(r.message==='Respuesta de diagnóstico no reconocida'){
-        const c=new AbortController(),timer=setTimeout(()=>c.abort(),6500);
-        try{const res=await fetch(url+'/healthz',{cache:'no-store',signal:c.signal});if(res.ok)return {status:'green',message:'El bridge responde; cámaras y máquinas se comprueban aparte'};}catch(_){}
-        finally{clearTimeout(timer);}
-      }
+      if(r.status==='green'&&r.data?.ok===true)return {status:'green',message:'El bridge confirma salud; cámaras y máquinas se comprueban aparte'};
+      if(r.status==='green')return {status:'yellow',message:'El bridge respondió, pero no confirmó /healthz'};
       return r;
     }
     if(id==='sii'){
