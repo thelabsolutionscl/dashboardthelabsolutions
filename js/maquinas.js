@@ -2090,7 +2090,7 @@ async function _bedLevelHistorySyncRemote(){
       for(let attempt=0;attempt<2;attempt++){
         const remote=await _bedLevelHistoryFetchRemote(),merged=_bedLevelHistoryMerge(remote.rows,local);_bedLevelHistorySave(merged);local=merged;
         const saved=await window.MachineOpsStorage.writeRecord(_BED_LEVEL_HISTORY_REMOTE,merged);
-        if(!saved)continue; // sólo conflicto 409 confirmado: releer y rebasar una vez
+        if(!saved)continue; /* sólo conflicto 409 confirmado: releer y rebasar una vez */
         const verify=await _bedLevelHistoryFetchRemote(),ids=new Set(verify.rows.map(x=>x.id)),needed=merged.slice(0,Math.min(30,merged.length)).every(x=>ids.has(x.id));
         if(needed){_bedLevelHistorySave(_bedLevelHistoryMerge(verify.rows,merged));_bedLevelHistoryRemoteAt=Date.now();return true;}
       }
