@@ -380,3 +380,11 @@ test('feedback-link issuance belongs only to signed operator, finance and admin 
     assert.equal(accessAllows({role:'admin'},method,'/feedback/link'),false,method);
   assert.equal(accessAllows({role:'admin'},'POST','/feedback/unrestricted'),false);
 });
+
+test('solo Access admin puede verificar claves de integraciones externas',()=>{
+  assert.equal(accessAllows({role:'admin'},'GET','/integrations/check'),true);
+  for(const role of ['finance','viewer','operator','sales']){
+    assert.equal(accessAllows({role},'GET','/integrations/check'),false,role);
+  }
+  assert.equal(accessAllows({role:'admin'},'POST','/integrations/check'),false);
+});
