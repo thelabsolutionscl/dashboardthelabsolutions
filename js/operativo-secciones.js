@@ -327,12 +327,13 @@
   }
 
   // El cargador global todavía lee Monitor Sistema para otros registros
-  // legítimos. Filtramos AGENDA antes de entregárselo para impedir que este
-  // feature dependa accidentalmente del acceso genérico o del recordId.
+  // legítimos. Los dominios que ya tienen rutas dedicadas se eliminan antes de
+  // hidratar para que no mantengan una dependencia lateral del acceso genérico.
   const originalApply=global._applyMonitorSistema;
   if(typeof originalApply==='function'){
+    const scopedNames=new Set(['AGENDA','MAIL_SIGNATURES','MAIL_SENT_ADDRESSES','MAIL_TEMPLATES']);
     global._applyMonitorSistema=function agendaMonitorFiltered(records){
-      return originalApply((records||[]).filter(r=>r?.fields?.Name!=='AGENDA'));
+      return originalApply((records||[]).filter(r=>!scopedNames.has(r?.fields?.Name)));
     };
   }
   global._agendaBackup=agendaBackupScoped;
