@@ -2070,11 +2070,10 @@ function _bedLevelHistoryMerge(a,b){
 function _bedLevelHistoryFor(id){return _bedLevelHistoryAll().filter(x=>x.machineId===id).sort((a,b)=>b.calibratedAt-a.calibratedAt);}
 function _bedLevelHistoryMatch(id,signature){return signature?_bedLevelHistoryFor(id).find(x=>x.signature===signature)||null:null;}
 async function _bedLevelHistoryFetchRemote(){
-  if(typeof airtableFetch!=='function')return{rows:[],record:null};
-  const res=await airtableFetch('Monitor Sistema',200),rec=(res?.records||[]).find(r=>r?.fields?.Name===_BED_LEVEL_HISTORY_REMOTE)||null;
-  let rows=[];if(rec){try{const parsed=JSON.parse(rec.fields?.Notes||'[]');if(Array.isArray(parsed))rows=parsed;}catch(_){}}
-  try{if(rec&&typeof state!=='undefined'&&state)state.bedLevelHistoryV2RecordId=rec.id;}catch(_){}
-  return{rows:_bedLevelHistoryPrune(rows),record:rec};
+  if(typeof window.MachineOpsStorage?.readRecord!=='function')return{rows:[],record:null};
+  const remote=await window.MachineOpsStorage.readRecord(_BED_LEVEL_HISTORY_REMOTE);
+  const rows=Array.isArray(remote?.data)?remote.data:[];
+  return{rows:_bedLevelHistoryPrune(rows),record:remote?.exists?{scoped:true}:null};
 }
 async function _bedLevelHistoryLoadRemote(force=false){
   if(!force&&Date.now()-_bedLevelHistoryRemoteAt<60000)return true;
@@ -2084,13 +2083,14 @@ async function _bedLevelHistoryLoadRemote(force=false){
 }
 async function _bedLevelHistorySyncRemote(){
   if(_bedLevelHistorySyncPromise)return _bedLevelHistorySyncPromise;
-  if(typeof _monitorUpsert!=='function'||typeof airtableFetch!=='function')return false;
+  if(typeof window.MachineOpsStorage?.writeRecord!=='function'||typeof window.MachineOpsStorage?.readRecord!=='function')return false;
   _bedLevelHistorySyncPromise=(async()=>{
     try{
       let local=_bedLevelHistoryAll();
       for(let attempt=0;attempt<2;attempt++){
         const remote=await _bedLevelHistoryFetchRemote(),merged=_bedLevelHistoryMerge(remote.rows,local);_bedLevelHistorySave(merged);local=merged;
-        await _monitorUpsert(_BED_LEVEL_HISTORY_REMOTE,JSON.stringify(merged),'bedLevelHistoryV2RecordId');
+        const saved=await window.MachineOpsStorage.writeRecord(_BED_LEVEL_HISTORY_REMOTE,merged);
+        if(!saved)continue; // sólo conflicto 409 confirmado: releer y rebasar una vez
         const verify=await _bedLevelHistoryFetchRemote(),ids=new Set(verify.rows.map(x=>x.id)),needed=merged.slice(0,Math.min(30,merged.length)).every(x=>ids.has(x.id));
         if(needed){_bedLevelHistorySave(_bedLevelHistoryMerge(verify.rows,merged));_bedLevelHistoryRemoteAt=Date.now();return true;}
       }
