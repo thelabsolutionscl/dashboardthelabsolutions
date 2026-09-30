@@ -338,5 +338,5 @@
   global._agendaBackup=agendaBackupScoped;
   global._agendaPoll=agendaPollScoped;
   global.startAgendaSync=startAgendaScopedSync;
-  global.addEventListener('beforeunload',()=>{if(timer)clearInterval(timer);});
+  if(typeof global.addEventListener==='function')global.addEventListener('beforeunload',()=>{if(timer)clearInterval(timer);});
 })(typeof window!=='undefined'?window:globalThis);
