@@ -474,3 +474,85 @@ test('el presupuesto se autorrepara si quedó una reserva huérfana de una llama
     assert.equal(spy.calls.length,0);
   } finally { spy.restore(); _kv.clear(); }
 });
+
+test('diagnóstico autenticado de Claude y OpenAI: GET de identidad sin generar tokens',async()=>{
+  const orig=global.fetch,calls=[];
+  try{
+    global.fetch=async(url,opts={})=>{
+      calls.push({url:String(url),opts});
+      return new Response('{"data":[]}',{status:200,headers:{'Content-Type':'application/json'}});
+    };
+    for(const service of ['anthropic','openai']){
+      const r=await worker.fetch(req('/integrations/check?service='+service,
+        {origin:OK_ORIGIN,key:ENV.APP_KEY}),ENV,undefined);
+      assert.equal(r.status,200);
+      const body=await r.json();
+      assert.equal(body.status,'green');assert.equal(body.verified,true);
+    }
+    assert.deepEqual(calls.map(x=>x.url),[
+      'https://api.anthropic.com/v1/models?limit=1',
+      'https://api.openai.com/v1/models'
+    ]);
+    assert.ok(calls.every(x=>x.opts.method==='GET'&&!x.opts.body&&x.opts.redirect==='manual'));
+    assert.equal(calls[0].opts.headers['x-api-key'],ENV.ANTHROPIC_TOKEN);
+    assert.equal(calls[1].opts.headers.Authorization,'Bearer '+ENV.OPENAI_TOKEN);
+  }finally{global.fetch=orig;}
+});
+
+test('diagnóstico bloquea escrituras, servicio arbitrario, falta de Origin y clave',async()=>{
+  const spy=espiarFetch();
+  try{
+    const route='/integrations/check?service=anthropic';
+    for(const [path,reqOpt,status] of [
+      [route,{method:'POST',origin:OK_ORIGIN,key:ENV.APP_KEY},405],
+      [route,{key:ENV.APP_KEY},403],
+      [route,{origin:OK_ORIGIN},403],
+      ['/integrations/check?service=evil',{origin:OK_ORIGIN,key:ENV.APP_KEY},404],
+      ['/integrations/check?service=anthropic&extra=1',{origin:OK_ORIGIN,key:ENV.APP_KEY},405]
+    ]){
+      const r=await worker.fetch(req(path,reqOpt),ENV,undefined);
+      assert.equal(r.status,status,path);
+    }
+    assert.equal(spy.calls.length,0,'solicitudes no permitidas no alcanzan proveedores');
+  }finally{spy.restore();}
+});
+
+test('diagnóstico no confunde clave rechazada, cuota excedida y servicio sin configurar',async()=>{
+  const orig=global.fetch;
+  try{
+    global.fetch=async()=>new Response('{}',{status:401});
+    let r=await worker.fetch(req('/integrations/check?service=anthropic',
+      {origin:OK_ORIGIN,key:ENV.APP_KEY}),ENV,undefined);
+    assert.deepEqual({status:(await r.json()).status,code:r.status},{status:'red',code:200});
+    global.fetch=async()=>new Response('{}',{status:429});
+    r=await worker.fetch(req('/integrations/check?service=anthropic',
+      {origin:OK_ORIGIN,key:ENV.APP_KEY}),ENV,undefined);
+    assert.equal((await r.json()).status,'yellow');
+    let count=0;global.fetch=async()=>{count++;throw Error('upstream should not be requested');};
+    r=await worker.fetch(req('/integrations/check?service=make',
+      {origin:OK_ORIGIN,key:ENV.APP_KEY}),ENV,undefined);
+    assert.equal((await r.json()).status,'gray');assert.equal(count,0);
+  }finally{global.fetch=orig;}
+});
+
+test('Make/Meta comprueban APIs sin webhook y rechazan una zona no permitida',async()=>{
+  const orig=global.fetch,calls=[];
+  try{
+    global.fetch=async(url,opts)=>{
+      calls.push({url:String(url),opts});
+      return new Response('{"data":[]}',{status:200});
+    };
+    const env={...ENV,MAKE_API_TOKEN:'make-test',MAKE_API_ZONE:'eu1',META_ACCESS_TOKEN:'meta-test'};
+    for(const service of ['make','meta']){
+      const r=await worker.fetch(req('/integrations/check?service='+service,
+        {origin:OK_ORIGIN,key:ENV.APP_KEY}),env,undefined);
+      assert.equal((await r.json()).verified,true);
+    }
+    assert.match(calls[0].url,/^https:\/\/eu1\.make\.com\/api\/v2\/users\/me$/);
+    assert.match(calls[1].url,/^https:\/\/graph\.facebook\.com\//);
+    assert.ok(calls.every(x=>x.opts.method==='GET'&&x.opts.body===undefined));
+    const invalid=await worker.fetch(req('/integrations/check?service=make',
+      {origin:OK_ORIGIN,key:ENV.APP_KEY}),{...env,MAKE_API_ZONE:'evil.example'},undefined);
+    assert.equal((await invalid.json()).status,'gray');assert.equal(calls.length,2);
+  }finally{global.fetch=orig;}
+});
