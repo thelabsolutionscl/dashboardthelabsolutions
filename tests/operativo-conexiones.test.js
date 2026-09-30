@@ -241,3 +241,14 @@ test('una respuesta unauthorized de /domains no se presenta como clave inválida
   assert.doesNotMatch(source,/error_code==='unauthorized'[\s\S]{0,160}status:'red'/);
   assert.match(source,/error_code==='unauthorized'\|\|d\?\.error_code==='send_only_or_forbidden'/);
 });
+
+
+test('GitHub Pages se verifica contra la versión publicada sin usar la API privada de Actions',()=>{
+  assert.doesNotMatch(source,/api\.github\.com\/repos\/thelabsolutionscl\/dashboardthelabsolutions\/actions/);
+  assert.match(source,/new URL\('index\.html',base\)/);
+  assert.match(source,/_tls_build_check/);
+  assert.match(source,/cache:'no-store'/);
+  assert.match(source,/credentials:'same-origin'/);
+  assert.match(source,/operativo-visual\\\.js\\\?v=/);
+  assert.match(source,/GitHub Pages responde y la versión publicada coincide/);
+});
