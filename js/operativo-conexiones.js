@@ -234,8 +234,8 @@
         if(d?.configured===false)return {status:'gray',message:'Falta la clave Resend en el servidor de correo'};
         if(d?.error_code==='send_only_or_forbidden')
           return {status:'yellow',message:'La clave parece limitada a envío. Envía un correo normal y vuelve a verificar; no amplíes permisos solo para el monitor'};
-        if(d?.error_code==='unauthorized')
-          return {status:'red',message:'Resend rechazó la API key configurada en el servidor'};
+        if(d?.error_code==='unauthorized'||d?.error_code==='send_only_or_forbidden')
+          return {status:'yellow',message:'La clave Resend está limitada a envío o no autoriza lecturas. Envía un correo normal y vuelve a verificar; no amplíes permisos solo para el monitor'};
         return {status:'yellow',message:'No se pudo verificar Resend; comprueba el servicio o la versión de mail-api'};
       }catch(_){return {status:'yellow',message:'Resend no se pudo verificar desde Correos'};}
     }
