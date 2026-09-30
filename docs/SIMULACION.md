@@ -129,8 +129,14 @@ mueve fuerte, ajusta esa constante en `js/simulacion.js`.
 ## Historial
 
 Las corridas se guardan en `localStorage` (`thelab_simulacion_v1`, tope 30) y se
-respaldan en **Monitor Sistema » SIMULACION**, el mismo patrón que usa la agenda.
-No requiere tabla nueva en Airtable.
+sincronizan por la ruta dedicada **`/shared/simulation`**. El navegador ya no
+necesita leer ni escribir la tabla completa `Monitor Sistema`.
+
+Al abrir la sección se hidrata el historial remoto y se reconcilia con la copia
+local. El documento compartido conserva un `clearedAt`: si alguien borra el
+historial en un equipo, una caché vieja de otro equipo no puede revivir esas
+corridas. Las escrituras usan revisión SHA-256/CAS y sólo un conflicto 409
+confirmado autoriza rebase; timeout o 5xx nunca se reintentan a ciegas.
 
 Se guarda solo el agregado por concepto, no los 44 votos crudos: el respaldo remoto
 tiene tope de tamaño y el detalle no se usa para comparar corridas. Por eso, al
@@ -143,6 +149,12 @@ Cuando corres la misma línea dos veces, cada concepto que se repite muestra el
 
 ## Acceso
 
-Visible para `admin`, `gerencia`, `marketing` y `demo`. No para `comercial`,
-`produccion` ni `finanzas`: es una herramienta de decisión de producto, no de
-operación diaria.
+Visible en el dashboard para `admin`, `gerencia`, `marketing` y `demo`. No
+para `comercial`, `produccion` ni `finanzas`: es una herramienta de decisión
+de producto, no de operación diaria.
+
+Con Cloudflare Access activo, la sincronización remota de `/shared/simulation`
+queda limitada a **Admin** o a la identidad exacta
+`marketing@thelab.solutions`. Demo permanece 100% local. Esta excepción por
+identidad evita convertir el rol Access `viewer` en un permiso general de
+escritura para investigación de producto.
