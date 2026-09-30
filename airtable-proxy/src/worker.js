@@ -773,8 +773,8 @@ function sharedSimulationRunAllowed(run){
      !SHARED_SIMULATION_PUBLICS.has(run.publico)||
      !Number.isInteger(run.panel)||!sharedSimulationNum(run.panel,1,100)||
      !Number.isInteger(run.nPerfiles)||!sharedSimulationNum(run.nPerfiles,1,100)||
-     !Array.isArray(run.barrido)||run.barrido.length>5||
-     run.barrido.some(v=>!sharedSimulationNum(v,0,100000000))||
+     (run.barrido!==undefined&&(!Array.isArray(run.barrido)||run.barrido.length>5||
+       run.barrido.some(v=>!sharedSimulationNum(v,0,100000000))))||
      !Array.isArray(run.items)||run.items.length>10||
      !run.items.every(sharedSimulationItemAllowed))
     return false;
