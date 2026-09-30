@@ -370,3 +370,13 @@ test('proxy wires Access after shared compatibility key, before any private rout
   const ai=proxy.indexOf("if (url.pathname === '/anthropic/usage')");
   assert.ok(key>0&&access>key&&ai>access);
 });
+
+test('feedback-link issuance belongs only to signed operator, finance and admin roles',()=>{
+  for(const role of ['operator','finance','admin'])
+    assert.equal(accessAllows({role},'POST','/feedback/link'),true,role);
+  for(const role of ['viewer','sales'])
+    assert.equal(accessAllows({role,seller:'nicanor'},'POST','/feedback/link'),false,role);
+  for(const method of ['GET','PUT','PATCH','DELETE'])
+    assert.equal(accessAllows({role:'admin'},method,'/feedback/link'),false,method);
+  assert.equal(accessAllows({role:'admin'},'POST','/feedback/unrestricted'),false);
+});
