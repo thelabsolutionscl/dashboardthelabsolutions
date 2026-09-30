@@ -237,3 +237,106 @@
   if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })(typeof window!=='undefined'?window:null);
+
+
+/* AGENDA_SCOPED_ACCESS_ADAPTER
+ * Retira AGENDA del acceso genérico a Monitor Sistema. La ruta server-side
+ * entrega únicamente el alcance autorizado y usa CAS por revisión para que
+ * varios navegadores no pierdan cambios.
+ */
+(function agendaScopedAccessAdapter(global){
+  'use strict';
+  let revision='',remoteItems=[],activeScope='',timer=null;
+  function scope(){
+    try{return typeof global._agendaScope==='function'?global._agendaScope():'';}
+    catch(_){return'';}
+  }
+  function resetScope(next){
+    if(next!==activeScope){activeScope=next;revision='';remoteItems=[];}
+    return next;
+  }
+  function config(){
+    try{
+      const px=typeof global._proxyCfg==='function'?global._proxyCfg():null;
+      if(!px?.url||!px?.key)return null;
+      const url=new URL(px.url);
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+         url.search||url.hash)return null;
+      if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+      return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+    }catch(_){return null;}
+  }
+  async function request(method,body){
+    const cfg=config(),sc=resetScope(scope());
+    if(!cfg||!sc||sc==='anon')throw new Error('Agenda compartida no configurada');
+    return fetch(cfg.base+'/shared/agenda?scope='+encodeURIComponent(sc),{
+      method,credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+  }
+  function accept(doc){
+    const sc=resetScope(scope());
+    if(!doc||doc.ok!==true||doc.scope!==sc||typeof doc.revision!=='string'||
+       !Array.isArray(doc.data))return false;
+    revision=doc.revision;
+    remoteItems=doc.data;
+    if(global.state)global.state._agendaRemote=JSON.stringify({[sc]:doc.data});
+    try{global._agendaReconcile?.({[sc]:doc.data});}catch(_){}
+    return true;
+  }
+  function build(){
+    const local=typeof global._agenda==='function'?global._agenda():[];
+    const merged=global._agendaPrune(global._agendaMerge(local,remoteItems));
+    try{localStorage.setItem(global._agendaKey(),JSON.stringify(merged));}catch(_){}
+    return merged;
+  }
+  async function agendaBackupScoped(){
+    try{
+      const u=global.AUTH?.getUser?.()||{},sc=resetScope(scope());
+      if(!u.username||!sc||sc==='anon')return false;
+      for(let attempt=0;attempt<2;attempt++){
+        const data=build();
+        const raw=JSON.stringify(data);if(raw.length>90000)return false;
+        const r=await request('PUT',{scope:sc,data,expectedRevision:revision});
+        let doc={};try{doc=await r.json();}catch(_){}
+        if(r.ok)return accept(doc);
+        if(r.status===409&&attempt===0&&doc?.code==='AGENDA_REVISION_CONFLICT'&&
+           doc.scope===sc&&typeof doc.revision==='string'&&Array.isArray(doc.data)){
+          if(!accept({ok:true,scope:sc,revision:doc.revision,data:doc.data}))return false;
+          continue;
+        }
+        return false; // timeout/5xx/resultado incierto: nunca reintentar a ciegas
+      }
+    }catch(_){return false;}
+    return false;
+  }
+  async function agendaPollScoped(){
+    try{
+      if(document.visibilityState!=='visible'||!navigator.onLine)return false;
+      if(!global.AUTH?.getUser?.())return false;
+      const r=await request('GET');
+      if(!r||!r.ok)return false;
+      return accept(await r.json());
+    }catch(_){return false;}
+  }
+  function startAgendaScopedSync(){
+    if(timer)clearInterval(timer);
+    agendaPollScoped().catch(()=>{});
+    timer=setInterval(agendaPollScoped,15000);
+  }
+
+  // El cargador global todavía lee Monitor Sistema para otros registros
+  // legítimos. Filtramos AGENDA antes de entregárselo para impedir que este
+  // feature dependa accidentalmente del acceso genérico o del recordId.
+  const originalApply=global._applyMonitorSistema;
+  if(typeof originalApply==='function'){
+    global._applyMonitorSistema=function agendaMonitorFiltered(records){
+      return originalApply((records||[]).filter(r=>r?.fields?.Name!=='AGENDA'));
+    };
+  }
+  global._agendaBackup=agendaBackupScoped;
+  global._agendaPoll=agendaPollScoped;
+  global.startAgendaSync=startAgendaScopedSync;
+  if(typeof global.addEventListener==='function')global.addEventListener('beforeunload',()=>{if(timer)clearInterval(timer);});
+})(typeof window!=='undefined'?window:globalThis);

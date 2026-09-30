@@ -325,6 +325,88 @@ async function sharedCalendarLoad(env){
     revision:await sharedCalendarDigest(record.fields.Notes),data};
 }
 
+
+const SHARED_AGENDA_ITEM_KEYS=new Set([
+  'id','texto','fecha','cliId','cliNombre','done','del','ts','mts'
+]);
+function sharedAgendaScopeAllowed(scope){
+  return scope==='__equipo__'||(
+    typeof scope==='string'&&scope.length<=254&&scope===scope.toLowerCase()&&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(scope)
+  );
+}
+function sharedAgendaItemsAllowed(items){
+  if(!Array.isArray(items)||items.length>500||JSON.stringify(items).length>90000)return false;
+  const text=(v,max)=>typeof v==='string'&&v.length<=max&&
+    !/[\x00-\x08\x0b\x0e-\x1f]/.test(v);
+  const finite=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0;
+  return items.every(item=>{
+    if(!item||typeof item!=='object'||Array.isArray(item)||
+       Object.keys(item).some(k=>!SHARED_AGENDA_ITEM_KEYS.has(k))||
+       !text(item.id,180)||!item.id||
+       !text(item.texto,1200)||!item.texto.trim()||
+       !/^\d{4}-\d{2}-\d{2}$/.test(String(item.fecha||''))||
+       !finite(item.ts)||
+       (item.mts!==undefined&&!finite(item.mts))||
+       (item.done!==undefined&&typeof item.done!=='boolean')||
+       (item.del!==undefined&&typeof item.del!=='boolean')||
+       (item.cliId!==undefined&&item.cliId!==null&&
+         !(typeof item.cliId==='string'&&/^rec[A-Za-z0-9]{14}$/.test(item.cliId)))||
+       (item.cliNombre!==undefined&&item.cliNombre!==null&&!text(item.cliNombre,300)))
+      return false;
+    return true;
+  });
+}
+function sharedAgendaDocumentAllowed(data){
+  if(!data||typeof data!=='object'||Array.isArray(data)||
+     Object.keys(data).length>100||JSON.stringify(data).length>95000)return false;
+  return Object.entries(data).every(([scope,items])=>
+    sharedAgendaScopeAllowed(scope)&&sharedAgendaItemsAllowed(items));
+}
+function sharedAgendaScopeFor(identity,requestedScope,legacy){
+  if(identity){
+    if(typeof identity.email!=='string'||!sharedAgendaScopeAllowed(identity.email))
+      return '';
+    const signedScope=identity.role==='sales'?identity.email:'__equipo__';
+    return !requestedScope||requestedScope===signedScope?signedScope:'';
+  }
+  return legacy&&sharedAgendaScopeAllowed(requestedScope)?requestedScope:'';
+}
+async function sharedAgendaLoad(env,scope){
+  if(!env.AIRTABLE_TOKEN||!sharedAgendaScopeAllowed(scope))return {error:'invalid-config'};
+  const query=new URLSearchParams();
+  query.set('maxRecords','2');
+  query.set('filterByFormula',"{Name}='AGENDA'");
+  query.append('fields[]','Name');query.append('fields[]','Notes');
+  let response;
+  try{
+    response=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+'?'+query.toString(),{
+        method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+      });
+  }catch(_){return {error:'network'};}
+  if(!response.ok||response.status>=300&&response.status<400)
+    return {error:'upstream'};
+  let body;try{body=await response.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>1)
+    return {error:body?.records?.length>1?'duplicate':'invalid-shape'};
+  if(!body.records.length){
+    const data=[];
+    return {recordId:'',raw:'',all:{},data,
+      revision:await sharedCalendarDigest(JSON.stringify(data))};
+  }
+  const record=body.records[0];
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(record.id||''))||
+     record.fields?.Name!=='AGENDA'||typeof record.fields?.Notes!=='string')
+    return {error:'invalid-record'};
+  let all;try{all=JSON.parse(record.fields.Notes);}catch(_){return {error:'invalid-payload'};}
+  if(!sharedAgendaDocumentAllowed(all))return {error:'invalid-payload'};
+  const data=Array.isArray(all[scope])?all[scope]:[];
+  return {recordId:record.id,raw:record.fields.Notes,all,data,
+    revision:await sharedCalendarDigest(JSON.stringify(data))};
+}
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -1199,8 +1281,9 @@ export class CrmMutationGuard {
     const path=new URL(request.url).pathname;
     const run = this._queue.then(() => path==='/marketing/spend'
       ?this._handleSpend(request):path==='/shared-calendar'
-        ?this._handleSharedCalendar(request):path==='/scoped-patch'
-          ?this._handleScopedPatch(request):this._handle(request));
+        ?this._handleSharedCalendar(request):path==='/shared-agenda'
+          ?this._handleSharedAgenda(request):path==='/scoped-patch'
+            ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
   }
@@ -1250,6 +1333,54 @@ export class CrmMutationGuard {
       return this._json({error:'Calendar write succeeded but verification is uncertain',
         code:'CALENDAR_WRITE_UNCERTAIN'},503);
     return this._json({ok:true,revision:verified.revision,data:verified.data},200);
+  }
+
+
+  async _handleSharedAgenda(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Shared agenda guard unavailable'},503);
+    let payload;try{payload=await request.json();}catch(_){
+      return this._json({error:'Invalid shared agenda request'},422);
+    }
+    const actor=payload?.actor;
+    const signed=actor&&typeof actor.email==='string'&&
+      ['sales','operator','finance','admin'].includes(actor.role);
+    const legacy=actor?.legacy===true;
+    const scope=sharedAgendaScopeFor(signed?actor:null,payload?.scope,legacy);
+    if(!scope||!signed&&!legacy||!sharedAgendaItemsAllowed(payload?.data)||
+       typeof payload.expectedRevision!=='string'||payload.expectedRevision.length>64)
+      return this._json({error:'Shared agenda write denied'},403);
+    const current=await sharedAgendaLoad(this.env,scope);
+    if(current.error)return this._json({error:'Shared agenda unavailable'},503);
+    if(current.revision!==payload.expectedRevision)
+      return this._json({error:'Agenda changed on another device',
+        code:'AGENDA_REVISION_CONFLICT',scope,revision:current.revision,data:current.data},409);
+    const all=Object.assign(Object.create(null),current.all);
+    all[scope]=payload.data;
+    if(!sharedAgendaDocumentAllowed(all))
+      return this._json({error:'Agenda payload too large or invalid'},413);
+    const raw=JSON.stringify(all);
+    const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+
+      (current.recordId?'/'+current.recordId:'');
+    const body={fields:{Name:'AGENDA',Notes:raw}};
+    let upstream;
+    try{
+      upstream=await fetch(target,{method:current.recordId?'PATCH':'POST',
+        redirect:'manual',headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,
+          'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }catch(_){return this._json({error:'Agenda write outcome uncertain; reread before retrying',
+      code:'AGENDA_WRITE_UNCERTAIN'},503);}
+    if([400,401,403,404,422].includes(upstream.status))
+      return this._json({error:'Agenda write rejected',code:'AGENDA_WRITE_REJECTED'},422);
+    if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+      return this._json({error:'Agenda write outcome uncertain; reread before retrying',
+        code:'AGENDA_WRITE_UNCERTAIN'},503);
+    const verified=await sharedAgendaLoad(this.env,scope);
+    if(verified.error||JSON.stringify(verified.data)!==JSON.stringify(payload.data))
+      return this._json({error:'Agenda write succeeded but verification is uncertain',
+        code:'AGENDA_WRITE_UNCERTAIN'},503);
+    return this._json({ok:true,scope,revision:verified.revision,data:verified.data},200);
   }
 
   // This shares tls-crm-global with guarded Pedidos/Cotizaciones creation.
@@ -1799,7 +1930,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -1909,6 +2040,53 @@ export default {
         Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
         return new Response(guarded.body,{status:guarded.status,headers});
       }catch(_){return json({error:'Calendar write guard unavailable'},503,scopedHeaders);}
+    }
+
+
+    // Agenda collaboration is scoped per signed identity. Sales users receive
+    // only their own email scope; all other signed roles receive __equipo__.
+    // Legacy APP_KEY mode keeps an explicit scope only until Access cutover.
+    if(url.pathname==='/shared/agenda'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      const queryKeys=[...url.searchParams.keys()];
+      if(queryKeys.some(k=>k!=='scope')||url.searchParams.getAll('scope').length!==1)
+        return json({error:'Agenda requires exactly one scope'},422,scopedHeaders);
+      const requestedScope=url.searchParams.get('scope')||'';
+      const scope=sharedAgendaScopeFor(authorized.identity,requestedScope,authorized.legacy===true);
+      if(!scope)return json({error:'Agenda scope denied'},403,scopedHeaders);
+      if(request.method==='GET'){
+        const current=await sharedAgendaLoad(env,scope);
+        if(current.error)return json({error:'Shared agenda unavailable'},503,scopedHeaders);
+        return json({ok:true,scope,revision:current.revision,data:current.data},200,scopedHeaders);
+      }
+      if(request.method!=='PUT')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>100000)
+        return json({error:'Agenda expects bounded JSON'},415,scopedHeaders);
+      let body;try{
+        const raw=await request.text();if(raw.length>100000)throw Error('large');
+        body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid agenda JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>!['scope','data','expectedRevision'].includes(k))||
+         body.scope!==scope||!sharedAgendaItemsAllowed(body.data)||
+         typeof body.expectedRevision!=='string'||body.expectedRevision.length>64)
+        return json({error:'Invalid agenda document'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)
+        return json({error:'Agenda write guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(
+          env.CRM_MUTATION_GUARD.idFromName('tls-shared-agenda'));
+        const guarded=await stub.fetch('https://crm-write.internal/shared-agenda',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({scope,data:body.data,expectedRevision:body.expectedRevision,
+            actor:authorized.identity
+              ?{email:authorized.identity.email,role:authorized.identity.role}
+              :{legacy:true}})
+        });
+        const headers=new Headers(guarded.headers);
+        Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Agenda write guard unavailable'},503,scopedHeaders);}
     }
 
     // A signed read-only viewer never receives the full Airtable CRM row.
