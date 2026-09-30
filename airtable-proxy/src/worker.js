@@ -515,6 +515,216 @@ async function sharedMailLoad(env,resource,account){
     revision:await sharedCalendarDigest(JSON.stringify(data))};
 }
 
+
+const SHARED_MACHINEOPS_SCHEMA=3;
+const SHARED_MACHINEOPS_PREFIX='MACHINE_OPS_V3:';
+const SHARED_MACHINEOPS_LEGACY='MACHINE_OPS_V2';
+const SHARED_MACHINEOPS_BED_HISTORY='BED_LEVEL_HISTORY_V2';
+const SHARED_MACHINEOPS_DOMAINS=[
+  'jobs','spools','qa','workflows','profiles','safetyReadings','incidents','audit',
+  'alertAcks','ignoredPrints','bedClearAcks','automation','costConfig','safetyConfig','maintenanceProfiles'
+];
+const SHARED_MACHINEOPS_ARRAY_DOMAINS=new Set([
+  'jobs','spools','qa','workflows','profiles','safetyReadings','incidents','audit'
+]);
+const SHARED_MACHINEOPS_CONFIG_DOMAINS=new Set([
+  'automation','costConfig','safetyConfig','maintenanceProfiles'
+]);
+const SHARED_MACHINEOPS_META='meta';
+const SHARED_MACHINEOPS_NAMES=new Set([
+  SHARED_MACHINEOPS_LEGACY,SHARED_MACHINEOPS_BED_HISTORY,
+  ...SHARED_MACHINEOPS_DOMAINS.map(d=>SHARED_MACHINEOPS_PREFIX+d),
+  SHARED_MACHINEOPS_PREFIX+SHARED_MACHINEOPS_META
+]);
+const SHARED_MACHINEOPS_LIMITS=Object.freeze({
+  jobs:1200,spools:500,qa:1200,workflows:400,profiles:500,
+  safetyReadings:500,incidents:1200,audit:500
+});
+function sharedMachineFinite(v,min=0,max=Number.MAX_SAFE_INTEGER){
+  return typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
+}
+function sharedMachinePlainObject(v){
+  return !!v&&typeof v==='object'&&!Array.isArray(v);
+}
+function sharedMachineJsonAllowed(value,depth=0){
+  if(depth>8)return false;
+  if(value===null||typeof value==='boolean')return true;
+  if(typeof value==='number')return Number.isFinite(value);
+  if(typeof value==='string')
+    return value.length<=85000&&!/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value);
+  if(Array.isArray(value))
+    return value.length<=1500&&value.every(v=>sharedMachineJsonAllowed(v,depth+1));
+  if(!sharedMachinePlainObject(value)||Object.keys(value).length>2500)return false;
+  return Object.entries(value).every(([k,v])=>
+    k.length>0&&k.length<=160&&!/[\x00-\x1f]/.test(k)&&sharedMachineJsonAllowed(v,depth+1));
+}
+function sharedMachineExactKeys(value,keys){
+  return sharedMachinePlainObject(value)&&Object.keys(value).length===keys.length&&
+    Object.keys(value).every(k=>keys.includes(k));
+}
+function sharedMachineAutomationAllowed(data){
+  const keys=['enabled','stallMinutes','tempTolerance','offlineMinutes','autoLink','autoIncident','bridgeIntervalSeconds'];
+  return sharedMachineExactKeys(data,keys)&&
+    typeof data.enabled==='boolean'&&typeof data.autoLink==='boolean'&&typeof data.autoIncident==='boolean'&&
+    sharedMachineFinite(data.stallMinutes,3,120)&&sharedMachineFinite(data.tempTolerance,5,60)&&
+    sharedMachineFinite(data.offlineMinutes,1,30)&&sharedMachineFinite(data.bridgeIntervalSeconds,30,600);
+}
+function sharedMachineCostAllowed(data){
+  const keys=['electricityClpKwh','machineKw','laborClpHour','operatorMinutes','wearClpHour','failureOverheadPct'];
+  return sharedMachineExactKeys(data,keys)&&
+    sharedMachineFinite(data.electricityClpKwh,0,1000000)&&
+    sharedMachineFinite(data.machineKw,0,100)&&
+    sharedMachineFinite(data.laborClpHour,0,100000000)&&
+    sharedMachineFinite(data.operatorMinutes,0,1440)&&
+    sharedMachineFinite(data.wearClpHour,0,100000000)&&
+    sharedMachineFinite(data.failureOverheadPct,0,100);
+}
+function sharedMachineSafetyAllowed(data){
+  const keys=['enforce','cameraRequired','ventilationRequired','smokeRequired','maxTemperature',
+    'maxHumidity','maxVoc','staleMinutes','sensorUrl','updatedAt'];
+  return sharedMachineExactKeys(data,keys)&&
+    ['enforce','cameraRequired','ventilationRequired','smokeRequired'].every(k=>typeof data[k]==='boolean')&&
+    sharedMachineFinite(data.maxTemperature,0,100)&&sharedMachineFinite(data.maxHumidity,0,100)&&
+    sharedMachineFinite(data.maxVoc,0,1000000)&&sharedMachineFinite(data.staleMinutes,1,1440)&&
+    typeof data.sensorUrl==='string'&&data.sensorUrl.length<=1000&&
+    !/[\x00-\x1f]/.test(data.sensorUrl)&&sharedMachineFinite(data.updatedAt,0);
+}
+function sharedMachineMaintenanceAllowed(data){
+  const models=['K1','K2','K2 Plus','Ender-5 Max','Giga'];
+  const keys=['nozzle','lubrication','belt','extruder','bed','sensors','general'];
+  if(!sharedMachineExactKeys(data,models))return false;
+  return models.every(model=>sharedMachineExactKeys(data[model],keys)&&
+    keys.every(k=>sharedMachineFinite(data[model][k],1,100000)));
+}
+function sharedMachineDomainDataAllowed(domain,data){
+  if(!SHARED_MACHINEOPS_DOMAINS.includes(domain))return false;
+  let ok=false;
+  if(domain==='automation')ok=sharedMachineAutomationAllowed(data);
+  else if(domain==='costConfig')ok=sharedMachineCostAllowed(data);
+  else if(domain==='safetyConfig')ok=sharedMachineSafetyAllowed(data);
+  else if(domain==='maintenanceProfiles')ok=sharedMachineMaintenanceAllowed(data);
+  else if(SHARED_MACHINEOPS_ARRAY_DOMAINS.has(domain))
+    ok=Array.isArray(data)&&data.length<=SHARED_MACHINEOPS_LIMITS[domain]&&sharedMachineJsonAllowed(data);
+  else ok=sharedMachinePlainObject(data)&&Object.keys(data).length<=1200&&sharedMachineJsonAllowed(data);
+  if(!ok)return false;
+  try{return JSON.stringify(data).length<=85000;}catch(_){return false;}
+}
+function sharedMachineMetaAllowed(value){
+  return sharedMachinePlainObject(value)&&
+    Object.keys(value).every(k=>['schema','domain','writtenAt','version','updatedAt','domains'].includes(k))&&
+    value.schema===SHARED_MACHINEOPS_SCHEMA&&value.domain===SHARED_MACHINEOPS_META&&
+    sharedMachineFinite(value.writtenAt,0)&&sharedMachineFinite(value.version,1,100)&&
+    sharedMachineFinite(value.updatedAt,0)&&Array.isArray(value.domains)&&
+    value.domains.length===SHARED_MACHINEOPS_DOMAINS.length&&
+    value.domains.every((d,i)=>d===SHARED_MACHINEOPS_DOMAINS[i]);
+}
+function sharedMachineEnvelopeAllowed(name,notes){
+  if(typeof notes!=='string'||notes.length>90000)return false;
+  let value;try{value=JSON.parse(notes);}catch(_){return false;}
+  if(name===SHARED_MACHINEOPS_PREFIX+SHARED_MACHINEOPS_META)return sharedMachineMetaAllowed(value);
+  if(!name.startsWith(SHARED_MACHINEOPS_PREFIX))return false;
+  const domain=name.slice(SHARED_MACHINEOPS_PREFIX.length);
+  if(!SHARED_MACHINEOPS_DOMAINS.includes(domain)||!sharedMachinePlainObject(value)||
+     Object.keys(value).some(k=>!['schema','domain','writtenAt','data','previous'].includes(k))||
+     value.schema!==SHARED_MACHINEOPS_SCHEMA||value.domain!==domain||
+     !sharedMachineFinite(value.writtenAt,0)||!sharedMachineDomainDataAllowed(domain,value.data))
+    return false;
+  if(value.previous!==undefined){
+    if(!sharedMachineExactKeys(value.previous,['writtenAt','data'])||
+       !sharedMachineFinite(value.previous.writtenAt,0)||
+       !sharedMachineDomainDataAllowed(domain,value.previous.data))return false;
+  }
+  return true;
+}
+function sharedMachineLegacyAllowed(notes){
+  if(typeof notes!=='string'||notes.length>95000)return false;
+  let value;try{value=JSON.parse(notes);}catch(_){return false;}
+  if(!sharedMachinePlainObject(value)||!sharedMachineFinite(Number(value.version||4),1,100)||
+     !sharedMachineFinite(Number(value.updatedAt||0),0))return false;
+  const allowed=new Set(['version','updatedAt',...SHARED_MACHINEOPS_DOMAINS]);
+  if(Object.keys(value).some(k=>!allowed.has(k)))return false;
+  return SHARED_MACHINEOPS_DOMAINS.every(domain=>
+    !Object.hasOwn(value,domain)||sharedMachineDomainDataAllowed(domain,value[domain]));
+}
+function sharedMachineBedHistoryAllowed(data){
+  if(!Array.isArray(data)||data.length>180||!sharedMachineJsonAllowed(data))return false;
+  try{return JSON.stringify(data).length<=85000;}catch(_){return false;}
+}
+function sharedMachineRecordAllowed(name,notes){
+  if(name===SHARED_MACHINEOPS_LEGACY)return sharedMachineLegacyAllowed(notes);
+  if(name===SHARED_MACHINEOPS_BED_HISTORY){
+    if(typeof notes!=='string'||notes.length>85000)return false;
+    let data;try{data=JSON.parse(notes);}catch(_){return false;}
+    return sharedMachineBedHistoryAllowed(data);
+  }
+  return sharedMachineEnvelopeAllowed(name,notes);
+}
+function sharedMachineWriteRoleAllowed(actor,domain,legacy=false){
+  if(legacy)return true;
+  if(!actor||!['operator','admin'].includes(actor.role))return false;
+  if(actor.role==='admin')return true;
+  return !SHARED_MACHINEOPS_CONFIG_DOMAINS.has(domain);
+}
+async function sharedMachineOpsLoad(env,recordName=''){
+  if(!env.AIRTABLE_TOKEN)return {error:'invalid-config'};
+  const single=recordName!==''; 
+  if(single&&recordName!==SHARED_MACHINEOPS_BED_HISTORY)return {error:'invalid-record'};
+  const names=single?[recordName]:[
+    SHARED_MACHINEOPS_LEGACY,
+    ...SHARED_MACHINEOPS_DOMAINS.map(d=>SHARED_MACHINEOPS_PREFIX+d),
+    SHARED_MACHINEOPS_PREFIX+SHARED_MACHINEOPS_META
+  ];
+  const formula=names.length===1
+    ?"{Name}='"+names[0]+"'"
+    :'OR('+names.map(n=>"{Name}='"+n+"'").join(',')+')';
+  const query=new URLSearchParams();
+  query.set('maxRecords',String(names.length+2));
+  query.set('filterByFormula',formula);
+  query.append('fields[]','Name');query.append('fields[]','Notes');
+  let response;
+  try{
+    response=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+'?'+query.toString(),{
+        method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+      });
+  }catch(_){return {error:'network'};}
+  if(!response.ok||response.status>=300&&response.status<400)return {error:'upstream'};
+  let body;try{body=await response.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.offset!==undefined||
+     body.records.length>names.length)return {error:'invalid-shape'};
+  const map=new Map();
+  for(const record of body.records){
+    const name=record?.fields?.Name,notes=record?.fields?.Notes;
+    if(!names.includes(name)||map.has(name)||
+       !/^rec[A-Za-z0-9]{14}$/.test(String(record?.id||''))||
+       typeof notes!=='string'||!sharedMachineRecordAllowed(name,notes))
+      return {error:'invalid-record'};
+    map.set(name,{recordId:record.id,name,notes});
+  }
+  let selected;
+  if(single)selected=map.has(recordName)?[map.get(recordName)]:[];
+  else{
+    const metaName=SHARED_MACHINEOPS_PREFIX+SHARED_MACHINEOPS_META;
+    selected=map.has(metaName)
+      ?[...SHARED_MACHINEOPS_DOMAINS.map(d=>SHARED_MACHINEOPS_PREFIX+d),metaName]
+          .filter(n=>map.has(n)).map(n=>map.get(n))
+      :(map.has(SHARED_MACHINEOPS_LEGACY)?[map.get(SHARED_MACHINEOPS_LEGACY)]:[]);
+  }
+  const revisionNames=single?[recordName]:[
+    ...SHARED_MACHINEOPS_DOMAINS.map(d=>SHARED_MACHINEOPS_PREFIX+d),
+    SHARED_MACHINEOPS_PREFIX+SHARED_MACHINEOPS_META
+  ];
+  const revisions=Object.create(null);
+  for(const name of revisionNames)
+    revisions[name]=await sharedCalendarDigest(map.get(name)?.notes||'');
+  const records=[];
+  for(const rec of selected)records.push({
+    name:rec.name,notes:rec.notes,revision:await sharedCalendarDigest(rec.notes)
+  });
+  return {records,revisions,recordMap:map};
+}
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -1391,8 +1601,9 @@ export class CrmMutationGuard {
       ?this._handleSpend(request):path==='/shared-calendar'
         ?this._handleSharedCalendar(request):path==='/shared-agenda'
           ?this._handleSharedAgenda(request):path==='/shared-mail'
-            ?this._handleSharedMail(request):path==='/scoped-patch'
-              ?this._handleScopedPatch(request):this._handle(request));
+            ?this._handleSharedMail(request):path==='/shared-machineops'
+              ?this._handleSharedMachineOps(request):path==='/scoped-patch'
+                ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
   }
@@ -1553,6 +1764,140 @@ export class CrmMutationGuard {
     return this._json({ok:true,resource,
       ...(resource==='templates'?{}:{account}),exists:true,
       revision:verified.revision,data:verified.data},200);
+  }
+
+
+  async _handleSharedMachineOps(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'MachineOps guard unavailable'},503);
+    let payload;try{payload=await request.json();}catch(_){
+      return this._json({error:'Invalid MachineOps request'},422);
+    }
+    const actor=payload?.actor,legacy=actor?.legacy===true;
+    const signed=actor&&typeof actor.email==='string'&&['operator','admin'].includes(actor.role);
+    if(!signed&&!legacy)return this._json({error:'MachineOps write denied'},403);
+
+    if(payload?.mode==='record'){
+      if(payload.record!==SHARED_MACHINEOPS_BED_HISTORY||
+         !sharedMachineBedHistoryAllowed(payload.data)||
+         typeof payload.expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(payload.expectedRevision))
+        return this._json({error:'Invalid machine history write'},422);
+      const current=await sharedMachineOpsLoad(this.env,SHARED_MACHINEOPS_BED_HISTORY);
+      if(current.error)return this._json({error:'Machine history unavailable'},503);
+      const revision=current.revisions[SHARED_MACHINEOPS_BED_HISTORY];
+      if(revision!==payload.expectedRevision)
+        return this._json({error:'Machine history changed on another device',
+          code:'MACHINEOPS_REVISION_CONFLICT',record:SHARED_MACHINEOPS_BED_HISTORY,
+          revision,records:current.records},409);
+      const raw=JSON.stringify(payload.data),rec=current.recordMap.get(SHARED_MACHINEOPS_BED_HISTORY);
+      const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+
+        (rec?'/'+rec.recordId:'');
+      let upstream;
+      try{
+        upstream=await fetch(target,{method:rec?'PATCH':'POST',redirect:'manual',
+          headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+          body:JSON.stringify({fields:{Name:SHARED_MACHINEOPS_BED_HISTORY,Notes:raw}})});
+      }catch(_){return this._json({error:'Machine history write uncertain; reread before retrying',
+        code:'MACHINEOPS_WRITE_UNCERTAIN'},503);}
+      if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+        return this._json({error:'Machine history write uncertain; reread before retrying',
+          code:'MACHINEOPS_WRITE_UNCERTAIN'},503);
+      const verified=await sharedMachineOpsLoad(this.env,SHARED_MACHINEOPS_BED_HISTORY);
+      if(verified.error||verified.recordMap.get(SHARED_MACHINEOPS_BED_HISTORY)?.notes!==raw)
+        return this._json({error:'Machine history verification uncertain',
+          code:'MACHINEOPS_WRITE_UNCERTAIN'},503);
+      return this._json({ok:true,record:SHARED_MACHINEOPS_BED_HISTORY,
+        revision:verified.revisions[SHARED_MACHINEOPS_BED_HISTORY],records:verified.records},200);
+    }
+
+    if(payload?.mode!=='snapshot'||!Array.isArray(payload.writes)||payload.writes.length>SHARED_MACHINEOPS_DOMAINS.length||
+       !sharedMachinePlainObject(payload.meta)||
+       Object.keys(payload.meta).some(k=>!['version','updatedAt'].includes(k))||
+       !sharedMachineFinite(payload.meta.version,1,100)||!sharedMachineFinite(payload.meta.updatedAt,0))
+      return this._json({error:'Invalid MachineOps snapshot write'},422);
+    const seen=new Set();
+    for(const write of payload.writes){
+      if(!sharedMachinePlainObject(write)||
+         Object.keys(write).some(k=>!['domain','data','expectedRevision'].includes(k))||
+         !SHARED_MACHINEOPS_DOMAINS.includes(write.domain)||seen.has(write.domain)||
+         !sharedMachineDomainDataAllowed(write.domain,write.data)||
+         typeof write.expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(write.expectedRevision)||
+         !sharedMachineWriteRoleAllowed(signed?actor:null,write.domain,legacy))
+        return this._json({error:'MachineOps domain write denied'},403);
+      seen.add(write.domain);
+    }
+    if(!payload.writes.length)return this._json({ok:true,records:[],revisions:{}},200);
+
+    const current=await sharedMachineOpsLoad(this.env);
+    if(current.error)return this._json({error:'MachineOps unavailable'},503);
+    for(const write of payload.writes){
+      const name=SHARED_MACHINEOPS_PREFIX+write.domain;
+      const revision=current.revisions[name];
+      if(revision!==write.expectedRevision)
+        return this._json({error:'MachineOps changed on another device',
+          code:'MACHINEOPS_REVISION_CONFLICT',domain:write.domain,revision,
+          records:current.records,revisions:current.revisions},409);
+    }
+
+    const metaName=SHARED_MACHINEOPS_PREFIX+SHARED_MACHINEOPS_META;
+    let currentMetaAt=0;
+    try{currentMetaAt=Number(JSON.parse(current.recordMap.get(metaName)?.notes||'{}').writtenAt)||0;}catch(_){}
+    const commitAt=Math.max(Date.now(),currentMetaAt+1);
+    const staged=[];
+    for(const write of payload.writes){
+      const name=SHARED_MACHINEOPS_PREFIX+write.domain,currentRec=current.recordMap.get(name);
+      let previous=null;
+      try{
+        const parsed=JSON.parse(currentRec?.notes||'null');
+        if(parsed&&parsed.schema===SHARED_MACHINEOPS_SCHEMA&&parsed.domain===write.domain&&
+           sharedMachineFinite(parsed.writtenAt,0)&&sharedMachineDomainDataAllowed(write.domain,parsed.data))
+          previous={writtenAt:parsed.writtenAt,data:parsed.data};
+      }catch(_){}
+      const envelope={schema:SHARED_MACHINEOPS_SCHEMA,domain:write.domain,writtenAt:commitAt,data:write.data};
+      let notes=JSON.stringify(envelope);
+      if(previous){
+        const candidate=JSON.stringify({...envelope,previous});
+        if(candidate.length<=90000)notes=candidate;
+      }
+      if(notes.length>90000||!sharedMachineEnvelopeAllowed(name,notes))
+        return this._json({error:'MachineOps domain too large',domain:write.domain},413);
+      staged.push({name,notes,recordId:currentRec?.recordId||''});
+    }
+    const metaNotes=JSON.stringify({schema:SHARED_MACHINEOPS_SCHEMA,domain:SHARED_MACHINEOPS_META,
+      writtenAt:commitAt,version:payload.meta.version,
+      updatedAt:Math.max(payload.meta.updatedAt,commitAt),domains:SHARED_MACHINEOPS_DOMAINS});
+    if(!sharedMachineEnvelopeAllowed(metaName,metaNotes))
+      return this._json({error:'Invalid MachineOps commit metadata'},422);
+    staged.push({name:metaName,notes:metaNotes,recordId:current.recordMap.get(metaName)?.recordId||''});
+
+    for(const item of staged){
+      const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+
+        (item.recordId?'/'+item.recordId:'');
+      let upstream;
+      try{
+        upstream=await fetch(target,{method:item.recordId?'PATCH':'POST',redirect:'manual',
+          headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+          body:JSON.stringify({fields:{Name:item.name,Notes:item.notes}})});
+      }catch(_){return this._json({error:'MachineOps write uncertain; reread before retrying',
+        code:'MACHINEOPS_WRITE_UNCERTAIN'},503);}
+      if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+        return this._json({error:'MachineOps write uncertain; reread before retrying',
+          code:'MACHINEOPS_WRITE_UNCERTAIN'},503);
+    }
+    const verified=await sharedMachineOpsLoad(this.env);
+    if(verified.error)return this._json({error:'MachineOps verification unavailable',
+      code:'MACHINEOPS_WRITE_UNCERTAIN'},503);
+    for(const write of payload.writes){
+      const name=SHARED_MACHINEOPS_PREFIX+write.domain;
+      let parsed;try{parsed=JSON.parse(verified.recordMap.get(name)?.notes||'null');}catch(_){}
+      if(!parsed||JSON.stringify(parsed.data)!==JSON.stringify(write.data))
+        return this._json({error:'MachineOps verification uncertain',
+          code:'MACHINEOPS_WRITE_UNCERTAIN'},503);
+    }
+    const wanted=new Set(staged.map(x=>x.name));
+    return this._json({ok:true,
+      records:verified.records.filter(r=>wanted.has(r.name)),
+      revisions:Object.fromEntries(Object.entries(verified.revisions).filter(([name])=>wanted.has(name)))},200);
   }
 
   // This shares tls-crm-global with guarded Pedidos/Cotizaciones creation.
@@ -2102,7 +2447,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -2319,6 +2664,60 @@ export default {
         Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
         return new Response(guarded.body,{status:guarded.status,headers});
       }catch(_){return json({error:'Mail write guard unavailable'},503,scopedHeaders);}
+    }
+
+
+    // MachineOps is isolated from generic Monitor Sistema access. Reads expose
+    // only allowlisted MachineOps records (without Airtable IDs); writes are
+    // serialized and CAS-guarded per domain.
+    if(url.pathname==='/shared/machineops'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      const keys=[...url.searchParams.keys()];
+      if(keys.some(k=>k!=='record')||url.searchParams.getAll('record').length>1)
+        return json({error:'MachineOps query parameters invalid'},422,scopedHeaders);
+      const record=url.searchParams.get('record')||'';
+      if(record&&record!==SHARED_MACHINEOPS_BED_HISTORY)
+        return json({error:'MachineOps record denied'},403,scopedHeaders);
+      if(request.method==='GET'){
+        const current=await sharedMachineOpsLoad(env,record);
+        if(current.error)return json({error:'MachineOps unavailable'},503,scopedHeaders);
+        return json({ok:true,records:current.records,revisions:current.revisions},200,scopedHeaders);
+      }
+      if(request.method!=='PUT')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>300000)
+        return json({error:'MachineOps expects bounded JSON'},415,scopedHeaders);
+      let body;try{
+        const raw=await request.text();if(raw.length>300000)throw Error('large');
+        body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid MachineOps JSON'},422,scopedHeaders);}
+      if(!env.CRM_MUTATION_GUARD)
+        return json({error:'MachineOps write guard unavailable'},503,scopedHeaders);
+      let guardedBody;
+      if(record){
+        if(!body||Object.keys(body).some(k=>!['data','expectedRevision'].includes(k))||
+           !sharedMachineBedHistoryAllowed(body.data)||
+           typeof body.expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(body.expectedRevision))
+          return json({error:'Invalid machine history document'},422,scopedHeaders);
+        guardedBody={mode:'record',record,data:body.data,expectedRevision:body.expectedRevision};
+      }else{
+        if(!body||Object.keys(body).some(k=>!['writes','meta'].includes(k))||
+           !Array.isArray(body.writes)||!sharedMachinePlainObject(body.meta))
+          return json({error:'Invalid MachineOps document'},422,scopedHeaders);
+        guardedBody={mode:'snapshot',writes:body.writes,meta:body.meta};
+      }
+      guardedBody.actor=authorized.identity
+        ?{email:authorized.identity.email,role:authorized.identity.role}:{legacy:true};
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(
+          env.CRM_MUTATION_GUARD.idFromName('tls-shared-machineops'));
+        const guarded=await stub.fetch('https://crm-write.internal/shared-machineops',{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(guardedBody)
+        });
+        const headers=new Headers(guarded.headers);
+        Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'MachineOps write guard unavailable'},503,scopedHeaders);}
     }
 
     // A signed read-only viewer never receives the full Airtable CRM row.
