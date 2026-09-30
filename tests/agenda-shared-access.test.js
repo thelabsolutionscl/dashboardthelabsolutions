@@ -40,7 +40,8 @@ test('agenda starts with an immediate scoped read and keeps the 15 second poll',
 });
 test('generic Monitor Sistema hydration explicitly filters AGENDA',()=>{
   assert.match(SRC,/global\._applyMonitorSistema=function agendaMonitorFiltered/);
-  assert.match(SRC,/fields\?\.Name!==['"]AGENDA['"]/);
+  assert.match(SRC,/scopedNames=new Set\(\[[^\]]*['"]AGENDA['"]/);
+  assert.match(SRC,/scopedNames\.has\(r\?\.fields\?\.Name\)/);
   assert.match(SRC,/global\._agendaBackup=agendaBackupScoped/);
   assert.match(SRC,/global\.startAgendaSync=startAgendaScopedSync/);
 });
