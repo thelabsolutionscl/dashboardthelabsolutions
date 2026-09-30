@@ -110,7 +110,7 @@ test('operator mutations are strict opt-in fields by verified table and type',()
     ['Proveedores','POST',{Nombre:'Proveedor A',Categoría:['Impresión'],Reputación:3}],
     ['Clientes','PATCH',{Empresa:'Cliente existente',Validado:true}],
     ['Cotizaciones','PATCH',{'Estado cotización':'Enviada',Cliente:[rec]}],
-    ['Pedidos','PATCH',{'Estado pedido':'En producción',Equipo asignado:'Taller'}],
+    ['Pedidos','PATCH',{'Estado pedido':'En producción','Equipo asignado':'Taller'}],
     ['Proveedores','PATCH',{Contacto:'Ana',Teléfono:'+56912345678'}]
   ];
   for(const [table,method,fields] of examples)
