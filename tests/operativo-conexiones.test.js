@@ -232,5 +232,12 @@ test('Resend distingue clave send-only y evidencia de envío real',()=>{
   assert.match(source,/send_only_or_forbidden/);
   assert.match(source,/Envía un correo normal y vuelve a verificar/);
   assert.match(source,/evidence==='recent_send'/);
-  assert.match(source,/Resend rechazó la API key/);
+  assert.doesNotMatch(source,/Resend rechazó la API key/);
+  assert.match(source,/La clave Resend está limitada a envío o no autoriza lecturas/);
+});
+
+
+test('una respuesta unauthorized de /domains no se presenta como clave inválida',()=>{
+  assert.doesNotMatch(source,/error_code==='unauthorized'[\s\S]{0,160}status:'red'/);
+  assert.match(source,/error_code==='unauthorized'\|\|d\?\.error_code==='send_only_or_forbidden'/);
 });
