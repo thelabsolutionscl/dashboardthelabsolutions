@@ -21,7 +21,7 @@ const ACCESS_VIEWER_TABLES=new Set([
   'Maquinas_Eventos','Maquinas_Mant'
 ]);
 const ACCESS_WRITE_TABLES={
-  operator:new Set(['Clientes','Cotizaciones','Pedidos','Inventario','Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema','Proveedores']),
+  operator:new Set(['Clientes','Cotizaciones','Pedidos','Maquinas','Maquinas_Eventos','Maquinas_Mant','Proveedores']),
   finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas','Proveedores','Reportes']),
 };
 const ACCESS_FINANCE_TABLES=new Set([
@@ -277,6 +277,10 @@ function accessAllows(identity,method,path){
   // Admin has unrestricted access to *recognized* data tables, not to any
   // arbitrary upstream method, table name or nested endpoint.
   if(admin)return ['POST','PATCH','DELETE'].includes(method);
+  // No destructive permissions for operational staff. CRM and supplier
+  // POST/PATCH also require a separate server-side field/type guard.
+  if(operator)return ['POST','PATCH'].includes(method)&&
+    ACCESS_WRITE_TABLES.operator.has(table);
   return ['POST','PATCH','DELETE'].includes(method)&&
     !!ACCESS_WRITE_TABLES[identity.role]?.has(table);
 }

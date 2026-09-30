@@ -165,12 +165,12 @@ test('privileged owner reassignments use the SAME DO queue and invalidate a sale
   assert.equal(f.calls.filter(c=>c.method==='PATCH').length,1);
   assert.equal(f.calls.at(-1).method,'GET');
 });
-test('privileged batch PATCH also shares the same global CRM guard',async()=>{
+test('admin batch owner reassignment shares the same global CRM guard',async()=>{
   const f=fixture();
   const uri='https://proxy.example.com'+BASE+'Clientes';
   const request=new Request(uri,{method:'PATCH',headers:{
     Origin:'https://dashboard.thelab.solutions','X-App-Key':f.env.APP_KEY,
-    'Content-Type':'application/json','X-Test-Role':'operator'
+    'Content-Type':'application/json','X-Test-Role':'admin'
   },body:JSON.stringify({records:[{id:rec,fields:{Vendedor:'gustavo'}}]})});
   const result=await f.run(request);
   assert.equal(result.status,200,await result.clone().text());
