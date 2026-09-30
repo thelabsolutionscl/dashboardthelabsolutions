@@ -2,36 +2,6 @@ import { accessAuthorize } from './access-auth.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
 
 
-// A company-wide operator needs operational CRM data, including business
-// quote/order totals, but NOT bank details, margins, private AI finance
-// analysis, raw proposal JSON, production costs or newly created fields.
-const OPERATOR_READ_FIELDS=Object.freeze({
-  Clientes:new Set([...VIEWER_READ_FIELDS.Clientes,
-    'Dirección','Notas followup','Notas internas','Valoración cliente',
-    'Lead Score IA','Servicio interés','Validado','Estado cuenta',
-    'Pedidos','Cotizaciones'
-  ]),
-  Cotizaciones:new Set([...VIEWER_READ_FIELDS.Cotizaciones,
-    'Solicitud cliente (texto libre)','Detalle productos','Subtotal (CLP)',
-    'Total final (CLP)','Urgencia (+25%)','Canal solicitud','Forma de pago',
-    'Tiempo de producción máx','Descuento (%)','Notas cotización','Estado cotización'
-  ]),
-  Pedidos:new Set([...VIEWER_READ_FIELDS.Pedidos,
-    'Instrucciones fabricación','Tiempo estimado (horas)',
-    'Anticipo pagado (50%)','Saldo pagado (50%)',
-    'Monto total (CLP)','Checklist QA','Observaciones QA','Resultado QA',
-    'Motivo rechazo QA','Texto a grabar / imprimir',
-    'Texto confirmado por cliente','Forma de pago','Notas pedido',
-    'Ficha Tecnica','FT Material','FT Color','FT Acabado','FT Cantidad',
-    'FT Impresora','FT Altura capa','FT Relleno (%)','FT Soportes',
-    'FT Peso estimado (g)','FT Tiempo impresión',
-    'FT Notas producción','Fecha despacho','Fecha objetivo interna'
-  ]),
-  Proveedores:new Set([...VIEWER_READ_FIELDS.Proveedores,
-    'WhatsApp','Estado postulación'
-  ])
-});
-
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -64,6 +34,37 @@ const VIEWER_READ_FIELDS=Object.freeze({
   Maquinas_Eventos:new Set(['maquina_id','fecha','tipo','tiempo']),
   Maquinas_Mant:new Set(['maquina_id','tipo','print_hours','fecha'])
 });
+// A company-wide operator needs operational CRM data, including business
+// quote/order totals, but NOT bank details, margins, private AI finance
+// analysis, raw proposal JSON, production costs or newly created fields.
+const OPERATOR_READ_FIELDS=Object.freeze({
+  Clientes:new Set([...VIEWER_READ_FIELDS.Clientes,
+    'Dirección','Notas followup','Notas internas','Valoración cliente',
+    'Lead Score IA','Servicio interés','Validado','Estado cuenta',
+    'Pedidos','Cotizaciones'
+  ]),
+  Cotizaciones:new Set([...VIEWER_READ_FIELDS.Cotizaciones,
+    'Solicitud cliente (texto libre)','Detalle productos','Subtotal (CLP)',
+    'Total final (CLP)','Urgencia (+25%)','Canal solicitud','Forma de pago',
+    'Tiempo de producción máx','Descuento (%)','Notas cotización','Estado cotización'
+  ]),
+  Pedidos:new Set([...VIEWER_READ_FIELDS.Pedidos,
+    'Instrucciones fabricación','Tiempo estimado (horas)',
+    'Anticipo pagado (50%)','Saldo pagado (50%)',
+    'Monto total (CLP)','Checklist QA','Observaciones QA','Resultado QA',
+    'Motivo rechazo QA','Texto a grabar / imprimir',
+    'Texto confirmado por cliente','Forma de pago','Notas pedido',
+    'Ficha Tecnica','FT Material','FT Color','FT Acabado','FT Cantidad',
+    'FT Impresora','FT Altura capa','FT Relleno (%)','FT Soportes',
+    'FT Peso estimado (g)','FT Tiempo impresión',
+    'FT Notas producción','Fecha despacho','Fecha objetivo interna'
+  ]),
+  Proveedores:new Set([...VIEWER_READ_FIELDS.Proveedores,
+    'WhatsApp','Estado postulación'
+  ])
+});
+
+
 function viewerProjectRecord(row,table,fieldsByTable=VIEWER_READ_FIELDS){
   const allowed=fieldsByTable[table];
   const fields=Object.fromEntries(Object.entries(row.fields)
