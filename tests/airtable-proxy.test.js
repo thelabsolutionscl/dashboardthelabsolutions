@@ -548,7 +548,7 @@ test('Make/Meta comprueban APIs sin webhook y rechazan una zona no permitida',as
         {origin:OK_ORIGIN,key:ENV.APP_KEY}),env,undefined);
       assert.equal((await r.json()).verified,true);
     }
-    assert.match(calls[0].url,/^https:\/\/eu1\.make\.com\/api\/v2\/users\/me$/);
+    assert.match(calls[0].url,/^https:\/\/eu1\.make\.com\/api\/v2\/enums\/timezones$/);
     assert.match(calls[1].url,/^https:\/\/graph\.facebook\.com\//);
     assert.ok(calls.every(x=>x.opts.method==='GET'&&x.opts.body===undefined));
     const invalid=await worker.fetch(req('/integrations/check?service=make',
