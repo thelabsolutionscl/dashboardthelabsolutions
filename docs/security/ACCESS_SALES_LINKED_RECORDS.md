@@ -15,3 +15,7 @@ The Worker uses at most two bounded target-table list requests, one per referenc
 The optional relationship query is deliberately not the default because it adds upstream requests and the existing legacy dashboard cannot yet be treated as a signed-sales client. The frontend must explicitly adopt and test these verified links during the eventual Cloudflare Access UI cutover. As with any multi-request Airtable read, verification proves the owner **at lookup time**, not an atomic historical snapshot if external writers can reassign owners between requests.
 
 A signed sales PATCH, if independently activated after the external writer review, now applies the **same approved field projection** to its successful postflight record as a signed sales GET. The full Airtable response is never returned to that seller: bank/financial fields, costs, future columns and unverified relationship IDs stay hidden. PATCH requests cannot edit links or owner fields, and this optional GET join does not relax those restrictions.
+
+## Source freshness check
+
+For explicit verified-link reads, the proxy rereads the source after verifying linked rows. If its assigned seller or link IDs change, the whole response fails closed. Regression tests cover the second read. Changes made by independent Airtable clients after this final read remain an outstanding rollout limitation.
