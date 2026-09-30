@@ -225,6 +225,106 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
     code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);}
 }
 
+
+const SHARED_CALENDAR_EMPTY=Object.freeze({events:[],gmap:{},gmapMts:0,crmSync:{}});
+const SHARED_CALENDAR_EVENT_KEYS=new Set([
+  'id','ts','creadoPor','gcal','titulo','fecha','allDay','hIni','hFin',
+  'personas','lugar','desc','alarmMin','emailMin','avisoApp','mts','del','gsyncMts'
+]);
+const SHARED_CALENDAR_SYNC_KEYS=new Set([
+  'gcal','gsyncMts','signature','type','syncKey','del'
+]);
+function sharedCalendarGcalAllowed(value){
+  if(!value||typeof value!=='object'||Array.isArray(value)||
+     Object.keys(value).length>12)return false;
+  return Object.entries(value).every(([key,row])=>
+    key.length>0&&key.length<=80&&row&&typeof row==='object'&&!Array.isArray(row)&&
+    Object.keys(row).every(k=>['cal','ev','mode'].includes(k))&&
+    ['cal','ev','mode'].every(k=>row[k]===undefined||
+      typeof row[k]==='string'&&row[k].length<=500));
+}
+function sharedCalendarPayloadAllowed(data){
+  if(!data||typeof data!=='object'||Array.isArray(data)||
+     JSON.stringify(data).length>95000)return false;
+  const keys=Object.keys(data);
+  if(keys.length!==4||!['events','gmap','gmapMts','crmSync'].every(k=>keys.includes(k))||
+     !Array.isArray(data.events)||data.events.length>500||
+     !data.gmap||typeof data.gmap!=='object'||Array.isArray(data.gmap)||
+     Object.keys(data.gmap).length>20||
+     !Number.isFinite(data.gmapMts)||data.gmapMts<0||
+     !data.crmSync||typeof data.crmSync!=='object'||Array.isArray(data.crmSync)||
+     Object.keys(data.crmSync).length>1000)return false;
+  const text=(v,max)=>typeof v==='string'&&v.length<=max&&
+    !/[\x00-\x08\x0b\x0e-\x1f]/.test(v);
+  const finite=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0;
+  if(!Object.entries(data.gmap).every(([k,v])=>text(k,80)&&text(v,500)))return false;
+  for(const event of data.events){
+    if(!event||typeof event!=='object'||Array.isArray(event)||
+       Object.keys(event).some(k=>!SHARED_CALENDAR_EVENT_KEYS.has(k))||
+       !text(event.id,180)||!finite(event.ts)||!finite(event.mts)||
+       !text(event.creadoPor||'',254)||!text(event.titulo||'',300)||
+       !/^\d{4}-\d{2}-\d{2}$/.test(String(event.fecha||''))||
+       (event.allDay!==undefined&&typeof event.allDay!=='boolean')||
+       !text(event.hIni||'',20)||!text(event.hFin||'',20)||
+       !Array.isArray(event.personas)||event.personas.length>12||
+       !event.personas.every(v=>text(v,80))||
+       !text(event.lugar||'',500)||!text(event.desc||'',4000)||
+       (event.alarmMin!==undefined&&(!finite(event.alarmMin)||event.alarmMin>10080))||
+       (event.emailMin!==undefined&&(!finite(event.emailMin)||event.emailMin>10080))||
+       (event.avisoApp!==undefined&&typeof event.avisoApp!=='boolean')||
+       (event.del!==undefined&&typeof event.del!=='boolean')||
+       (event.gsyncMts!==undefined&&!finite(event.gsyncMts))||
+       (event.gcal!==undefined&&!sharedCalendarGcalAllowed(event.gcal)))return false;
+  }
+  for(const [key,row] of Object.entries(data.crmSync)){
+    if(!text(key,180)||!row||typeof row!=='object'||Array.isArray(row)||
+       Object.keys(row).some(k=>!SHARED_CALENDAR_SYNC_KEYS.has(k))||
+       (row.gcal!==undefined&&!sharedCalendarGcalAllowed(row.gcal))||
+       (row.gsyncMts!==undefined&&!finite(row.gsyncMts))||
+       (row.signature!==undefined&&!text(row.signature,1000))||
+       (row.type!==undefined&&!text(row.type,80))||
+       (row.syncKey!==undefined&&!text(row.syncKey,240))||
+       (row.del!==undefined&&typeof row.del!=='boolean'))return false;
+  }
+  return true;
+}
+async function sharedCalendarDigest(raw){
+  const bytes=new TextEncoder().encode(String(raw||''));
+  const hash=await crypto.subtle.digest('SHA-256',bytes);
+  return [...new Uint8Array(hash)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+async function sharedCalendarLoad(env){
+  if(!env.AIRTABLE_TOKEN)return {error:'missing-token'};
+  const query=new URLSearchParams();
+  query.set('maxRecords','2');
+  query.set('filterByFormula',"{Name}='CALENDARIO'");
+  query.append('fields[]','Name');query.append('fields[]','Notes');
+  let response;
+  try{
+    response=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+'?'+query.toString(),{
+        method:'GET',redirect:'manual',
+        headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+      });
+  }catch(_){return {error:'network'};}
+  if(!response.ok||response.status>=300&&response.status<400)
+    return {error:'upstream'};
+  let body;try{body=await response.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>1)
+    return {error:body?.records?.length>1?'duplicate':'invalid-shape'};
+  if(!body.records.length)return {
+    recordId:'',raw:'',revision:'',data:{events:[],gmap:{},gmapMts:0,crmSync:{}}
+  };
+  const record=body.records[0];
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(record.id||''))||
+     record.fields?.Name!=='CALENDARIO'||typeof record.fields?.Notes!=='string')
+    return {error:'invalid-record'};
+  let data;try{data=JSON.parse(record.fields.Notes);}catch(_){return {error:'invalid-payload'};}
+  if(!sharedCalendarPayloadAllowed(data))return {error:'invalid-payload'};
+  return {recordId:record.id,raw:record.fields.Notes,
+    revision:await sharedCalendarDigest(record.fields.Notes),data};
+}
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -1098,8 +1198,9 @@ export class CrmMutationGuard {
   fetch(request) {
     const path=new URL(request.url).pathname;
     const run = this._queue.then(() => path==='/marketing/spend'
-      ?this._handleSpend(request):path==='/scoped-patch'
-        ?this._handleScopedPatch(request):this._handle(request));
+      ?this._handleSpend(request):path==='/shared-calendar'
+        ?this._handleSharedCalendar(request):path==='/scoped-patch'
+          ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
   }
@@ -1108,6 +1209,49 @@ export class CrmMutationGuard {
       status, headers: { 'Content-Type': 'application/json' },
     });
   }
+  async _handleSharedCalendar(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Shared calendar guard unavailable'},503);
+    let payload;try{payload=await request.json();}catch(_){
+      return this._json({error:'Invalid shared calendar request'},422);
+    }
+    const actor=payload?.actor;
+    const signed=actor&&typeof actor.email==='string'&&
+      ['sales','operator','finance','admin'].includes(actor.role);
+    const legacy=actor?.legacy===true;
+    if(!signed&&!legacy||!sharedCalendarPayloadAllowed(payload?.data)||
+       typeof payload.expectedRevision!=='string'||payload.expectedRevision.length>64)
+      return this._json({error:'Shared calendar write denied'},403);
+    const current=await sharedCalendarLoad(this.env);
+    if(current.error)return this._json({error:'Shared calendar unavailable'},503);
+    if(current.revision!==payload.expectedRevision)
+      return this._json({error:'Calendar changed on another device',
+        code:'CALENDAR_REVISION_CONFLICT',revision:current.revision,data:current.data},409);
+    const raw=JSON.stringify(payload.data);
+    if(raw.length>95000)return this._json({error:'Calendar payload too large'},413);
+    const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+
+      (current.recordId?'/'+current.recordId:'');
+    const body={fields:{Name:'CALENDARIO',Notes:raw}};
+    let upstream;
+    try{
+      upstream=await fetch(target,{method:current.recordId?'PATCH':'POST',
+        redirect:'manual',headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,
+          'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }catch(_){return this._json({error:'Calendar write outcome uncertain; reread before retrying',
+      code:'CALENDAR_WRITE_UNCERTAIN'},503);}
+    if([400,401,403,404,422].includes(upstream.status))
+      return this._json({error:'Calendar write rejected',code:'CALENDAR_WRITE_REJECTED'},422);
+    if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+      return this._json({error:'Calendar write outcome uncertain; reread before retrying',
+        code:'CALENDAR_WRITE_UNCERTAIN'},503);
+    const verified=await sharedCalendarLoad(this.env);
+    if(verified.error||verified.raw!==raw)
+      return this._json({error:'Calendar write succeeded but verification is uncertain',
+        code:'CALENDAR_WRITE_UNCERTAIN'},503);
+    return this._json({ok:true,revision:verified.revision,data:verified.data},200);
+  }
+
   // This shares tls-crm-global with guarded Pedidos/Cotizaciones creation.
   // All proxied Access PATCHes of the three commercial tables enter one queue.
   // The sales branch alone requires a verified owner, safe field allowlist,
@@ -1655,7 +1799,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -1725,6 +1869,46 @@ export default {
         email:authorized.identity.email,role:authorized.identity.role,
         method:request.method,path:url.pathname.slice(0,180),
       }));
+    }
+
+    // Calendar collaboration gets a dedicated document endpoint instead of
+    // granting browsers generic Monitor Sistema access.
+    if(url.pathname==='/shared/calendar'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search)return json({error:'Calendar query parameters not allowed'},422,scopedHeaders);
+      if(request.method==='GET'){
+        const current=await sharedCalendarLoad(env);
+        if(current.error)return json({error:'Shared calendar unavailable'},503,scopedHeaders);
+        return json({ok:true,revision:current.revision,data:current.data},200,scopedHeaders);
+      }
+      if(request.method!=='PUT')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>100000)
+        return json({error:'Calendar expects bounded JSON'},415,scopedHeaders);
+      let body;try{
+        const raw=await request.text();if(raw.length>100000)throw Error('large');
+        body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid calendar JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>!['data','expectedRevision'].includes(k))||
+         !sharedCalendarPayloadAllowed(body.data)||
+         typeof body.expectedRevision!=='string'||body.expectedRevision.length>64)
+        return json({error:'Invalid calendar document'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)
+        return json({error:'Calendar write guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(
+          env.CRM_MUTATION_GUARD.idFromName('tls-shared-calendar'));
+        const guarded=await stub.fetch('https://crm-write.internal/shared-calendar',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({data:body.data,expectedRevision:body.expectedRevision,
+            actor:authorized.identity
+              ?{email:authorized.identity.email,role:authorized.identity.role}
+              :{legacy:true}})
+        });
+        const headers=new Headers(guarded.headers);
+        Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Calendar write guard unavailable'},503,scopedHeaders);}
     }
 
     // A signed read-only viewer never receives the full Airtable CRM row.
