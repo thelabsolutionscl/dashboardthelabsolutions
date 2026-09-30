@@ -897,7 +897,10 @@ function feedbackSecret(env) {
   return privatePortal.length >= 32 ? privatePortal : "";
 }
 function feedbackSignedOnly(env) {
-  return String(env.FEEDBACK_SIGNED_ONLY || "").trim().toLowerCase() === "true";
+  const setting=String(env.FEEDBACK_SIGNED_ONLY || "").trim().toLowerCase();
+  // A mistyped nonempty cutover value must NEVER silently permit legacy
+  // unsigned order IDs. Empty/explicit false alone preserve legacy mode.
+  return setting!==""&&setting!=="false";
 }
 async function feedbackMakeToken(env, id, purpose, days = 30) {
   const secret = feedbackSecret(env);
