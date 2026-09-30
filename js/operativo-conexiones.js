@@ -325,6 +325,17 @@
     }
     if(!store.mounted){store.mounted=true;restore();}
     render();
+    startMonitoring();
+  }
+  function startMonitoring(){
+    // Puede iniciarse después de DOMContentLoaded si el login fue asíncrono.
+    if(store.autoStarted||!user()||root._DEMO_MODE)return;
+    store.autoStarted=true;
+    setTimeout(()=>{if(!DOC.hidden&&user())void sweep(false);},1300);
+    setInterval(()=>{if(!DOC.hidden&&permitted('overview'))void sweep(false);},FIVE_MIN);
+    DOC.addEventListener('visibilitychange',()=>{
+      if(!DOC.hidden&&Date.now()-store.lastSweep>=FIVE_MIN)void sweep(false);
+    });
   }
   function open(){
     mount();
@@ -357,12 +368,6 @@
   function bootstrap(){
     if(!DOC)return;
     mount();
-    if(!root._DEMO_MODE&&user()&&!store.autoStarted){
-      store.autoStarted=true;
-      setTimeout(()=>{mount();void sweep(false);},1300);
-      setInterval(()=>{if(!DOC.hidden&&permitted('overview'))void sweep(false);},FIVE_MIN);
-      DOC.addEventListener('visibilitychange',()=>{if(!DOC.hidden&&Date.now()-store.lastSweep>=FIVE_MIN)void sweep(false);});
-    }
   }
   const api={catalog,counts,displayStatus,configuredUrl,formatTime,mount,open,check,sweep,summary,probe,result,getJson};
   if(typeof module!=='undefined'&&module.exports){module.exports=api;return;}
