@@ -51,6 +51,8 @@ jobs:
           PORTAL_ADMIN_KEY: ${{ secrets.PORTAL_ADMIN_KEY }}
           PORTAL_ACCESS_MODE: ${{ vars.PORTAL_ACCESS_MODE }}
           PORTAL_CUTOVER_VERIFIED: ${{ vars.PORTAL_CUTOVER_VERIFIED }}
+          FEEDBACK_ACCESS_MODE: ${{ vars.FEEDBACK_ACCESS_MODE }}
+          FEEDBACK_CUTOVER_VERIFIED: ${{ vars.FEEDBACK_CUTOVER_VERIFIED }}
         run: |
           # Nunca publicar un PAT de Airtable en GitHub Pages, ni siquiera
           # cuando falte el Proxy. Si no hay backend configurado se detiene
@@ -78,6 +80,21 @@ jobs:
           else
             if [ -n "${PORTAL_ADMIN_KEY}" ]; then sed -i "s|%%PORTAL_ADMIN_KEY%%|${PORTAL_ADMIN_KEY}|g" index.html; fi
             sed -i "s|%%PORTAL_ACCESS_MODE%%|false|g" index.html
+          fi
+          # Feedback/NPS/POD/tracking: no unsigned base64 links after the
+          # signed issuer cutover; leave legacy unchanged until both Workers,
+          # browser Access sessions and same-site proxy DNS are verified.
+          if [ "${FEEDBACK_ACCESS_MODE}" = "true" ]; then
+            if [ "${FEEDBACK_CUTOVER_VERIFIED}" != "true" ] || [ "${PORTAL_ACCESS_MODE}" != "true" ] ||
+               [ -z "${LEAD_WORKER_URL}" ] ||
+               [[ ! "${PROXY_URL}" =~ ^https://[a-z0-9-]+\.thelab\.solutions/?$ ]]; then
+              echo "::error::Feedback Access requires verified portal Access, a same-site proxy and a configured lead Worker."
+              exit 1
+            fi
+            sed -i "s|%%FEEDBACK_ACCESS_MODE%%|true|g" js/agentes.js
+            echo "Signed customer feedback links enabled; legacy fallback disabled in dashboard."
+          else
+            sed -i "s|%%FEEDBACK_ACCESS_MODE%%|false|g" js/agentes.js
           fi
           sed -i "s|%%SII_WORKER_URL%%|${SII_WORKER_URL}|g" index.html
           if [ "${SII_ACCESS_MODE}" = "true" ]; then

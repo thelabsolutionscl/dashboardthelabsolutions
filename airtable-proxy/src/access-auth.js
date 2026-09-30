@@ -234,6 +234,7 @@ function accessAllows(identity,method,path){
   if(path==='/printer/session')return method==='POST';
   if(path.startsWith('/printer/'))return false;
 
+  if(path==='/feedback/link')return method==='POST'&&(operator||finance||admin);
   if(path==='/portal-admin/link')return method==='POST'&&(operator||finance||admin);
   if(path==='/portal-admin/revocar')return method==='POST'&&admin;
   if(path.startsWith('/portal-admin/'))return false;

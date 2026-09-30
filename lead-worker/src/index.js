@@ -84,6 +84,11 @@ export default {
       if (request.method === "POST" && url.pathname === "/portal/link") {
         return await handlePortalLink(request, env, cors);
       }
+      // Privileged issuance; signed NPS/POD/tracking links are never minted
+      // using public APP_KEY, customer-supplied IDs or a browser-side secret.
+      if (request.method === "POST" && url.pathname === "/feedback/link") {
+        return await handleFeedbackLink(request, env, cors);
+      }
 
       if (request.method === "GET" && url.pathname === "/portal") {
         return await handlePortal(request, env);
@@ -880,6 +885,91 @@ function _npsDecodeToken(t) {
   try { id = atob(String(t || "")); } catch (e) { return null; }
   return isRecId(id) ? id : null;
 }
+// Migration of legacy base64(recordId) links. Signed links are purpose-bound
+// and expire, and their key stays only in the lead Worker. No APP_KEY/PAT/public
+// form key may be used as a signing fallback. FEEDBACK_SIGNED_ONLY is an
+// independent final-cutover switch, initially false to preserve old links.
+const FEEDBACK_PURPOSES = new Set(["nps", "pod", "pedido"]);
+function feedbackSecret(env) {
+  const dedicated = String(env.FEEDBACK_LINK_SECRET || "");
+  if (dedicated.length >= 32) return dedicated;
+  const privatePortal = String(env.PORTAL_SECRET || "");
+  return privatePortal.length >= 32 ? privatePortal : "";
+}
+function feedbackSignedOnly(env) {
+  const setting=String(env.FEEDBACK_SIGNED_ONLY || "").trim().toLowerCase();
+  // A mistyped nonempty cutover value must NEVER silently permit legacy
+  // unsigned order IDs. Empty/explicit false alone preserve legacy mode.
+  return setting!==""&&setting!=="false";
+}
+async function feedbackMakeToken(env, id, purpose, days = 30) {
+  const secret = feedbackSecret(env);
+  if (!secret || !isRecId(id) || !FEEDBACK_PURPOSES.has(purpose) ||
+      !Number.isInteger(days) || days < 1 || days > 90)
+    throw Error("Feedback signing unavailable");
+  const exp = Math.floor(Date.now() / 1000) + days * 86400;
+  const sig = await hmacB64u(secret, "feedback:v1:" + purpose + ":" + id + ":" + exp);
+  return { token: id + "." + exp.toString(36) + "." + sig, exp };
+}
+async function feedbackVerifyToken(env, raw, purpose) {
+  const text = String(raw || "");
+  if (!FEEDBACK_PURPOSES.has(purpose) || text.length > 200) return null;
+  const parts = text.split(".");
+  if (parts.length === 3) {
+    const [id, exp36, supplied] = parts;
+    const exp = /^[0-9a-z]{6,9}$/.test(exp36) ? parseInt(exp36, 36) : NaN;
+    if (!isRecId(id) || !Number.isSafeInteger(exp) ||
+        exp < 1000000000 || exp > 4102444800 ||
+        exp * 1000 < Date.now() ||
+        !/^[A-Za-z0-9_-]{43}$/.test(supplied)) return null;
+    const secret = feedbackSecret(env);
+    if (!secret) return null;
+    const expected = await hmacB64u(secret, "feedback:v1:" + purpose + ":" + id + ":" + exp);
+    return timingSafeEqual(supplied, expected) ? id : null;
+  }
+  return feedbackSignedOnly(env) ? null : _npsDecodeToken(text);
+}
+async function handleFeedbackLink(request, env, cors) {
+  // This key may still be present in historical Pages bundles before the
+  // portal Access cutover. Never allow minting merely because it matches:
+  // a separate final-review switch and freshly rotated private credential
+  // are required. This remains OFF in every existing deployment.
+  if (String(env.FEEDBACK_ISSUER_ENABLED || "").trim().toLowerCase() !== "true")
+    return json({ok:false,error:"Feedback issuance not activated"},503,cors);
+  const expected = String(env.PORTAL_ADMIN_KEY || "");
+  const key = String(request.headers.get("X-Portal-Admin-Key") || "");
+  if (expected.length < 16 || !timingSafeEqual(key, expected))
+    return json({ok:false,error:"No autorizado"},401,cors);
+  if (!feedbackSecret(env))
+    return json({ok:false,error:"Feedback signing secret not configured"},503,cors);
+  if (!String(request.headers.get("Content-Type") || "").toLowerCase().startsWith("application/json") ||
+      Number(request.headers.get("Content-Length") || 0) > 1024)
+    return json({ok:false,error:"Expected bounded JSON"},415,cors);
+  let body;
+  try {
+    const raw = await request.text();
+    if (raw.length > 1024) throw Error("Oversized feedback request");
+    body = JSON.parse(raw);
+  } catch (_) { return json({ok:false,error:"Invalid feedback JSON"},400,cors); }
+  const recordId = body?.recordId, purpose = body?.purpose;
+  const days = body?.days === undefined ? 30 : body.days;
+  if (!body || typeof body !== "object" || Array.isArray(body) ||
+      !Object.keys(body).every(k => ["recordId", "purpose", "days"].includes(k)) ||
+      !isRecId(recordId) || !FEEDBACK_PURPOSES.has(purpose) ||
+      !Number.isInteger(days) || days < 1 || days > 90)
+    return json({ok:false,error:"Invalid feedback link request"},422,cors);
+  let origin;
+  try {
+    const publicUrl = new URL(String(env.WORKER_PUBLIC_URL || new URL(request.url).origin));
+    if (publicUrl.protocol !== "https:" || publicUrl.username || publicUrl.password ||
+        publicUrl.pathname !== "/" || publicUrl.search || publicUrl.hash)
+      throw Error("Invalid public origin");
+    origin = publicUrl.origin;
+  } catch (_) { return json({ok:false,error:"Feedback public origin unavailable"},503,cors); }
+  const signed = await feedbackMakeToken(env, recordId, purpose, days);
+  return json({ok:true,url:origin + "/" + purpose + "?p=" + encodeURIComponent(signed.token),
+    expires_at:signed.exp,purpose},200,{...cors,"Cache-Control":"no-store"});
+}
 async function handleNps(request, env, ctx, cors) {
   const url = new URL(request.url);
 
@@ -895,7 +985,7 @@ async function handleNps(request, env, ctx, cors) {
   if (request.method === "POST") {
     const body = await readJson(request);
     if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
-    const pedId = _npsDecodeToken(body.token);
+    const pedId = await feedbackVerifyToken(env, body.token, "nps");
     if (!pedId) return json({ ok: false, error: "Token inválido" }, 400, cors);
     if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return json({ ok: false, error: "No configurado" }, 500, cors);
     const comentario = String(body.comentario || "").slice(0, 2000);
@@ -907,18 +997,19 @@ async function handleNps(request, env, ctx, cors) {
   }
 
   // GET
-  const pedId = _npsDecodeToken(url.searchParams.get("p"));
+  const feedbackToken = url.searchParams.get("p");
+  const pedId = await feedbackVerifyToken(env, feedbackToken, "nps");
   if (!pedId) return htmlPage("Enlace inválido", "Este enlace de encuesta no es válido o ya expiró.", false);
   const gRaw = url.searchParams.get("g") || "";
   const gUrl = /^https?:\/\//i.test(gRaw) ? gRaw : "";
   const sRaw = url.searchParams.get("s");
 
   // Sin score → mostrar la página de calificación
-  if (sRaw == null) return npsRatingPage(pedId, gUrl);
+  if (sRaw == null) return npsRatingPage(pedId, gUrl, feedbackToken);
 
   const score = parseInt(sRaw, 10);
   if (!(score >= 1 && score <= 5)) return htmlPage("Calificación inválida", "Elige una nota del 1 al 5.", false);
-  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return npsThanksPage(score, pedId, gUrl);
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return npsThanksPage(score, pedId, gUrl, feedbackToken);
 
   try {
     await airtableUpdateTolerant(env, "Pedidos", pedId, {
@@ -929,10 +1020,10 @@ async function handleNps(request, env, ctx, cors) {
     // best-effort: igual agradecemos para no frustrar al cliente
   }
   ctx.waitUntil(sendNpsAlert(env, { pedId, score }));
-  return npsThanksPage(score, pedId, gUrl);
+  return npsThanksPage(score, pedId, gUrl, feedbackToken);
 }
-function npsRatingPage(pedId, gUrl) {
-  const tok = btoa(pedId);
+function npsRatingPage(pedId, gUrl, feedbackToken) {
+  const tok = feedbackToken;
   const g = gUrl ? "&g=" + encodeURIComponent(gUrl) : "";
   const faces = [
     { n: 1, e: "😞", t: "Muy malo" },
@@ -942,7 +1033,7 @@ function npsRatingPage(pedId, gUrl) {
     { n: 5, e: "😍", t: "Excelente" },
   ];
   const btns = faces.map((f) =>
-    `<a href="/nps?p=${tok}&s=${f.n}${g}" style="display:flex;flex-direction:column;align-items:center;gap:6px;text-decoration:none;padding:12px 8px;border-radius:12px;background:#151518;border:1px solid #26262b;min-width:58px;transition:transform .1s">
+    `<a href="/nps?p=${encodeURIComponent(tok)}&s=${f.n}${g}" style="display:flex;flex-direction:column;align-items:center;gap:6px;text-decoration:none;padding:12px 8px;border-radius:12px;background:#151518;border:1px solid #26262b;min-width:58px;transition:transform .1s">
        <span style="font-size:34px">${f.e}</span>
        <span style="font-size:10px;color:#8a8a92">${f.t}</span></a>`
   ).join("");
@@ -956,8 +1047,8 @@ ${logoHeader(true)}
 </div></body></html>`;
   return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
-function npsThanksPage(score, pedId, gUrl) {
-  const tok = btoa(pedId);
+function npsThanksPage(score, pedId, gUrl, feedbackToken) {
+  const tok = feedbackToken;
   const feliz = score >= 4;
   const color = feliz ? "#00b3a4" : score === 3 ? "#f5a623" : "#e5484d";
   const titulo = feliz ? "¡Gracias por tu nota! 🙌" : "Gracias, lo tomamos muy en serio";
@@ -1038,10 +1129,11 @@ async function handlePod(request, env, ctx, cors) {
   if (await rateLimited(env, request, "pod", 30, 3600)) {
     return htmlPage("Demasiados intentos", "Espera unos minutos y vuelve a abrir el enlace.", false, 429);
   }
-  const pedId = _npsDecodeToken(url.searchParams.get("p"));
+  const feedbackToken = url.searchParams.get("p");
+  const pedId = await feedbackVerifyToken(env, feedbackToken, "pod");
   if (!pedId) return htmlPage("Enlace inválido", "Este enlace de confirmación no es válido o ya expiró.", false);
   const confirm = url.searchParams.get("c") === "1";
-  if (!confirm) return podConfirmPage(pedId);
+  if (!confirm) return podConfirmPage(pedId, feedbackToken);
   if (env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
     try {
       await airtableUpdateTolerant(env, "Pedidos", pedId, {
@@ -1053,8 +1145,8 @@ async function handlePod(request, env, ctx, cors) {
   }
   return htmlPage("¡Recepción confirmada! ✅", "Gracias por confirmar que recibiste tu pedido conforme. ¡Fue un gusto trabajar contigo!", true);
 }
-function podConfirmPage(pedId) {
-  const tok = btoa(pedId);
+function podConfirmPage(pedId, feedbackToken) {
+  const tok = feedbackToken;
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirmar recepción — The Lab Solutions</title></head>
 <body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
 <div style="max-width:460px;padding:40px 24px;text-align:center">
@@ -1062,7 +1154,7 @@ ${logoHeader(true)}
 <div style="font-size:44px;margin-bottom:8px">📦</div>
 <h1 style="font-size:22px;margin:0 0 12px">¿Recibiste tu pedido?</h1>
 <p style="font-size:15px;line-height:1.6;color:#b6b6bd;margin:0 0 24px">Confírmanos que llegó todo en orden. Nos tomas 1 segundo y nos ayuda a cerrar el pedido.</p>
-<a href="/pod?p=${tok}&c=1" style="display:inline-block;background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:13px 26px;border-radius:10px;font-size:15px">✅ Sí, lo recibí conforme</a>
+<a href="/pod?p=${encodeURIComponent(tok)}&c=1" style="display:inline-block;background:#00b3a4;color:#06231f;font-weight:700;text-decoration:none;padding:13px 26px;border-radius:10px;font-size:15px">✅ Sí, lo recibí conforme</a>
 </div></body></html>`;
   return new Response(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
@@ -1098,7 +1190,7 @@ async function handlePedidoEstado(request, env) {
   if (await rateLimited(env, request, "pedido", 60, 3600)) {
     return htmlPage("Demasiados intentos", "Espera unos minutos y vuelve a abrir el enlace.", false, 429);
   }
-  const pedId = _npsDecodeToken(url.searchParams.get("p"));
+  const pedId = await feedbackVerifyToken(env, url.searchParams.get("p"), "pedido");
   if (!pedId) return htmlPage("Enlace inválido", "Este enlace de seguimiento no es válido o ya expiró.", false);
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) return htmlPage("No disponible", "El seguimiento no está disponible en este momento.", false);
   let rec;

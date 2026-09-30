@@ -652,6 +652,64 @@ function _npsWorkerUrl(){
     return u.replace(/\/$/,'');
   }catch(e){return '';}
 }
+// Keep the legacy outgoing links until the Cloudflare Access + private issuer
+// has been tested in two browsers. Once enabled, NEVER fall back to a public
+// base64(recordId) link after an issuer, network or role error.
+function _feedbackAccessMode(){return '%%FEEDBACK_ACCESS_MODE%%'==='true';}
+async function _feedbackSecureLink(p,purpose){
+  if(!_feedbackAccessMode())throw Error('Feedback Access is not active');
+  if(!p||!/^rec[A-Za-z0-9]{14}$/.test(p.id||'')||
+     !['nps','pod','pedido'].includes(purpose))
+    throw Error('Invalid feedback record or purpose');
+  const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+  let origin;
+  try{
+    const proxy=new URL(String(px?.url||''));
+    if(proxy.origin!=='https://proxy.thelab.solutions'||
+       proxy.username||proxy.password||proxy.pathname!=='/'||
+       proxy.search||proxy.hash||!px.key)
+      throw Error('Invalid proxy');
+    origin=proxy.origin;
+  }catch(_){throw Error('Cloudflare Access proxy is not configured');}
+  const result=await fetch(origin+'/feedback/link',{
+    method:'POST',credentials:'include',redirect:'error',
+    headers:{'Content-Type':'application/json','X-App-Key':px.key},
+    body:JSON.stringify({recordId:p.id,purpose,days:30})
+  });
+  if(!result.ok)throw Error('Cannot issue authenticated feedback link');
+  let data;
+  try{data=await result.json();}catch(_){throw Error('Invalid feedback issuer response');}
+  const expected=_npsWorkerUrl();
+  let issued,worker;
+  try{
+    issued=new URL(String(data?.url||''));
+    worker=new URL(expected);
+    if(!data||data.ok!==true||data.purpose!==purpose||
+       issued.protocol!=='https:'||issued.username||issued.password||
+       issued.port||issued.hash||issued.pathname!=='/'+purpose||
+       !/^rec[A-Za-z0-9]{14}\.[0-9a-z]{6,9}\.[A-Za-z0-9_-]{43}$/.test(
+         issued.searchParams.get('p')||'')||
+       issued.searchParams.getAll('p').length!==1||
+       [...issued.searchParams.keys()].some(k=>k!=='p')||
+       (issued.origin!==worker.origin&&
+        !['https://leads.thelab.solutions','https://portal.thelab.solutions'].includes(issued.origin)))
+      throw Error('Invalid signed URL');
+  }catch(_){throw Error('Feedback issuer returned an untrusted URL');}
+  if(purpose==='nps'){
+    const review=_pdReviewUrl();
+    if(review)issued.searchParams.set('g',review);
+  }
+  return issued.toString();
+}
+function _feedbackPopup(){
+  const popup=window.open('about:blank','_blank');
+  if(!popup)throw Error('El navegador bloqueó la pestaña de WhatsApp');
+  return popup;
+}
+function _feedbackPopupFail(popup){
+  try{popup?.close();}catch(_){}
+  toast('No se pudo crear el enlace protegido. Revisa la sesión de Access e inténtalo nuevamente.','error');
+}
 function _npsLink(p){
   const base=_npsWorkerUrl(); if(!base||!p||!p.id) return '';
   let url=base+'/nps?p='+encodeURIComponent(btoa(p.id));
@@ -661,14 +719,20 @@ function _npsLink(p){
 // ── PORTAL DE SEGUIMIENTO DE PEDIDO (S2) ───────────────────────────────
 // Enlace público (worker /pedido) donde el cliente ve el estado de su pedido.
 function _seguimientoLink(p){const base=_npsWorkerUrl();if(!base||!p||!p.id)return '';return base+'/pedido?p='+encodeURIComponent(btoa(p.id));}
-function compartirSeguimiento(pedidoId){
+async function compartirSeguimiento(pedidoId){
   const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
-  const link=_seguimientoLink(p);if(!link){toast('Configura el lead-worker para compartir seguimiento','info');return;}
+  if(!_feedbackAccessMode()&&!_seguimientoLink(p)){toast('Configura el lead-worker para compartir seguimiento','info');return;}
   const cli=_pdCliRec(p);const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
-  const msg=`Hola${nombre?' '+nombre:''} 👋 Aquí puedes seguir el estado de tu pedido ${p.fields['N° Pedido']?('('+p.fields['N° Pedido']+')'):''} en tiempo real: ${link}\n— The Lab Solutions`;
   const phone=cli?_getClienteWAPhone(cli):'';
-  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg),'_blank');
-  toast('Compartiendo seguimiento del pedido','success');
+  let popup=null;
+  try{
+    if(_feedbackAccessMode())popup=_feedbackPopup();
+    const link=_feedbackAccessMode()?await _feedbackSecureLink(p,'pedido'):_seguimientoLink(p);
+    const msg=`Hola${nombre?' '+nombre:''} 👋 Aquí puedes seguir el estado de tu pedido ${p.fields['N° Pedido']?('('+p.fields['N° Pedido']+')'):''} en tiempo real: ${link}\n— The Lab Solutions`;
+    const wa='https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg);
+    if(popup)popup.location.replace(wa);else window.open(wa,'_blank');
+    toast('Compartiendo seguimiento del pedido','success');
+  }catch(_){_feedbackPopupFail(popup);}
 }
 
 // ── COMPROBANTE DE ENTREGA / POD (Q7) ──────────────────────────────────
@@ -686,28 +750,34 @@ async function ensurePodFields(){
     for(const w of want){if(have.has(w.name))continue;try{await _atFetch(`/meta/bases/${BASE_ID}/tables/${tbl.id}/fields`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(w)});}catch(e){}}
   }catch(e){}
 }
-function _podMsg(p){
+function _podMsg(p,overrideLink){
   const f=p.fields;const cli=_pdCliRec(p);
   const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
-  const link=_podLink(p);
+  const link=overrideLink||_podLink(p);
   return `Hola${nombre?' '+nombre:''} 👋 Soy de The Lab Solutions. Te despachamos tu pedido ${f['N° Pedido']?('('+f['N° Pedido']+')'):''} y queremos confirmar que llegó todo bien. ¿Nos confirmas la recepción con un clic aquí? ${link}\n¡Gracias! 💙`;
 }
-function pedirPOD(pedidoId){
+async function pedirPOD(pedidoId){
   const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId);if(!p){toast('Pedido no encontrado','error');return;}
-  if(!_podLink(p)){toast('Configura el lead-worker para enviar el comprobante','info');return;}
-  try{ensurePodFields();}catch(e){}
+  if(!_feedbackAccessMode()&&!_podLink(p)){toast('Configura el lead-worker para enviar el comprobante','info');return;}
   const cli=_pdCliRec(p);const phone=cli?_getClienteWAPhone(cli):'';
-  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_podMsg(p)),'_blank');
-  toast('Enviando solicitud de confirmación de entrega','success');
+  let popup=null;
+  try{
+    if(_feedbackAccessMode())popup=_feedbackPopup();
+    const link=_feedbackAccessMode()?await _feedbackSecureLink(p,'pod'):_podLink(p);
+    try{await ensurePodFields();}catch(_){}
+    const wa='https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_podMsg(p,link));
+    if(popup)popup.location.replace(wa);else window.open(wa,'_blank');
+    toast('Enviando solicitud de confirmación de entrega','success');
+  }catch(_){_feedbackPopupFail(popup);}
 }
 function _pdUsesNps(p){return !_pdReviewUrl()&&!!_npsLink(p);}
-function _pdMsg(p){
+function _pdMsg(p,overrideNps){
   const f=p.fields;
   const cli=_pdCliRec(p);
   const nombre=cli&&cli.fields['Contacto']?String(cli.fields['Contacto']).trim().split(/\s+/)[0]:'';
   const prod=String(f['Detalle productos']||f['Solicitud cliente (texto libre)']||'').trim().slice(0,60);
   const rev=_pdReviewUrl();
-  const nps=_npsLink(p);
+  const nps=overrideNps||_npsLink(p);
   const base=`Hola${nombre?' '+nombre:''} 👋 Soy Andrea de The Lab Solutions. Hace unos días te entregamos ${prod?('tu pedido ('+prod+')'):'tu pedido'} y queríamos saber cómo llegó todo — ¿quedaste conforme? 😊`;
   // Si hay un enlace de Google configurado, ese es el CTA principal. No mostramos
   // la URL técnica del worker al cliente.
@@ -801,13 +871,20 @@ function buildPostEntregaTray(){
   }).join('')+(cands.length>10?`<div style="padding:8px 16px;font-size:11px;color:var(--text3)">…y ${cands.length-10} más</div>`:'');
   _pdBindTrayCollapse(card,list);
 }
-function pdWhatsApp(pedidoId){
+async function pdWhatsApp(pedidoId){
   const p=(state.pedidosById||{})[pedidoId]||(state.pedidos||[]).find(x=>x.id===pedidoId); if(!p){toast('Pedido no encontrado','error');return;}
   const cli=_pdCliRec(p);
   const phone=cli?_getClienteWAPhone(cli):'';
-  if(_pdUsesNps(p)){try{ensureNpsFields();}catch(e){}}   // prepara NPS solo cuando no existe link directo de Google
-  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_pdMsg(p)),'_blank');
-  pdMarkDone(pedidoId,'WhatsApp',true);
+  let popup=null;
+  try{
+    const needsNps=_pdUsesNps(p);
+    if(_feedbackAccessMode())popup=_feedbackPopup();
+    const link=needsNps&&_feedbackAccessMode()?await _feedbackSecureLink(p,'nps'):null;
+    if(needsNps){try{await ensureNpsFields();}catch(_){}}
+    const wa='https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(_pdMsg(p,link));
+    if(popup)popup.location.replace(wa);else window.open(wa,'_blank');
+    pdMarkDone(pedidoId,'WhatsApp',true);
+  }catch(_){_feedbackPopupFail(popup);}
 }
 // Abre un BORRADOR del mensaje post-entrega en la sección Correos, listo para
 // revisar/editar antes de mandarlo (no se envía automáticamente). Al enviarlo de
@@ -822,7 +899,12 @@ async function pdEmail(pedidoId,btn){
   if(btn){btn.disabled=true;btn.textContent='…';}
   if(_pdUsesNps(p)){try{await ensureNpsFields();}catch(e){}}   // prepara NPS solo cuando no existe link directo de Google
   if(btn){btn.disabled=false;btn.innerHTML=prev;}
-  const bodyHtml=escapeHtml(_pdMsg(p)).replace(/\n/g,'<br>');
+  let secureNps=null;
+  if(_feedbackAccessMode()&&_pdUsesNps(p)){
+    try{secureNps=await _feedbackSecureLink(p,'nps');}
+    catch(_){if(btn){btn.disabled=false;btn.innerHTML=prev;}_feedbackPopupFail(null);return;}
+  }
+  const bodyHtml=escapeHtml(_pdMsg(p,secureNps)).replace(/\n/g,'<br>');
   if(typeof switchTab==='function') switchTab('correo');
   setTimeout(()=>{try{MAIL.openCompose({to,subject:'¿Cómo llegó tu pedido? — The Lab Solutions',body:bodyHtml,title:'Mensaje post-entrega',_pdPedidoId:pedidoId,_fromName:AGENT_CTA_FROM.name,_fromEmail:AGENT_CTA_FROM.email});}catch(e){toast('No se pudo abrir el borrador','error');}},350);
 }
