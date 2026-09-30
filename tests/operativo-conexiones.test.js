@@ -226,3 +226,11 @@ test('cada diagnóstico tiene timeout aislado para no frenar las demás tarjetas
   assert.match(source,/Promise\.race\(\[Promise\.resolve\(\)\.then\(\(\)=>probe\(id,mode\)\),timeout\]\)/);
   assert.match(source,/La comprobación tardó demasiado/);
 });
+
+
+test('Resend distingue clave send-only y evidencia de envío real',()=>{
+  assert.match(source,/send_only_or_forbidden/);
+  assert.match(source,/Envía un correo normal y vuelve a verificar/);
+  assert.match(source,/evidence==='recent_send'/);
+  assert.match(source,/Resend rechazó la API key/);
+});
