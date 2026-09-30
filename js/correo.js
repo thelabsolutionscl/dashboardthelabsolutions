@@ -14,6 +14,7 @@ const MAIL={
   _readSeq:0,
   _sending:false,
   _accountUnseen:{},
+  _sharedMailRevisions:{},
 
   // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
   // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
@@ -43,6 +44,95 @@ const MAIL={
   activeAccountObj(){
     const a=this.activeAccount();
     return this.accounts().find(x=>x.email===a)||{email:a,name:(AUTH.getUser()?.name||'')};
+  },
+
+  _sharedMailKey(resource,account){return resource+':'+(account||'');},
+  _sharedMailConfig(){
+    try{
+      const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+      if(!px?.url||!px?.key)return null;
+      const url=new URL(px.url);
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+         url.search||url.hash)return null;
+      if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+      return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+    }catch(_){return null;}
+  },
+  async _sharedMailRequest(resource,method,account,body){
+    const cfg=this._sharedMailConfig();if(!cfg)throw new Error('Proxy compartido no configurado');
+    const params=new URLSearchParams({resource});
+    if(resource!=='templates')params.set('account',account||'');
+    return fetch(cfg.base+'/shared/mail?'+params.toString(),{
+      method,credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+  },
+  _acceptSharedMailDoc(doc,resource,account){
+    if(!doc||doc.ok!==true||doc.resource!==resource||
+       typeof doc.revision!=='string')return false;
+    if(resource!=='templates'&&doc.account!==account)return false;
+    this._sharedMailRevisions[this._sharedMailKey(resource,account)]=doc.revision;
+    return true;
+  },
+  async _readSharedMail(resource,account){
+    const r=await this._sharedMailRequest(resource,'GET',account);
+    if(!r?.ok)return null;
+    const doc=await r.json();
+    return this._acceptSharedMailDoc(doc,resource,account)?doc:null;
+  },
+  _mergeSentAddresses(a,b){
+    const seen=new Set(),out=[];
+    [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(email=>{
+      const v=String(email||'').trim().toLowerCase();
+      if(v&&!seen.has(v)){seen.add(v);out.push(v);}
+    });
+    return out.slice(0,300);
+  },
+  async _writeSharedMail(resource,data,account){
+    try{
+      const key=this._sharedMailKey(resource,account);
+      if(typeof this._sharedMailRevisions[key]!=='string'){
+        const first=await this._readSharedMail(resource,account);
+        if(!first)return false;
+        if(resource==='sent-addresses')data=this._mergeSentAddresses(data,first.data);
+      }
+      for(let attempt=0;attempt<2;attempt++){
+        const body={resource,data,expectedRevision:this._sharedMailRevisions[key]||''};
+        if(resource!=='templates')body.account=account;
+        const r=await this._sharedMailRequest(resource,'PUT',account,body);
+        let doc={};try{doc=await r.json();}catch(_){}
+        if(r.ok)return this._acceptSharedMailDoc(doc,resource,account);
+        if(r.status===409&&attempt===0&&doc?.code==='MAIL_REVISION_CONFLICT'&&
+           doc.resource===resource&&typeof doc.revision==='string'&&
+           (resource==='templates'||doc.account===account)){
+          this._sharedMailRevisions[key]=doc.revision;
+          if(resource==='sent-addresses')data=this._mergeSentAddresses(data,doc.data);
+          continue;
+        }
+        return false; // timeout/5xx/resultado incierto: nunca reintentar a ciegas
+      }
+    }catch(_){return false;}
+    return false;
+  },
+  async _hydrateSharedMailboxState(account){
+    const acct=String(account||this.activeAccount()||'').trim().toLowerCase();
+    if(!acct)return false;
+    const [sig,sent]=await Promise.all([
+      this._readSharedMail('signature',acct).catch(()=>null),
+      this._readSharedMail('sent-addresses',acct).catch(()=>null)
+    ]);
+    if(sig&&typeof sig.data==='string'&&sig.data){
+      const k='thelab_mail_sig_'+acct;
+      if(!localStorage.getItem(k))localStorage.setItem(k,sig.data);
+    }
+    if(sent&&Array.isArray(sent.data)){
+      const k='thelab_mail_sent_'+acct;
+      let local=[];try{local=JSON.parse(localStorage.getItem(k)||'[]');}catch(_){}
+      localStorage.setItem(k,JSON.stringify(this._mergeSentAddresses(local,sent.data)));
+      try{this.fillContactsDatalist();}catch(_){}
+    }
+    return !!(sig||sent);
   },
 
   unseenTotal(){
@@ -212,6 +302,7 @@ const MAIL={
 
   async init(){
     this.renderAccounts();
+    this._hydrateSharedMailboxState().catch(()=>{});
     if(this._init) return;
     if(!this.getMailPass()){this.showPassModal();return;}
     this._init=true;
@@ -850,6 +941,7 @@ const MAIL={
     document.getElementById('mailList').innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
     document.getElementById('mailConnStatus').textContent='';
     this.renderAccounts();
+    this._hydrateSharedMailboxState(email).catch(()=>{});
     if(!this.getMailPass()){ this.showPassModal(); return; }
     this.init();
   },
@@ -984,8 +1076,8 @@ const MAIL={
   },
 
   // ── Direcciones enviadas antes (para autocompletar) ──
-  // Se guardan por casilla activa (como la firma) y se respaldan en Airtable
-  // (Monitor Sistema » MAIL_SENT_ADDRESSES) para sobrevivir al caché y a otros equipos.
+  // Se guardan por casilla activa y se sincronizan por /shared/mail, sin
+  // exponer el registro global MAIL_SENT_ADDRESSES de Monitor Sistema al navegador.
   _sentKey(){const a=this.activeAccount();return a?'thelab_mail_sent_'+a:null;},
   getSentAddrs(){const k=this._sentKey();if(!k)return[];try{const v=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(v)?v:[];}catch(e){return[];}},
   _extractEmails(...strs){
@@ -1006,20 +1098,12 @@ const MAIL={
   },
   async _saveSentAddrsAirtable(){
     try{
-      let prev={};try{prev=JSON.parse(state._mailSentRemote||'{}');}catch(e){}
-      const all={...prev};
-      this.accounts().forEach(a=>{
-        const v=localStorage.getItem('thelab_mail_sent_'+a.email);if(!v)return;
-        let local=[];try{local=JSON.parse(v);}catch(e){return;}
-        const remote=Array.isArray(all[a.email])?all[a.email]:[];
-        const seen=new Set();const merged=[];
-        [...local, ...remote].forEach(e=>{const lk=String(e).toLowerCase();if(lk&&!seen.has(lk)){seen.add(lk);merged.push(lk);}});
-        all[a.email]=merged.slice(0,300);
-      });
-      const notes=JSON.stringify(all).slice(0,95000);
-      await _monitorUpsert('MAIL_SENT_ADDRESSES',notes,'mailSentRecordId');
-      state._mailSentRemote=notes;
-    }catch(e){console.warn('[Direcciones] no se pudo respaldar en Airtable (queda local):',e.message);}
+      const account=this.activeAccount();if(!account)return false;
+      const local=this.getSentAddrs();
+      const ok=await this._writeSharedMail('sent-addresses',local,account);
+      if(!ok)console.warn('[Direcciones] respaldo compartido pendiente; el historial queda local');
+      return ok;
+    }catch(e){console.warn('[Direcciones] no se pudo respaldar (queda local):',e.message);return false;}
   },
   // Precarga única (por casilla/equipo) del histórico de la carpeta Enviados, para
   // que el autocompletar tenga direcciones desde el primer día y no solo desde el
@@ -1280,15 +1364,12 @@ const MAIL={
   },
   async _saveSigsAirtable(){
     try{
-      // Junta las firmas locales de todas las cuentas y las mezcla sobre lo ya
-      // respaldado (así no se pisan firmas guardadas desde otro computador).
-      let prev={};try{prev=JSON.parse(state._mailSigsRemote||'{}');}catch(e){}
-      const all={...prev};
-      this.accounts().forEach(a=>{const v=localStorage.getItem('thelab_mail_sig_'+a.email);if(v) all[a.email]=v;});
-      const notes=JSON.stringify(all).slice(0,95000);
-      await _monitorUpsert('MAIL_SIGNATURES',notes,'mailSigsRecordId');
-      state._mailSigsRemote=notes;
-    }catch(e){console.warn('[Firmas] no se pudo respaldar en Airtable (queda local):',e.message);}
+      const account=this.activeAccount();if(!account)return false;
+      const html=localStorage.getItem('thelab_mail_sig_'+account)||'';
+      const ok=await this._writeSharedMail('signature',html,account);
+      if(!ok)console.warn('[Firmas] respaldo compartido pendiente; la firma queda local');
+      return ok;
+    }catch(e){console.warn('[Firmas] no se pudo respaldar (queda local):',e.message);return false;}
   },
 
   sigHtml(){
