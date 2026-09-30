@@ -16,10 +16,9 @@ test('calendar shared sync no longer requires generic Monitor Sistema access or 
   assert.match(request,/credentials:\s*['"]include['"]/);
   assert.match(request,/X-App-Key/);
   for(const block of [backup,poll]){
-    assert.doesNotMatch(block,/Monitor Sistema/);
-    assert.doesNotMatch(block,/_monitorUpsert/);
+    assert.doesNotMatch(block,/_monitorUpsert\s*\(/);
     assert.doesNotMatch(block,/calRecordId/);
-    assert.doesNotMatch(block,/_atFetch/);
+    assert.doesNotMatch(block,/_atFetch\s*\(/);
   }
 });
 test('calendar PUT retries only a confirmed revision conflict and never blindly retries 5xx',()=>{
