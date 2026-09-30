@@ -10,7 +10,6 @@ El panel OVERVIEW ofrece dos acciones separadas por integración: **Conectar / c
 - Meta: opcional `META_ACCESS_TOKEN` en el proxy, con permiso de lectura de identidad. GET `/me?fields=id`; no publica.
 - Resend: agregar el `mail-api.php` actualizado al servidor **mail-api.thelab.solutions**. Verifica mediante `GET /domains` desde PHP (la clave no abandona el servidor), solo después de autenticar una cuenta IMAP. Si se usa una API key restringida al envío, la verificación de dominios puede resultar amarilla aunque el envío funcione.
 - Google Ads: GET existente al endpoint de Google Apps Script (`days=1`). Solo se permiten URLs de `script.google.com`. El éxito certifica lectura, no permiso para editar campañas.
-- WordPress: marcado como **Legado**, ya que el sitio actual usa Next.js. Solo verifica si hay una configuración legítima y credenciales en la sesión. No se confunde salud de la web con integración WordPress.
 
 Todos los métodos del proxy para comprobar integraciones externas son GET, con proveedor y destinos fijos, sin redirecciones y sin devolver cuerpos externos, API keys o datos personales. Cloudflare Access, cuando está habilitado, exige rol `admin`; el modo legado sigue usando clave compartida y origen validado, por lo que la configuración de Access sigue siendo necesaria para asegurar el backend.
 

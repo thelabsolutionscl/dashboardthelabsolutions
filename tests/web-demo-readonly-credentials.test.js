@@ -14,16 +14,15 @@ function stores(){
  const make=()=>{const m=new Map();return {getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k)};};
  return {localStorage:make(),sessionStorage:make()};
 }
-test('WordPress Application Password moves out of persistent storage on first read',()=>{
+test('limpieza definitiva elimina las credenciales heredadas de ambos almacenamientos',()=>{
  const {localStorage,sessionStorage}=stores();
- localStorage.setItem('wp_config',JSON.stringify({url:'https://wp.example',user:'staff',pass:'private'}));
- const fn=new Function('localStorage','sessionStorage',fragment('function getWPConfig(){','function saveWPConfig(){')+'return getWPConfig;')(localStorage,sessionStorage);
- assert.equal(fn().pass,'private');
+ localStorage.setItem('wp_config','credencial heredada');
+ sessionStorage.setItem('wp_config','credencial de sesión');
+ const purge=fragment('(function clearDeprecatedSiteCredentials(){','// Auditor SEO on-page');
+ new Function('localStorage','sessionStorage',purge)(localStorage,sessionStorage);
  assert.equal(localStorage.getItem('wp_config'),null);
- assert.equal(JSON.parse(sessionStorage.getItem('wp_config')).pass,'private');
- const save=fragment('function saveWPConfig(){','function loadWPConfigForm(){');
- assert.match(save,/sessionStorage\.setItem\('wp_config'/);
- assert.doesNotMatch(save,/localStorage\.setItem\('wp_config'/);
+ assert.equal(sessionStorage.getItem('wp_config'),null);
+ assert.doesNotMatch(source,/function getWPConfig|\/wp-json\/|_yoast_wpseo_/);
 });
 test('Ads mutation secret moves to session storage while retaining public endpoint and customer ID',()=>{
  const {localStorage,sessionStorage}=stores();

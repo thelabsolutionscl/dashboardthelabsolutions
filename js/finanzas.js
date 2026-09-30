@@ -1994,7 +1994,7 @@ const GS_SECTIONS=[
   {tab:'maquinas',      icon:'icon-maquinas',       c:'#ff4444',title:'Máquinas',        kw:'impresoras 3d printers monitor capacidad'},
   {tab:'equipo',        icon:'icon-equipo',         c:'#f472b6',title:'Equipo',          kw:'personas staff calendario turnos rrhh'},
   {tab:'reporte',       icon:'icon-reporte',        c:'#14b8a6',title:'Reportes',        kw:'analitica estadisticas metricas informes'},
-  {tab:'web',           icon:'icon-web',            c:'#6366f1',title:'Web',             kw:'wordpress google ads seo sitio marketing'},
+  {tab:'web',           icon:'icon-web',            c:'#6366f1',title:'Web',             kw:'google ads seo nextjs sitio marketing'},
   {tab:'finanzas',      icon:'icon-finanzas',       c:'#22c55e',title:'Finanzas',        kw:'facturas dte sii caja flujo dinero contabilidad'},
   {tab:'visual',        icon:'icon-visual',         c:'#8b5cf6',title:'Visual AI',       kw:'imagenes render diseno generador'},
   {tab:'remuneraciones',icon:'icon-remuneraciones', c:'#84cc16',title:'Remuneraciones',  kw:'sueldos pagos nominas liquidaciones rrhh'},

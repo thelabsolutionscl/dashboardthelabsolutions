@@ -34,8 +34,7 @@ test('WEB tiene una sola sección, navegación y módulo SEO/Ads cargado',()=>{
   assert.match(SOURCE,/switchTab\(\s*['"]web['"]\s*\)/,'debe existir navegación escritorio');
   assert.match(SOURCE,/switchTabMobile\(\s*['"]web['"]\s*\)/,'debe existir navegación móvil');
   assert.equal(count(/js\/seo-ads\.js(?:\?[^"']*)?/g,INDEX),1,'seo-ads.js debe cargarse una sola vez');
-  // seoPagesList pertenecía al panel de WordPress, retirado al migrar el sitio
-  // (hoy manda el Auditor SEO on-page); sus funciones quedan con guarda de nulo.
+  // Auditor SEO on-page: Next.js y sitemap real; no usa un CMS externo.
   for(const id of ['webTrafficPanel','webTrafficBody','webTrafficDemo','seoAuditBody','seoAuditScore','adsCampaignsArea','adsPendingPanel','adsCapacidadBox','adsSuggestBox','adsAutopilotPanel','adsCampaignModal','adsDeleteModal','adsOfflineModal']){
     assert.equal(count(new RegExp(`id=["']${id}["']`,'g'),INDEX),1,`${id} debe existir una vez`);
   }
@@ -43,7 +42,7 @@ test('WEB tiene una sola sección, navegación y módulo SEO/Ads cargado',()=>{
 
 test('las funciones críticas de WEB existen sin redefiniciones',()=>{
   [
-    'getWPConfig','saveWPConfig','loadWPPages','renderSEOList','runSeoAudit','_seoAnalyze','seoOptimizeIA','saveYoastFields','runSEODiag',
+    'runSeoAudit','_seoAnalyze','seoOptimizeIA',
     'getAdsConfig','saveAdsConfig','loadAdsData','renderAdsKPIs','renderAdsCampaigns','renderAdsAgent','getAdsDemoData',
     'syncAdsToAirtable','loadAdsSnapshotsFromAirtable','_adsQueueMutation','sendAdsMutation','syncMutationStatuses','renderPendingMutations','retryMutation','retryAllErrors',
     'getCapacidadLineas','renderAdsCapacidad','renderAdsSugerencias','renderAdsAutopilot','adsAutopilotDecide',
@@ -97,14 +96,10 @@ test('la optimización SEO con IA parte desde hallazgos reales y solo propone te
   assert.doesNotMatch(body,/airtableWrite|fetch\([^)]*wp-json\/wp\/v2/,'la IA general no debe publicar directamente');
 });
 
-test('el guardado SEO verifica la respuesta de WordPress antes de confirmar',()=>{
-  const body=functionBlock(SOURCE,'saveYoastFields');
-  assert.match(body,/wpAuthHeader\s*\(/);
-  assert.match(body,/method\s*:\s*['"]POST['"]/);
-  assert.match(body,/_yoast_wpseo_title/);
-  assert.match(body,/_yoast_wpseo_metadesc/);
-  assert.match(body,/\?_fields=meta/,'debe releer los campos');
-  assert.match(body,/savedOk/,'debe validar la persistencia');
+test('la auditoría SEO actual no mantiene rutas de publicación WP/Yoast',()=>{
+ const live=fs.readFileSync(path.join(JS_DIR,'seo-ads.js'),'utf8');
+ assert.doesNotMatch(live,/\/wp-json\/|_yoast_wpseo_|getWPConfig|saveYoastFields|loadWPPages|runSEODiag/);
+ assert.match(live,/function runSeoAudit\s*\(/);
 });
 
 test('loadAdsData respeta el orden lógico completo del panel',()=>{
@@ -214,8 +209,6 @@ test('los snapshots de Ads se escriben en Airtable con lotes acotados',()=>{
   assert.match(body,/adsHealthScore/);
 });
 
-test.todo('runSEODiag debe restaurar el título SEO original después de probar escritura');
-test.todo('credenciales WordPress y secreto de Ads no deben persistirse en localStorage');
 test.todo('el webhook y la clave de Make no deben estar expuestos en el bundle público');
 test.todo('la creación debe confirmar primero la cola y después solicitar el cascarón a Make');
 test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ads o Make',()=>{
@@ -232,4 +225,3 @@ test.todo('syncAdsToAirtable debe hacer upsert por fecha/campaña y no duplicar 
 test.todo('ROAS real debe usar ingresos atribuibles a Google Ads, no todo el revenue del CRM');
 test.todo('la carga de líneas manuales y láser debe usar pedidos de su propia línea, no el total global');
 test.todo('el piloto debe reservar o cerrar la propuesta antes de encolar para evitar una segunda aprobación si falla Airtable');
-test.todo('saveYoastFields debe comparar los valores leídos con los valores enviados antes de mostrar éxito');

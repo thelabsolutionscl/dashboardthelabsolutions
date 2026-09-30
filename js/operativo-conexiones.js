@@ -19,7 +19,6 @@
     {id:'make',name:'Make · Automatizaciones',group:'IA y automatización',page:'overview',impact:'Escenarios de automatización y notificaciones',guide:'Crea una API key de solo lectura en Make con scope organization:read. Configura MAKE_API_TOKEN y MAKE_API_ZONE (eu1, eu2, us1, us2, ca1 o au1) como secreto/variable del Worker en Cloudflare. Verificar conexión usa únicamente GET, sin llamar webhooks.',auto:false},
     {id:'ads',name:'Google Ads',group:'Marketing y web',page:'web',impact:'Campañas, gasto y reportes publicitarios',guide:'Abre Configurar Ads, comprueba la URL de Google Apps Script y el ID de cliente. Verificar conexión realiza una consulta de lectura, sin modificar campañas. El permiso para editar campañas se comprueba por separado.',auto:false},
     {id:'meta',name:'Meta / Redes sociales',group:'Marketing y web',page:'redes',impact:'Publicaciones, integraciones y métricas sociales',guide:'Configura META_ACCESS_TOKEN en el Worker de Cloudflare con permisos de lectura de identidad. Verificar conexión consulta GET /me sin publicar ni modificar nada. Revisa permisos y activos en Meta Business Settings.',auto:false},
-    {id:'wordpress',name:'WordPress · Legado',group:'Marketing y web',page:'web',impact:'Contenido del sitio y diagnóstico SEO',guide:'Revisar WEB y la API REST de WordPress. La validación de edición requiere un permiso de sitio; el monitor no modifica entradas.',auto:false}
   ];
   const byId=Object.fromEntries(catalog.map(s=>[s.id,s]));
   const store={results:{},history:[],lastGood:{},lastSweep:0,lastCheckAt:0,busy:new Set(),snapshot:null,active:'Todas',mounted:false,autoStarted:false,userKey:null};
@@ -32,7 +31,6 @@
     meta:'https://business.facebook.com/settings',
     ads:'https://ads.google.com/',
     resend:'https://resend.com/api-keys',
-    wordpress:'https://thelab.solutions/',
     proxy:'https://dash.cloudflare.com/',airtable:'https://dash.cloudflare.com/',
     sii:'https://dash.cloudflare.com/',leads:'https://dash.cloudflare.com/',
     printer:'https://dash.cloudflare.com/'
@@ -121,7 +119,6 @@
     if(id==='github')return true;
     if(id==='ads')return typeof loadAdsData==='function'||permitted('web');
     if(id==='meta')return permitted('redes');
-    if(id==='wordpress')return permitted('web');
     return false;
   }
   function configuredClientId(value){return !!(value&&typeof value==='string'&&!value.startsWith('%%'));}
@@ -179,22 +176,6 @@
     return r.data?.ok===true?
       {status:'green',message:'Consulta Ads correcta; permiso para modificar campañas no comprobado'}:
       {status:'yellow',message:'El Script no confirmó una conexión válida con Google Ads'};
-  }
-  async function verifyWordPress(){
-    if(typeof getWPConfig!=='function')return {status:'gray',message:'WordPress legado no configurado'};
-    const cfg=getWPConfig();
-    if(!cfg?.user||!cfg?.pass)return {status:'gray',message:'No hay credenciales WordPress en esta sesión'};
-    let url;
-    try{url=new URL(cfg.url);if(url.protocol!=='https:'||
-      !['thelab.solutions','www.thelab.solutions'].includes(url.hostname)||
-      url.username||url.password||url.port)throw Error('invalid');}
-    catch(_){return {status:'gray',message:'Se requiere la URL HTTPS autorizada del sitio'};}
-    const r=await getJson(url.origin+'/wp-json/wp/v2/users/me?context=edit',
-      {headers:{Authorization:'Basic '+btoa(cfg.user+':'+cfg.pass)}});
-    if(r.status!=='green')return r;
-    return r.data?.id?
-      {status:'green',message:'WordPress confirmó autenticación de solo lectura'}:
-      {status:'yellow',message:'WordPress no confirmó identidad'};
   }
   async function probe(id,mode){
     const manual=mode==='manual',u=user();
@@ -299,7 +280,6 @@
         {status:'gray',message:'No existe la credencial del proveedor en Cloudflare'};
     }
     if(id==='ads')return manual?verifyAds():{status:'gray',message:'Pulsa Verificar conexión para consultar Google Ads'};
-    if(id==='wordpress')return manual?verifyWordPress():{status:'gray',message:'WordPress es legado; configúralo solo si sigue en uso'};
     return {status:'gray',message:'Aún no dispone de comprobación segura'};
   }
   const pending=new Map();
@@ -486,14 +466,6 @@
     if(id==='printer'||id==='proxy'||id==='airtable'){
       if(typeof openUserMenu==='function'){
         DOC.getElementById('tlsConnDialog')?.close();openUserMenu();
-      }else guide(id);
-      return;
-    }
-    if(id==='wordpress'){
-      const panel=DOC.getElementById('wpConfigPanel');
-      if(panel&&permitted('web')&&typeof switchTab==='function'){
-        DOC.getElementById('tlsConnDialog')?.close();switchTab('web');
-        panel.style.display='block';panel.scrollIntoView?.({block:'nearest'});
       }else guide(id);
       return;
     }

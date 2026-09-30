@@ -2,7 +2,7 @@
 
 ## Montaje
 
-El archivo js/operativo-visual.js carga js/operativo-conexiones.js con el hash del build. El nuevo módulo agrega su propio CSS versionado. El resumen se presenta en OVERVIEW y el diálogo contiene 16 integraciones, filtros por categoría, diagnóstico, dependencia afectada, último OK y reparación guiada.
+El archivo js/operativo-visual.js carga js/operativo-conexiones.js con el hash del build. El nuevo módulo agrega su propio CSS versionado. El resumen se presenta en OVERVIEW y el diálogo contiene 15 integraciones, filtros por categoría, diagnóstico, dependencia afectada, último OK y reparación guiada.
 
 ## Semáforo
 
@@ -22,13 +22,14 @@ Las revisiones automáticas se ejecutan cada cinco minutos con sesión autentica
 | Google Calendar | Una lectura con el token vigente; no demuestra sincronización |
 | Google Drive | Una lectura de archivos con el token vigente; no sube documentos |
 | IMAP | Bajo demanda, consulta de carpetas; no abre ni marca correos |
-| Resend | No tiene prueba segura en frontend; gris y guía de revisión |
+| Resend | Verificación autenticada desde el servidor de correo bajo demanda, sin enviar mensajes |
 | Impresoras | GET /healthz; no demuestra que cada cámara funcione |
 | Worker SII | GET /health y banderas de certificado/autenticación; no consume folios |
 | Worker de leads | GET /health; no envía formularios |
 | GitHub Pages | Última ejecución de deploy y versión del build si está disponible |
-| Claude y OpenAI | Solo presencia de configuración en el proxy; no consume tokens |
-| Make, Google Ads, Meta y WordPress | Guías sin comprobación activa hasta contar con endpoints seguros |
+| Claude y OpenAI | GET de modelos desde el proxy, sin consumir tokens de inferencia; verifica identidad de claves, no saldo |
+| Make y Meta | GET autenticado con claves de solo lectura desde Cloudflare, al solicitarlo |
+| Google Ads | GET al Apps Script configurado; confirma lectura, no escritura |
 
 ## Reparación y seguridad
 
@@ -37,7 +38,7 @@ Calendar y Drive permiten reconectar mediante el flujo OAuth existente tras un c
 ## Pendientes al validar en producción
 
 1. Comprobar OAuth de Google en navegador y en Tauri/macOS, permisos Cloudflare Access y CORS.
-2. Para Resend, Make, Ads, Meta y WordPress, crear endpoints backend autenticados de solo lectura antes de habilitar verificaciones y semáforos verdes.
+2. Verificar credenciales/permisos reales en la sesión administrativa y actualizar manualmente el servidor PHP de Resend; no marcar servicios en verde sin una prueba exitosa.
 3. Conectar las URLs de Workers SII y leads cuando falten en la configuración del despliegue.
 4. Los flujos completos (evento sincronizado, correo entregado, lead procesado, cámara operativa) requieren telemetría y recibos adicionales; una respuesta HTTP no basta.
 5. La vigilancia del navegador no reemplaza un monitor externo 24/7.

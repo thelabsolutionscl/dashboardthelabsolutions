@@ -5,14 +5,14 @@ const source=fs.readFileSync('js/operativo-conexiones.js','utf8');
 const visual=fs.readFileSync('js/operativo-visual.js','utf8');
 const css=fs.readFileSync('js/operativo-conexiones.css','utf8');
 
-test('catálogo tiene 16 servicios independientes, sin estados verdes ficticios',()=>{
-  assert.equal(center.catalog.length,16);
-  assert.equal(new Set(center.catalog.map(x=>x.id)).size,16);
-  for(const id of ['proxy','airtable','calendar','drive','imap','resend','printer','sii','leads','github','anthropic','openai','make','ads','meta','wordpress']){
+test('catálogo tiene 15 servicios independientes, sin estados verdes ficticios',()=>{
+  assert.equal(center.catalog.length,15);
+  assert.equal(new Set(center.catalog.map(x=>x.id)).size,15);
+  for(const id of ['proxy','airtable','calendar','drive','imap','resend','printer','sii','leads','github','anthropic','openai','make','ads','meta']){
     assert.ok(center.catalog.some(x=>x.id===id),id);
   }
   const c=center.counts(center.catalog);
-  assert.equal(c.green,0);assert.equal(c.red,0);assert.equal(c.gray,16);
+  assert.equal(c.green,0);assert.equal(c.red,0);assert.equal(c.gray,15);
   assert.match(source,/status:'gray',message:'Todavía no se ha ejecutado una prueba'/);
 });
 
@@ -185,4 +185,9 @@ test('el centro aparece una sola vez en OVERVIEW y carga CSS con el hash del bui
   sandbox.AUTH.getUser=()=>({username:'otro@ejemplo.cl',role:'admin'});
   root.TLSConnections.mount();
   assert.equal(root.TLSConnections.summary().red,0,'cambiar de usuario no muestra errores de otra sesión');
+});
+
+test('no hay ficha, acciones ni verificación del proveedor retirado',()=>{
+  assert.ok(!center.catalog.some(s=>s.id==='wordpress'));
+  for(const legacy of ['verifyWordPress','wp-json','wpConfigPanel'])assert.equal(source.includes(legacy),false,legacy);
 });
