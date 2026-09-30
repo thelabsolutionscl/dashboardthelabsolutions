@@ -6,7 +6,7 @@
 'use strict';
 
 const STORAGE_KEY='thelab_machine_ops_v2';
-const REMOTE_NAME='MACHINE_OPS_V2';
+const REMOTE_NAME='MACHINE_OPS_V2'; // nombre lógico legado; transporte real: MachineOpsStorage
 const DB_NAME='thelab-machine-ops';
 const DB_STORE='queues';
 const MODELS=['K1','K2','K2 Plus','Ender-5 Max','Giga'];
@@ -279,14 +279,13 @@ async function saveRemote(force=false){
   if(!_remoteDirty&&!force)return true;
   const revision=_remoteRevision;
   _remoteSaving=(async()=>{
-    if(typeof _monitorUpsert!=='function'){
+    if(typeof window.MachineOpsStorage?.writeSnapshot!=='function'){
       _remoteSetError('Sin acceso al almacenamiento compartido');_scheduleRemoteRetry();return false;
     }
     _remoteSync.state='pushing';_remoteSync.lastError='';_renderRemoteSyncIndicator();
     try{
       await loadRemote({render:false,requeueLocal:false});
-      const payload=JSON.stringify(_remoteSnapshot(data()));
-      await _monitorUpsert(REMOTE_NAME,payload,'machineOpsRecordId');
+      await window.MachineOpsStorage.writeSnapshot(_remoteSnapshot(data()));
       _remoteSync.lastPushAt=Date.now();_remoteSync.state='synced';_remoteSync.lastError='';_remoteRetryMs=2500;
       if(revision===_remoteRevision)_remoteDirty=false;
       else setTimeout(()=>saveRemote(),0);
@@ -302,15 +301,13 @@ async function loadRemote({render=false,requeueLocal=true}={}){
   if(window._DEMO_MODE)return false;
   if(_remotePulling)return _remotePulling;
   _remotePulling=(async()=>{
-    if(typeof airtableFetch!=='function'){_remoteSetError('Airtable no disponible');return false;}
+    if(typeof window.MachineOpsStorage?.readSnapshot!=='function'){_remoteSetError('MachineOps compartido no disponible');return false;}
     _remoteSync.state=_remoteDirty?'pending':'pulling';
     try{
       const localBefore=data();
-      const res=await airtableFetch('Monitor Sistema',200);
-      const rec=(res.records||[]).find(r=>r.fields?.Name===REMOTE_NAME);
-      if(!rec){_remoteSetError('No existe el registro compartido de MachineOps');return false;}
-      state.machineOpsRecordId=rec.id;
-      const remote=JSON.parse(rec.fields?.Notes||'{}'),needsPush=_localNeedsRemotePush(localBefore,remote);
+      const remote=await window.MachineOpsStorage.readSnapshot();
+      if(!remote||typeof remote!=='object'){_remoteSetError('No existe un snapshot compartido de MachineOps');return false;}
+      const needsPush=_localNeedsRemotePush(localBefore,remote);
       const before=JSON.stringify(localBefore);
       _data=mergeData(localBefore,remote);writeLocal();
       const changed=JSON.stringify(_data)!==before;
@@ -879,6 +876,10 @@ async function checkBridgeHealth(silent=true){
   writeLocal();renderIntelligence();updateNavCounts();return _bridgeHealth.state==='up';
 }
 function saveIntelligenceConfig(){
+  const role=typeof AUTH!=='undefined'?AUTH.getUser()?.role:'';
+  if(typeof RBAC!=='undefined'&&typeof RBAC.canConfigRole==='function'&&!RBAC.canConfigRole(role)){
+    toast('Solo administración puede cambiar automatización y costos de MachineOps','error');return false;
+  }
   data().automation={...data().automation,enabled:!!input('mopsAutoEnabled')?.checked,autoLink:!!input('mopsAutoLink')?.checked,autoIncident:!!input('mopsAutoIncident')?.checked,
     stallMinutes:clamp(num(inputVal('mopsAutoStall'),12),3,120),offlineMinutes:clamp(num(inputVal('mopsAutoOffline'),2),1,30),tempTolerance:clamp(num(inputVal('mopsAutoTemp'),18),5,60),bridgeIntervalSeconds:clamp(num(inputVal('mopsBridgeInterval'),60),30,600)};
   data().costConfig={...data().costConfig,electricityClpKwh:Math.max(0,num(inputVal('mopsCostElectricity'))),machineKw:Math.max(0,num(inputVal('mopsCostKw'))),laborClpHour:Math.max(0,num(inputVal('mopsCostLabor'))),operatorMinutes:Math.max(0,num(inputVal('mopsCostOperator'))),wearClpHour:Math.max(0,num(inputVal('mopsCostWear'))),failureOverheadPct:clamp(num(inputVal('mopsCostFailure')),0,100)};
