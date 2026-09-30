@@ -23,7 +23,20 @@
   ];
   const byId=Object.fromEntries(catalog.map(s=>[s.id,s]));
   const store={results:{},history:[],lastGood:{},lastSweep:0,lastCheckAt:0,busy:new Set(),snapshot:null,active:'Todas',mounted:false,autoStarted:false,userKey:null};
-  const label={green:'Operativo',yellow:'Advertencia',red:'Error confirmado',gray:'Sin verificar'};
+  const label={green:'Conexión verificada',yellow:'Requiere atención',red:'Error confirmado',gray:'Pendiente de conectar o verificar'};
+  const officialPortals=Object.freeze({
+    github:'https://github.com/thelabsolutionscl/dashboardthelabsolutions/actions',
+    anthropic:'https://console.anthropic.com/settings/keys',
+    openai:'https://platform.openai.com/api-keys',
+    make:'https://www.make.com/en/login',
+    meta:'https://business.facebook.com/settings',
+    ads:'https://ads.google.com/',
+    resend:'https://resend.com/api-keys',
+    wordpress:'https://thelab.solutions/',
+    proxy:'https://dash.cloudflare.com/',airtable:'https://dash.cloudflare.com/',
+    sii:'https://dash.cloudflare.com/',leads:'https://dash.cloudflare.com/',
+    printer:'https://dash.cloudflare.com/'
+  });
   function user(){
     try{return typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;}catch(_){return null;}
   }
@@ -352,8 +365,12 @@
       info.append(el('span','','Afecta: '+s.impact),el('span','','Comprobado: '+formatTime(r.checkedAt)));
       if(store.lastGood[s.id])info.append(el('span','','Último OK: '+formatTime(store.lastGood[s.id])));
       const actions=el('div','tls-conn-service-actions');
-      const test=button('Diagnosticar','check',s.id);test.disabled=store.busy.has(s.id);actions.append(test);
-      if(s.oauth&&configured(s.id)){const oauth=button('Reconectar OAuth','oauth',s.id);oauth.disabled=store.busy.has(s.id);actions.append(oauth);}
+      const test=button('Verificar conexión','check',s.id);test.disabled=store.busy.has(s.id);actions.append(test);
+      const connectLabel=s.oauth?'Conectar / reconectar':s.id==='imap'?'Iniciar sesión':s.id==='ads'?'Configurar Ads':
+        ['anthropic','openai','make','meta','resend','proxy','airtable','sii','leads'].includes(s.id)?
+          'Conectar / configurar':'Conectar / configurar';
+      const connect=button(connectLabel,'connect',s.id);
+      connect.disabled=store.busy.has(s.id);actions.append(connect);
       const guide=button('Cómo resolver','guide',s.id);actions.append(guide);
       if(permitted(s.page)&&s.page!=='overview')actions.append(button('Ir a '+s.page,'navigate',s.id));
       item.append(top,info,actions);list.append(item);
@@ -415,6 +432,12 @@
     const node=DOC.getElementById('tlsConnGuide');if(!node)return;
     DOC.getElementById('tlsConnGuideTitle').textContent=s.name;
     DOC.getElementById('tlsConnGuideBody').textContent=s.guide;
+    node.querySelector('[data-tls-portal]')?.remove?.();
+    if(officialPortals[id]){
+      const link=el('a','tls-conn-button tls-conn-portal','Abrir configuración oficial ↗');
+      link.href=officialPortals[id];link.target='_blank';link.rel='noopener noreferrer';
+      link.dataset.tlsPortal=id;node.append(link);
+    }
     node.hidden=false;node.scrollIntoView({block:'nearest'});
   }
   async function reconnect(id){
@@ -432,11 +455,57 @@
       result(id,'yellow','La autorización no se completó. Revisa la cuenta y vuelve a intentar','manual');guide(id);
     }
   }
+  function connectService(id){
+    // El gesto de usuario inicia OAuth de manera síncrona; un sondeo no puede
+    // abrir ventanas ni modificar configuraciones o secretos.
+    if(!byId[id]||!user()||root._DEMO_MODE)return;
+    if(id==='calendar'||id==='drive'){
+      if(!configured(id)){
+        guide(id);
+        const setting=DOC.getElementById('tlsConnGuideBody');
+        if(setting)setting.textContent='Falta el Google Client ID. Abre Mi cuenta y configura Google OAuth antes de conectar.';
+        return;
+      }
+      void reconnect(id);return;
+    }
+    if(id==='imap'){
+      if(typeof MAIL!=='undefined'&&typeof MAIL.showPassModal==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();MAIL.showPassModal();
+      }else guide(id);
+      return;
+    }
+    if(id==='ads'){
+      if(permitted('web')&&typeof switchTab==='function'&&typeof toggleAdsConfig==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();switchTab('web');
+        const panel=DOC.getElementById('adsConfigPanel');
+        if(panel&&panel.style.display==='none')toggleAdsConfig();
+        panel?.scrollIntoView?.({block:'center'});
+      }else guide(id);
+      return;
+    }
+    if(id==='printer'||id==='proxy'||id==='airtable'){
+      if(typeof openUserMenu==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();openUserMenu();
+      }else guide(id);
+      return;
+    }
+    if(id==='wordpress'){
+      const panel=DOC.getElementById('wpConfigPanel');
+      if(panel&&permitted('web')&&typeof switchTab==='function'){
+        DOC.getElementById('tlsConnDialog')?.close();switchTab('web');
+        panel.style.display='block';panel.scrollIntoView?.({block:'nearest'});
+      }else guide(id);
+      return;
+    }
+    // Keys de IA, Make y Meta viven exclusivamente en Cloudflare; la salida
+    // Resend se configura exclusivamente en el backend de correo.
+    guide(id);
+  }
   function bootstrap(){
     if(!DOC)return;
     mount();
   }
-  const api={catalog,counts,displayStatus,configuredUrl,formatTime,mount,open,check,sweep,summary,probe,result,getJson};
+  const api={catalog,counts,displayStatus,configuredUrl,formatTime,mount,open,check,sweep,summary,probe,result,getJson,connectService,verifyServerService};
   if(typeof module!=='undefined'&&module.exports){module.exports=api;return;}
   root.TLSConnections=api;
   DOC?.addEventListener('click',e=>{
@@ -447,6 +516,7 @@
     if(action==='check')void check(id,'manual');
     if(action==='check-all')void sweep(true);
     if(action==='oauth')void reconnect(id);
+    if(action==='connect')connectService(id);
     if(action==='guide')guide(id);
     if(action==='close-guide')DOC.getElementById('tlsConnGuide').hidden=true;
     if(action==='filter'){store.active=b.dataset.group;renderDialog();}
