@@ -42,6 +42,10 @@ const ACCESS_ALLOWED_TABLES=new Set([
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
 ]);
 const ACCESS_ADMIN_ONLY_TABLES=new Set([
+  // Live Monitor Sistema records share one unrestricted Notes column for
+  // machine safety/cost configuration, mail signatures, jobs and calendars.
+  // Read/write requires admin until a per-record scoped service exists.
+  'Monitor Sistema',
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
   'Social_Interactions','Social_Metrics',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
