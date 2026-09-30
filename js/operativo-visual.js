@@ -430,6 +430,8 @@
       const due=receivables().filter(r=>r.days>0);cards.push({page:'finanzas',title:'Facturas vencidas',n:due.length,sub:money(due.reduce((s,r)=>s+r.porCobrar,0))+' por cobrar · con IVA',action:'today-aging',arg:'overdue',tone:due.length?'warn':'neutral'});
     }
     el.innerHTML=`<div class="op-section-heading"><div><span class="op-eyebrow">TU JORNADA</span><h2>Hoy requiere tu atención</h2><p>Prioridades de los registros cargados${global._DEMO_MODE?' · DEMO':''}.</p></div>${button('Ver todas las acciones','all-actions')}</div><div class="op-metrics">${cards.filter(c=>allowed(c.page)).map(c=>`<button class="op-priority op-${c.tone}" data-op="${c.action}" data-arg="${c.arg}"><span>${esc(c.title)}</span><strong>${c.n}</strong><p>${esc(c.sub)}</p><b>Revisar →</b></button>`).join('')}</div>`;
+    // Resumen de salud independiente de los datos comerciales de OVERVIEW.
+    global.TLSConnections?.mount?.();
   }
   function receivables(){
     if(typeof finGetAllFacturas!=='function')return [];
@@ -591,5 +593,16 @@
   },true);
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
+  // Carga diferida del monitor con el hash actual: no mezcla versiones.
+  (function loadConnections(){
+    const src=document.currentScript?.src;
+    if(!src||!document.head||!document.createElement)return;
+    if(document.getElementById('tlsConnectionsScript'))return;
+    const url=new URL('operativo-conexiones.js',src),original=new URL(src);
+    if(original.searchParams.has('v'))url.searchParams.set('v',original.searchParams.get('v'));
+    const script=document.createElement('script');
+    script.id='tlsConnectionsScript';script.src=url.href;script.defer=true;
+    document.head.appendChild(script);
+  })();
   document.addEventListener('DOMContentLoaded',mount);
 })(window);
