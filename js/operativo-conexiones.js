@@ -296,9 +296,21 @@
     if(!manual&&store.lastSweep&&Date.now()-store.lastSweep<FIVE_MIN)return;
     store.lastSweep=Date.now();
     const list=visibleServices().filter(s=>manual||s.auto);
-    // Serial para limitar concurrencia, sin ejecutar solicitudes pagadas ni
-    // abrir OAuth de fondo. El resto permanece explícitamente "sin verificar".
-    for(const s of list){if(!user()||root._DEMO_MODE||(!manual&&DOC?.hidden))break;await check(s.id,manual?'manual':'auto');}
+    const mode=manual?'manual':'auto';
+    // "Comprobar ahora" no debe depender del orden de las tarjetas. Antes las
+    // pruebas corrían en serie: una API lenta podía dejar solo las primeras
+    // conexiones verificadas y obligar a volver a pulsar el botón. Ejecutamos
+    // en paralelo limitado (4) para que una integración lenta no bloquee al
+    // resto, sin abrir OAuth ni hacer escrituras o llamadas de inferencia.
+    const queue=list.slice();
+    const workers=Array.from({length:Math.min(4,queue.length)},async()=>{
+      while(queue.length){
+        if(!user()||root._DEMO_MODE||(!manual&&DOC?.hidden))return;
+        const service=queue.shift();if(!service)continue;
+        await check(service.id,mode);
+      }
+    });
+    await Promise.allSettled(workers);
     render();
   }
   function el(tag,className,textValue){
