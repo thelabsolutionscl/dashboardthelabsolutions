@@ -25,7 +25,7 @@ const other='recBBBBBBBBBBBBBB';
 function record(fields,id=rec){return {id,fields:{Vendedor:'nicanor',...fields}};}
 function fixture(options={}){
   const rows=new Map([[rec,record({'Notas internas':'original','Notas cotización':'old',
-    'Notas followup':'pending','Contacto':'A'})],
+    'Notas followup':'pending','Notas pedido':'original','Contacto':'A'})],
     [other,record({'Notas internas':'not mine','Notas cotización':'private'})]]);
   rows.get(other).fields.Vendedor='florencia';
   const calls=[];
@@ -94,15 +94,30 @@ test('opt-in safe sales PATCH verifies original owner, expected fields and post-
   for(const [table,field,old,next] of [
     ['Clientes','Notas internas','original','contactado'],
     ['Cotizaciones','Notas cotización','old','en revisión'],
-    ['Pedidos','Notas internas','original','confirmado por ventas']
+    ['Pedidos','Notas pedido','original','confirmado por ventas']
   ]){
     const f=fixture();
+    // A PATCH must never return the unfiltered Airtable postflight row.
+    Object.assign(f.rows.get(rec).fields,{
+      'Datos pago / banco':'SECRET ACCOUNT',
+      'Facturas vencidas':4,
+      'Margen real (%)':98,
+      'Costo real total (CLP)':999999,
+      'Cliente':[other],
+      'Pedido':[other],
+      'Cotizaciones':[other],
+      'Nueva columna futura':'PRIVATE'
+    });
     const response=await f.run(f.request(table,rec,{[field]:next},{[field]:old}));
     assert.equal(response.status,200,await response.clone().text());
     const saved=await response.json();
     assert.equal(saved.id,rec);
     assert.equal(saved.fields[field],next);
     assert.equal(saved.fields.Vendedor,'nicanor');
+    for(const hidden of ['Datos pago / banco','Facturas vencidas',
+      'Margen real (%)','Costo real total (CLP)','Cliente','Pedido',
+      'Cotizaciones','Nueva columna futura'])
+      assert.equal(saved.fields[hidden],undefined,table+' PATCH leaked '+hidden);
     assert.deepEqual(f.calls.map(c=>c.method),['GET','PATCH','GET']);
     assert.equal(f.calls[1].body,JSON.stringify({fields:{[field]:next}}),
       'untrusted expected_fields and owner must not reach Airtable');
@@ -174,7 +189,7 @@ test('sales cannot edit owner, relationships, financial totals, approvals or wor
     ['Cotizaciones',{'Total final (CLP)':9999999}],
     ['Pedidos',{'Estado pedido':'Despachado'}],
     ['Pedidos',{'Cotizaciones':['recBBBBBBBBBBBBBB']}],
-    ['Pedidos',{'Notas pedido':'Retainer unapproved 2026-09'}]
+    ['Pedidos',{'Notas internas':'Retainer unapproved 2026-09'}]
   ]){
     const f=fixture();
     const expected=Object.fromEntries(Object.keys(fields).map(k=>[k,'']));

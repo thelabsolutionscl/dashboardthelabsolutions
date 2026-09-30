@@ -49,11 +49,73 @@ function sellerProjectRecord(row,table){
   return result;
 }
 
+// Relationship IDs are visible ONLY after independently checking the Vendedor
+// of each referenced record. This intentionally runs for an explicit single
+// record opt-in, not for 100-row pages with unbounded nested joins.
+const SELLER_LINK_TABLES=Object.freeze({
+  Clientes:Object.freeze({Pedidos:'Pedidos',Cotizaciones:'Cotizaciones'}),
+  Cotizaciones:Object.freeze({Cliente:'Clientes',Pedido:'Pedidos'}),
+  Pedidos:Object.freeze({Cliente:'Clientes',Cotizaciones:'Cotizaciones'})
+});
+async function sellerVerifiedLinks(row,table,seller,env){
+  const names=SELLER_LINK_TABLES[table],byTarget=new Map(),source=new Map();
+  let total=0;
+  for(const [field,target] of Object.entries(names)){
+    if(!Object.hasOwn(row.fields,field))continue;
+    const ids=row.fields[field];
+    if(!Array.isArray(ids)||ids.length>25||
+       ids.some(id=>typeof id!=='string'||!/^rec[A-Za-z0-9]{14}$/.test(id)))
+      throw Error('Invalid CRM link structure');
+    total+=ids.length;
+    source.set(field,ids);
+    if(!byTarget.has(target))byTarget.set(target,new Set());
+    for(const id of ids)byTarget.get(target).add(id);
+  }
+  if(total>25)throw Error('Too many CRM links to verify');
+  const verified=new Map();
+  for(const [target,ids] of byTarget){
+    const approved=new Set();
+    if(ids.size){
+      const quoted=[...ids].map(id=>'RECORD_ID()="'+id+'"');
+      const predicate=quoted.length===1?quoted[0]:'OR('+quoted.join(',')+')';
+      const query=new URLSearchParams({
+        filterByFormula:'AND({Vendedor}="'+seller+'",'+predicate+')',
+        pageSize:'100'
+      });
+      query.append('fields[]','Vendedor');
+      const url=AIRTABLE_BASE+SCOPED_CRM_PREFIX+encodeURIComponent(target)+'?'+query;
+      const res=await fetch(url,{method:'GET',redirect:'manual',headers:{
+        Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'
+      }});
+      if(!res.ok||res.status>=300&&res.status<400)
+        throw Error('Cannot verify related-record owner');
+      const body=await res.json();
+      if(!body||!Array.isArray(body.records)||body.records.length>ids.size||
+         body.offset!==undefined)throw Error('Invalid linked-record verification');
+      for(const linked of body.records){
+        if(!linked||!ids.has(linked.id)||approved.has(linked.id)||
+           sellerFieldName(linked)!==seller)
+          throw Error('Invalid linked-record ownership');
+        approved.add(linked.id);
+      }
+    }
+    verified.set(target,approved);
+  }
+  const result={};
+  for(const [field,ids] of source){
+    const allowed=verified.get(names[field]);
+    result[field]=ids.filter(id=>allowed.has(id));
+  }
+  return result;
+}
+
 
 const SELLER_SAFE_PATCH_FIELDS=Object.freeze({
   Clientes:new Set(['Notas internas','Notas followup','Contacto','Cargo contacto','Teléfono']),
   Cotizaciones:new Set(['Notas cotización']),
-  Pedidos:new Set(['Notas internas'])
+  // Pedidos' internal production notes are deliberately absent from the
+  // sales read projection; permit only the visible customer-facing notes.
+  Pedidos:new Set(['Notas pedido'])
 });
 const SELLER_SAFE_PATCH_MAX_BYTES=12288;
 const SCOPED_CRM_PREFIX='/v0/app1YtD74AqiPWQhy/';
@@ -68,7 +130,8 @@ function sellerScopedPatchShape(table,body){
   if(!keys.length||keys.length>5||Object.keys(expected).length!==keys.length)return false;
   const allowed=SELLER_SAFE_PATCH_FIELDS[table];
   return !!allowed&&keys.every(key=>
-    allowed.has(key)&&Object.hasOwn(expected,key)&&
+    allowed.has(key)&&SELLER_READ_FIELDS[table]?.has(key)&&
+    Object.hasOwn(expected,key)&&
     typeof fields[key]==='string'&&
     typeof expected[key]==='string'&&
     fields[key].length<=(key.includes('Notas')?4000:256)&&
@@ -172,7 +235,10 @@ async function sellerScopedRead(request,url,identity,env,CORS){
      parts.length>2||(parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1])))
     return json({error:'Scoped sales route denied'},403,CORS);
   const single=parts.length===2;
-  if(single&&url.search)
+  // A related-record join is available only for an already owned single
+  // record. Never accept caller-supplied target IDs, filters or link tables.
+  const includeVerifiedLinks=single&&url.search==='?includeVerifiedLinks=1';
+  if(single&&url.search&&!includeVerifiedLinks)
     return json({error:'Unscoped record query forbidden'},422,CORS);
   const query=new URLSearchParams(url.search);
   if(!single){
@@ -234,6 +300,16 @@ async function sellerScopedRead(request,url,identity,env,CORS){
     records:rows.map(row=>sellerProjectRecord(row,table)),
     ...(body.offset===undefined?{}:{offset:body.offset})
   };
+  if(includeVerifiedLinks){
+    try{
+      Object.assign(safe.fields,
+        await sellerVerifiedLinks(body,table,identity.seller,env));
+    }catch(_){
+      // A partial or unverifiable join must not return its source row as if
+      // the requested verification had succeeded.
+      return json({error:'Cannot verify related CRM ownership'},502,CORS);
+    }
+  }
   return json(safe,200,{...CORS,'Cache-Control':'private, no-store'});
 }
 
@@ -761,7 +837,9 @@ export class CrmMutationGuard {
           code:'SALES_OWNER_CHANGED'},409);
       console.log('[Scoped sales PATCH]',JSON.stringify({actor:actor.email,
         table,record_id:recordId,fields:Object.keys(body.fields)}));
-      return this._json(after,200);
+      // A successful PATCH is a READ as well: do not return Airtable's full
+      // postflight row to sales. Reuse the GET field allowlist exactly.
+      return this._json(sellerProjectRecord(after,table),200);
     }catch(_){return this._json({error:'Sales PATCH succeeded but verification is uncertain',
       code:'SALES_PATCH_UNCERTAIN'},503);}
   }
