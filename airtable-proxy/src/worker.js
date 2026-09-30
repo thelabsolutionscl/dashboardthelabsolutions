@@ -1454,7 +1454,7 @@ export default {
         openai:{secret:env.OPENAI_TOKEN,url:'https://api.openai.com/v1/models',
           headers:()=>({Authorization:'Bearer '+env.OPENAI_TOKEN})},
         make:{secret:env.MAKE_API_TOKEN,
-          url:'https://'+(env.MAKE_API_ZONE||'eu1')+'.make.com/api/v2/users/me',
+          url:'https://'+(env.MAKE_API_ZONE||'eu1')+'.make.com/api/v2/enums/timezones',
           headers:()=>({Authorization:'Token '+env.MAKE_API_TOKEN})},
         meta:{secret:env.META_ACCESS_TOKEN,url:'https://graph.facebook.com/v23.0/me?fields=id',
           headers:()=>({Authorization:'Bearer '+env.META_ACCESS_TOKEN})}
