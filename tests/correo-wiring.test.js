@@ -145,7 +145,7 @@ test('mail-api expone cabeceras RFC de conversación sin descargar cuerpos', () 
     assert.match(list, new RegExp("'" + key + "'"));
     assert.match(search, new RegExp("'" + key + "'"));
   }
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-resend-status/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-30-resend-send-evidence/);
 });
 
 test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
@@ -348,7 +348,7 @@ test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de
   const send=phpCase('send');
   assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
   assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-29-mail-security-resend-status/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-30-resend-send-evidence/);
 });
 
 test('verificación Resend exige IMAP, usa GET dominios y no envía mensajes',()=>{
@@ -360,4 +360,20 @@ test('verificación Resend exige IMAP, usa GET dominios y no envía mensajes',()
   assert.match(branch,/https:\/\/api\.resend\.com\/domains/);
   assert.doesNotMatch(branch,/resend_send\(/);
   assert.doesNotMatch(branch,/CURLOPT_POST/);
+});
+
+
+test('Resend conserva evidencia local del último envío exitoso sin PII',()=>{
+  assert.match(PHP,/function resend_health_mark_ok\(\$key\)/);
+  assert.match(PHP,/hash\('sha256',\(string\)\$key\)/);
+  assert.match(PHP,/tls-resend-health\.json/);
+  assert.match(PHP,/resend_health_mark_ok\(\$key\); return null/);
+  assert.doesNotMatch(PHP,/resend_health_mark_ok\([^)]*\$to/);
+});
+
+test('diagnóstico Resend acepta evidencia de envío reciente antes de consultar dominios',()=>{
+  const branch=PHP.slice(PHP.indexOf("case 'resend_status':"),PHP.indexOf("case 'folders':"));
+  assert.match(branch,/if \(resend_health_recent\(\$key\)\)/);
+  assert.match(branch,/'evidence'=>'recent_send'/);
+  assert.match(branch,/send_only_or_forbidden/);
 });
