@@ -65,23 +65,35 @@ test('401, 503 y fallo de red se clasifican sin presentar CORS como caída confi
   }finally{global.fetch=orig;}
 });
 
-test('Claude no consume tokens y usa solo /health para presencia de configuración',async()=>{
-  const previous={fetch:global.fetch,AUTH:global.AUTH,_DEFAULTS:global._DEFAULTS,_DEMO_MODE:global._DEMO_MODE};
+test('Claude/OpenAI verifican credenciales reales sin consumir tokens ni exponer la clave',async()=>{
+  const prev={fetch:global.fetch,AUTH:global.AUTH,_DEFAULTS:global._DEFAULTS,
+    _proxyCfg:global._proxyCfg,_DEMO_MODE:global._DEMO_MODE};
   const urls=[];
   try{
     global.AUTH={getUser:()=>({username:'admin-test',role:'admin'})};
-    global._DEFAULTS={PROXY_URL:'https://proxy.thelab.solutions'};
+    global._DEFAULTS={PROXY_URL:'https://proxy.thelab.solutions',PROXY_KEY:'test-only'};
+    global._proxyCfg=()=>({url:'https://proxy.thelab.solutions',key:'test-only'});
     global._DEMO_MODE=false;
     global.fetch=async(url,opts)=>{
-      urls.push({url,opts});return {ok:true,status:200,json:async()=>({ok:true,anthropic:true,openai:false})};
+      urls.push({url,opts});
+      if(String(url).endsWith('/health'))
+        return {ok:true,status:200,json:async()=>({ok:true,anthropic:true,openai:true})};
+      return {ok:true,status:200,json:async()=>String(url).includes('anthropic')?
+        {status:'green',verified:true,message:'Autenticación correcta'}:
+        {status:'red',verified:false,message:'Clave rechazada'}};
     };
     const claude=await center.probe('anthropic','manual');
     const openai=await center.probe('openai','manual');
-    assert.equal(claude.status,'yellow','tener token no valida la suscripción');
-    assert.equal(openai.status,'gray','no declarar error si el servicio no está habilitado');
-    assert.deepEqual(urls.map(x=>x.url),['https://proxy.thelab.solutions/health']);
-    assert.ok(urls.every(x=>x.opts.method==='GET'));
-  }finally{Object.assign(global,previous);}
+    assert.equal(claude.status,'green');assert.equal(claude.verified,true);
+    assert.equal(openai.status,'red');
+    assert.deepEqual(urls.map(x=>x.url),[
+      'https://proxy.thelab.solutions/integrations/check?service=anthropic',
+      'https://proxy.thelab.solutions/integrations/check?service=openai'
+    ]);
+    assert.ok(urls.every(x=>x.opts.method==='GET'&&!x.opts.body));
+    assert.ok(urls.every(x=>x.opts.headers['X-App-Key']==='test-only'));
+    assert.ok(urls.every(x=>x.opts.credentials==='include'));
+  }finally{Object.assign(global,prev);}
 });
 
 test('Calendar y Drive no fuerzan ventanas de OAuth durante el monitoreo automático',async()=>{
@@ -98,21 +110,32 @@ test('Calendar y Drive no fuerzan ventanas de OAuth durante el monitoreo automá
   }finally{Object.assign(global,previous);}
 });
 
-test('IMAP hace solo lectura de carpetas bajo demanda; Resend nunca envía pruebas',async()=>{
-  const previous={AUTH:global.AUTH,MAIL:global.MAIL,_DEMO_MODE:global._DEMO_MODE};
-  let calls=0;
+test('IMAP verifica carpetas y Resend solo su token sin enviar correos',async()=>{
+  const prev={AUTH:global.AUTH,MAIL:global.MAIL,_DEMO_MODE:global._DEMO_MODE};
+  const actions=[];
   try{
     global.AUTH={getUser:()=>({username:'mail-test',role:'admin'})};global._DEMO_MODE=false;
     global.MAIL={activeAccount:()=> 'foo@example.com',getMailPass:()=> 'no-persistir',
-      post:async(p)=>{calls++;assert.deepEqual(p,{action:'folders'});return {folders:[]};}};
+      post:async(p)=>{actions.push(p.action);return p.action==='folders'?
+        {folders:[]}:{ok:true,verified:true,configured:true};}};
     assert.equal((await center.probe('imap','auto')).status,'gray');
-    assert.equal(calls,0);
+    assert.deepEqual(actions,[]);
     assert.equal((await center.probe('imap','manual')).status,'green');
-    assert.equal(calls,1);
-    assert.equal((await center.probe('resend','manual')).status,'gray');
-    assert.equal(calls,1);
+    assert.equal((await center.probe('resend','manual')).status,'green');
+    assert.deepEqual(actions,['folders','resend_status']);
     assert.doesNotMatch(source,/MAIL\.post\(\s*\{\s*action:['"]send/);
-  }finally{Object.assign(global,previous);}
+  }finally{Object.assign(global,prev);}
+});
+
+test('los 16 servicios tienen Conectar/configurar y Verificar conexión',()=>{
+  assert.match(source,/button\('Verificar conexión','check',s\.id\)/);
+  assert.match(source,/button\(connectLabel,'connect',s\.id\)/);
+  assert.match(source,/if\(action==='connect'\)connectService\(id\)/);
+  assert.match(source,/if\(id==='ads'\)/);
+  assert.match(source,/if\(id==='imap'\)/);
+  assert.match(source,/https:\/\/console\.anthropic\.com/);
+  assert.match(source,/https:\/\/platform\.openai\.com/);
+  assert.doesNotMatch(source,/requestAccessToken\(/);
 });
 
 test('OVERVIEW integra script y estilos versionados con panel fuera del render comercial',()=>{
