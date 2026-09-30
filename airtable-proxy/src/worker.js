@@ -1139,11 +1139,11 @@ export class CrmMutationGuard {
              payload.records.some(r=>!r||!/^rec[A-Za-z0-9]{14}$/.test(r.id))))||
          (path!==root&&(!payload.fields||typeof payload.fields!=='object')))
         return this._json({error:'Unsupported CRM patch shape'},422);
-      if(actor.role==='finance'||actor.role==='operator'){
-        // These are the only three commercial tables the two roles may edit.
-        // Other tables never enter this internal path.
-        if(!SELLER_SCOPE_TABLES.has(table))
-          return this._json({error:'Scoped patch role denied'},403);
+      if(actor.role==='operator'){
+        // The outer Worker validates too. Defend independently in the DO,
+        // before either an individual or bulk CRM mutation reaches Airtable.
+        if(search!==''||!operatorWritePayloadAllowed(table,'PATCH',payload))
+          return this._json({error:'Unapproved operator patch fields'},422);
       }
       try{
         const upstream=await fetch(AIRTABLE_BASE+path+search,{
@@ -1322,6 +1322,12 @@ export class CrmMutationGuard {
     try { data = await request.json(); }
     catch (_) { return this._json({ error: 'Invalid JSON' }, 400); }
     const table = data && data.table;
+    // Signed operator creation is independently checked inside the shared
+    // Durable Object, before idempotency reads or an upstream Airtable POST.
+    // Legacy requests omit actor; signed admin/finance retain their roles.
+    if(data?.actor?.role==='operator'&&
+       (data.search!==''||!operatorWritePayloadAllowed(table,'POST',data.body)))
+      return this._json({error:'Unapproved operator create fields'},422);
     if (!['Pedidos','Cotizaciones','Facturas','Reportes'].includes(table) || !data.body ||
         typeof data.body !== 'object' || Array.isArray(data.body) ||
         !data.body.fields || typeof data.body.fields !== 'object' ||
