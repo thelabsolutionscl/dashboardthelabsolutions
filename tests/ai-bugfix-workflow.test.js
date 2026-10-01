@@ -53,4 +53,6 @@ test('proxy verifica identidad OIDC del workflow exacto y mantiene presupuesto I
   assert.match(WORKER,/reserveAiBudget\(env,payload,'bugfix-'\+stage\)/);
   assert.match(WORKER,/reconcileAiBudget/);
   assert.match(WORKER,/url\.pathname==='\/service\/github\/bugfix-ai'/);
+  assert.match(WORKER,/stage==='ping'/);
+  assert.match(SCRIPT,/async function verifyService\(\)/);
 });
