@@ -323,3 +323,13 @@ test('OVERVIEW, CALENDARIO, CLIENTES, COTIZACIONES, PEDIDOS y MÁQUINAS quedan f
   assert.doesNotMatch(branch[1],/Experto|page\+':expert'/,'las vistas simple-only no deben crear botón Experto');
   assert.match(src,/let layout='tarjetas';[\s\S]*?op_layout_pedidos/,'Tabla/Tarjetas debe quedar independiente de Simple/Experto en Pedidos');
 });
+
+
+test('una aprobada histórica no ofrece crear pedido y se muestra como cerrada',()=>{
+  const h=setup();h.context._pedidoDeCot=()=>null;
+  const cot=record('hist',{'Estado cotización':'Aprobada','Venta histórica conciliada':true,'Cliente':'ABC','Total final (CLP)':119000});
+  assert.equal(h.op.quoteInfo(cot).next,'Venta histórica conciliada · producida y pagada');
+  h.op.quotes([cot]);
+  assert.match(h.element('opQuotes').innerHTML,/Venta histórica conciliada/);
+  assert.doesNotMatch(h.element('opQuotes').innerHTML,/Crear pedido pendiente/);
+});
