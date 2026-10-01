@@ -13,8 +13,8 @@ const WORKER=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/worker.j
   .replace('export class CrmMutationGuard','class CrmMutationGuard')
   .replace('export default','const worker=');
 const {accessAllows}=new Function(AUTH+'\nreturn {accessAllows};')();
-const {problemReportPayloadAllowed,problemProjectRecord}=
-  new Function(WORKER+'\nreturn {problemReportPayloadAllowed,problemProjectRecord};')();
+const {problemReportPayloadAllowed,problemRepairPayloadAllowed,problemProjectRecord}=
+  new Function(WORKER+'\nreturn {problemReportPayloadAllowed,problemRepairPayloadAllowed,problemProjectRecord};')();
 
 test('menu de usuario carga Reportar problema y abre una pantalla propia',()=>{
   assert.match(LOADER,/load\('js\/problem-reports\.js','reporte e historial de problemas'\)/);
@@ -59,6 +59,24 @@ test('payload rechaza secretos gigantes, URLs externas y archivos no imagen',()=
   assert.equal(problemReportPayloadAllowed({...good,url:'https://evil.example/'}),false);
   assert.equal(problemReportPayloadAllowed({...good,screenshot:{...good.screenshot,contentType:'image/svg+xml'}}),false);
   assert.equal(problemReportPayloadAllowed({...good,extra:'secret'}),false);
+});
+
+test('historial permite enviar un reporte a reparación con un botón',()=>{
+  assert.match(UI,/data-pr-repair/);
+  assert.match(UI,/⚡ Reparar/);
+  assert.match(UI,/↻ Reintentar reparación/);
+  assert.match(UI,/✓ En cola/);
+  assert.match(UI,/action:'repair'/);
+  assert.match(UI,/Reporte enviado a reparación/);
+});
+
+test('acción repair solo acepta un recordId canónico y campos mínimos',()=>{
+  assert.equal(problemRepairPayloadAllowed({action:'repair',recordId:'recAAAAAAAAAAAAAA',reporter:'user@example.com'}),true);
+  assert.equal(problemRepairPayloadAllowed({action:'repair',recordId:'bad',reporter:'user@example.com'}),false);
+  assert.equal(problemRepairPayloadAllowed({action:'repair',recordId:'recAAAAAAAAAAAAAA',extra:'x'}),false);
+  assert.equal(problemRepairPayloadAllowed({action:'delete',recordId:'recAAAAAAAAAAAAAA'}),false);
+  assert.match(WORKER,/Solicitud manual de reparación recibida\. En cola para el próximo ciclo del agente\./);
+  assert.match(WORKER,/Estado:'Nuevo','Auto reparar':true/);
 });
 
 test('historial proyecta solo campos de producto y una captura',()=>{

@@ -65,3 +65,10 @@ test('un PR con tests aprobados no escribe un Error falso',()=>{
   assert.match(WORKFLOW,/Vincular PR aprobado al reporte[\s\S]*?steps\.tests\.outcome == 'success'[\s\S]*?PROBLEM_STATE: PR abierto/);
   assert.match(WORKFLOW,/Vincular PR con pruebas fallidas[\s\S]*?steps\.tests\.outcome != 'success'[\s\S]*?PROBLEM_STATE: Error/);
 });
+
+
+test('revisa la cola cada cinco minutos sin aumentar concurrencia',()=>{
+  assert.match(WORKFLOW,/cron: '\*\/5 \* \* \* \*'/);
+  assert.match(WORKFLOW,/group: problem-repair-agent/);
+  assert.match(WORKFLOW,/cancel-in-progress: false/);
+});
