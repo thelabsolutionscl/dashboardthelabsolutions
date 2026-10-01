@@ -1,6 +1,6 @@
 # Manual de Usuario - Dashboard The Lab Solutions
 
-**Versión:** 1.2  
+**Versión:** 1.3  
 **Fecha:** 1 de octubre de 2026  
 **Aplicación:** Dashboard The Lab Solutions  
 **Objetivo:** explicar el uso cotidiano del dashboard sin entrar en administración de servidores, claves ni código.
@@ -83,6 +83,8 @@ Los KPIs son accesos de lectura rápida. Si un KPI no coincide con una ficha con
 
 ### Hoy requiere tu atención
 
+![Detalle de alertas y prioridades del Overview.](assets/overview-atencion.png)
+
 Agrupa situaciones operativas que requieren acción: entregas, gestiones comerciales, cobros u otros bloqueos detectados.
 
 **IMPORTANTE:** una alerta derivada de datos históricos o estimados debe revisarse contra su fuente. Por ejemplo, Finanzas distingue actualmente entre cartera viva y registros históricos.
@@ -112,6 +114,10 @@ Centraliza clientes, leads, datos de contacto, estado comercial e historial rela
 
 ### Flujo recomendado
 
+![Listado y herramientas de Clientes.](assets/clientes-listado.png)
+
+![Formulario para crear un nuevo lead o cliente.](assets/clientes-nuevo.png)
+
 1. Buscar primero al cliente para evitar duplicados.
 2. Si no existe, crearlo.
 3. Completar empresa, contacto, correo, teléfono y origen.
@@ -140,6 +146,8 @@ Según el flujo disponible, una cotización puede pasar por estados como borrado
 
 ### Crear una cotización
 
+![Formulario de Nueva cotización.](assets/nueva-cotizacion.png)
+
 1. Pulsa **Nueva cotización**.
 2. Selecciona o crea el cliente.
 3. Agrega los ítems.
@@ -165,6 +173,8 @@ Al aprobar una cotización, el flujo normal debe relacionarla con un pedido. Si 
 
 ### Ver propuesta
 
+![Listado operativo de Cotizaciones.](assets/cotizaciones-listado.png)
+
 La vista de propuesta permite revisar descripción, unidades, costos y valores de venta antes de compartir o aprobar.
 
 ---
@@ -178,6 +188,10 @@ La vista de propuesta permite revisar descripción, unidades, costos y valores d
 Controlar el ciclo posterior a una venta aprobada: producción, pagos, equipo, despacho, QA y documentación.
 
 ### Vistas disponibles
+
+![Pedidos en vista Tabla.](assets/pedidos-tabla.png)
+
+![Centro de planificación de Pedidos.](assets/pedidos-planificacion.png)
 
 - Tarjetas
 - Tabla
@@ -220,6 +234,8 @@ No marques un pedido como despachado solo para sacarlo de la lista. Usa QA y los
 Registrar materiales y consultar stock operativo.
 
 ### Acciones habituales
+
+![Detalle del stock y materiales de Inventario.](assets/inventario-stock.png)
 
 - Crear material.
 - Actualizar cantidades.
@@ -270,6 +286,8 @@ Ejecutar asistentes especializados para tareas concretas del negocio: análisis,
 4. No asumas que un texto de IA es un dato confirmado del CRM.
 
 ### Cola de agentes
+
+![Cola y resultados de Agentes IA.](assets/agentes-cola.png)
 
 La cola permite revisar trabajos pendientes y resultados. Un agente no debe modificar silenciosamente un proceso crítico sin confirmación cuando la acción requiere aprobación humana.
 
@@ -331,6 +349,8 @@ Gestionar campañas de email masivo separadas del correo individual 1:1.
 
 ### Bloques principales
 
+![Campañas y herramientas de Newsletter.](assets/newsletter-campanas.png)
+
 - KPIs de audiencia y campañas.
 - Redacción de newsletter.
 - Campañas.
@@ -378,6 +398,8 @@ Según disponibilidad: estado, cámara, temperaturas, telemetría, archivo/traba
 
 ### Controles remotos
 
+![Telemetría y controles de las impresoras.](assets/maquinas-telemetria.png)
+
 Pueden existir acciones para pausar, reanudar, detener, mover ejes, ajustar temperatura, recuperar telemetría y calibrar.
 
 **PRECAUCIÓN:** detener, mover o cambiar temperatura actúa sobre una máquina real. Verifica siempre impresora y trabajo antes de ejecutar.
@@ -395,6 +417,8 @@ Si el dashboard detecta una impresión sin trabajo relacionado, muestra una aler
 Muestra impresoras y cámaras para supervisión del taller.
 
 ### Centro de planificación
+
+![Centro de planificación de la granja 3D.](assets/maquinas-planificacion.png)
 
 Distingue entre planificación local, telemetría física reciente y cola durable confirmada por Farm Controller.
 
@@ -432,6 +456,8 @@ Coordinar eventos, entregas y compromisos del equipo.
 
 ### Vistas
 
+![Calendario en vista Agenda.](assets/calendario-agenda.png)
+
 - Mes
 - Semana
 - Agenda
@@ -461,6 +487,8 @@ Generar y consultar resúmenes ejecutivos basados en la información del negocio
 
 ### Reporte CEO
 
+![Historial y zona inferior de Reportes.](assets/reportes-historial.png)
+
 El **Reporte 1-clic (CEO_AGENT)** analiza los datos disponibles y genera una lectura ejecutiva.
 
 ### Uso correcto
@@ -482,6 +510,8 @@ Revisar sitio web, SEO, Google Ads, métricas y herramientas de optimización.
 Según configuración: analizar sitio, optimizar con IA, configurar integraciones, crear contenido con IA, revisar campañas, conversiones offline, tope de gasto, verificar cambios, diagnosticar y exportar CSV.
 
 ### Google Ads
+
+![Herramientas de Google Ads y marketing web.](assets/web-google-ads.png)
 
 Algunas acciones dependen de Apps Script o APIs externas. Una conexión verde confirma la prueba configurada, pero no implica que todas las mutaciones estén disponibles.
 
@@ -509,6 +539,10 @@ Consultar ventas, facturas, cobranza, préstamos, deudas, libro diario, antigüe
 - Antigüedad
 - Presupuesto
 
+### Facturas
+
+![Vista de Facturas en Finanzas.](assets/finanzas-facturas.png)
+
 ### Revenue, facturación y pago no son lo mismo
 
 - **Revenue / venta:** valor comercial reconocido por el flujo correspondiente.
@@ -519,6 +553,8 @@ Consultar ventas, facturas, cobranza, préstamos, deudas, libro diario, antigüe
 No asumas que una venta aprobada implica automáticamente que está facturada y pagada.
 
 ### Por Cobrar
+
+![Vista Por Cobrar con cartera activa.](assets/finanzas-por-cobrar.png)
 
 La cartera activa utiliza una ruta conciliada. Los registros históricos embebidos no deben generar cobranza por sí solos sin confirmación.
 
@@ -573,6 +609,8 @@ La sección organiza carpetas, mensajes, lectura, redacción, no deseado, navega
 
 ### Redactar
 
+![Ventana para redactar un correo.](assets/correo-redactar.png)
+
 El editor soporta composición normal, saltos de línea y corrección ortográfica del navegador.
 
 ### Hilos
@@ -611,6 +649,8 @@ Centro de Conexiones comprueba ambos sin exponer claves.
 Comprobar si las integraciones necesarias para el dashboard están realmente operativas.
 
 ### Estados
+
+![Detalle ampliado del Centro de Conexiones.](assets/centro-conexiones-detalle.png)
 
 - **Verde:** prueba satisfactoria.
 - **Amarillo:** configuración parcial, condición temporal o verificación incompleta.
