@@ -36,6 +36,7 @@ async function dismiss(){
     try{closeUserMenu?.()}catch(_){}
     try{closeAppearanceSettings?.()}catch(_){}
     try{document.getElementById('tlsConnDialog')?.close()}catch(_){}
+    try{document.getElementById('tlsBugDialog')?.close()}catch(_){}
     document.querySelectorAll('.appearance-modal-overlay.open').forEach(el=>el.classList.remove('open'));
     document.querySelectorAll('.toast,.toast-item,.sys-loader,.system-loader').forEach(el=>{el.style.display='none'});
     window.scrollTo(0,0);
@@ -118,6 +119,7 @@ await shot('correo-redactar',{tab:'correo',action:()=>{try{const p=document.getE
 await shot('centro-conexiones-detalle',{tab:'overview',action:()=>{try{openConnectionsCenterFromUserMenu();const d=document.getElementById('tlsConnDialog');if(d)d.scrollTop=620}catch(_){}},delay:1000});
 
 await shot('apariencia',{tab:'overview',action:()=>{try{openAppearanceSettings()}catch(_){}} ,delay:800});
+await shot('reportar-problema',{tab:'overview',action:()=>{try{openBugReporter()}catch(_){}},delay:900});
 
 // El propio manual se captura al final, cuando todas las imágenes anteriores
 // ya existen en disco y el servidor local puede mostrarlas.
