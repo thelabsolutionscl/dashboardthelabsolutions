@@ -660,27 +660,61 @@ REGLAS: TPU máx 35mm/s y retracción corta. PETG ventilador ≤50%, no exceder 
 COSTURA (seamMode): "alineado" oculta la costura atrás de la pieza (estético), "agudo" en esquinas, "cercano" minimiza viaje. outerWallLast=true imprime la pared exterior al final → mejor acabado. bridgeDetect=true para voladizos horizontales. elephantFoot (mm, 0-0.3): encoge la 1ª capa. xyCompensation (mm, -0.3 a 0.3): negativo agranda agujeros. arcFitting=false salvo que se indique (requiere [gcode_arcs] en Klipper).
 VELOCIDAD: outerSpeed (mm/s, 0=auto) baja la pared exterior para mejor acabado (60% de speed en piezas vistosas). infillSpeed (0=auto) sube el relleno. accel (mm/s², 0=no tocar) limita aceleración para reducir ringing en piezas finas. ADHESIÓN: skirt (líneas, ceba el filamento sin pegarse a la pieza), brim (pegado, para piezas altas o ABS), raft=true (base completa bajo la pieza, para superficies difíciles o ABS — encarece). DETALLE: gapFill=true rellena paredes finas sin huecos. fuzzySkin (mm, 0.1-0.3) da textura rugosa mate a la pared exterior. coasting (mm, 0.1-0.3) corta la extrusión antes del fin del perímetro para evitar el blob de costura.
 CALIDAD (estilo OrcaSlicer): minLayerTime (s, 5-12) ralentiza capas chicas para que enfríen → mejor en piezas pequeñas/torres. overhangSpeed (mm/s, 0=off) baja la velocidad de la pared exterior sobre voladizos. flowRatio (%, 95-105) ajusta extrusión. maxVolumetricFlow (mm³/s) limita físicamente el caudal: respeta el valor conservador del material y NO lo eleves por encima sin una calibración. Si la salud de malla dice REVISAR, adviértelo: no supongas que el volumen es fiable. pressureAdvance (mm, 0=off; típico 0.02-0.05 en Klipper) reduce blobbing en esquinas — déjalo en 0 salvo que conozcas el valor de la impresora. wipeDist (mm, 0.5-1.5) limpia la boquilla al retraer → menos stringing. widthOuter/widthInfill (mm, 0=auto) anchos de línea por feature (outer un poco más fino = más nítido). seamMode también acepta "aleatorio" (costura dispersa).
-RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXACTAMENTE estas claves:
-{"layerHeight":0.2,"firstLayerHeight":0.25,"shells":2,"topLayers":4,"bottomLayers":3,"infillPct":15,"infillType":"grid|gyroid|triangle|hex|cubic|concentric|lightning|adaptive|linear","speed":120,"outerSpeed":0,"infillSpeed":0,"firstLayerSpeed":30,"travelSpeed":200,"accel":0,"nozzleTemp":210,"bedTemp":60,"fanPct":100,"minLayerTime":8,"overhangSpeed":0,"flowRatio":100,"maxVolumetricFlow":12,"pressureAdvance":0,"wipeDist":0.8,"widthOuter":0,"widthInfill":0,"supports":false,"treeSupports":false,"supportAngle":50,"adaptiveLayerHeight":false,"seamMode":"cercano|alineado|agudo|aleatorio","outerWallLast":false,"bridgeDetect":false,"gapFill":true,"fuzzySkin":0,"coasting":0,"elephantFoot":0,"xyCompensation":0,"arcFitting":false,"skirt":2,"skirtGap":2,"brim":0,"raft":false,"ironing":false,"retractDist":0.8,"retractSpeed":35,"zHop":0.2,"razonamiento":"2-4 frases en español con las decisiones clave","advertencias":["lista de riesgos, puede ser vacía"]}`;
+RECIBIRÁS además un PERFIL BASE LOCAL ya seguro y acotado. No lo repitas completo.
+RESPONDE SOLO con un objeto JSON válido, sin markdown ni texto extra, con esta forma:
+{"overrides":{"campoQueCambias":valor},"razonamiento":"1-3 frases breves en español","advertencias":["riesgos concretos; puede ser []"]}
+En "overrides" incluye ÚNICAMENTE parámetros que realmente cambiarías respecto del perfil base. Si el perfil base ya es adecuado, usa {}.
+No inventes nombres de parámetros: solo puedes usar claves presentes en PERFIL BASE LOCAL.`;
+  function _parseIaPayload(raw){
+    const txt=String(raw||'').trim(),a=txt.indexOf('{');
+    if(a<0)throw new Error('la IA respondió sin parámetros JSON');
+    let depth=0,inString=false,escaped=false,b=-1;
+    for(let i=a;i<txt.length;i++){
+      const ch=txt[i];
+      if(inString){
+        if(escaped){escaped=false;continue;}
+        if(ch==='\\'){escaped=true;continue;}
+        if(ch==='"')inString=false;
+        continue;
+      }
+      if(ch==='"'){inString=true;continue;}
+      if(ch==='{')depth++;
+      else if(ch==='}'&&--depth===0){b=i;break;}
+    }
+    if(b<0||depth!==0||inString)throw new Error('respuesta IA truncada antes de cerrar el JSON');
+    let obj;
+    try{obj=JSON.parse(txt.slice(a,b+1));}
+    catch(_){throw new Error('JSON de IA inválido');}
+    if(!obj||typeof obj!=='object'||Array.isArray(obj))throw new Error('JSON de IA no es un objeto');
+    const ov=(obj.overrides&&typeof obj.overrides==='object'&&!Array.isArray(obj.overrides))?obj.overrides:obj;
+    const advertencias=Array.isArray(obj.advertencias)?obj.advertencias.map(x=>String(x)).filter(Boolean).slice(0,8):[];
+    return{overrides:ov,razonamiento:String(obj.razonamiento||'').trim(),advertencias};
+  }
+
   async function analizarIA(){
     if(!S.stats)return;
     if(!(typeof hasClaudeAccess==='function'?hasClaudeAccess():!!(typeof _proxyCfg==='function'&&_proxyCfg()))){toast('Proxy IA requerido: Claude está bloqueado hasta configurar el Proxy Worker','error');return;}
     const btn=el('slBtnIA');btn.disabled=true;btn.textContent='⏳ Analizando…';
     try{showAgentWorking('PRODUCTION',{name:'KAI-Slicer',emoji:'🖨️',verb:'está calculando los parámetros de impresión…',messages:['Analizando la geometría de la pieza…','Eligiendo capas, relleno y soportes…','Ajustando velocidad y temperatura…']});}catch(e){}
     try{
-      const out=await callAgentClaude('PRODUCTION',IA_SYS,resumen());
-      const a=out.indexOf('{'),b=out.lastIndexOf('}');
-      if(a<0||b<=a)throw new Error('respuesta sin JSON');
-      const p=JSON.parse(out.slice(a,b+1));
-      S.params=clampParams(p);
-      showRazon((p.razonamiento||'Parámetros calculados por IA.'),p.advertencias||[]);
+      const base=perfilBaseParams();
+      const input=resumen()+'\nPERFIL BASE LOCAL (cambia solo lo necesario): '+JSON.stringify(base);
+      const out=await callAgentClaude('PRODUCTION',IA_SYS,input);
+      const parsed=_parseIaPayload(out),patch={};
+      for(const k of Object.keys(base)){
+        if(Object.prototype.hasOwnProperty.call(parsed.overrides,k))patch[k]=parsed.overrides[k];
+      }
+      S.params=clampParams({...base,...patch});
+      showRazon(parsed.razonamiento||'La IA revisó el perfil base y ajustó solo los parámetros necesarios.',parsed.advertencias);
       renderParams();
     }catch(e){
-      toast('IA no disponible ('+e.message+') — usando perfil base','error');
+      const msg=String(e&&e.message||e||'error desconocido');
+      toast('IA no disponible ('+msg+') — usando perfil base','error');
       usarPerfilBase();
     }finally{try{hideAgentWorking();}catch(e){}btn.disabled=false;btn.textContent='✨ Analizar con IA';}
   }
-  function usarPerfilBase(){
+
+  function perfilBaseParams(){
     if(!S.stats)return;
     const st=S.stats,mat=MATS[el('slMaterial').value]||MATS['PLA'],spec=SPECS[el('slPrinter').value];
     const obj=el('slObjetivo').value,noz=+el('slNozzle').value;
@@ -707,7 +741,11 @@ RESPONDE SOLO con un objeto JSON válido (sin markdown, sin texto extra) con EXA
       brim:st.hr>3?8:0,raft:false,ironing:obj==='calidad',
       retractDist:(mat===MATS.TPU||mat===MATS['TPU-95A'])?0.5:0.8,retractSpeed:(mat===MATS.TPU||mat===MATS['TPU-95A'])?20:35,zHop:0.2,
       };
-    S.params=clampParams(p);
+    return clampParams(p);
+  }
+  function usarPerfilBase(){
+    if(!S.stats)return;
+    S.params=perfilBaseParams();
     showRazon('Perfil heurístico local (sin IA): calculado según material, objetivo y geometría. Puedes editar cualquier parámetro antes de generar el G-code.',[]);
     renderParams();
   }

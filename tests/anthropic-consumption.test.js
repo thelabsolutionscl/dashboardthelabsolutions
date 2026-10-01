@@ -60,6 +60,7 @@ test('la política central reserva Sonnet para razonamiento y acota cada salida'
   assert.equal(sandbox.agentAiPolicy('FINANCE').model,'claude-sonnet-4-6');
   assert.equal(sandbox.agentAiPolicy('ADS').model,'claude-sonnet-4-6');
   assert.equal(sandbox.agentAiPolicy('COMMUNITY_AGENT').maxTokens,300);
+  assert.equal(sandbox.agentAiPolicy('PRODUCTION').maxTokens,850,'el arreglo del slicer no debe inflar el techo global de salida');
   const body=JSON.parse(sandbox._CLAUDE_BODY('s','u',{model:'claude-sonnet-4-6',maxTokens:99999}));
   assert.equal(body.max_tokens,1400,'el navegador no puede pedir una salida ilimitada');
   assert.ok(Array.isArray(body.system),'el system debe enviarse en bloques cacheables');
