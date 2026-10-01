@@ -2796,7 +2796,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/bug-reports'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -2866,6 +2866,65 @@ export default {
         email:authorized.identity.email,role:authorized.identity.role,
         method:request.method,path:url.pathname.slice(0,180),
       }));
+    }
+
+    // Internal bug reports get a narrow endpoint. Screenshots are stored
+    // separately from metadata so history reads stay small.
+    if(url.pathname==='/shared/bug-reports'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      const keys=[...url.searchParams.keys()];
+      if(keys.some(k=>k!=='id')||url.searchParams.getAll('id').length>1)
+        return json({error:'Bug report query invalid'},422,scopedHeaders);
+
+      if(request.method==='GET'){
+        const id=url.searchParams.get('id')||'';
+        const result=id?await sharedBugReportLoad(env,id):await sharedBugReportList(env);
+        if(result.error){
+          const status=result.error==='not-found'?404:
+            result.error==='invalid-id'?422:503;
+          return json({error:result.error},status,scopedHeaders);
+        }
+        return id
+          ?json({ok:true,report:result.report,screenshot:result.screenshot||''},200,scopedHeaders)
+          :json({ok:true,reports:result.reports||[]},200,scopedHeaders);
+      }
+
+      if(url.search)return json({error:'Bug report write query not allowed'},422,scopedHeaders);
+
+      if(request.method==='POST'){
+        if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+           Number(request.headers.get('Content-Length')||0)>100000)
+          return json({error:'Bug report expects bounded JSON'},415,scopedHeaders);
+        let body;try{
+          const raw=await request.text();if(raw.length>100000)throw Error('large');
+          body=JSON.parse(raw);
+        }catch(_){return json({error:'Invalid bug report JSON'},422,scopedHeaders);}
+        const result=await sharedBugReportCreate(env,body,authorized.identity||null);
+        if(result.error)return json({error:result.error},result.uncertain?503:422,scopedHeaders);
+        return json({ok:true,id:result.id,report:result.report},201,scopedHeaders);
+      }
+
+      if(request.method==='PATCH'){
+        if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+           Number(request.headers.get('Content-Length')||0)>10000)
+          return json({error:'Bug report action expects bounded JSON'},415,scopedHeaders);
+        let body;try{
+          const raw=await request.text();if(raw.length>10000)throw Error('large');
+          body=JSON.parse(raw);
+        }catch(_){return json({error:'Invalid bug report action JSON'},422,scopedHeaders);}
+        if(!body||typeof body!=='object'||Array.isArray(body)||
+           Object.keys(body).some(k=>!['id','action'].includes(k))||
+           !bugReportIdAllowed(body.id)||!['retry','close'].includes(body.action))
+          return json({error:'Invalid bug report action'},422,scopedHeaders);
+        const result=await sharedBugReportAction(env,body.id,body.action);
+        if(result.error){
+          const status=result.error==='not-found'?404:
+            result.error==='retry-not-allowed'?409:422;
+          return json({error:result.error},status,scopedHeaders);
+        }
+        return json({ok:true,report:result.report},200,scopedHeaders);
+      }
+      return json({error:'Method not allowed'},405,scopedHeaders);
     }
 
     // Calendar collaboration gets a dedicated document endpoint instead of
