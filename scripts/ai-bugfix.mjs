@@ -190,11 +190,11 @@ function testPatch(changed){
     const r=spawnSync(process.execPath,['--check',path],{encoding:'utf8'});
     if(r.status!==0)throw new Error('Syntax check falló en '+path+': '+String(r.stderr||r.stdout).slice(-1500));
   }
-  if(changed.some(p=>p.endsWith('.php'))){
-    const r=spawnSync('php',['-l',...changed.filter(p=>p.endsWith('.php'))],{encoding:'utf8'});
-    if(r.status!==0)throw new Error('PHP lint falló: '+String(r.stderr||r.stdout).slice(-1500));
+  for(const path of changed.filter(p=>p.endsWith('.php'))){
+    const r=spawnSync('php',['-l',path],{encoding:'utf8'});
+    if(r.status!==0)throw new Error('PHP lint falló en '+path+': '+String(r.stderr||r.stdout).slice(-1500));
   }
-  const tests=spawnSync(process.execPath,['--test','tests/*.test.js'],{encoding:'utf8',shell:true,maxBuffer:12*1024*1024});
+  const tests=spawnSync('bash',['-lc','node --test tests/*.test.js'],{encoding:'utf8',maxBuffer:12*1024*1024});
   if(tests.status!==0)throw new Error('Tests fallaron:\n'+String(tests.stdout||'').slice(-5000)+'\n'+String(tests.stderr||'').slice(-1500));
 }
 function cleanTitle(message){
