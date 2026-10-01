@@ -1345,6 +1345,118 @@ const MAIL={
     return html;
   },
 
+  // Las firmas son contenido propio, no HTML recibido de terceros. Mantienen el
+  // formato de email (tablas + estilos inline) pero siguen pasando por una
+  // allowlist independiente para que una firma compartida nunca pueda ejecutar JS.
+  _safeSignatureStyle(styleText){
+    const probe=document.createElement('span');
+    probe.setAttribute('style',String(styleText||''));
+    const allowed=[
+      'font-family','font-size','font-weight','font-style','line-height','letter-spacing',
+      'color','background-color','text-decoration','text-align','text-transform','white-space',
+      'vertical-align','border','border-top','border-right','border-bottom','border-left',
+      'border-color','border-style','border-width','border-radius','padding','padding-top',
+      'padding-right','padding-bottom','padding-left','margin','margin-top','margin-right',
+      'margin-bottom','margin-left','width','min-width','max-width','height','min-height',
+      'max-height','display','border-collapse','opacity'
+    ];
+    const out=[];
+    for(const prop of allowed){
+      const value=probe.style.getPropertyValue(prop).trim();
+      if(!value||value.length>220)continue;
+      if(/url\s*\(|expression\s*\(|javascript:|vbscript:|@import|behavior\s*:|var\s*\(/i.test(value))continue;
+      out.push(prop+':'+value);
+    }
+    return out.join(';');
+  },
+  _sanitizarFirma(html){
+    const raw=String(html||'');
+    if(!raw)return '';
+    try{
+      const doc=new DOMParser().parseFromString(raw,'text/html');
+      const keep=new Set('p br div span b strong i em u s table thead tbody tfoot tr td th hr a img'.split(' '));
+      const drop=new Set('script style svg math iframe object embed form input button textarea select link meta base video audio source picture template noscript'.split(' '));
+      const safe=node=>{
+        if(node.nodeType===3)return doc.createTextNode(node.textContent||'');
+        if(node.nodeType!==1)return null;
+        const tag=node.localName.toLowerCase();
+        if(drop.has(tag))return null;
+        const el=keep.has(tag)?doc.createElement(tag):doc.createDocumentFragment();
+
+        if(keep.has(tag)){
+          const css=this._safeSignatureStyle(node.getAttribute('style')||'');
+          if(css)el.setAttribute('style',css);
+
+          if(tag==='table'){
+            if((node.getAttribute('role')||'').toLowerCase()==='presentation')el.setAttribute('role','presentation');
+            for(const at of ['cellpadding','cellspacing','border']){
+              const v=String(node.getAttribute(at)||'').trim();
+              if(/^\d{1,2}$/.test(v))el.setAttribute(at,v);
+            }
+          }
+          if(tag==='td'||tag==='th'){
+            const align=String(node.getAttribute('align')||'').toLowerCase();
+            const valign=String(node.getAttribute('valign')||'').toLowerCase();
+            if(['left','center','right'].includes(align))el.setAttribute('align',align);
+            if(['top','middle','bottom'].includes(valign))el.setAttribute('valign',valign);
+            const bgcolor=String(node.getAttribute('bgcolor')||'').trim();
+            if(/^#[0-9a-f]{3,8}$/i.test(bgcolor))el.setAttribute('bgcolor',bgcolor);
+          }
+          if(tag==='a'){
+            try{
+              const url=new URL(node.getAttribute('href')||'');
+              if(['https:','mailto:','tel:'].includes(url.protocol)){
+                el.setAttribute('href',url.href);
+                el.setAttribute('rel','noopener noreferrer');
+                if(url.protocol==='https:')el.setAttribute('target','_blank');
+              }
+            }catch(_){}
+          }
+          if(tag==='img'){
+            const src=String(node.getAttribute('src')||'').trim();
+            let ok=false;
+            try{
+              const url=new URL(src);
+              if(url.protocol==='https:'&&!url.username&&!url.password){el.setAttribute('src',url.href);ok=true;}
+            }catch(_){}
+            if(!ok&&/^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(src)&&src.length<=350000){
+              el.setAttribute('src',src.replace(/\s+/g,''));ok=true;
+            }
+            if(!ok)return null;
+            el.setAttribute('alt',String(node.getAttribute('alt')||'').slice(0,200));
+            for(const at of ['width','height']){
+              const v=String(node.getAttribute(at)||'').trim();
+              if(/^\d{1,4}$/.test(v))el.setAttribute(at,v);
+            }
+          }
+        }
+
+        for(const child of [...node.childNodes]){
+          const cleaned=safe(child);if(cleaned)el.appendChild(cleaned);
+        }
+        return el;
+      };
+
+      const out=doc.createElement('div');
+      for(const node of [...doc.body.childNodes]){
+        const cleaned=safe(node);if(cleaned)out.appendChild(cleaned);
+      }
+      // El wrapper ya separa la firma del mensaje. Quita líneas vacías que se
+      // acumulan al copiar/pegar desde Gmail/Outlook y desplazan la tarjeta.
+      const blank=node=>{
+        if(node.nodeType===3)return !String(node.textContent||'').trim();
+        if(node.nodeType!==1)return true;
+        const tag=node.localName.toLowerCase();
+        if(tag==='br')return true;
+        if(!['p','div','span'].includes(tag))return false;
+        return !String(node.textContent||'').trim()&&!node.querySelector('img,table,hr');
+      };
+      while(out.firstChild&&blank(out.firstChild))out.firstChild.remove();
+      while(out.lastChild&&blank(out.lastChild))out.lastChild.remove();
+      return out.innerHTML;
+    }catch(_){return this.esc(raw);}
+  },
+
   // Firma independiente por cuenta: se guarda con la casilla activa, no con el
   // usuario del dashboard. Como la cuenta por defecto es la del usuario logueado,
   // la firma ya existente se conserva para esa casilla (misma clave).
@@ -1357,7 +1469,7 @@ const MAIL={
     return fixed;
   },
   setSig(html){
-    const k=this._sigKey();if(k) localStorage.setItem(k,this._sanitizarCita(html,true));
+    const k=this._sigKey();if(k) localStorage.setItem(k,this._sanitizarFirma(html));
     // Respaldo permanente: la firma queda también en Airtable (sobrevive a
     // limpiar el caché y aparece igual en otros dispositivos).
     this._saveSigsAirtable();
@@ -1377,7 +1489,7 @@ const MAIL={
     if(!s) return '';
     // Sin línea separadora: las firmas con diseño propio (tarjeta) traen su
     // borde, y en las de texto el espacio en blanco basta como separación.
-    return `<br><br><div class="mail-signature-block" contenteditable="false" style="margin-top:12px">${this._sanitizarCita(s,true)}</div>`;
+    return `<br><div class="mail-signature-block" contenteditable="false" style="margin-top:8px;max-width:100%">${this._sanitizarFirma(s)}</div>`;
   },
 
   insertSignature(){
@@ -1391,7 +1503,7 @@ const MAIL={
   openSigModal(){
     const ed=document.getElementById('mailSigEditor'),code=document.getElementById('mailSigCode');
     const acct=document.getElementById('mailSigAcct'); if(acct) acct.textContent='· '+(this.activeAccount()||'');
-    ed.innerHTML=this._sanitizarCita(this.getSig(),true);
+    ed.innerHTML=this._sanitizarFirma(this.getSig());
     if(code){code.style.display='none';code.value='';}
     ed.style.display='block';
     const b=document.getElementById('mailSigCodeBtn');if(b)b.classList.remove('active');
@@ -1415,7 +1527,7 @@ const MAIL={
       code.value=ed.innerHTML; code.style.display='block'; ed.style.display='none';
       if(b)b.classList.add('active'); this._applyEditorBg(); code.focus();
     }else{
-      ed.innerHTML=this._sanitizarCita(code.value,true); code.style.display='none'; ed.style.display='block';
+      ed.innerHTML=this._sanitizarFirma(code.value); code.style.display='none'; ed.style.display='block';
       if(b)b.classList.remove('active'); ed.focus();
     }
   },
