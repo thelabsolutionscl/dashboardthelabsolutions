@@ -40,7 +40,7 @@ test('un folio reutilizado otro año NO borra la factura histórica',()=>{
   const b=boot({airtable:[dte('356','2026-01-07')],historic:[old('356','2025')]});
   const rows=b.finGetAllFacturas();
   assert.equal(rows.length,2);
-  assert.ok(rows.some(r=>r.year==='2025'&&!r._source));
+  assert.ok(rows.some(r=>r.year==='2025'&&r._source==='legacy'));
   assert.ok(rows.some(r=>r.year==='2026'&&r._source==='airtable'));
 });
 
