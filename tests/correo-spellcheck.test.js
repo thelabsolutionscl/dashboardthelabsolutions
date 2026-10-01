@@ -34,8 +34,8 @@ test('el helper se carga desde el bootstrap visual global',()=>{
 test('el corrector combina español general y español de Chile localmente',()=>{
   assert.match(SRC,/vendor\/spellcheck\/typo\.js/);
   for(const locale of ['es_CL','es_ES']){
-    assert.match(SRC,new RegExp('vendor/spellcheck/'+locale+'\\\\.aff'));
-    assert.match(SRC,new RegExp('vendor/spellcheck/'+locale+'\\\\.dic'));
+    assert.ok(SRC.includes('vendor/spellcheck/'+locale+'.aff'),locale+' debe cargarse en el corrector');
+    assert.ok(SRC.includes('vendor/spellcheck/'+locale+'.dic'),locale+' debe cargarse en el corrector');
     assert.ok(fs.statSync('vendor/spellcheck/'+locale+'.dic').size>500000,locale+' debe usar un vocabulario Hunspell completo');
     assert.ok(fs.statSync('vendor/spellcheck/'+locale+'.aff').size>100000,locale+' debe incluir reglas Hunspell de flexión');
   }
