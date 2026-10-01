@@ -196,6 +196,12 @@ function renderHistory(){
 }
 async function loadHistory(){
   const box=D.getElementById('tlsBugList');if(box)box.innerHTML='<div class="tls-bug-empty">Cargando…</div>';
+  if(root._DEMO_MODE){
+    history=[{id:'br_demo_manual',section:'correo',status:'nuevo',
+      message:'Ejemplo: traté de enviar un correo pero apareció un error inesperado.',
+      createdAt:new Date().toISOString(),reporterName:'Demo Manual'}];
+    renderHistory();return;
+  }
   try{const d=await api('GET');history=Array.isArray(d.reports)?d.reports:[];renderHistory();}
   catch(e){if(box)box.innerHTML='<div class="tls-bug-empty">No se pudo cargar el historial: '+esc(e.message)+'</div>';}
 }
@@ -218,6 +224,12 @@ async function showDetail(id){
 async function submit(){
   const msg=String(D.getElementById('tlsBugMessage')?.value||'').trim(),state=D.getElementById('tlsBugSubmitState'),btn=D.getElementById('tlsBugSubmit');
   if(msg.length<10){state.textContent='Describe el problema con un poco más de detalle.';return;}
+  if(root._DEMO_MODE){
+    history.unshift({id:'br_demo_'+Date.now().toString(36),section:currentContext().section,status:'nuevo',
+      message:msg,createdAt:new Date().toISOString(),reporterName:'Demo Manual'});
+    D.getElementById('tlsBugMessage').value='';setImage(null);renderHistory();
+    state.textContent='✓ DEMO: reporte agregado solo a esta vista, sin guardar datos reales.';return;
+  }
   btn.disabled=true;state.textContent='Guardando reporte…';
   try{
     const context=currentContext();
