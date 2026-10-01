@@ -228,18 +228,14 @@ test('cada diagnóstico tiene timeout aislado para no frenar las demás tarjetas
 });
 
 
-test('Resend distingue clave send-only y evidencia de envío real',()=>{
-  assert.match(source,/send_only_or_forbidden/);
-  assert.match(source,/Envía un correo normal y vuelve a verificar/);
+test('Resend verifica el permiso real de envío y distingue evidencia reciente',()=>{
   assert.match(source,/evidence==='recent_send'/);
-  assert.doesNotMatch(source,/Resend rechazó la API key/);
-  assert.match(source,/La clave Resend está limitada a envío o no autoriza lecturas/);
-});
-
-
-test('una respuesta unauthorized de /domains no se presenta como clave inválida',()=>{
-  assert.doesNotMatch(source,/error_code==='unauthorized'[\s\S]{0,160}status:'red'/);
-  assert.match(source,/error_code==='unauthorized'\|\|d\?\.error_code==='send_only_or_forbidden'/);
+  assert.match(source,/evidence==='send_capability'/);
+  assert.match(source,/Resend autorizó el permiso de envío/);
+  assert.match(source,/error_code==='send_unauthorized'\|\|d\?\.error_code==='send_forbidden'/);
+  assert.match(source,/status:'red',message:'La API key configurada no autoriza el envío por Resend'/);
+  assert.doesNotMatch(source,/send_only_or_forbidden/);
+  assert.doesNotMatch(source,/Envía un correo normal y vuelve a verificar/);
 });
 
 

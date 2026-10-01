@@ -10,7 +10,7 @@
     {id:'calendar',name:'Google Calendar',group:'Google y comunicación',page:'calendario',impact:'Agenda y sincronización de eventos',guide:'Reconectar la cuenta usando OAuth. Después, abrir Calendario para revisar la sincronización real de eventos. Una prueba de acceso no confirma que todos los eventos se sincronizaron.',auto:true,oauth:true},
     {id:'drive',name:'Google Drive',group:'Google y comunicación',page:'cotizaciones',impact:'Archivos, carpetas y propuestas',guide:'Reconectar mediante el botón OAuth. Revisar el Client ID autorizado y las carpetas desde una cotización; la lectura no crea archivos.',auto:true,oauth:true},
     {id:'imap',name:'Correos · Entrada IMAP',group:'Google y comunicación',page:'correo',impact:'Recepción, carpetas y lectura de correos',guide:'Abrir Correos, elegir la cuenta afectada y volver a introducir la clave en esa sesión. El diagnóstico solo consulta carpetas, nunca marca mensajes como leídos.',auto:false},
-    {id:'resend',name:'Correos · Salida Resend',group:'Google y comunicación',page:'correo',impact:'Envío de correos desde el dashboard',guide:'Instala el mail-api.php actualizado y configura RESEND_API_KEY únicamente en el servidor de correo. Autentica una casilla y pulsa Verificar conexión: se consultan dominios, sin enviar mensajes. Una clave limitada al envío puede no autorizar la prueba.',auto:false},
+    {id:'resend',name:'Correos · Salida Resend',group:'Google y comunicación',page:'correo',impact:'Envío de correos desde el dashboard',guide:'Instala el mail-api.php actualizado y configura RESEND_API_KEY únicamente en el servidor de correo. Autentica una casilla y pulsa Verificar conexión: se comprueba el permiso real de envío con una solicitud inválida que Resend rechaza antes de crear el correo; no se envían mensajes.',auto:false},
     {id:'printer',name:'Bridge de impresoras',group:'Operaciones',page:'maquinas',impact:'Telemetría y cámaras de las impresoras',guide:'Comprobar el bridge y el túnel. Si está disponible, revisar luego las cámaras y la autenticación en Máquinas; /healthz por sí solo no certifica cada impresora.',auto:true},
     {id:'sii',name:'SII · Emisor electrónico',group:'Operaciones',page:'finanzas',impact:'Facturas, certificado y emisión de DTE',guide:'Revisar configuración y certificados del Worker SII desde el entorno seguro. El diagnóstico jamás emite DTE ni consume folios.',auto:true},
     {id:'leads',name:'Leads · Worker web',group:'Marketing y web',page:'clientes',impact:'Formulario web, nuevos leads y newsletter',guide:'Comprobar /health y la credencial Airtable en el Worker. Para verificar un envío real del formulario, realizar una prueba controlada fuera de este monitor.',auto:true},
@@ -227,16 +227,20 @@
       if(!manual)return {status:'gray',message:'Resend se verifica bajo demanda (sin enviar mensajes)'};
       try{
         const d=await MAIL.post({action:'resend_status'});
-        if(d?.verified===true&&d?.ok===true)
-          return {status:'green',message:d?.evidence==='recent_send'?
+        if(d?.verified===true&&d?.ok===true){
+          const message=d?.evidence==='recent_send'?
             'Resend verificado por un envío real reciente; no se envió correo de prueba':
-            'Resend autenticado en el servidor; no se envió ningún correo'};
+            d?.evidence==='send_capability'?
+              'Resend autorizó el permiso de envío; la prueba se rechazó antes de crear un correo':
+              'Resend autenticado en el servidor; no se envió ningún correo';
+          return {status:'green',message};
+        }
         if(d?.configured===false)return {status:'gray',message:'Falta la clave Resend en el servidor de correo'};
-        if(d?.error_code==='send_only_or_forbidden')
-          return {status:'yellow',message:'La clave parece limitada a envío. Envía un correo normal y vuelve a verificar; no amplíes permisos solo para el monitor'};
-        if(d?.error_code==='unauthorized'||d?.error_code==='send_only_or_forbidden')
-          return {status:'yellow',message:'La clave Resend está limitada a envío o no autoriza lecturas. Envía un correo normal y vuelve a verificar; no amplíes permisos solo para el monitor'};
-        return {status:'yellow',message:'No se pudo verificar Resend; comprueba el servicio o la versión de mail-api'};
+        if(d?.error_code==='send_unauthorized'||d?.error_code==='send_forbidden')
+          return {status:'red',message:'La API key configurada no autoriza el envío por Resend'};
+        if(d?.error_code==='rate_limited')
+          return {status:'yellow',message:'Resend limitó temporalmente la comprobación; vuelve a verificar en unos minutos'};
+        return {status:'yellow',message:'No se pudo verificar el permiso de envío de Resend; comprueba el servicio o la versión de mail-api'};
       }catch(_){return {status:'yellow',message:'Resend no se pudo verificar desde Correos'};}
     }
     if(id==='printer'){
