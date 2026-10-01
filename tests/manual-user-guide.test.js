@@ -6,6 +6,7 @@ const fs=require('node:fs');
 const INDEX=fs.readFileSync('index.html','utf8');
 const PAGE=fs.readFileSync('manual.html','utf8');
 const MANUAL=fs.readFileSync('docs/manual/MANUAL_USUARIO.md','utf8');
+const SCREENSHOT_WORKFLOW=fs.readFileSync('.github/workflows/manual-screenshots.yml','utf8');
 
 test('el manual vive en el menú de usuario y abre en una pestaña aparte',()=>{
   assert.match(INDEX,/openUserManual\(\)[\s\S]{0,240}Manual de usuario/);
@@ -29,6 +30,30 @@ test('la página del manual carga la fuente markdown y permite imprimir',()=>{
   assert.match(PAGE,/id="toc"/);
 });
 
+test('búsqueda e índice funcionan también en móvil y sin tildes',()=>{
+  assert.match(PAGE,/id="mobileToc"/);
+  assert.match(PAGE,/id="searchStatus"/);
+  assert.match(PAGE,/id="searchEmpty"/);
+  assert.match(PAGE,/function normalizeText|const normalizeText=/);
+  assert.match(PAGE,/normalize\('NFD'\)/);
+  assert.match(PAGE,/IntersectionObserver/);
+  assert.match(PAGE,/ids=new Map\(\)/);
+});
+
+test('parser conserva saltos de línea explícitos y alt seguro',()=>{
+  assert.match(PAGE,/hardBreak=\/ \{2\}\$\//);
+  assert.match(PAGE,/alt=esc\(altText\)/);
+  assert.match(PAGE,/<br>/);
+});
+
+test('screenshots del manual se regeneran desde el PR actual',()=>{
+  assert.match(SCREENSHOT_WORKFLOW,/pull_request:/);
+  assert.match(SCREENSHOT_WORKFLOW,/docs\/manual\/MANUAL_USUARIO\.md/);
+  assert.match(SCREENSHOT_WORKFLOW,/manual\.html/);
+  assert.match(SCREENSHOT_WORKFLOW,/github\.event\.pull_request\.head\.ref/);
+  assert.doesNotMatch(SCREENSHOT_WORKFLOW,/manual-screenshots-v2/);
+});
+
 test('el manual cubre las secciones operativas principales',()=>{
   for(const title of [
     'OVERVIEW','CLIENTES','COTIZACIONES','PEDIDOS','INVENTARIO','PROVEEDORES',
@@ -36,6 +61,12 @@ test('el manual cubre las secciones operativas principales',()=>{
     'CALENDARIO','REPORTES','WEB','FINANZAS','REMUNERACIONES','CORREO',
     'CENTRO DE CONEXIONES','APARIENCIA'
   ]) assert.ok(MANUAL.includes(title),title);
+});
+
+test('redacción del manual evita jerga retirada y mantiene versión actual',()=>{
+  assert.match(MANUAL,/\*\*Versión:\*\* 1\.4/);
+  assert.doesNotMatch(MANUAL,/Control de versión del manual/);
+  assert.doesNotMatch(MANUAL,/\bmutaciones\b/i);
 });
 
 test('no documenta los modos Simple/Experto retirados',()=>{
