@@ -1,0 +1,72 @@
+name: Migrar respaldos antiguos cifrados
+
+# Solo manual. No toca ni borra los respaldos legados hasta verificar que TODOS
+# están almacenados cifrados en un artifact nuevo. Requiere el mismo secret
+# BACKUP_ENCRYPTION_KEY del backup semanal.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Escribe MIGRAR para cifrar, verificar y eliminar las copias antiguas'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: tls-legacy-backup-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verificar autorización y secreto ANTES de descargar
+        env:
+          CONFIRM: ${{ github.event.inputs.confirm }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          if [ "$CONFIRM" != "MIGRAR" ]; then
+            echo "::error::Confirmación inválida. No se descargó ni borró ningún artifact."
+            exit 1
+          fi
+          if [ "${#BACKUP_ENCRYPTION_KEY}" -lt 24 ]; then
+            echo "::error::Primero configura BACKUP_ENCRYPTION_KEY en GitHub Actions (mínimo 24 caracteres)."
+            exit 1
+          fi
+
+      - name: Cifrar todas las copias antiguas sin borrar ninguna
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: node scripts/migrate-legacy-backups.mjs prepare
+
+      - name: Publicar SOLO copias cifradas
+        id: upload
+        if: ${{ hashFiles('backup-migrated/*.enc.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-crm-legacy-cifrados-${{ github.run_id }}
+          path: backup-migrated/*.enc.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Verificar contenido publicado y SOLO ENTONCES borrar originales
+        if: ${{ steps.upload.outputs['artifact-id'] != '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          NEW_ARTIFACT_ID: ${{ steps.upload.outputs['artifact-id'] }}
+        run: node scripts/migrate-legacy-backups.mjs finalize

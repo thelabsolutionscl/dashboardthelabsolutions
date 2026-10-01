@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="860" viewBox="0 0 1180 860" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5b6472"/>
+    </marker>
+    <marker id="arrowCyan" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#00bcd4"/>
+    </marker>
+    <style>
+      .title{font-size:26px;font-weight:700;fill:#0f1115}
+      .sub{font-size:13px;fill:#5b6472}
+      .box-title{font-size:15px;font-weight:700}
+      .box-text{font-size:12px;fill:#3a4150}
+      .lbl{font-size:11px;fill:#5b6472;font-style:italic}
+      .tag{font-size:11px;font-weight:700;fill:#fff}
+      .step{font-size:13px;font-weight:700;fill:#fff}
+    </style>
+  </defs>
+
+  <rect width="1180" height="860" fill="#f7f8fa"/>
+  <text x="40" y="48" class="title">The Lab Solutions — Pipeline de Ventas con Agentes IA</text>
+  <text x="40" y="70" class="sub">Captura multicanal → normalización → cola en Airtable → agentes Claude → de vuelta al CRM</text>
+
+  <!-- ROW 1: Canales -->
+  <g>
+    <rect x="40" y="100" width="300" height="64" rx="10" fill="#fff" stroke="#d7dbe0"/>
+    <circle cx="62" cy="124" r="6" fill="#0a66c2"/>
+    <text x="78" y="122" class="box-title" fill="#0a66c2">LinkedIn Lead Gen</text>
+    <text x="78" y="142" class="box-text">vía Make / Zapier · POST /webhooks/linkedin</text>
+    <text x="78" y="157" class="box-text">campos: name, company, jobTitle, email, service…</text>
+
+    <rect x="440" y="100" width="300" height="64" rx="10" fill="#fff" stroke="#d7dbe0"/>
+    <circle cx="462" cy="124" r="6" fill="#fbbc05"/>
+    <text x="478" y="122" class="box-title" fill="#b8860b">Google Ads Lead Form</text>
+    <text x="478" y="142" class="box-text">POST /webhooks/google-ads · Prioridad: Alta</text>
+    <text x="478" y="157" class="box-text">normaliza user_column_data[]</text>
+
+    <rect x="840" y="100" width="300" height="64" rx="10" fill="#fff" stroke="#d7dbe0"/>
+    <circle cx="862" cy="124" r="6" fill="#00bcd4"/>
+    <text x="878" y="122" class="box-title" fill="#0097a7">Web — Contact.tsx</text>
+    <text x="878" y="142" class="box-text">POST /lead · honeypot + Turnstile + rate-limit</text>
+    <text x="878" y="157" class="box-text">captura UTMs, gclid, li_fat_id</text>
+  </g>
+
+  <!-- arrows to worker -->
+  <line x1="190" y1="164" x2="430" y2="210" stroke="#5b6472" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="590" y1="164" x2="590" y2="210" stroke="#5b6472" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="990" y1="164" x2="750" y2="210" stroke="#5b6472" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="250" y="195" class="lbl">+ llave anti-bot (header)</text>
+
+  <!-- ROW 2: Worker -->
+  <rect x="220" y="214" width="740" height="150" rx="12" fill="#0f1115"/>
+  <text x="244" y="244" class="box-title" fill="#fff">thelab-leads-worker  ·  Cloudflare Worker  (lead-worker/src/index.js)</text>
+  <text x="244" y="266" class="box-text" fill="#aeb6c2">Ningún secreto en el repo — todo por wrangler secret</text>
+
+  <rect x="244" y="282" width="216" height="64" rx="8" fill="#1c2230"/>
+  <text x="256" y="304" class="step">1 · Valida llave + anti-bot</text>
+  <text x="256" y="324" class="box-text" fill="#9aa3b2">honeypot, Turnstile, rate-limit</text>
+  <text x="256" y="339" class="box-text" fill="#9aa3b2">401 si la llave falla</text>
+
+  <rect x="472" y="282" width="216" height="64" rx="8" fill="#1c2230"/>
+  <text x="484" y="304" class="step">2 · Normaliza payload</text>
+  <text x="484" y="324" class="box-text" fill="#9aa3b2">normalizeWeb / GoogleAds / LinkedIn</text>
+  <text x="484" y="339" class="box-text" fill="#9aa3b2">→ forma interna única</text>
+
+  <rect x="700" y="282" width="236" height="64" rx="8" fill="#1c2230"/>
+  <text x="712" y="304" class="step">3 · Persiste + dispara</text>
+  <text x="712" y="324" class="box-text" fill="#9aa3b2">dedupe Cliente · email speed-to-lead</text>
+  <text x="712" y="339" class="box-text" fill="#9aa3b2">dead-letter + cron si Airtable falla</text>
+
+  <!-- arrows worker to airtable -->
+  <line x1="400" y1="364" x2="300" y2="430" stroke="#5b6472" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="700" y1="364" x2="820" y2="430" stroke="#5b6472" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- ROW 3: Airtable -->
+  <rect x="90" y="434" width="420" height="92" rx="10" fill="#fff" stroke="#00bcd4" stroke-width="1.6"/>
+  <rect x="90" y="434" width="420" height="26" rx="10" fill="#00bcd4"/>
+  <text x="106" y="452" class="tag">Airtable · Clientes (CRM)</text>
+  <text x="106" y="480" class="box-text">Empresa · Contacto · Cargo · Email · Origen · Servicio interés</text>
+  <text x="106" y="498" class="box-text">campos IA: Lead Score IA · Próxima acción IA · Resumen IA</text>
+  <text x="106" y="516" class="box-text" fill="#0097a7">dedupe por email/teléfono — no duplica clientes recurrentes</text>
+
+  <rect x="640" y="434" width="420" height="92" rx="10" fill="#fff" stroke="#7e57c2" stroke-width="1.6"/>
+  <rect x="640" y="434" width="420" height="26" rx="10" fill="#7e57c2"/>
+  <text x="656" y="452" class="tag">Airtable · Agent_Queue (cola)</text>
+  <text x="656" y="480" class="box-text">Evento · Agente · Estado · Prioridad · Input JSON · Source</text>
+  <text x="656" y="498" class="box-text">Estado: Pendiente → Procesando → Completado / Error</text>
+  <text x="656" y="516" class="box-text" fill="#5e35b1">Output · Lead Score (1–10) · Acción sugerida</text>
+
+  <!-- arrow queue to dashboard -->
+  <line x1="850" y1="526" x2="850" y2="575" stroke="#00bcd4" stroke-width="2" marker-end="url(#arrowCyan)"/>
+  <text x="862" y="558" class="lbl" fill="#0097a7">Procesar (manual) / AUTO_PROCESS_LEADS</text>
+
+  <!-- ROW 4: Dashboard + Claude -->
+  <rect x="90" y="580" width="970" height="150" rx="12" fill="#fff" stroke="#d7dbe0"/>
+  <text x="114" y="610" class="box-title" fill="#0f1115">Dashboard · tab Agentes → "Cola de Agentes"  (index.html)</text>
+  <text x="114" y="630" class="box-text">processAgentQueueItem() → resuelve system prompt del agente → callClaude() → escribe Output, Lead Score y actualiza el Cliente + Agent_Log</text>
+
+  <!-- agent chips -->
+  <g>
+    <rect x="114" y="648" width="118" height="30" rx="15" fill="#e8f8fb" stroke="#00bcd4"/><text x="173" y="668" text-anchor="middle" class="box-text" fill="#0097a7" font-weight="700">LEAD_AGENT</text>
+    <rect x="240" y="648" width="138" height="30" rx="15" fill="#f3ecfb" stroke="#7e57c2"/><text x="309" y="668" text-anchor="middle" class="box-text" fill="#5e35b1" font-weight="700">LINKEDIN_AGENT</text>
+    <rect x="386" y="648" width="120" height="30" rx="15" fill="#eafaf0" stroke="#2e9e5b"/><text x="446" y="668" text-anchor="middle" class="box-text" fill="#1f7a44" font-weight="700">SALES_AGENT</text>
+    <rect x="514" y="648" width="122" height="30" rx="15" fill="#eafaf0" stroke="#2e9e5b"/><text x="575" y="668" text-anchor="middle" class="box-text" fill="#1f7a44" font-weight="700">QUOTE_AGENT</text>
+    <rect x="644" y="648" width="150" height="30" rx="15" fill="#fff6e6" stroke="#e0a32e"/><text x="719" y="668" text-anchor="middle" class="box-text" fill="#b8860b" font-weight="700">PRODUCTION_AGENT</text>
+    <rect x="802" y="648" width="100" height="30" rx="15" fill="#f1f3f5" stroke="#8a93a0"/><text x="852" y="668" text-anchor="middle" class="box-text" fill="#4a5260" font-weight="700">QA_AGENT</text>
+    <rect x="910" y="648" width="138" height="30" rx="15" fill="#fff6e6" stroke="#e0a32e"/><text x="979" y="668" text-anchor="middle" class="box-text" fill="#b8860b" font-weight="700">FOLLOWUP_AGENT</text>
+  </g>
+  <text x="114" y="702" class="box-text" fill="#5b6472">+ CEO · FINANCE · ADS · LEAD_GEN · ONBOARDING · REPORTE_CLIENTE · CONTENT  —  14 agentes especializados en total</text>
+  <text x="114" y="720" class="box-text" fill="#5b6472">Modelo por defecto: claude-haiku-4-5 (server-side) · configurable por ANTHROPIC_MODEL</text>
+
+  <!-- feedback arrow back to CRM -->
+  <path d="M90,690 C30,690 30,480 86,480" fill="none" stroke="#00bcd4" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrowCyan)"/>
+  <text x="20" y="600" class="lbl" fill="#0097a7" transform="rotate(-90 20 600)">escribe Lead Score IA · Próxima acción · Resumen</text>
+
+  <text x="40" y="800" class="sub">Robustez: tolerancia a campos inexistentes (reintenta sin el campo) · dead-letter en KV con reintento por cron (7 días) · tope diario de costo de Claude.</text>
+  <text x="40" y="820" class="sub">Una sola conversión de negocio: lead capturado → scoreado → cotizado → producido → entregado, todo trazado contra el mismo Cliente.</text>
+</svg>

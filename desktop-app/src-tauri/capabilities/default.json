@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos base de la ventana principal. El contenido remoto no invoca comandos nativos.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

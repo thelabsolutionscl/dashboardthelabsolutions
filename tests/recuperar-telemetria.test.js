@@ -1,0 +1,211 @@
+#!/usr/bin/env node
+'use strict';
+// Recuperación de telemetría: una impresora viva con Moonraker caído se
+// levanta desde el dashboard (botón) → bridge del taller (SSH) → impresora.
+
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const vm=require('node:vm');
+
+const BRIDGE=fs.readFileSync(path.join(__dirname,'..','printer-bridge','server.js'),'utf8');
+const MAQ=fs.readFileSync(path.join(__dirname,'..','js','maquinas.js'),'utf8');
+
+function functionSource(source,name){
+  const marker=`function ${name}(`;
+  const start=source.indexOf(marker);
+  assert.notEqual(start,-1,`falta ${name}`);
+  const body=source.indexOf('{',start);
+  let depth=0;
+  for(let i=body;i<source.length;i++){
+    if(source[i]==='{')depth++;
+    else if(source[i]==='}'&&--depth===0)return source.slice(start,i+1);
+  }
+  throw new Error(`no se pudo aislar ${name}`);
+}
+
+// El bridge se importa entero levantaría un servidor: se aíslan sus funciones puras.
+function bridgeApi(env={}){
+  const context={
+    process:{env:{...env}},
+    SSH_USER:env.PRINTER_SSH_USER||'root',
+    SSH_PASS:env.PRINTER_SSH_PASS||'',
+    SSH_KEY:env.PRINTER_SSH_KEY||'',
+    Object,String,Array,
+  };
+  vm.createContext(context);
+  vm.runInContext([
+    functionSource(BRIDGE,'moonrakerRecoverScript'),
+    functionSource(BRIDGE,'recoverSshCommand'),
+    functionSource(BRIDGE,'isPrivateIp'),
+    'this.api={script:moonrakerRecoverScript,ssh:recoverSshCommand,priv:isPrivateIp};',
+  ].join('\n'),context);
+  return context.api;
+}
+
+test('el guion repone moonraker.conf y reinicia el servicio de cualquier modelo',()=>{
+  const {script}=bridgeApi();
+  const s=script();
+  assert.match(s,/\.moonraker\.conf\.bkp/,'debe reponer la config desde el respaldo (causa real de los incidentes)');
+  assert.match(s,/\/etc\/init\.d\/S56moonraker_service/,'K1');
+  assert.match(s,/\/etc\/init\.d\/moonraker\b/,'Ender-5 Max');
+  assert.match(s,/systemctl restart moonraker/,'Klipper genérica');
+  assert.match(s,/\/usr\/data\/printer_data\/config/,'Buildroot (K1 / Ender-5 Max)');
+  assert.match(s,/\/mnt\/UDISK\/printer_data\/config/,'Tina/OpenWrt (K2)');
+  assert.doesNotMatch(s,/FIRMWARE_RESTART|systemctl restart klipper/,'jamás debe tocar Klipper: puede haber una impresión en curso');
+});
+
+test('la IP viaja como argumento, nunca concatenada a una shell',()=>{
+  const {ssh}=bridgeApi();
+  const {cmd,args}=ssh('192.168.100.7');
+  assert.equal(cmd,'ssh');
+  assert.ok(args.includes('root@192.168.100.7'),'destino como argumento propio');
+  assert.ok(args.includes('BatchMode=yes'),'sin llave no debe quedarse esperando una contraseña');
+  // El guion va como UN argumento: ssh no lo re-parte y no hay shell local.
+  assert.equal(args[args.length-1],ssh('192.168.100.7').args[args.length-1]);
+  assert.ok(args.filter(a=>a.includes('\n')).length===1,'el guion es un solo argumento');
+});
+
+test('con contraseña la clave va por entorno, no en la línea de comandos',()=>{
+  const {ssh}=bridgeApi({PRINTER_SSH_PASS:'creality'});
+  const {cmd,args,env}=ssh('192.168.100.68');
+  assert.equal(cmd,'sshpass');
+  assert.ok(args.includes('-e'),'sshpass -e lee SSHPASS del entorno');
+  assert.equal(env.SSHPASS,'creality');
+  assert.ok(!args.includes('creality'),'la contraseña no puede aparecer en argv (visible en ps)');
+  assert.ok(!args.includes('BatchMode=yes'),'BatchMode impediría la autenticación por contraseña');
+});
+
+test('una llave explícita se usa y excluye a las demás',()=>{
+  const {ssh}=bridgeApi({PRINTER_SSH_KEY:'/Users/lab/.ssh/printers'});
+  const {args}=ssh('192.168.100.95');
+  assert.ok(args.includes('-i')&&args.includes('/Users/lab/.ssh/printers'));
+  assert.ok(args.includes('IdentitiesOnly=yes'));
+});
+
+test('la ruta /recover exige POST, token, IP privada y no se solapa',()=>{
+  assert.match(BRIDGE,/\/\^\\\/recover\\\/\(\\d\{1,3\}\\\.\\d\{1,3\}\\\.\\d\{1,3\}\\\.\\d\{1,3\}\)\$\//,'la ruta valida el formato de la IP');
+  const ruta=BRIDGE.slice(BRIDGE.indexOf('const mRec ='),BRIDGE.indexOf('// Mantención: estado de config'));
+  assert.match(ruta,/req\.method !== 'POST'/,'GET no debe reiniciar nada');
+  assert.match(ruta,/isPrivateIp\(ip\)/,'nunca hacia internet');
+  assert.match(ruta,/_recovering\.has\(ip\)/,'dos clics no pueden reiniciar Moonraker en pleno arranque');
+  // El token se valida antes, para todas las rutas salvo /healthz
+  const auth=BRIDGE.indexOf("if (!tokenMatches(given))");
+  assert.ok(auth!==-1&&auth<BRIDGE.indexOf('const mRec ='),'la ruta va después del control de token timing-safe');
+  const {priv}=bridgeApi();
+  assert.equal(priv('192.168.100.7'),true);
+  assert.equal(priv('8.8.8.8'),false);
+});
+
+test('el bridge puede recuperar cámaras K2/K2 Plus y MJPEG sin tocar Klipper',()=>{
+  const camScript=functionSource(BRIDGE,'cameraRecoverScript');
+  assert.match(camScript,/S99camera/,'prefiere el servicio persistente instalado en la impresora');
+  assert.match(camScript,/\/dev\/null &/,'S99camera debe arrancar en background: las K1 esperan ~30 s y no pueden agotar SSH');
+  assert.match(camScript,/k2rtc\.py/,'K2 requiere el puente WebRTC');
+  assert.match(camScript,/go2rtc/,'K2 publica snapshots mediante go2rtc');
+  assert.match(camScript,/camera_watchdog\.py/,'debe reponer también el watchdog');
+  assert.match(camScript,/mjpg_streamer/,'K1 y Ender mantienen recuperación MJPEG');
+  assert.doesNotMatch(camScript,/klipper|FIRMWARE_RESTART/i,'recuperar cámara no puede reiniciar Klipper');
+  const probe=functionSource(BRIDGE,'cameraIsUp');
+  assert.match(probe,/1984/);
+  assert.match(probe,/frame\.jpeg\?src=k2plus/);
+  assert.match(probe,/8080/);
+  const route=BRIDGE.slice(BRIDGE.indexOf('const mCamRec ='),BRIDGE.indexOf('// Recuperar la telemetría'));
+  assert.match(route,/req\.method!=='POST'/);
+  assert.match(route,/isPrivateIp\(ip\)/);
+  assert.match(route,/_recoveringCamera\.has\(ip\)/,'no debe reiniciar dos veces el mismo stack');
+  assert.match(route,/requestedKind/,'el dashboard puede indicar K2 o MJPEG para no probar el backend equivocado');
+  assert.match(route,/recoverCamera\(ip,kind\)/);
+  assert.doesNotMatch(route,/writeHead\(5\d\d/,'Cloudflare no debe convertir el error en una respuesta sin CORS');
+});
+
+test('recuperación de cámara usa el backend correcto y tiene presupuesto de tiempo suficiente',()=>{
+  const cam= functionSource(BRIDGE,'cameraIsUp');
+  assert.match(cam,/mode!=='mjpeg'/,'K1/MJPEG no debe perder 25 s probando go2rtc');
+  assert.match(cam,/mode!=='k2'/,'K2 no debe perder tiempo probando MJPEG');
+  const recover=functionSource(MAQ,'recoverPrinterCamera');
+  const request=functionSource(MAQ,'_cameraRecoverRequest');
+  assert.match(recover,/_cameraRecoverRequest\(ip,kind\)/,'la recuperación usa el helper autenticado del bridge');
+  assert.match(request,/\?kind=\$\{kind\}/,'el modelo debe viajar como pista al bridge');
+  const clientMs=Number(MAQ.match(/const _CAM_RECOVER_TIMEOUT_MS=(\d+)/)[1]);
+  const waitMs=Number(BRIDGE.match(/const CAMERA_RECOVER_WAIT_MS = (\d+)/)[1]);
+  assert.ok(clientMs>waitMs+30000,'el navegador debe esperar holgadamente el arranque físico y la negociación de cámara');
+});
+
+test('la tarjeta de telemetría caída ofrece el botón de recuperación',()=>{
+  const tarjeta=MAQ.slice(MAQ.indexOf("} else if(s.state==='apidown')"),MAQ.indexOf("} else if(s.state==='offline')"));
+  assert.match(tarjeta,/recoverPrinterTelemetry\('\$\{m\.id\}'\)/,'el botón llama a la recuperación');
+  assert.match(tarjeta,/id="recov_\$\{m\.id\}"/,'con id propio para mostrar el progreso');
+  assert.match(tarjeta,/No interrumpe la impresión en curso/,'hay que decirlo: la máquina puede estar imprimiendo');
+  assert.match(tarjeta,/ssh root@\$\{ip\} '\$\{escapeHtml\(svc\)\}'/,'el comando SSH manual trae la IP: sin ella no se puede copiar y pegar');
+});
+
+test('el dashboard pide la recuperación al bridge, con token y sin bloquear para siempre',()=>{
+  const fn=functionSource(MAQ,'recoverPrinterTelemetry');
+  assert.match(fn,/\$\{getPrinterTunnel\(\)\}\/recover\/\$\{ip\}/,'va al bridge del taller, no a Moonraker (que está caído)');
+  assert.match(fn,/method:'POST'/);
+  assert.match(fn,/_appendBridgeToken\(`\$\{getPrinterTunnel\(\)\}\/recover\/\$\{ip\}`\)/,'token en la URL: una cabecera propia obliga a un preflight que en móvil se cae');
+  assert.match(fn,/AbortSignal\.timeout\(_RECOVER_TIMEOUT_MS\)/,'no puede quedarse colgado');
+  assert.match(fn,/r\.status===404/,'un bridge sin actualizar debe explicarse, no fallar en silencio');
+  assert.match(fn,/delete _aliveProbe\[id\]/,'el sondeo cacheado queda obsoleto tras recuperar');
+  assert.match(fn,/pollPrinters\(\)/,'refresca el estado al terminar');
+  assert.match(MAQ,/const _RECOVER_TIMEOUT_MS=(\d+)/);
+  const ms=Number(MAQ.match(/const _RECOVER_TIMEOUT_MS=(\d+)/)[1]);
+  const sshMs=Number(BRIDGE.match(/const RECOVER_SSH_TIMEOUT_MS = (\d+)/)[1]);
+  const waitMs=Number(BRIDGE.match(/const RECOVER_WAIT_MS = (\d+)/)[1]);
+  assert.ok(ms>sshMs+waitMs,`el dashboard (${ms}ms) debe esperar más que el peor caso del bridge (${sshMs+waitMs}ms)`);
+});
+
+// Cloudflare descarta los 5xx del origen y los reemplaza por su página de error,
+// que no lleva cabeceras CORS: en el navegador eso no es "recibí un 502", es un
+// fetch rechazado sin explicación. Por el túnel, un 5xx honesto es invisible.
+test('el bridge no responde con 5xx a través del túnel',()=>{
+  const handler=BRIDGE.slice(BRIDGE.indexOf('const mRec ='),BRIDGE.indexOf('// Mantención: estado de config'));
+  assert.match(handler,/res\.writeHead\(200, \{ 'Content-Type': 'application\/json' \}\)/,'el veredicto va en el cuerpo, no en el status');
+  assert.doesNotMatch(handler,/writeHead\(5\d\d/,'ningún 5xx: Cloudflare se lo come');
+  assert.doesNotMatch(handler,/jsonError\(res, 5\d\d/,'tampoco por la vía de error');
+  assert.match(BRIDGE,/jsonError\(res, 424, 'impresora inaccesible/,'el proxy usa 424, que sí atraviesa el túnel');
+  assert.match(MAQ,/\(r\.status===424\|\|r\.status===502\)\?'La impresora no responde al bridge'/,'el dashboard entiende el 424 nuevo y el 502 de un bridge viejo');
+});
+
+// Enrolar una impresora desde el MacBook no sirve si instala la llave DEL
+// MACBOOK: quien entra a las impresoras es el iMac. Por eso el bridge publica
+// su llave pública y responde si ya puede entrar.
+test('el bridge publica su llave y sabe decir si puede entrar a una impresora',()=>{
+  const SCRIPT=fs.readFileSync(path.join(__dirname,'..','printer-bridge','install-printer-keys.sh'),'utf8');
+  const pub=functionSource(BRIDGE,'bridgePublicKeys');
+  assert.match(pub,/\.pub/,'solo llaves públicas, jamás la privada');
+  assert.doesNotMatch(pub,/id_ed25519'\)\]|readFileSync\(SSH_KEY\)/,'nunca leer el archivo de la llave privada');
+  assert.ok(BRIDGE.indexOf("if (!tokenMatches(given))")<BRIDGE.indexOf("rawPath === '/pubkey'"),'/pubkey va detrás del token timing-safe');
+  const chk=BRIDGE.slice(BRIDGE.indexOf('const mChk ='),BRIDGE.indexOf("if (rawPath === '/update'"));
+  assert.match(chk,/isPrivateIp\(mChk\[1\]\)/,'sshcheck solo hacia la red privada');
+  assert.match(chk,/writeHead\(200/,'responde 200: un 5xx no cruza el túnel');
+  assert.match(SCRIPT,/\$BRIDGE_URL\/pubkey\?bt=/,'el modo --bridge pide la llave al bridge');
+  assert.match(SCRIPT,/\$BRIDGE_URL\/sshcheck\/\$ip\?bt=/,'y verifica preguntándole al bridge, no localmente');
+});
+
+test('actualizar el bridge en remoto es POST, reversible y sin 5xx',()=>{
+  const upd=BRIDGE.slice(BRIDGE.indexOf("if (rawPath === '/update'"),BRIDGE.indexOf('// Recuperar la telemetría'));
+  assert.match(upd,/req\.method === 'POST'/,'un GET no puede reiniciar el bridge');
+  assert.match(upd,/UPDATE_ENABLED/,'se puede apagar con BRIDGE_UPDATE=0');
+  assert.match(upd,/writeHead\(200/);
+  assert.doesNotMatch(upd,/writeHead\(5\d\d/);
+  const fn=functionSource(BRIDGE,'updateBridge');
+  assert.match(fn,/'pull', '--ff-only', 'origin', 'main'/,'solo fast-forward desde origin/main');
+  assert.doesNotMatch(fn,/reset|--force|checkout/,'nunca reescribir el árbol de trabajo del iMac');
+});
+
+// dropbear 2019.78 (Ender-5 Max) no conoce ed25519 —llegó en 2020.79— y solo
+// firma RSA con SHA-1, que OpenSSH ≥8.8 desactivó por defecto. El síntoma
+// engaña: la llave se copia, los permisos quedan 700/700/600 y el login falla
+// igual, porque quien se niega es el cliente.
+test('el bridge habla con el SSH viejo de las Ender-5 Max',()=>{
+  const SCRIPT=fs.readFileSync(path.join(__dirname,'..','printer-bridge','install-printer-keys.sh'),'utf8');
+  const {ssh}=bridgeApi();
+  const {args}=ssh('192.168.100.67');
+  assert.ok(args.includes('PubkeyAcceptedAlgorithms=+ssh-rsa'),'sin esto la llave RSA se rechaza en silencio');
+  assert.ok(args.includes('HostKeyAlgorithms=+ssh-rsa'),'y una host key RSA vieja no negocia');
+  assert.match(SCRIPT,/PubkeyAcceptedAlgorithms=\+ssh-rsa/,'el script debe usar las mismas opciones: si no, su verificación miente sobre lo que podrá hacer el bridge');
+  assert.match(SCRIPT,/HostKeyAlgorithms=\+ssh-rsa/);
+});

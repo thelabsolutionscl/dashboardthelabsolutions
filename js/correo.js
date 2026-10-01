@@ -1,0 +1,1863 @@
+/* js/correo.js — módulo extraído de index.html (carga en el mismo punto). */
+const MAIL={
+  API:'https://mail-api.thelab.solutions/mail-api.php',
+  folder:'INBOX',
+  page:1,
+  pages:1,
+  total:0,
+  msgs:[],
+  selUid:null,
+  composeMode:null,
+  _searchTimer:null,
+  _init:false,
+  _currentMsg:null,
+  _readSeq:0,
+  _sending:false,
+  _accountUnseen:{},
+  _sharedMailRevisions:{},
+
+  // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
+  // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
+  // agregar hola@ u otras casillas y alternar entre ellas. La clave se guarda
+  // por-casilla, así cada cuenta recuerda la suya. Por defecto la cuenta activa
+  // es la del usuario logueado, de modo que las claves ya guardadas siguen igual.
+  _acctsKey(){const u=AUTH.getUser();return u?'thelab_mail_accts_'+u.username:null;},
+  _activeKey(){const u=AUTH.getUser();return u?'thelab_mail_active_'+u.username:null;},
+  accounts(){
+    const u=AUTH.getUser(); if(!u) return [];
+    let list=[]; try{list=JSON.parse(localStorage.getItem(this._acctsKey())||'[]');}catch(e){list=[];}
+    if(!Array.isArray(list)) list=[];
+    if(!list.some(a=>a&&a.email===u.username)) list.unshift({email:u.username,name:u.name||''});
+    // hola@ es la casilla comercial compartida: siempre disponible en el selector
+    // (al elegirla por primera vez pide su clave, que queda guardada por-casilla).
+    if(!list.some(a=>a&&a.email==='hola@thelab.solutions')) list.push({email:'hola@thelab.solutions',name:'The Lab Solutions'});
+    return list.filter(a=>a&&a.email);
+  },
+  setAccounts(list){const k=this._acctsKey();if(k) localStorage.setItem(k,JSON.stringify(list));},
+  activeAccount(){
+    const u=AUTH.getUser(); if(!u) return null;
+    const k=this._activeKey(); let a=k?localStorage.getItem(k):null;
+    const list=this.accounts();
+    if(!a || !list.some(x=>x.email===a)) a=u.username;
+    return a;
+  },
+  activeAccountObj(){
+    const a=this.activeAccount();
+    return this.accounts().find(x=>x.email===a)||{email:a,name:(AUTH.getUser()?.name||'')};
+  },
+
+  _sharedMailKey(resource,account){return resource+':'+(account||'');},
+  _sharedMailConfig(){
+    try{
+      const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+      if(!px?.url||!px?.key)return null;
+      const url=new URL(px.url);
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+         url.search||url.hash)return null;
+      if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+      return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
+    }catch(_){return null;}
+  },
+  async _sharedMailRequest(resource,method,account,body){
+    const cfg=this._sharedMailConfig();if(!cfg)throw new Error('Proxy compartido no configurado');
+    const params=new URLSearchParams({resource});
+    if(resource!=='templates')params.set('account',account||'');
+    return fetch(cfg.base+'/shared/mail?'+params.toString(),{
+      method,credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+  },
+  _acceptSharedMailDoc(doc,resource,account){
+    if(!doc||doc.ok!==true||doc.resource!==resource||
+       typeof doc.revision!=='string')return false;
+    if(resource!=='templates'&&doc.account!==account)return false;
+    this._sharedMailRevisions[this._sharedMailKey(resource,account)]=doc.revision;
+    return true;
+  },
+  async _readSharedMail(resource,account){
+    const r=await this._sharedMailRequest(resource,'GET',account);
+    if(!r?.ok)return null;
+    const doc=await r.json();
+    return this._acceptSharedMailDoc(doc,resource,account)?doc:null;
+  },
+  _mergeSentAddresses(a,b){
+    const seen=new Set(),out=[];
+    [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(email=>{
+      const v=String(email||'').trim().toLowerCase();
+      if(v&&!seen.has(v)){seen.add(v);out.push(v);}
+    });
+    return out.slice(0,300);
+  },
+  async _writeSharedMail(resource,data,account){
+    try{
+      const key=this._sharedMailKey(resource,account);
+      if(typeof this._sharedMailRevisions[key]!=='string'){
+        const first=await this._readSharedMail(resource,account);
+        if(!first)return false;
+        if(resource==='sent-addresses')data=this._mergeSentAddresses(data,first.data);
+      }
+      for(let attempt=0;attempt<2;attempt++){
+        const body={resource,data,expectedRevision:this._sharedMailRevisions[key]||''};
+        if(resource!=='templates')body.account=account;
+        const r=await this._sharedMailRequest(resource,'PUT',account,body);
+        let doc={};try{doc=await r.json();}catch(_){}
+        if(r.ok)return this._acceptSharedMailDoc(doc,resource,account);
+        if(r.status===409&&attempt===0&&doc?.code==='MAIL_REVISION_CONFLICT'&&
+           doc.resource===resource&&typeof doc.revision==='string'&&
+           (resource==='templates'||doc.account===account)){
+          this._sharedMailRevisions[key]=doc.revision;
+          if(resource==='sent-addresses')data=this._mergeSentAddresses(data,doc.data);
+          continue;
+        }
+        return false; // timeout/5xx/resultado incierto: nunca reintentar a ciegas
+      }
+    }catch(_){return false;}
+    return false;
+  },
+  async _hydrateSharedMailboxState(account){
+    const acct=String(account||this.activeAccount()||'').trim().toLowerCase();
+    if(!acct)return false;
+    const [sig,sent]=await Promise.all([
+      this._readSharedMail('signature',acct).catch(()=>null),
+      this._readSharedMail('sent-addresses',acct).catch(()=>null)
+    ]);
+    if(sig&&typeof sig.data==='string'&&sig.data){
+      const k='thelab_mail_sig_'+acct;
+      if(!localStorage.getItem(k))localStorage.setItem(k,sig.data);
+    }
+    if(sent&&Array.isArray(sent.data)){
+      const k='thelab_mail_sent_'+acct;
+      let local=[];try{local=JSON.parse(localStorage.getItem(k)||'[]');}catch(_){}
+      localStorage.setItem(k,JSON.stringify(this._mergeSentAddresses(local,sent.data)));
+      try{this.fillContactsDatalist();}catch(_){}
+    }
+    return !!(sig||sent);
+  },
+
+  unseenTotal(){
+    return Object.values(this._accountUnseen||{}).reduce((sum,n)=>sum+Math.max(0,Number(n)||0),0);
+  },
+  setAccountUnseen(value,email){
+    const account=email||this.activeAccount();if(!account)return 0;
+    this._accountUnseen=this._accountUnseen||{};
+    this._accountUnseen[account]=Math.max(0,Number(value)||0);
+    const total=this.unseenTotal();
+    try{this.renderAccounts();}catch(e){}
+    try{if(typeof syncMailNavBadge==='function')syncMailNavBadge(total);}catch(e){}
+    try{window.DashboardNotificationBadges?.render?.();}catch(e){}
+    return total;
+  },
+
+  _mailPassKey(){const a=this.activeAccount();return a?'thelab_mail_pass_'+a:null;},
+  getMailPassFor(email){
+    if(!email)return '';
+    const k='thelab_mail_pass_'+email;
+    try{
+      const existing=sessionStorage.getItem(k);
+      if(existing)return existing;
+      // One-time migration of legacy passwords. sessionStorage is scoped to
+      // this tab; a closed browser will require the user to sign in again.
+      const old=localStorage.getItem(k)||'';
+      if(!old)return '';
+      sessionStorage.setItem(k,old);
+      localStorage.removeItem(k);
+      return old;
+    }catch(_){return '';}
+  },
+  getMailPass(){return this.getMailPassFor(this.activeAccount());},
+  setMailPass(p){
+    const k=this._mailPassKey();if(!k)return;
+    sessionStorage.setItem(k,p);
+    localStorage.removeItem(k);
+  },
+  clearMailPass(){
+    const k=this._mailPassKey();if(!k)return;
+    try{sessionStorage.removeItem(k);}finally{localStorage.removeItem(k);}
+  },
+
+  auth(){
+    const o=this.activeAccountObj();
+    return {
+      user:o.email||'',
+      pass:this.getMailPass()||'',
+      from_name:o.name||''
+    };
+  },
+
+  // ── FRENO DE ENVÍOS ────────────────────────────────────────────
+  // Ahora el envío sale por Resend, así que ya NO hay riesgo de que el hosting
+  // suspenda la casilla. El freno queda solo como red de seguridad contra
+  // envíos masivos accidentales (p. ej. un bucle) y para no rozar los límites
+  // de tu plan de Resend. Ventana móvil de 60 min compartida por TODOS los
+  // flujos (manual, agentes IA, cobranza, reportes) y todas las casillas.
+  // Tope por defecto 200/hora, ajustable con el botón 🛡.
+  _SEND_LIMIT_KEY:'thelab_mail_hourly_limit',
+  _SEND_LOG_KEY:'thelab_mail_send_ts',
+  hourlyLimit(){const v=parseInt(localStorage.getItem(this._SEND_LIMIT_KEY));return v>0?v:200;},
+  setHourlyLimit(){
+    const v=prompt('Freno de envíos: máximo de correos por hora (red de seguridad contra envíos masivos accidentales).\nAhora envías por Resend, así que puedes dejarlo alto; ajústalo según el límite de tu plan de Resend.',String(this.hourlyLimit()));
+    if(v===null) return;
+    const n=parseInt(v);
+    if(!(n>0)){toast('Debe ser un número mayor a 0','error');return;}
+    localStorage.setItem(this._SEND_LIMIT_KEY,String(n));
+    toast('🛡 Freno: máximo '+n+' correos/hora','success');
+  },
+  _sendGate(){
+    if(window._DEMO_MODE)return null;
+    try{
+      const now=Date.now();
+      const ts=(JSON.parse(localStorage.getItem(this._SEND_LOG_KEY)||'[]')).filter(t=>now-t<3600e3);
+      const lim=this.hourlyLimit();
+      if(ts.length>=lim){
+        const min=Math.ceil((3600e3-(now-ts[0]))/60000);
+        return {error:`🛡 Freno de envíos: ya van ${ts.length} correos en la última hora (límite ${lim}). Reintenta en ~${min} min o ajusta el límite con el botón 🛡 en Correos.`};
+      }
+      ts.push(now);
+      localStorage.setItem(this._SEND_LOG_KEY,JSON.stringify(ts));
+      return null;
+    }catch(e){return null;} // el freno jamás debe romper un envío legítimo
+  },
+
+  // Traduce errores conocidos del servidor de correo a un aviso claro y accionable.
+  // OJO: la suspensión de la casilla es del HOSTING, no del dashboard; esto solo
+  // explica mejor el error, no reactiva el envío.
+  _friendlyErr(o){
+    if(o&&typeof o.error==='string'){
+      const e=o.error;
+      if(/suspend/i.test(e)){
+        const m=e.match(/from\s*"?([^"\s]+@[^"\s]+)"?/i);
+        const box=(m&&m[1])||this.activeAccount()||'esa casilla';
+        o.error='📵 El hosting suspendió el ENVÍO SALIENTE de '+box+' (suele pasar al superar el tope de correos/hora del plan). No es un problema del dashboard. Qué hacer: espera un rato y reintenta, baja el tope con el botón 🛡 Freno, envía desde otra casilla, o pídele al hosting que reactive el correo saliente de esa cuenta.';
+      } else if(/authenticat|535|user:|pass:/i.test(e)){
+        o.error='🔑 El servidor rechazó la clave de '+(this.activeAccount()||'la casilla')+'. Revísala con el botón "Cambiar clave".';
+      }
+    }
+    return o;
+  },
+
+  // Parseo tolerante de la respuesta del backend PHP: un 200 con JSON "inválido"
+  // casi siempre es un Warning/Notice de PHP impreso ANTES del JSON, o basura
+  // alrededor. Rescatamos el objeto/array embebido; si no, damos un error útil.
+  _parseResp(text,status){
+    const s=String(text||'');
+    try{ return this._friendlyErr(JSON.parse(s)); }catch(_){}
+    // extrae el primer { o [ ... hasta el último } o ] (salta warnings/HTML delante)
+    const i=s.search(/[\[{]/), j=Math.max(s.lastIndexOf('}'),s.lastIndexOf(']'));
+    if(i>=0 && j>i){ try{ return this._friendlyErr(JSON.parse(s.slice(i,j+1))); }catch(_){} }
+    try{ console.warn('[MAIL] respuesta no-JSON ('+status+'):', s.slice(0,600)); }catch(_){}
+    const snip=s.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,140);
+    return {error:'El servidor de correo respondió algo inesperado ('+status+')'+(snip?': “'+snip+'…”':'. Reintenta o recarga la bandeja.')};
+  },
+
+  async post(params){
+    if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
+    const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
+    const a=this.auth();
+    fd.append('user',a.user); fd.append('pass',a.pass);
+    for(const[k,v] of Object.entries(params)) fd.append(k,v);
+    // El WAF del hosting bloquea de forma INTERMITENTE (fetch falla sin CORS).
+    // Una mutación pudo completarse aunque se haya perdido la respuesta.
+    // Reintentar spam/trash/mark/send podría actuar sobre un UID ya movido.
+    const canRetry=['folders','list','snippets','read','search','attachment','sent_addrs'].includes(params?.action);
+    const tries=canRetry?3:1;
+    let lastErr='Sin conexión con el servidor';
+    for(let i=0;i<tries;i++){
+      const ctrl=new AbortController();
+      const timeout=setTimeout(()=>ctrl.abort(),30000);
+      try{
+        const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
+        const text=await r.text();
+        return this._parseResp(text,r.status);
+      }catch(e){
+        lastErr=e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor';
+        if(i<tries-1&&e.name!=='AbortError'){await new Promise(res=>setTimeout(res,500*(i+1)));continue;}
+      }finally{clearTimeout(timeout);}
+    }
+    return{error:lastErr};
+  },
+
+  // Envía autenticando como OTRA casilla (p.ej. hola@) usando su clave guardada
+  // por-cuenta. Si esa clave no está, cae a la cuenta activa conservando el
+  // from_name pedido, y avisa desde qué casilla salió realmente.
+  async postAs(fromEmail,params){
+    const pass=this.getMailPassFor(fromEmail);
+    if(!pass){
+      return {error:'No se envió: la casilla '+fromEmail+' no tiene credenciales configuradas. Selecciónala en Correos e inicia sesión.'};
+    }
+    if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
+    const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
+    fd.append('user',fromEmail); fd.append('pass',pass);
+    for(const[k,v] of Object.entries(params)) fd.append(k,v);
+    const ctrl=new AbortController();
+    const timeout=setTimeout(()=>ctrl.abort(),30000);
+    try{
+      const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
+      const text=await r.text();
+      return this._parseResp(text,r.status);
+    }catch(e){
+      return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
+    }finally{clearTimeout(timeout);}
+  },
+
+  async init(){
+    this.renderAccounts();
+    this._hydrateSharedMailboxState().catch(()=>{});
+    if(this._init) return;
+    if(!this.getMailPass()){this.showPassModal();return;}
+    this._init=true;
+    document.getElementById('mailConnStatus').textContent='Conectando...';
+    try{
+      if(await this.loadFolders()===false){   // clave rechazada: el modal ya está pidiendo otra
+        document.getElementById('mailConnStatus').textContent='';
+        return;
+      }
+      await this.loadMessages();
+      document.getElementById('mailConnStatus').textContent='';
+      _mailPollErrors=0;
+      startMailPolling();
+      this.preloadSentAddrs();   // backfill del histórico de Enviados (una vez, en segundo plano)
+    }catch(e){
+      this._init=false;
+      document.getElementById('mailConnStatus').textContent='Error de conexión';
+      document.getElementById('mailList').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger);font-size:13px">No se pudo conectar al servidor de correo.<br><span style="font-size:11px;color:var(--text3)">Verifica que mail-api.php esté instalado en mail-api.thelab.solutions</span></div>';
+    }
+  },
+
+  showPassModal(msg){
+    document.getElementById('mailPassEmail').textContent=this.activeAccount()||'';
+    document.getElementById('mailPassInput').value='';
+    document.getElementById('mailPassError').textContent=msg||'';
+    document.getElementById('mailPassModal').style.display='flex';
+    setTimeout(()=>document.getElementById('mailPassInput').focus(),100);
+  },
+
+  async confirmMailPass(){
+    const p=document.getElementById('mailPassInput').value;
+    if(!p) return;
+    document.getElementById('mailPassModal').style.display='none';
+    this.setMailPass(p);
+    this._init=false;
+    await this.init();
+  },
+
+  async loadFolders(){
+    const data=await this.post({action:'folders'});
+    if(data.error){
+      if(data.error.toLowerCase().includes('auth')||data.error.toLowerCase().includes('login')){
+        this.clearMailPass();this._init=false;
+        this.showPassModal('Contraseña incorrecta. Inténtalo de nuevo.');
+        return false;   // corta init(): sin clave, pedir la lista es un viaje perdido
+      }
+      document.getElementById('mailFolderList').innerHTML=`<div style="padding:8px;font-size:11px;color:var(--danger)">${this.esc(data.error)}</div>`;return;
+    }
+    const folderMeta={
+      inbox:     {label:'Bandeja de entrada', icon:'icon-correo'},
+      sent:      {label:'Enviados',           icon:'icon-send'},
+      drafts:    {label:'Borradores',         icon:'icon-file'},
+      draft:     {label:'Borradores',         icon:'icon-file'},
+      junk:      {label:'Spam',               icon:'icon-ban'},
+      spam:      {label:'Spam',               icon:'icon-ban'},
+      trash:     {label:'Papelera',           icon:'icon-trash'},
+      deleted:   {label:'Eliminados',         icon:'icon-trash'},
+      archive:   {label:'Archivo',            icon:'icon-folder'},
+    };
+    const svgIcon=id=>`<svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#${id}"/></svg>`;
+    const labelFor=name=>{
+      const raw=name.replace(/^INBOX\./i,'');
+      const key=raw.toLowerCase();
+      const match=Object.entries(folderMeta).find(([k])=>key===k||key.includes(k));
+      return match?match[1]:{label:raw,icon:'icon-folder'};
+    };
+    const html=data.folders.map(f=>{
+      const isActive=f.name===this.folder;
+      const meta=labelFor(f.name);
+      return `<button class="mail-folder-item${isActive?' active':''}" data-folder="${this.esc(f.name)}" onclick="MAIL.selectFolder(this.dataset.folder)">
+        <span class="mail-folder-name">${svgIcon(meta.icon)} ${this.esc(meta.label)}</span>
+        ${f.unseen>0?`<span class="mail-unseen-badge">${f.unseen}</span>`:''}
+      </button>`;
+    }).join('');
+    document.getElementById('mailFolderList').innerHTML=html||'<div style="padding:8px;font-size:11px;color:var(--text3)">Sin carpetas</div>';
+    this._folders=data.folders||[];
+    const inbox=this._folders.find(f=>/^INBOX$/i.test(String(f.name||'')))||this._folders[0];
+    this.setAccountUnseen(Number(inbox?.unseen||0));   // actualiza lateral + badge del dock
+    // reutilizable: preloadSentAddrs ya no las vuelve a pedir
+    return true;
+  },
+
+  async loadMessages(folder,page){
+    if(folder) this.folder=folder;
+    if(page)   this.page=page;
+    this._sel=new Set(); // la lista cambia → reinicia la selección múltiple
+    const list=document.getElementById('mailList');
+    list.innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
+    document.getElementById('mailFolderTitle').textContent=this.folder.replace(/^INBOX\./i,'').replace(/^INBOX$/i,'Bandeja de entrada');
+    document.querySelectorAll('.mail-spam-action').forEach(btn=>{btn.style.display=this._isSpamFolder(this.folder)?'none':'';});
+    document.getElementById('mailListFooter').style.display='none';
+    const data=await this.post({action:'list',folder:this.folder,page:this.page});
+    if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
+    this.msgs=data.messages;
+    this.pages=data.pages;
+    this.total=data.total;
+    this.renderMsgList(data.messages);
+    // Pagination
+    const footer=document.getElementById('mailListFooter');
+    if(data.pages>1){
+      footer.style.display='flex';
+      document.getElementById('mailPageInfo').textContent=`Pág ${this.page}/${this.pages} · ${this.total} mensajes`;
+      document.getElementById('mailPrevBtn').disabled=this.page<=1;
+      document.getElementById('mailNextBtn').disabled=this.page>=this.pages;
+    }
+  },
+
+  // ── Vínculo correo ↔ CRM: matching del remitente contra la cartera ──
+  _fromEmail(s){const m=String(s||'').match(/<([^>]+)>/);const e=(m?m[1]:String(s||'')).trim();return /@/.test(e)?e.toLowerCase():'';},
+  _cliEmailMap(){
+    const map={};
+    (state.clientes||[]).forEach(c=>{const e=(c.fields['Email']||'').trim().toLowerCase();if(e&&!map[e])map[e]=c;});
+    return map;
+  },
+  crearLeadDesdeCorreo(){
+    const d=this._currentMsg; if(!d){toast('Abre un correo primero','error');return;}
+    switchTab('nuevo-lead');
+    setTimeout(()=>{
+      const set=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
+      const dom=(this._fromEmail(d.from_email)||'').split('@')[1]||'';
+      const empresa=(d.from_name||'').trim()||(dom?dom.split('.')[0].replace(/^./,ch=>ch.toUpperCase()):'');
+      set('nl-email',d.from_email||'');
+      set('nl-contacto',d.from_name||'');
+      set('nl-empresa',empresa);
+      set('nl-origen','Contacto directo');
+      set('nl-notas','Contacto por correo — asunto: "'+(d.subject||'')+'"');
+      toast('Formulario prellenado desde el correo ✓','success');
+    },150);
+  },
+
+  _threadSubject(raw){
+    return this._repairMojibake(String(raw||'(Sin asunto)'))
+      .replace(/^(?:\s*(?:re|fw|fwd|rv|enc|respuesta)\s*:\s*)+/i,'')
+      .replace(/\s+/g,' ').trim();
+  },
+
+  _threadSubjectKey(raw){
+    return this._threadSubject(raw)
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLocaleLowerCase('es-CL');
+  },
+
+  _threadLooksReply(raw){
+    return /^(?:\s*(?:re|fw|fwd|rv|enc|respuesta)\s*:)/i.test(String(raw||''));
+  },
+
+  _threadHeaderIds(raw){
+    const ids=[];String(raw||'').replace(/<([^>]+)>/g,(_,id)=>{ids.push(String(id||'').trim().toLowerCase());return _;});
+    if(!ids.length){
+      const bare=String(raw||'').trim().replace(/^<|>$/g,'').toLowerCase();
+      if(bare&&bare.includes('@'))ids.push(bare);
+    }
+    return ids;
+  },
+
+  // Agrupa por cabeceras RFC (Message-ID / References / In-Reply-To) cuando
+  // el servidor las entrega. Si el host aún no expone esas cabeceras, usa el
+  // asunto sin Re:/Fwd: como fallback, pero solo cuando hay señales de respuesta.
+  _threadGroups(msgs){
+    const rows=(msgs||[]).filter(Boolean);
+    const n=rows.length,parent=Array.from({length:n},(_,i)=>i);
+    const find=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;};
+    const union=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[b]=a;};
+    const byMid=new Map(),externalRoot=new Map();
+
+    rows.forEach((m,i)=>{
+      const mid=this._threadHeaderIds(m.message_id||m.messageId)[0];
+      if(mid)byMid.set(mid,i);
+    });
+    rows.forEach((m,i)=>{
+      const refs=this._threadHeaderIds(m.references);
+      const irt=this._threadHeaderIds(m.in_reply_to||m.inReplyTo);
+      [...refs,...irt].forEach(id=>{if(byMid.has(id))union(i,byMid.get(id));});
+      const root=refs[0]||irt[0]||'';
+      if(root){
+        if(externalRoot.has(root))union(i,externalRoot.get(root));
+        else externalRoot.set(root,i);
+      }
+    });
+
+    // Fallback compatible con el mail-api anterior: una conversación sin
+    // metadata RFC se reconoce por asunto base si al menos una fila es respuesta.
+    const subj=new Map();
+    rows.forEach((m,i)=>{
+      const key=this._threadSubjectKey(m.subject);
+      if(!key)return;
+      const arr=subj.get(key)||[];arr.push(i);subj.set(key,arr);
+    });
+    subj.forEach(indices=>{
+      if(indices.length<2||!indices.some(i=>this._threadLooksReply(rows[i].subject)))return;
+      const noHeader=indices.filter(i=>{
+        const m=rows[i];
+        return !this._threadHeaderIds(m.references).length&&!this._threadHeaderIds(m.in_reply_to||m.inReplyTo).length;
+      });
+      if(noHeader.length===indices.length){
+        for(let j=1;j<indices.length;j++)union(indices[0],indices[j]);
+      }else{
+        const anchored=indices.find(i=>find(i)!==i||this._threadHeaderIds(rows[i].references).length||this._threadHeaderIds(rows[i].in_reply_to||rows[i].inReplyTo).length);
+        if(anchored!=null)noHeader.forEach(i=>union(anchored,i));
+      }
+    });
+
+    const groups=new Map();
+    rows.forEach((m,i)=>{
+      const root=find(i),arr=groups.get(root)||[];arr.push(m);groups.set(root,arr);
+    });
+    const out=[...groups.values()].map(members=>{
+      const latest=members[0];
+      return{
+        id:String(latest.uid),
+        key:this._threadSubjectKey(latest.subject)||('uid-'+latest.uid),
+        subject:this._threadSubject(latest.subject)||latest.subject||'(Sin asunto)',
+        members,
+        latest,
+        unread:members.filter(m=>!m.seen).length
+      };
+    });
+    // Mantiene exactamente el orden original de la bandeja: la conversación se
+    // ubica donde aparece su mensaje más reciente.
+    const pos=new Map(rows.map((m,i)=>[String(m.uid),i]));
+    out.sort((a,b)=>(pos.get(String(a.latest.uid))??9999)-(pos.get(String(b.latest.uid))??9999));
+    return out;
+  },
+
+  _mailItemHtml(m,opts={}){
+    const cmap=opts.cmap||this._cliEmailMap();
+    const from=this.parseFrom(m.from);
+    const date=this.fmtDate(m.date);
+    const unread=!m.seen?'unread':'';
+    const sel=m.uid===this.selUid?'selected':'';
+    const checked=this._sel.has(m.uid);
+    const cli=cmap[this._fromEmail(m.from)];
+    const cliChip=cli?`<span title="Cliente en CRM: ${this.esc(cli.fields['Empresa']||cli.fields['Contacto']||'')} — clic para abrir la ficha" onclick="event.stopPropagation();openClienteDetalle('${cli.id}')" style="flex-shrink:0;font-size:11px;cursor:pointer;line-height:1">👤</span> `:'';
+    const child=opts.child?' mail-thread-child':'';
+    return `<div class="mail-item ${unread} ${sel} ${checked?'sel-checked':''}${child}" data-uid="${m.uid}" onclick="MAIL.readMsg(${m.uid})">
+      <input type="checkbox" class="mail-item-chk" ${checked?'checked':''} onclick="event.stopPropagation();MAIL.toggleSelect(${m.uid},this.checked)" title="Seleccionar">
+      <div class="mail-item-main">
+        <div class="mail-item-row1">
+          <span class="mail-item-from">${m.flagged?'<span class="mail-item-star">★</span> ':''}${cliChip}${this.esc(from)}</span>
+          <span class="mail-item-date">${date}</span>
+        </div>
+        <div class="mail-item-subject">${this.esc(m.subject)}</div>
+        <div class="mail-item-snippet${m.snippet?'':' is-empty'}" data-snippet-uid="${m.uid}">${m.snippet?this.esc(m.snippet):''}</div>
+      </div>
+    </div>`;
+  },
+
+  toggleThread(id){
+    this._threadOpen=this._threadOpen||new Set();
+    const k=String(id);
+    if(this._threadOpen.has(k))this._threadOpen.delete(k);else this._threadOpen.add(k);
+    const wrap=document.querySelector(`.mail-thread[data-thread-id="${CSS.escape(k)}"]`);
+    if(wrap)wrap.classList.toggle('open',this._threadOpen.has(k));
+  },
+
+  toggleThreadSelect(id,on){
+    this._sel=this._sel||new Set();
+    const group=this._renderThreads?.get(String(id))||[];
+    group.forEach(m=>{if(on)this._sel.add(m.uid);else this._sel.delete(m.uid);});
+    this.renderMsgList(this.msgs||[]);
+  },
+
+  renderMsgList(msgs){
+    const list=document.getElementById('mailList');
+    if(!msgs.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">Sin mensajes</div>';this._updateSelBar();return;}
+    this._sel=this._sel||new Set();
+    this._threadOpen=this._threadOpen||new Set();
+    const cmap=this._cliEmailMap(),groups=this._threadGroups(msgs);
+    this._renderThreads=new Map(groups.map(g=>[String(g.id),g.members]));
+    list.innerHTML=groups.map(g=>{
+      if(g.members.length===1)return this._mailItemHtml(g.latest,{cmap});
+      const open=this._threadOpen.has(String(g.id));
+      const checked=g.members.every(m=>this._sel.has(m.uid));
+      const partial=!checked&&g.members.some(m=>this._sel.has(m.uid));
+      const selected=g.members.some(m=>m.uid===this.selUid);
+      const senders=[...new Set(g.members.map(m=>this.parseFrom(m.from)).filter(Boolean))];
+      const who=senders.slice(0,2).join(', ')+(senders.length>2?` +${senders.length-2}`:'');
+      const date=this.fmtDate(g.latest.date);
+      const latestCli=cmap[this._fromEmail(g.latest.from)];
+      const cliChip=latestCli?`<span title="Cliente en CRM: ${this.esc(latestCli.fields['Empresa']||latestCli.fields['Contacto']||'')} — clic para abrir la ficha" onclick="event.stopPropagation();openClienteDetalle('${latestCli.id}')" style="flex-shrink:0;font-size:11px;cursor:pointer;line-height:1">👤</span> `:'';
+      return `<div class="mail-thread${open?' open':''}" data-thread-id="${this.esc(g.id)}">
+        <div class="mail-item mail-thread-head ${g.unread?'unread':''} ${selected?'selected':''} ${checked?'sel-checked':''}" onclick="MAIL.toggleThread('${this.esc(g.id)}')" title="Abrir/cerrar cadena de ${g.members.length} correos">
+          <input type="checkbox" class="mail-item-chk" ${checked?'checked':''} data-partial="${partial?'1':'0'}" onclick="event.stopPropagation();MAIL.toggleThreadSelect('${this.esc(g.id)}',this.checked)" title="Seleccionar cadena completa">
+          <span class="mail-thread-chevron" aria-hidden="true">›</span>
+          <div class="mail-item-main">
+            <div class="mail-item-row1">
+              <span class="mail-item-from">${g.members.some(m=>m.flagged)?'<span class="mail-item-star">★</span> ':''}${cliChip}${this.esc(who||this.parseFrom(g.latest.from))}</span>
+              <span class="mail-item-date">${date}</span>
+            </div>
+            <div class="mail-thread-subject-row"><div class="mail-item-subject">${this.esc(g.subject)}</div><span class="mail-thread-count">${g.members.length}${g.unread?` · ${g.unread} nuevo${g.unread===1?'':'s'}`:''}</span></div>
+            <div class="mail-item-snippet${g.latest.snippet?'':' is-empty'}" data-snippet-uid="${g.latest.uid}">${g.latest.snippet?this.esc(g.latest.snippet):''}</div>
+          </div>
+        </div>
+        <div class="mail-thread-children">${g.members.map(m=>this._mailItemHtml(m,{cmap,child:true})).join('')}</div>
+      </div>`;
+    }).join('');
+    document.querySelectorAll('.mail-thread-head .mail-item-chk[data-partial="1"]').forEach(chk=>{chk.indeterminate=true;});
+    this._updateSelBar();
+    this.loadSnippets(msgs);
+  },
+
+  // Carga los previews (snippets) en segundo plano, por lotes pequeños y aislados.
+  // La lista ya está en pantalla; esto solo rellena el textito bajo el asunto.
+  // Va aparte del listado a propósito: si un correo corrupto hace fallar un lote,
+  // se ignora y la bandeja no se ve afectada (nunca vuelve a caerse por el preview).
+  async loadSnippets(msgs){
+    const pend=(msgs||[]).filter(m=>m&&!m.snippet).map(m=>m.uid);
+    if(!pend.length) return;
+    const seq=(this._snipSeq=(this._snipSeq||0)+1);
+    const folder=this.folder, chunk=12;
+    for(let i=0;i<pend.length;i+=chunk){
+      if(seq!==this._snipSeq||folder!==this.folder) return; // la lista cambió → aborta
+      const uids=pend.slice(i,i+chunk);
+      let data; try{ data=await this.post({action:'snippets',folder,uids:uids.join(',')}); }catch(e){ continue; }
+      if(seq!==this._snipSeq||folder!==this.folder) return;
+      const snips=(data&&data.snippets)||{};
+      for(const uid of uids){
+        const s=snips[uid]||snips[String(uid)]||'';
+        if(!s) continue;
+        const m=(this.msgs||[]).find(x=>x&&String(x.uid)===String(uid));
+        if(m) m.snippet=s; // cachea para re-renders (no se vuelve a pedir)
+        document.querySelectorAll(`[data-snippet-uid="${uid}"]`).forEach(el=>{
+          el.textContent=s;el.classList.remove('is-empty');
+        });
+      }
+    }
+  },
+
+  async readMsg(uid){
+    this.selUid=uid;
+    const seq=++this._readSeq;
+    this.mobGo('reader');
+    document.querySelectorAll('.mail-item').forEach(el=>{el.classList.remove('selected');});
+    document.querySelector(`.mail-item[data-uid="${uid}"]`)?.classList.add('selected');
+    if(this._renderThreads){
+      for(const [tid,members] of this._renderThreads){
+        if(members.some(m=>String(m.uid)===String(uid))){
+          document.querySelector(`.mail-thread[data-thread-id="${CSS.escape(String(tid))}"]>.mail-thread-head`)?.classList.add('selected');
+          break;
+        }
+      }
+    }
+    document.getElementById('mailReaderEmpty').style.display='none';
+    const rc=document.getElementById('mailReaderContent');
+    rc.style.display='flex';
+    document.getElementById('mailRdrBody').innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
+    document.getElementById('mailRdrSubject').textContent='Cargando...';
+    document.getElementById('mailRdrMeta').textContent='';
+    const data=await this.post({action:'read',folder:this.folder,uid});
+    if(seq!==this._readSeq) return; // llegó tarde: el usuario ya abrió otro mensaje
+    if(data.error){this._currentMsg=null;document.getElementById('mailRdrBody').innerHTML=`<div style="color:var(--danger)">${this.esc(data.error)}</div>`;return;}
+    if(data.body_html)data.body_html=this._normalizeMailHtml(data.body_html);
+    if(data.body_text)data.body_text=this._repairMojibake(data.body_text);
+    data.subject=this._repairMojibake(data.subject||'');
+    data.from_name=this._repairMojibake(data.from_name||'');
+    this._currentMsg=data;
+    document.getElementById('mailRdrSubject').textContent=data.subject;
+    // Vínculo con el CRM: ¿el remitente es un cliente conocido?
+    const _cli=this._cliEmailMap()[this._fromEmail(data.from_email)];
+    const _propio=/@thelab\.solutions$/i.test(this._fromEmail(data.from_email));
+    const _crmLine=_cli
+      ?`<div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="badge-cliente">👤 Cliente: ${this.esc(_cli.fields['Empresa']||_cli.fields['Contacto']||'—')}</span><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="openClienteDetalle('${_cli.id}')">Ver ficha CRM →</button></div>`
+      :(!_propio&&this._fromEmail(data.from_email)?`<div style="margin-top:7px"><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="MAIL.crearLeadDesdeCorreo()" title="Crea un lead en el CRM con los datos de este correo">➕ Crear lead desde este correo</button></div>`:'');
+    // Todas estas piezas son cabeceras que escribe QUIEN ENVÍA el correo: van
+    // escapadas sin excepción. La fecha se escapaba sola por olvido, y es una
+    // cabecera más (Date:), así que bastaba un correo para inyectar aquí.
+    document.getElementById('mailRdrMeta').innerHTML=
+      `<strong>${this.esc(data.from_name||data.from_email)}</strong> &lt;${this.esc(data.from_email)}&gt;<br>`+
+      `Para: ${(Array.isArray(data.to)?data.to:[data.to]).map(t=>this.esc(t)).join(', ')}<br>`+
+      `${this.esc(data.date)}`+_crmLine;
+    // Render body (respeta el modo claro/oscuro compartido con el editor)
+    this._renderMsgBody(data);
+    // Adjuntos del mensaje
+    const attsDiv=document.getElementById('mailRdrAtts');
+    if(data.attachments&&data.attachments.length){
+      attsDiv.style.display='flex';
+      // El nombre del adjunto lo elige quien envía el correo. Metido dentro de
+      // un onclick como texto de código, un nombre como \');algo();// cerraba
+      // la llamada y ejecutaba lo que viniera detrás (verificado en navegador).
+      // Con data-* el nombre nunca es código: es un valor que se lee.
+      attsDiv.innerHTML=data.attachments.map(a=>
+        `<span class="mail-att-chip" data-part="${this.esc(a.part)}" data-name="${this.esc(a.name)}" onclick="MAIL.downloadAtt(this.dataset.part,this.dataset.name)">📎 <span class="att-name">${this.esc(a.name)}</span></span>`
+      ).join('');
+    }else{attsDiv.style.display='none';attsDiv.innerHTML='';}
+    // Estado del botón destacar
+    const listItem=this.msgs.find(x=>x.uid===uid);
+    const wasUnread=!!(listItem&&!listItem.seen);
+    this._updateFlagBtn(listItem?!!listItem.flagged:false);
+    // El servidor ya lo marcó leído al abrirlo; si la copia local no se entera,
+    // cualquier re-pintado de la lista (destacar, eliminar en lote) lo devuelve
+    // a negrita como si estuviera sin leer.
+    if(listItem) listItem.seen=1;
+    if(wasUnread&&/^INBOX$/i.test(String(this.folder||''))){
+      this.setAccountUnseen(Math.max(0,(this._accountUnseen?.[this.activeAccount()]||0)-1));
+    }
+    // Mark read in list
+    const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
+    if(item) item.classList.remove('unread');
+  },
+
+  // Pinta el cuerpo del mensaje en el preview usando la misma preferencia
+  // claro/oscuro del editor (mail_editor_light). Muchos correos comerciales
+  // están diseñados para fondo blanco: en claro se ven como los pensaron.
+  _renderMsgBody(data){
+    const bodyDiv=document.getElementById('mailRdrBody');
+    if(!bodyDiv||!data) return;
+    const light=localStorage.getItem('mail_editor_light')==='1';
+    bodyDiv.innerHTML='';
+    bodyDiv.style.background=light?'#ffffff':'';
+    if(data.has_html){
+      const ifr=document.createElement('iframe');
+      ifr.setAttribute('sandbox','allow-same-origin allow-popups');
+      ifr.style.cssText='width:100%;border:none;display:block;'+(light?'background:#fff;':'');
+      const css=light
+        ?'*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;background:#fff;margin:0;padding:16px;line-height:1.6}a{color:#0068c9}img{max-width:100%;height:auto}'
+        :'*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:14px;color:#ccc;background:#111;margin:0;padding:16px;line-height:1.6}a{color:#00f3ff}img{max-width:100%;height:auto}';
+      ifr.srcdoc=`<!DOCTYPE html><html><head><meta charset="UTF-8"><base target="_blank"><style>${css}</style></head><body>${data.body_html}</body></html>`;
+      bodyDiv.appendChild(ifr);
+      ifr.onload=()=>{
+        try{const h=ifr.contentDocument.body.scrollHeight;ifr.style.height=(h+32)+'px';}catch(e){}
+      };
+    } else {
+      bodyDiv.innerHTML=`<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;color:${light?'#1a1a1a':'var(--text2)'};line-height:1.65;margin:0;padding:${light?'16px':'0'}">${this.esc(data.body_text||'(Sin contenido)')}</pre>`;
+    }
+  },
+
+  _updateFlagBtn(flagged){
+    const b=document.getElementById('mailFlagBtn');
+    if(!b) return;
+    b.textContent=flagged?'★ Destacado':'☆ Destacar';
+    b.style.color=flagged?'#facc15':'';
+    b.style.borderColor=flagged?'rgba(250,204,21,.4)':'';
+  },
+
+  async toggleFlag(){
+    if(!this.selUid) return;
+    const m=this.msgs.find(x=>x.uid===this.selUid);
+    const newVal=m?(m.flagged?0:1):1;
+    const data=await this.post({action:'mark',folder:this.folder,uid:this.selUid,flagged:newVal});
+    if(data.error){toast(data.error,'error');return;}
+    if(m) m.flagged=newVal;
+    this._updateFlagBtn(!!newVal);
+    this.renderMsgList(this.msgs);
+    toast(newVal?'Mensaje destacado':'Destacado removido','success');
+  },
+
+  async markUnread(){
+    if(!this.selUid) return;
+    const data=await this.post({action:'mark',folder:this.folder,uid:this.selUid,seen:0});
+    if(data.error){toast(data.error,'error');return;}
+    const m=this.msgs.find(x=>x.uid===this.selUid);
+    const wasSeen=!!(m&&m.seen);
+    if(m) m.seen=0;
+    if(wasSeen&&/^INBOX$/i.test(String(this.folder||''))){
+      this.setAccountUnseen((this._accountUnseen?.[this.activeAccount()]||0)+1);
+    }
+    this.selUid=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    this.renderMsgList(this.msgs);
+    this.mobGo('list');
+    toast('Marcado como no leído','success');
+  },
+
+  async downloadAtt(part,name){
+    toast('Descargando '+name+'...','info');
+    const data=await this.post({action:'attachment',folder:this.folder,uid:this.selUid,part});
+    if(data.error){toast(data.error,'error');return;}
+    try{
+      const bin=atob(data.data);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+      const blob=new Blob([bytes],{type:data.mime||'application/octet-stream'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=data.name||name;
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+    }catch(e){toast('Error al decodificar adjunto','error');}
+  },
+
+  async selectFolder(name){
+    this.folder=name;
+    this.page=1;
+    this.selUid=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    document.querySelectorAll('.mail-folder-item').forEach(b=>{
+      b.classList.toggle('active',b.dataset.folder===name);
+    });
+    document.getElementById('mailSearchInput').value='';
+    await this.loadMessages();
+    this.mobGo('list');
+  },
+
+  mobGo(view){
+    const mc=document.getElementById('mailClient');
+    if(!mc) return;
+    mc.classList.remove('mob-folders','mob-list','mob-reader');
+    mc.classList.add('mob-'+view);
+    ['folders','list','reader'].forEach(v=>{
+      const btn=document.getElementById('mobNav'+v.charAt(0).toUpperCase()+v.slice(1));
+      if(btn) btn.style.background=v===view?'rgba(0,243,255,0.1)':'';
+      if(btn) btn.style.color=v===view?'var(--accent)':'';
+    });
+  },
+
+  async prevPage(){if(this.page>1){this.page--;await this.loadMessages();}},
+  async nextPage(){if(this.page<this.pages){this.page++;await this.loadMessages();}},
+
+  async refresh(){
+    this._init=false;
+    this.selUid=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    await this.init();
+  },
+
+  // ── Selector de cuentas ──────────────────────────────────────────
+  renderAccounts(){
+    const list=this.accounts(),active=this.activeAccount();
+    // Conservamos el <select> oculto como compatibilidad con código antiguo,
+    // pero la navegación real vive ahora en la columna izquierda.
+    const sel=document.getElementById('mailAcctSel');
+    if(sel){
+      let html=list.map(a=>{
+        const label=a.name?`${this.esc(a.name)} · ${this.esc(a.email)}`:this.esc(a.email);
+        return `<option value="${this.esc(a.email)}"${a.email===active?' selected':''}>${label}</option>`;
+      }).join('');
+      html+=`<option value="__editname__">✎ Editar nombre del remitente…</option>`;
+      html+=`<option value="__add__">＋ Agregar cuenta…</option>`;
+      if(list.length>1)html+=`<option value="__remove__">✕ Quitar cuenta actual…</option>`;
+      sel.innerHTML=html;
+    }
+
+    const folders=document.getElementById('mailFolders');if(!folders)return;
+    let rail=document.getElementById('mailAccountRail');
+    if(!rail){
+      rail=document.createElement('section');
+      rail.id='mailAccountRail';
+      rail.className='mail-account-rail';
+      const compose=folders.querySelector('.mail-compose-btn');
+      if(compose)folders.insertBefore(rail,compose);
+      else folders.prepend(rail);
+    }
+
+    const rows=list.map((a,idx)=>{
+      const isActive=a.email===active;
+      const name=(a.name||a.email.split('@')[0]||'Cuenta').trim();
+      const initials=name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'@';
+      const unseen=Number(this._accountUnseen?.[a.email]||0);
+      return `<button type="button" class="mail-account-item${isActive?' active':''}" data-email="${this.esc(a.email)}" onclick="MAIL.switchAccount(this.dataset.email)" title="${this.esc(a.email)}">
+        <span class="mail-account-avatar">${this.esc(initials)}</span>
+        <span class="mail-account-copy"><strong>${this.esc(name)}</strong><small>${this.esc(a.email)}</small></span>
+        ${unseen>0?`<span class="mail-account-unseen">${unseen>99?'99+':unseen}</span>`:''}
+        ${isActive?'<span class="mail-account-active-dot" aria-label="Cuenta activa"></span>':''}
+      </button>`;
+    }).join('');
+
+    rail.innerHTML=`<div class="mail-account-head">
+      <span>CUENTAS</span>
+      <div class="mail-account-tools">
+        <button type="button" onclick="event.stopPropagation();MAIL.addAccount()" title="Agregar cuenta">＋</button>
+        <button type="button" onclick="event.stopPropagation();MAIL.editAccountName()" title="Editar nombre del remitente">✎</button>
+        ${list.length>1?'<button type="button" onclick="event.stopPropagation();MAIL.removeAccount()" title="Quitar cuenta activa">−</button>':''}
+      </div>
+    </div>
+    <div class="mail-account-list">${rows}</div>
+    <div class="mail-account-divider"><span>CARPETAS</span></div>`;
+  },
+  onAcctChange(v){
+    if(v==='__add__'){ this.renderAccounts(); this.addAccount(); return; }
+    if(v==='__editname__'){ this.renderAccounts(); this.editAccountName(); return; }
+    if(v==='__remove__'){ this.renderAccounts(); this.removeAccount(); return; }
+    if(v && v!==this.activeAccount()) this.switchAccount(v);
+  },
+  addAccount(){
+    let email=prompt('Correo de la cuenta a agregar:','@thelab.solutions');
+    if(email===null) return;
+    email=email.trim().toLowerCase();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Correo inválido','error'); return; }
+    const list=this.accounts();
+    const existing=list.find(a=>a.email===email);
+    // Casillas como hola@ vienen precargadas: si ya está, igual dejamos ajustar
+    // su nombre de remitente en vez de bloquear con "ya agregada".
+    if(existing){
+      let name=prompt('Esa casilla ya está agregada.\nNombre del remitente (así aparece tu nombre al enviar):',existing.name||'');
+      if(name!==null){
+        existing.name=name.trim();
+        this.setAccounts(list);
+        this.renderAccounts();
+        toast('✓ Nombre del remitente actualizado','success');
+      }
+      this.switchAccount(email);
+      return;
+    }
+    let name=prompt('Nombre para mostrar al enviar (remitente):','The Lab Solutions');
+    if(name===null) return;
+    list.push({email,name:name.trim()});
+    this.setAccounts(list);
+    this.switchAccount(email); // pedirá la contraseña de esa casilla
+  },
+  // Cambia el nombre del remitente (from_name) de la cuenta ACTIVA sin tocar la
+  // casilla ni su clave. Así hola@ puede salir como "Andrea Garrido - The Lab
+  // Solutions" en vez del nombre fijo por defecto.
+  editAccountName(){
+    const active=this.activeAccount(); if(!active) return;
+    const cur=this.activeAccountObj();
+    let name=prompt('Nombre del remitente para '+active+'\n(así aparece tu nombre al enviar correos desde esta casilla):',(cur&&cur.name)||'');
+    if(name===null) return;
+    name=name.trim();
+    const list=this.accounts();
+    const idx=list.findIndex(a=>a.email===active);
+    if(idx>=0) list[idx]={...list[idx],name};
+    else list.push({email:active,name});
+    this.setAccounts(list);
+    this.renderAccounts();
+    toast('✓ Nombre del remitente actualizado','success');
+  },
+  removeAccount(){
+    const active=this.activeAccount(), u=AUTH.getUser();
+    let list=this.accounts();
+    if(list.length<=1){ toast('Debe quedar al menos una cuenta','info'); return; }
+    if(!confirm('¿Quitar '+active+' de la lista? (no borra el buzón, solo lo saca de aquí)')){ this.renderAccounts(); return; }
+    this.clearMailPass(); // borra la clave guardada de esa casilla
+    list=list.filter(a=>a.email!==active);
+    this.setAccounts(list);
+    const next=(list.find(a=>a.email===u?.username)||list[0]).email;
+    this.switchAccount(next);
+  },
+  switchAccount(email){
+    const k=this._activeKey(); if(k) localStorage.setItem(k,email);
+    this._init=false; this.folder='INBOX'; this.page=1; this.msgs=[]; this.selUid=null; this._currentMsg=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    document.getElementById('mailList').innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
+    document.getElementById('mailConnStatus').textContent='';
+    this.renderAccounts();
+    this._hydrateSharedMailboxState(email).catch(()=>{});
+    if(!this.getMailPass()){ this.showPassModal(); return; }
+    this.init();
+  },
+
+  // ── Pantalla completa ────────────────────────────────────────────
+  toggleFullscreen(){
+    if(!this._fsWired){
+      this._fsWired=true;
+      document.addEventListener('keydown',e=>{
+        if(e.key==='Escape'){ const c=document.getElementById('mailClient'); if(c&&c.classList.contains('fullscreen')) MAIL.toggleFullscreen(); }
+      });
+    }
+    const c=document.getElementById('mailClient'); if(!c) return;
+    const on=c.classList.toggle('fullscreen');
+    document.body.classList.toggle('mail-fs-on',on);
+    const ex=document.getElementById('mailFsExit'); if(ex) ex.style.display=on?'inline-flex':'none';
+    const b=document.getElementById('mailFsBtn'); if(b) b.innerHTML=on?'⛶ Salir':'⛶ Pantalla completa';
+  },
+
+  onSearchInput(val){
+    clearTimeout(this._searchTimer);
+    if(!val.trim()){this.loadMessages();return;}
+    this._searchTimer=setTimeout(()=>this.search(val),400);
+  },
+
+  async search(q){
+    const list=document.getElementById('mailList');
+    list.innerHTML='<div class="loading-state" style="padding:30px"><div class="spinner"></div></div>';
+    document.getElementById('mailListFooter').style.display='none';
+    const data=await this.post({action:'search',folder:this.folder,query:q});
+    if(data.error){list.innerHTML=`<div style="padding:16px;color:var(--danger);font-size:13px">${this.esc(data.error)}</div>`;return;}
+    this._sel=new Set();
+    this.msgs=data.messages||[];
+    this.renderMsgList(this.msgs);
+  },
+
+  _cmpAtts:[],
+
+  // El tope se contaba sobre _cmpAtts, que solo se llena cuando el FileReader
+  // TERMINA de leer. Al elegir varios archivos de una vez, ninguno se había
+  // añadido todavía: cuatro de 6 MB pasaban los cuatro (24 MB) y el envío
+  // reventaba después, en el servidor. Ahora se cuenta al elegir.
+  _cmpPend:0,
+  addFiles(files){
+    const MAX=15*1024*1024;
+    let total=this._cmpAtts.reduce((s,a)=>s+a.size,0)+(this._cmpPend||0);
+    for(const f of files){
+      if(total+f.size>MAX){toast('Límite 15 MB de adjuntos','error');break;}
+      total+=f.size;
+      this._cmpPend=(this._cmpPend||0)+f.size;
+      const reader=new FileReader();
+      const listo=()=>{this._cmpPend=Math.max(0,(this._cmpPend||0)-f.size);};
+      reader.onload=()=>{
+        listo();
+        this._cmpAtts.push({name:f.name,type:f.type||'application/octet-stream',size:f.size,data:reader.result.split(',')[1]});
+        this.renderCmpAtts();
+      };
+      // Sin esto, un archivo ilegible desaparecía sin decir nada y el correo
+      // salía sin él.
+      reader.onerror=()=>{listo();toast('No se pudo leer '+f.name,'error');};
+      reader.readAsDataURL(f);
+    }
+  },
+
+  removeAtt(i){this._cmpAtts.splice(i,1);this.renderCmpAtts();},
+
+  renderCmpAtts(){
+    const div=document.getElementById('mailCmpAtts');
+    if(!div) return;
+    div.innerHTML=this._cmpAtts.map((a,i)=>
+      `<span class="mail-att-chip"><span class="att-name" onclick="MAIL.previewAtt(${i})" style="cursor:pointer" title="Clic para previsualizar">👁 ${this.esc(a.name)}</span> <span style="color:var(--text3);font-size:10px">${(a.size/1024).toFixed(0)} KB</span> <span class="att-x" onclick="MAIL.removeAtt(${i})">✕</span></span>`
+    ).join('');
+  },
+
+  // Previsualiza un adjunto del correo en redacción (p.ej. el PDF de la cotización)
+  // ANTES de enviar, para revisar su contenido. Renderiza en un iframe (PDF) o
+  // <img> (imágenes); otros tipos se abren en pestaña.
+  _attPrevUrl:null,
+  previewAtt(i){
+    const a=this._cmpAtts[i]; if(!a||!a.data){toast('Adjunto no disponible','error');return;}
+    try{
+      if(this._attPrevUrl){URL.revokeObjectURL(this._attPrevUrl);this._attPrevUrl=null;}
+      const bin=atob(a.data);const bytes=new Uint8Array(bin.length);
+      for(let j=0;j<bin.length;j++) bytes[j]=bin.charCodeAt(j);
+      const blob=new Blob([bytes],{type:a.type||'application/octet-stream'});
+      const url=URL.createObjectURL(blob);this._attPrevUrl=url;
+      const modal=document.getElementById('mailAttPreviewModal');
+      const frame=document.getElementById('mailAttPreviewFrame');
+      const img=document.getElementById('mailAttPreviewImg');
+      const title=document.getElementById('mailAttPreviewTitle');
+      const openBtn=document.getElementById('mailAttPreviewOpen');
+      if(title) title.textContent=a.name||'Adjunto';
+      const isImg=/^image\//.test(a.type||'');
+      const isPdf=/pdf/i.test(a.type||'')||/\.pdf$/i.test(a.name||'');
+      if(openBtn) openBtn.onclick=()=>window.open(url,'_blank');
+      if(isImg){img.src=url;img.style.display='block';frame.style.display='none';frame.src='';}
+      else if(isPdf){frame.src=url;frame.style.display='block';img.style.display='none';img.src='';}
+      else{ // tipos no previsualizables: abrir en pestaña
+        window.open(url,'_blank');
+        return;
+      }
+      if(modal) modal.style.display='flex';
+    }catch(e){toast('No se pudo previsualizar el adjunto','error');}
+  },
+  closeAttPreview(){
+    const modal=document.getElementById('mailAttPreviewModal');if(modal) modal.style.display='none';
+    const frame=document.getElementById('mailAttPreviewFrame');if(frame) frame.src='';
+    const img=document.getElementById('mailAttPreviewImg');if(img) img.src='';
+    if(this._attPrevUrl){const u=this._attPrevUrl;this._attPrevUrl=null;setTimeout(()=>URL.revokeObjectURL(u),400);}
+  },
+
+  fillContactsDatalist(){
+    const dl=document.getElementById('mailContactsList');
+    if(!dl) return;
+    const seen=new Set();const opts=[];
+    // 1) Clientes registrados (etiqueta = empresa/contacto)
+    if(typeof state!=='undefined'&&state.clientes){
+      // En modo vendedor el autocompletar sólo ofrece los clientes propios.
+      const _base=(typeof isVendorMode==='function'&&isVendorMode())?state.clientes.filter(vendorOwnsRecord):state.clientes;
+      _base.forEach(c=>{
+        const em=(c.fields['Email']||'').trim();if(!em)return;
+        const k=em.toLowerCase();if(seen.has(k))return;seen.add(k);
+        opts.push(`<option value="${this.esc(em)}">${this.esc(c.fields['Empresa']||c.fields['Contacto']||'')}</option>`);
+      });
+    }
+    // 2) Direcciones a las que ya se envió antes (aunque no sean clientes registrados)
+    this.getSentAddrs().forEach(em=>{
+      const k=String(em).toLowerCase();if(!k||seen.has(k))return;seen.add(k);
+      opts.push(`<option value="${this.esc(em)}">enviado antes</option>`);
+    });
+    dl.innerHTML=opts.join('');
+  },
+
+  // ── Direcciones enviadas antes (para autocompletar) ──
+  // Se guardan por casilla activa y se sincronizan por /shared/mail, sin
+  // exponer el registro global MAIL_SENT_ADDRESSES de Monitor Sistema al navegador.
+  _sentKey(){const a=this.activeAccount();return a?'thelab_mail_sent_'+a:null;},
+  getSentAddrs(){const k=this._sentKey();if(!k)return[];try{const v=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(v)?v:[];}catch(e){return[];}},
+  _extractEmails(...strs){
+    const out=[];const re=/[^\s<>,;:"]+@[^\s<>,;:"]+\.[^\s<>,;:"]+/g;
+    strs.forEach(s=>{if(!s)return;const m=String(s).match(re);if(m)m.forEach(e=>out.push(e.trim().replace(/[.,;:]+$/,'')));});
+    return out;
+  },
+  addSentAddrs(...strs){
+    const k=this._sentKey();if(!k)return;
+    const found=this._extractEmails(...strs);
+    if(!found.length)return;
+    // Recién enviadas primero, luego el histórico; dedup case-insensitive; tope 300.
+    const seen=new Set();const list=[];
+    [...found, ...this.getSentAddrs()].forEach(e=>{const lk=String(e).toLowerCase();if(lk&&!seen.has(lk)){seen.add(lk);list.push(lk);}});
+    try{localStorage.setItem(k,JSON.stringify(list.slice(0,300)));}catch(e){}
+    this._saveSentAddrsAirtable();
+    try{this.fillContactsDatalist();}catch(e){}
+  },
+  async _saveSentAddrsAirtable(){
+    try{
+      const account=this.activeAccount();if(!account)return false;
+      const local=this.getSentAddrs();
+      const ok=await this._writeSharedMail('sent-addresses',local,account);
+      if(!ok)console.warn('[Direcciones] respaldo compartido pendiente; el historial queda local');
+      return ok;
+    }catch(e){console.warn('[Direcciones] no se pudo respaldar (queda local):',e.message);return false;}
+  },
+  // Precarga única (por casilla/equipo) del histórico de la carpeta Enviados, para
+  // que el autocompletar tenga direcciones desde el primer día y no solo desde el
+  // próximo envío. Silenciosa: nunca bloquea ni rompe el correo.
+  async preloadSentAddrs(){
+    const acct=this.activeAccount();if(!acct)return;
+    const flag='thelab_mail_sent_preloaded_'+acct;
+    if(localStorage.getItem(flag))return;
+    try{
+      let folder='';
+      try{
+        const fl=(this._folders&&this._folders.length)?this._folders:((await this.post({action:'folders'})).folders||[]);
+        const f=fl.find(x=>/(^|[.\/])(sent|enviad)/i.test(x.name||''));if(f)folder=f.name;
+      }catch(e){}
+      const data=await this.post({action:'sent_addrs',folder});
+      if(data&&!data.error){
+        if(Array.isArray(data.addresses)&&data.addresses.length) this.addSentAddrs(data.addresses.join(','));
+        localStorage.setItem(flag,'1');   // hecho (aunque venga vacío): no reintentar en cada carga
+      }
+    }catch(e){/* silencioso */}
+  },
+
+  // ── Plantillas ──
+  _tplKey(){const u=AUTH.getUser();return u?'thelab_mail_tpl_'+u.username:null;},
+  getTpls(){try{const k=this._tplKey();return k?JSON.parse(localStorage.getItem(k)||'[]'):[];}catch(e){return[];}},
+  setTpls(t){const k=this._tplKey();if(k) localStorage.setItem(k,JSON.stringify(t));},
+
+  toggleTplMenu(e){
+    e.stopPropagation();
+    const menu=document.getElementById('mailTplMenu');
+    if(menu.style.display!=='none'){menu.style.display='none';return;}
+    const tpls=this.getTpls();
+    let html=tpls.map((t,i)=>
+      `<div class="mail-tpl-item"><span style="flex:1" onclick="MAIL.useTpl(${i})">${this.esc(t.name)}</span><span class="att-x" onclick="event.stopPropagation();MAIL.delTpl(${i})">✕</span></div>`
+    ).join('');
+    html+=`<div class="mail-tpl-item" style="border-top:1px solid var(--border);color:var(--accent)" onclick="MAIL.saveAsTpl()">+ Guardar borrador actual como plantilla</div>`;
+    menu.innerHTML=html;
+    menu.style.display='block';
+    const close=ev=>{if(!menu.contains(ev.target)){menu.style.display='none';document.removeEventListener('click',close);}};
+    setTimeout(()=>document.addEventListener('click',close),50);
+  },
+
+  useTpl(i){
+    const t=this.getTpls()[i];
+    if(!t) return;
+    if(t.subject&&!document.getElementById('mailCmpSubject').value) document.getElementById('mailCmpSubject').value=t.subject;
+    document.getElementById('mailCmpBody').focus();
+    document.execCommand('insertHTML',false,t.body);
+    document.getElementById('mailTplMenu').style.display='none';
+  },
+
+  delTpl(i){
+    const tpls=this.getTpls();
+    if(!confirm(`¿Eliminar plantilla "${tpls[i]?.name}"?`)) return;
+    tpls.splice(i,1);this.setTpls(tpls);
+    document.getElementById('mailTplMenu').style.display='none';
+    toast('Plantilla eliminada','success');
+  },
+
+  saveAsTpl(){
+    const name=prompt('Nombre de la plantilla:');
+    if(!name) return;
+    const tpls=this.getTpls();
+    tpls.push({name,subject:document.getElementById('mailCmpSubject').value,body:document.getElementById('mailCmpBody').innerHTML});
+    this.setTpls(tpls);
+    document.getElementById('mailTplMenu').style.display='none';
+    toast('Plantilla guardada','success');
+  },
+
+  // ── Enviar cotización por correo ──
+  // Registro al enviar una cotización por correo: estado → Enviada (si estaba
+  // Solicitada), fecha de cotización si faltaba, y nota con destinatario.
+  async _registrarCotEnviada(cotId,to){
+    const c=state.cotizacionesById[cotId]; if(!c) return;
+    const f=c.fields;
+    const patch={};
+    if((f['Estado cotización']||'')==='Solicitada') patch['Estado cotización']='Enviada';
+    if(!f['Fecha cotización']) patch['Fecha cotización']=hoyCL();
+    let guardado=true;
+    if(Object.keys(patch).length){
+      try{await airtableWriteTolerant('Cotizaciones','PATCH',cotId,patch);Object.assign(f,patch);}
+      catch(e){guardado=false;console.warn('[correo] no se registró el envío de la cotización',e&&e.message);}
+    }
+    try{const arr=_getNotas('cot',cotId);arr.push({id:'n'+Date.now(),ts:Date.now(),text:'📧 Cotización enviada por correo a '+to+' (PDF adjunto)'});_saveNotas('cot',cotId,arr);}catch(e){}
+    try{renderCotizaciones();}catch(e){}
+    // El correo ya salió; lo que puede fallar es dejarlo registrado. Decir
+    // "registrada como enviada" cuando el estado no cambió deja la cotización
+    // fuera del seguimiento sin que nadie se entere.
+    if(guardado) toast('✓ Cotización '+(f['N° Cotización']||'')+' registrada como enviada','success');
+    else toast('Correo enviado, pero la cotización '+(f['N° Cotización']||'')+' quedó sin marcar como enviada — cámbiala a mano','error');
+  },
+
+  async sendCotizacion(cotId){
+    const c=state.cotizacionesById[cotId];
+    if(!c){toast('Cotización no encontrada','error');return;}
+    const f=c.fields;
+    const numCot=f['N° Cotización']||'—';
+    // Email del cliente
+    let email='',empresa='';
+    const cid=Array.isArray(f['Cliente'])?f['Cliente'][0]:null;
+    if(cid){
+      const cli=state.clientesByIdRec[cid];
+      if(cli){email=cli.fields['Email']||'';empresa=cli.fields['Empresa']||'';}
+    }
+    // Generar PDF de la cotización como adjunto
+    this._cmpAtts=[];this._cmpPend=0;
+    // Si el PDF no sale, el borrador NO puede seguir diciendo "adjuntamos":
+    // sería mandarle al cliente un correo que promete un archivo que no va.
+    let pdfOk=false;
+    try{
+      const res=buildCotizacionDoc(cotId);
+      if(res&&res.html){
+        toast('Generando PDF…','info');
+        const pdfBlob=await _fichaHTMLtoPdfBlob(res.html);
+        const b64=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(reader.result.split(',')[1]);
+          reader.onerror=reject;
+          reader.readAsDataURL(pdfBlob);
+        });
+        const fname=`Cotizacion_${numCot.replace(/[^\w-]/g,'_')}.pdf`;
+        this._cmpAtts.push({name:fname,type:'application/pdf',size:pdfBlob.size,data:b64});
+        pdfOk=true;
+      }
+    }catch(e){toast('Error generando PDF','error');}
+    if(!pdfOk) toast('⚠ El PDF no se generó: el borrador va SIN adjunto y sin prometerlo. Adjúntalo a mano o reintenta.','error');
+    // Link del portal del cliente (firmado, con vencimiento). Si no se pudo
+    // generar, el correo sale igual sin el bloque: nunca bloquea el envío.
+    let portalHtml='';
+    try{
+      if(cid&&typeof portalLinkCliente==='function'){
+        const p=await portalLinkCliente(cid);
+        if(p&&p.url){
+          portalHtml=`<p style="margin:18px 0 0;padding:14px 16px;background:#f0fffe;border:1px solid rgba(0,212,204,0.35);border-radius:8px">`
+            +`<strong>Revisa todo en tu portal de cliente</strong><br>`
+            +`Desde tu enlace privado puedes ver esta cotización, aprobarla con un clic y seguir el avance de tus pedidos en cualquier momento:<br>`
+            +`<a href="${this.esc(p.url)}" style="display:inline-block;margin-top:10px;background:#00d4cc;color:#0a0a0a;font-weight:700;text-decoration:none;padding:10px 18px;border-radius:7px">Entrar a mi portal</a><br>`
+            +`<span style="font-size:12px;color:#888">Enlace personal, válido hasta el ${this.esc(p.expira)}. Por seguridad, no lo compartas.</span></p>`;
+        }else if(p&&p.error){toast('Correo sin link del portal — '+p.error,'info');}
+      }
+    }catch(e){}
+    switchTab('correo');
+    setTimeout(()=>{
+      this.init();
+      this.openCompose({
+        _keepAtts:true,
+        _cotId:cotId,
+        title:'Enviar cotización',
+        to:email,
+        subject:`Cotización ${numCot} — The Lab Solutions`,
+        body:`<p>Estimado${empresa?' equipo de '+this.esc(empresa):''},</p><p>${pdfOk?'Adjuntamos la':'Le escribimos por la'} cotización <strong>${this.esc(numCot)}</strong> solicitada. Quedamos atentos a sus comentarios.</p>${portalHtml}<p>Saludos cordiales,</p>`
+      });
+      this.renderCmpAtts();
+    },300);
+  },
+
+  openCompose(opts={}){
+    if(!opts._keepAtts){this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();}
+    this._cmpCotId=opts._cotId||null;   // vínculo con la cotización (registro al enviar)
+    this._cmpReactivarCli=opts._reactivarCli||null;   // marcar cliente "Reactivado" al enviar
+    this._cmpWinbackCli=opts._winbackCli||null;   // sacar de Leads dormidos SOLO tras envío exitoso
+    this._cmpRecompraCli=opts._recompraCli||null; // sacar de Recompra SOLO tras envío exitoso
+    this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
+    this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
+    this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
+    this._cmpFromEmail=opts._fromEmail||null;   // fuerza la casilla desde la que sale (p.ej. hola@)
+    this.fillContactsDatalist();
+    document.getElementById('mailCmpTo').value=opts.to||'';
+    document.getElementById('mailCmpCc').value=opts.cc||'';
+    const bccEl=document.getElementById('mailCmpBcc'); if(bccEl) bccEl.value=opts.bcc||'';
+    // Muestra las filas CC/CCO solo si traen valor (el botón las abre a mano)
+    const ccRow=document.getElementById('mailCcRow'); if(ccRow) ccRow.style.display=opts.cc?'flex':'none';
+    const bccRow=document.getElementById('mailBccRow'); if(bccRow) bccRow.style.display=opts.bcc?'flex':'none';
+    document.getElementById('mailCmpSubject').value=opts.subject||'';
+    const sig=this.sigHtml();
+    document.getElementById('mailCmpBody').innerHTML=this._sanitizarCita(opts.body||'')+sig;
+    document.getElementById('mailComposeTitle').textContent=opts.title||'Nuevo mensaje';
+    document.getElementById('mailSendStatus').textContent='';
+    document.getElementById('mailComposePanel').style.display='flex';
+    document.getElementById('mailComposePanel').classList.remove('collapsed');
+    this._applyEditorBg();
+    if(!opts.to) document.getElementById('mailCmpTo').focus();
+    else document.getElementById('mailCmpBody').focus();
+  },
+  closeCompose(){
+    document.getElementById('mailComposePanel').style.display='none';
+    // Cerrar un borrador equivale a cancelar la acción: no debe quedar ningún
+    // vínculo de seguimiento capaz de marcar un envío futuro distinto.
+    this._cmpCotId=null;
+    this._cmpReactivarCli=null;
+    this._cmpWinbackCli=null;
+    this._cmpRecompraCli=null;
+    this._cmpFuCotId=null;
+    this._cmpPdPedido=null;
+    this._cmpFromName=null;
+    this._cmpFromEmail=null;
+  },
+
+  _mojibakeScore(value){
+    const s=String(value||'');
+    return (s.match(/(?:Ã.|Â.|â.|ðŸ|ï¿½|�)/g)||[]).length;
+  },
+  _repairMojibake(value){
+    let s=String(value??'');
+    const cp1252=new Map([[0x20AC,0x80],[0x201A,0x82],[0x0192,0x83],[0x201E,0x84],[0x2026,0x85],[0x2020,0x86],[0x2021,0x87],[0x02C6,0x88],[0x2030,0x89],[0x0160,0x8A],[0x2039,0x8B],[0x0152,0x8C],[0x017D,0x8E],[0x2018,0x91],[0x2019,0x92],[0x201C,0x93],[0x201D,0x94],[0x2022,0x95],[0x2013,0x96],[0x2014,0x97],[0x02DC,0x98],[0x2122,0x99],[0x0161,0x9A],[0x203A,0x9B],[0x0153,0x9C],[0x017E,0x9E],[0x0178,0x9F]]);
+    const decodeOnce=input=>{
+      const bytes=[];
+      for(const ch of input){
+        const cp=ch.codePointAt(0);
+        if(cp<=255)bytes.push(cp);
+        else if(cp1252.has(cp))bytes.push(cp1252.get(cp));
+        else return input;
+      }
+      try{return new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(bytes));}catch(_){return input;}
+    };
+    for(let i=0;i<2;i++){
+      const before=this._mojibakeScore(s);if(!before)break;
+      const candidate=decodeOnce(s);
+      if(candidate===s||this._mojibakeScore(candidate)>=before)break;
+      s=candidate;
+    }
+    return s;
+  },
+  _looksLikeMailGarbage(text){
+    const s=String(text||'').trim();if(s.length<18)return false;
+    const replacements=(s.match(/[�\u0000-\u0008\u000B\u000C\u000E-\u001F]/g)||[]).length;
+    const weird=(s.match(/[^\p{L}\p{N}\s.,;:!?¿¡@+\-_/()'"“”‘’%&]/gu)||[]).length;
+    return replacements>=1 || (weird>=7&&weird/Math.max(1,s.length)>.16);
+  },
+  _normalizeMailHtml(value){
+    let html=String(value??'');
+    // Un mensaje single-part mal leído podía anteponer bytes de cabeceras
+    // decodificados como base64 antes del primer tag HTML.
+    const firstTag=html.search(/<[A-Za-z][^>]*>/);
+    if(firstTag>0&&this._looksLikeMailGarbage(html.slice(0,firstTag)))html=html.slice(firstTag);
+    html=html.replace(/>([^<]+)</g,(all,text)=>'>'+this._repairMojibake(text)+'<');
+    // Si el HTML es básicamente texto plano, repara también la cadena completa.
+    if(!/<[A-Za-z][^>]*>/.test(html))html=this._repairMojibake(html);
+    return html;
+  },
+
+  // Las firmas son contenido propio, no HTML recibido de terceros. Mantienen el
+  // formato de email (tablas + estilos inline) pero siguen pasando por una
+  // allowlist independiente para que una firma compartida nunca pueda ejecutar JS.
+  _safeSignatureStyle(styleText){
+    const probe=document.createElement('span');
+    probe.setAttribute('style',String(styleText||''));
+    const allowed=[
+      'font-family','font-size','font-weight','font-style','line-height','letter-spacing',
+      'color','background-color','text-decoration','text-align','text-transform','white-space',
+      'vertical-align','border','border-top','border-right','border-bottom','border-left',
+      'border-color','border-style','border-width','border-radius','padding','padding-top',
+      'padding-right','padding-bottom','padding-left','margin','margin-top','margin-right',
+      'margin-bottom','margin-left','width','min-width','max-width','height','min-height',
+      'max-height','display','border-collapse','opacity','list-style','list-style-type','list-style-position'
+    ];
+    const out=[];
+    for(const prop of allowed){
+      const value=probe.style.getPropertyValue(prop).trim();
+      if(!value||value.length>220)continue;
+      if(/url\s*\(|expression\s*\(|javascript:|vbscript:|@import|behavior\s*:|var\s*\(/i.test(value))continue;
+      out.push(prop+':'+value);
+    }
+    return out.join(';');
+  },
+  _sanitizarFirma(html){
+    const raw=String(html||'');
+    if(!raw)return '';
+    try{
+      const doc=new DOMParser().parseFromString(raw,'text/html');
+      const keep=new Set('p br div span b strong i em u s ul ol li table thead tbody tfoot tr td th hr a img'.split(' '));
+      const drop=new Set('script style svg math iframe object embed form input button textarea select link meta base video audio source picture template noscript'.split(' '));
+      const safe=node=>{
+        if(node.nodeType===3)return doc.createTextNode(node.textContent||'');
+        if(node.nodeType!==1)return null;
+        const tag=node.localName.toLowerCase();
+        if(drop.has(tag))return null;
+        const el=keep.has(tag)?doc.createElement(tag):doc.createDocumentFragment();
+
+        if(keep.has(tag)){
+          const css=this._safeSignatureStyle(node.getAttribute('style')||'');
+          if(css)el.setAttribute('style',css);
+
+          if(tag==='table'){
+            if((node.getAttribute('role')||'').toLowerCase()==='presentation')el.setAttribute('role','presentation');
+            for(const at of ['cellpadding','cellspacing','border']){
+              const v=String(node.getAttribute(at)||'').trim();
+              if(/^\d{1,2}$/.test(v))el.setAttribute(at,v);
+            }
+          }
+          if(tag==='td'||tag==='th'){
+            const align=String(node.getAttribute('align')||'').toLowerCase();
+            const valign=String(node.getAttribute('valign')||'').toLowerCase();
+            if(['left','center','right'].includes(align))el.setAttribute('align',align);
+            if(['top','middle','bottom'].includes(valign))el.setAttribute('valign',valign);
+            const bgcolor=String(node.getAttribute('bgcolor')||'').trim();
+            if(/^#[0-9a-f]{3,8}$/i.test(bgcolor))el.setAttribute('bgcolor',bgcolor);
+          }
+          if(tag==='a'){
+            try{
+              const url=new URL(node.getAttribute('href')||'');
+              if(['https:','mailto:','tel:'].includes(url.protocol)){
+                el.setAttribute('href',url.href);
+                el.setAttribute('rel','noopener noreferrer');
+                if(url.protocol==='https:')el.setAttribute('target','_blank');
+              }
+            }catch(_){}
+          }
+          if(tag==='img'){
+            const src=String(node.getAttribute('src')||'').trim();
+            let ok=false;
+            try{
+              const url=new URL(src);
+              if(url.protocol==='https:'&&!url.username&&!url.password){el.setAttribute('src',url.href);ok=true;}
+            }catch(_){}
+            if(!ok&&/^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(src)&&src.length<=350000){
+              el.setAttribute('src',src.replace(/\s+/g,''));ok=true;
+            }
+            if(!ok)return null;
+            el.setAttribute('alt',String(node.getAttribute('alt')||'').slice(0,200));
+            for(const at of ['width','height']){
+              const v=String(node.getAttribute(at)||'').trim();
+              if(/^\d{1,4}$/.test(v))el.setAttribute(at,v);
+            }
+          }
+        }
+
+        for(const child of [...node.childNodes]){
+          const cleaned=safe(child);if(cleaned)el.appendChild(cleaned);
+        }
+        return el;
+      };
+
+      const out=doc.createElement('div');
+      for(const node of [...doc.body.childNodes]){
+        const cleaned=safe(node);if(cleaned)out.appendChild(cleaned);
+      }
+      // El wrapper ya separa la firma del mensaje. Quita líneas vacías que se
+      // acumulan al copiar/pegar desde Gmail/Outlook y desplazan la tarjeta.
+      const blank=node=>{
+        if(node.nodeType===3)return !String(node.textContent||'').trim();
+        if(node.nodeType!==1)return true;
+        const tag=node.localName.toLowerCase();
+        if(tag==='br')return true;
+        if(!['p','div','span'].includes(tag))return false;
+        return !String(node.textContent||'').trim()&&!node.querySelector('img,table,hr');
+      };
+      while(out.firstChild&&blank(out.firstChild))out.firstChild.remove();
+      while(out.lastChild&&blank(out.lastChild))out.lastChild.remove();
+      return out.innerHTML;
+    }catch(_){return this.esc(raw);}
+  },
+
+  // Firma independiente por cuenta: se guarda con la casilla activa, no con el
+  // usuario del dashboard. Como la cuenta por defecto es la del usuario logueado,
+  // la firma ya existente se conserva para esa casilla (misma clave).
+  _sigKey(){const a=this.activeAccount();return a?'thelab_mail_sig_'+a:null;},
+  getSig(){
+    const k=this._sigKey();if(!k)return null;
+    const raw=localStorage.getItem(k)||'';
+    const fixed=this._normalizeMailHtml(raw);
+    if(fixed!==raw&&fixed)try{localStorage.setItem(k,fixed);}catch(e){}
+    return fixed;
+  },
+  setSig(html){
+    const k=this._sigKey();if(k) localStorage.setItem(k,this._sanitizarFirma(html));
+    // Respaldo permanente: la firma queda también en Airtable (sobrevive a
+    // limpiar el caché y aparece igual en otros dispositivos).
+    this._saveSigsAirtable();
+  },
+  async _saveSigsAirtable(){
+    try{
+      const account=this.activeAccount();if(!account)return false;
+      const html=localStorage.getItem('thelab_mail_sig_'+account)||'';
+      const ok=await this._writeSharedMail('signature',html,account);
+      if(!ok)console.warn('[Firmas] respaldo compartido pendiente; la firma queda local');
+      return ok;
+    }catch(e){console.warn('[Firmas] no se pudo respaldar (queda local):',e.message);return false;}
+  },
+
+  sigHtml(){
+    const s=this.getSig();
+    if(!s) return '';
+    // Sin línea separadora: las firmas con diseño propio (tarjeta) traen su
+    // borde, y en las de texto el espacio en blanco basta como separación.
+    return `<br><div class="mail-signature-block" contenteditable="false" style="margin-top:8px;max-width:100%">${this._sanitizarFirma(s)}</div>`;
+  },
+
+  insertSignature(){
+    const s=this.sigHtml();
+    if(!s){toast('No tienes firma configurada. Usa el botón "Firma" en la cabecera.','info');return;}
+    const body=document.getElementById('mailCmpBody');
+    body.focus();
+    document.execCommand('insertHTML',false,s);
+  },
+
+  openSigModal(){
+    const ed=document.getElementById('mailSigEditor'),code=document.getElementById('mailSigCode');
+    const acct=document.getElementById('mailSigAcct'); if(acct) acct.textContent='· '+(this.activeAccount()||'');
+    ed.innerHTML=this._sanitizarFirma(this.getSig());
+    if(code){code.style.display='none';code.value='';}
+    ed.style.display='block';
+    const b=document.getElementById('mailSigCodeBtn');if(b)b.classList.remove('active');
+    document.getElementById('mailSigModal').style.display='flex';
+    this._applyEditorBg();
+    setTimeout(()=>ed.focus(),100);
+  },
+  closeSigModal(){document.getElementById('mailSigModal').style.display='none';},
+  saveSig(){
+    const code=document.getElementById('mailSigCode'),ed=document.getElementById('mailSigEditor');
+    const html=(code&&code.style.display!=='none')?code.value:ed.innerHTML;
+    this.setSig(html);
+    this.closeSigModal();
+    toast('Firma guardada','success');
+  },
+  // Alterna entre el editor visual y pegar/editar el HTML crudo (firmas tipo tabla).
+  toggleSigCode(){
+    const ed=document.getElementById('mailSigEditor'),code=document.getElementById('mailSigCode'),b=document.getElementById('mailSigCodeBtn');
+    if(!ed||!code) return;
+    if(code.style.display==='none'){
+      code.value=ed.innerHTML; code.style.display='block'; ed.style.display='none';
+      if(b)b.classList.add('active'); this._applyEditorBg(); code.focus();
+    }else{
+      ed.innerHTML=this._sanitizarFirma(code.value); code.style.display='none'; ed.style.display='block';
+      if(b)b.classList.remove('active'); ed.focus();
+    }
+  },
+  // Fondo claro/oscuro de los editores de correo (mejor contraste al escribir).
+  toggleEditorBg(){
+    const light=localStorage.getItem('mail_editor_light')!=='1';
+    localStorage.setItem('mail_editor_light',light?'1':'0');
+    this._applyEditorBg();
+    // El preview comparte la preferencia: re-pinta el mensaje abierto al instante
+    if(this._currentMsg) this._renderMsgBody(this._currentMsg);
+  },
+  _applyEditorBg(){
+    const light=localStorage.getItem('mail_editor_light')==='1';
+    ['mailCmpBody','mailSigEditor','mailSigCode'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){ el.style.background=light?'#ffffff':''; el.style.color=light?'#111111':''; }
+    });
+  },
+
+  _insertEditorImage(editorId){
+    const candidate=prompt('URL HTTPS de la imagen:');
+    if(!candidate)return;
+    let url;
+    try{
+      url=new URL(candidate.trim());
+      if(url.protocol!=='https:'||url.username||url.password)throw Error('Invalid image URL');
+    }catch(_){toast('La imagen debe tener una URL HTTPS válida.','error');return;}
+    const editor=document.getElementById(editorId);if(!editor)return;
+    editor.focus();
+    const img=document.createElement('img');
+    img.src=url.href;img.loading='lazy';img.decoding='async';img.alt='';
+    img.style.maxWidth='100%';
+    if(editorId==='mailSigEditor')img.style.maxHeight='100px';
+    const selection=window.getSelection();
+    if(selection&&selection.rangeCount&&editor.contains(selection.anchorNode)){
+      const range=selection.getRangeAt(0);
+      range.deleteContents();range.insertNode(img);range.setStartAfter(img);
+      range.collapse(true);selection.removeAllRanges();selection.addRange(range);
+    }else editor.appendChild(img);
+  },
+  sigInsertImage(){this._insertEditorImage('mailSigEditor');},
+  insertImagePrompt(){this._insertEditorImage('mailCmpBody');},
+  toggleCompose(){document.getElementById('mailComposePanel').classList.toggle('collapsed');},
+  toggleCc(){const r=document.getElementById('mailCcRow');r.style.display=r.style.display==='none'?'flex':'none';},
+  toggleBcc(){const r=document.getElementById('mailBccRow');r.style.display=r.style.display==='none'?'flex':'none';},
+
+  reply(){
+    if(!this._currentMsg) return;
+    const m=this._currentMsg;
+    this.openCompose({
+      title:'Responder',
+      to:m.from_email,
+      subject:'Re: '+m.subject.replace(/^Re:\s*/i,''),
+      body:`<br><br><hr style="border:none;border-top:1px solid #333;margin:16px 0"><p style="color:#888;font-size:12px">De: ${this.esc(m.from_name||m.from_email)} &lt;${this.esc(m.from_email)}&gt;<br>Fecha: ${this.esc(m.date)}<br>Asunto: ${this.esc(m.subject)}</p>${m.body_html?this._sanitizarCita(m.body_html):this.esc(m.body_text||'')}`
+    });
+  },
+
+  forward(){
+    if(!this._currentMsg) return;
+    const m=this._currentMsg;
+    this.openCompose({
+      title:'Reenviar',
+      subject:'Fwd: '+m.subject.replace(/^Fwd:\s*/i,''),
+      body:`<br><br><hr style="border:none;border-top:1px solid #333;margin:16px 0"><p style="color:#888;font-size:12px">Reenviado de: ${this.esc(m.from_name||m.from_email)} &lt;${this.esc(m.from_email)}&gt;<br>Fecha: ${this.esc(m.date)}<br>Asunto: ${this.esc(m.subject)}</p>${m.body_html?this._sanitizarCita(m.body_html):this.esc(m.body_text||'')}`
+    });
+  },
+
+  _validEmails(str){
+    return str.split(',').map(s=>s.trim()).filter(Boolean)
+      .every(e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.match(/<(.+)>/)?.[1]||e));
+  },
+
+  async sendCompose(){
+    if(this._sending) return;
+    const to=document.getElementById('mailCmpTo').value.trim();
+    const cc=document.getElementById('mailCmpCc').value.trim();
+    const bcc=(document.getElementById('mailCmpBcc')?.value||'').trim();
+    const subject=this._repairMojibake(document.getElementById('mailCmpSubject').value.trim());
+    const body=this._normalizeMailHtml(document.getElementById('mailCmpBody').innerHTML);
+    const status=document.getElementById('mailSendStatus');
+    const err=m=>{status.textContent=m;status.style.color='var(--danger)';};
+    if(!to) return err('Falta el destinatario');
+    if(!this._validEmails(to)) return err('Email de destinatario inválido');
+    if(cc&&!this._validEmails(cc)) return err('Email en CC inválido');
+    if(bcc&&!this._validEmails(bcc)) return err('Email en CCO inválido');
+    if(!subject) return err('Falta el asunto');
+    this._sending=true;
+    const btn=document.getElementById('mailSendBtn');
+    if(btn) btn.disabled=true;
+    status.textContent='Enviando...';status.style.color='var(--text3)';
+    try{
+      const a=this.auth();
+      const params={action:'send',to,cc,bcc,subject,body,from_name:this._cmpFromName||a.from_name};
+      if(this._cmpAtts.length) params.atts=JSON.stringify(this._cmpAtts.map(x=>({name:x.name,type:x.type,data:x.data})));
+      // Si el borrador fija una casilla de salida (p.ej. hola@), autentica como esa
+      // cuenta con su clave guardada; si no, sale por la cuenta activa.
+      const data=this._cmpFromEmail?await this.postAs(this._cmpFromEmail,params):await this.post(params);
+      if(data.error) err(data.error);
+      else{
+        status.textContent='✓ Enviado';status.style.color='var(--success)';
+        NOTIFY.add('sent','Correo enviado',to,'correo');
+        try{this.addSentAddrs(to,cc,bcc);}catch(e){}   // recuerda las direcciones para autocompletar luego
+        // Cierre del ciclo cotización→PDF→correo: marca Enviada y deja registro
+        if(this._cmpCotId){try{await this._registrarCotEnviada(this._cmpCotId,to);}catch(e){}this._cmpCotId=null;}
+        // Reactivación: revisar/abrir el borrador no cambia nada. Solo llegamos
+        // aquí después de que mail-api confirmó el envío.
+        if(this._cmpReactivarCli){try{if(typeof marcarReactivado==='function') await marcarReactivado(this._cmpReactivarCli,'correo');}catch(e){}this._cmpReactivarCli=null;}
+        if(this._cmpWinbackCli){try{if(typeof wbMarkSent==='function') wbMarkSent(this._cmpWinbackCli,'correo');}catch(e){}this._cmpWinbackCli=null;}
+        if(this._cmpRecompraCli){try{if(typeof _recompraMark==='function') _recompraMark(this._cmpRecompraCli,'correo');}catch(e){}this._cmpRecompraCli=null;}
+        if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') await fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
+        // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
+        if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
+        this._cmpFromName=null;this._cmpFromEmail=null;
+        this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();
+        setTimeout(()=>this.closeCompose(),1500);
+      }
+    }finally{
+      this._sending=false;
+      if(btn) btn.disabled=false;
+    }
+  },
+
+  async trashCurrent(){
+    if(!this.selUid) return;
+    if(!confirm('¿Mover este mensaje a la papelera?')) return;
+    const data=await this.post({action:'trash',folder:this.folder,uid:this.selUid});
+    if(data.error){toast(data.error,'error');return;}
+    toast('Mensaje eliminado','success');
+    this.selUid=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  _isSpamFolder(folder){
+    const raw=String(folder||'').replace(/^INBOX[./]/i,'').toLowerCase();
+    return /(^|[./\s_-])(junk|spam|correo(?:s)? no deseado(?:s)?)([./\s_-]|$)/i.test(raw)||raw==='junk'||raw==='spam';
+  },
+
+  async spamCurrent(){
+    if(!this.selUid)return;
+    if(this._isSpamFolder(this.folder)){toast('Este mensaje ya está en Spam','info');return;}
+    if(!confirm('¿Marcar este correo como no deseado y moverlo a Spam?'))return;
+    const data=await this.post({action:'spam',folder:this.folder,uid:this.selUid});
+    if(data.error){toast(data.error,'error');return;}
+    if(data.ok!==true||!this._isSpamFolder(data.folder)){
+      toast('El servidor no confirmó el movimiento a Spam. El correo sigue en la bandeja.','error');return;
+    }
+    toast('🚫 Correo movido a Spam','success');
+    this.selUid=null;this._currentMsg=null;
+    document.getElementById('mailReaderEmpty').style.display='flex';
+    document.getElementById('mailReaderContent').style.display='none';
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  // ── Selección múltiple de la bandeja ──────────────────────────
+  toggleSelect(uid,on){
+    this._sel=this._sel||new Set();
+    if(on) this._sel.add(uid); else this._sel.delete(uid);
+    const item=document.querySelector(`.mail-item[data-uid="${uid}"]`);
+    if(item) item.classList.toggle('sel-checked',on);
+    if(this._renderThreads){
+      for(const [tid,members] of this._renderThreads){
+        if(!members.some(m=>String(m.uid)===String(uid))||members.length<2)continue;
+        const all=members.every(m=>this._sel.has(m.uid)),some=members.some(m=>this._sel.has(m.uid));
+        const head=document.querySelector(`.mail-thread[data-thread-id="${CSS.escape(String(tid))}"]>.mail-thread-head`);
+        if(head){
+          head.classList.toggle('sel-checked',all);
+          const chk=head.querySelector('.mail-item-chk');if(chk){chk.checked=all;chk.indeterminate=!all&&some;}
+        }
+        break;
+      }
+    }
+    this._updateSelBar();
+  },
+  toggleSelectAll(on){
+    this._sel=this._sel||new Set();
+    (this.msgs||[]).forEach(m=>{ if(on) this._sel.add(m.uid); else this._sel.delete(m.uid); });
+    document.querySelectorAll('#mailList .mail-item').forEach(el=>{
+      const chk=el.querySelector('.mail-item-chk');
+      if(chk) chk.checked=on;
+      el.classList.toggle('sel-checked',on);
+    });
+    this._updateSelBar();
+  },
+  clearSelection(){
+    this._sel=new Set();
+    document.querySelectorAll('#mailList .mail-item').forEach(el=>{
+      const c=el.querySelector('.mail-item-chk'); if(c) c.checked=false;
+      el.classList.remove('sel-checked');
+    });
+    this._updateSelBar();
+  },
+  _updateSelBar(){
+    const n=this._sel?this._sel.size:0;
+    const bar=document.getElementById('mailSelBar'); if(bar) bar.style.display=n>0?'flex':'none';
+    const cnt=document.getElementById('mailSelCount'); if(cnt) cnt.textContent=`${n} seleccionado${n!==1?'s':''}`;
+    const a=document.getElementById('mailSelAllChk');
+    if(a){ const total=(this.msgs||[]).length; a.checked=total>0&&n>=total; a.indeterminate=n>0&&n<total; }
+  },
+  async trashSelected(){
+    this._sel=this._sel||new Set();
+    const uids=[...this._sel];
+    if(!uids.length) return;
+    if(!confirm(`¿Mover ${uids.length} mensaje${uids.length>1?'s':''} a la papelera?`)) return;
+    const bar=document.getElementById('mailSelBar');
+    const btns=bar?bar.querySelectorAll('button'):[];
+    btns.forEach(b=>b.disabled=true);
+    let ok=0,fail=0;
+    for(const uid of uids){
+      const data=await this.post({action:'trash',folder:this.folder,uid});
+      if(data&&!data.error) ok++; else fail++;
+    }
+    btns.forEach(b=>b.disabled=false);
+    // Si el mensaje abierto se eliminó, cierra el lector
+    if(this.selUid&&uids.includes(this.selUid)){
+      this.selUid=null;
+      document.getElementById('mailReaderEmpty').style.display='flex';
+      document.getElementById('mailReaderContent').style.display='none';
+    }
+    this._sel=new Set();
+    toast(fail?`${ok} eliminado${ok!==1?'s':''} · ${fail} con error`:`✓ ${ok} mensaje${ok!==1?'s':''} eliminado${ok!==1?'s':''}`, fail?'info':'success');
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  async spamSelected(){
+    this._sel=this._sel||new Set();
+    const uids=[...this._sel];
+    if(!uids.length)return;
+    if(this._isSpamFolder(this.folder)){toast('Los mensajes seleccionados ya están en Spam','info');return;}
+    if(!confirm(`¿Marcar ${uids.length} correo${uids.length>1?'s':''} como no deseado${uids.length>1?'s':''} y moverlo${uids.length>1?'s':''} a Spam?`))return;
+    const bar=document.getElementById('mailSelBar');
+    const btns=bar?bar.querySelectorAll('button'):[];
+    btns.forEach(b=>b.disabled=true);
+    let ok=0,fail=0;
+    const moved=new Set();
+    for(const uid of uids){
+      const data=await this.post({action:'spam',folder:this.folder,uid});
+      if(data?.ok===true&&this._isSpamFolder(data.folder)){ok++;moved.add(uid);}else fail++;
+    }
+    btns.forEach(b=>b.disabled=false);
+    if(this.selUid&&moved.has(this.selUid)){
+      this.selUid=null;this._currentMsg=null;
+      document.getElementById('mailReaderEmpty').style.display='flex';
+      document.getElementById('mailReaderContent').style.display='none';
+    }
+    this._sel=new Set();
+    toast(fail?`${ok} movido${ok!==1?'s':''} a Spam · ${fail} con error`:`🚫 ${ok} correo${ok!==1?'s':''} movido${ok!==1?'s':''} a Spam`,fail?'info':'success');
+    await this.loadMessages();
+    await this.loadFolders();
+  },
+
+  parseFrom(from){
+    const m=from.match(/^"?([^"<]+)"?\s*</);
+    if(m) return m[1].trim();
+    const e=from.match(/<(.+)>/);
+    if(e) return e[1];
+    return from;
+  },
+
+  fmtDate(dateStr){
+    if(!dateStr) return '';
+    try{
+      const d=new Date(dateStr);
+      const now=new Date();
+      const diff=(now-d)/1000;
+      if(diff<86400 && d.getDate()===now.getDate()) return d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+      if(diff<604800) return ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()];
+      return _DTF_DM.format(d);
+    }catch(e){return dateStr.substring(0,10);}
+  },
+
+  esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');},
+
+  /* Limpia el HTML de un correo recibido antes de citarlo en una respuesta.
+   *
+   * Al LEER, el mensaje se pinta dentro de un <iframe> con sandbox sin
+   * allow-scripts: nada de lo que traiga puede ejecutarse. Pero al Responder o
+   * Reenviar, ese mismo HTML se metía con innerHTML en el editor, sin ninguna
+   * contención — y ahí un <img src=x onerror="..."> SÍ corre. O sea: bastaba con
+   * escribirle a hola@thelab.solutions (una dirección pública) y esperar a que
+   * alguien pulsara Responder.
+   *
+   * Citar en HTML es justo lo que se espera de una respuesta, así que no se
+   * convierte a texto plano: se quita lo que ejecuta o navega y se conserva el
+   * formato. DOMParser no ejecuta scripts ni descarga nada al analizar.
+   */
+  _sanitizarCita(html,allowImages=false){
+    const raw=String(html||'');
+    if(!raw)return '';
+    try{
+      const doc=new DOMParser().parseFromString(raw,'text/html');
+      const keep=new Set('p br div span b strong i em u s ul ol li blockquote table thead tbody tfoot tr td th hr h1 h2 h3 pre code a'.split(' '));
+      if(allowImages)keep.add('img');
+      const drop=new Set('script style svg math iframe object embed form input button textarea select link meta base video audio source picture template noscript'.split(' '));
+      const safe=node=>{
+        if(node.nodeType===3)return doc.createTextNode(node.textContent||'');
+        if(node.nodeType!==1)return null;
+        const tag=node.localName.toLowerCase();
+        if(drop.has(tag)||tag==='img'&&!allowImages)return null;
+        const el=keep.has(tag)?doc.createElement(tag):doc.createDocumentFragment();
+        if(tag==='a'&&keep.has(tag)){
+          try{
+            const url=new URL(node.getAttribute('href')||'');
+            if(['https:','mailto:'].includes(url.protocol)){
+              el.href=url.href;el.rel='noopener noreferrer';el.target='_blank';
+            }
+          }catch(_){}
+        }
+        if(tag==='img'){
+          try{
+            const url=new URL(node.getAttribute('src')||'');
+            if(url.protocol!=='https:'||url.username||url.password)return null;
+            el.src=url.href;el.alt=String(node.getAttribute('alt')||'').slice(0,200);
+            el.loading='lazy';el.style.maxWidth='100%';
+          }catch(_){return null;}
+        }
+        for(const child of [...node.childNodes]){
+          const cleaned=safe(child);if(cleaned)el.appendChild(cleaned);
+        }
+        return el;
+      };
+      const out=doc.createElement('div');
+      for(const node of [...doc.body.childNodes]){
+        const cleaned=safe(node);if(cleaned)out.appendChild(cleaned);
+      }
+      return out.innerHTML;
+    }catch(_){return this.esc(raw);}
+  }
+};

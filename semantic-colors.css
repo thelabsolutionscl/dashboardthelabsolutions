@@ -1,0 +1,19 @@
+/* Shared semantic palette across dashboard sections and detail levels. */
+:root{--semantic-success:#34d399;--semantic-production:#fb923c;--semantic-warning:#fbbf24;--semantic-danger:#f87171;--semantic-info:#60a5fa;--semantic-analysis:#c4b5fd;--semantic-neutral:#a3aebf;}
+[data-semantic-tone=success]{--semantic-color:var(--semantic-success);--semantic-bg:rgba(52,211,153,.12);--semantic-border:rgba(52,211,153,.4)}
+[data-semantic-tone=production]{--semantic-color:var(--semantic-production);--semantic-bg:rgba(251,146,60,.12);--semantic-border:rgba(251,146,60,.4)}
+[data-semantic-tone=warning]{--semantic-color:var(--semantic-warning);--semantic-bg:rgba(251,191,36,.12);--semantic-border:rgba(251,191,36,.4)}
+[data-semantic-tone=danger]{--semantic-color:var(--semantic-danger);--semantic-bg:rgba(248,113,113,.12);--semantic-border:rgba(248,113,113,.4)}
+[data-semantic-tone=info]{--semantic-color:var(--semantic-info);--semantic-bg:rgba(96,165,250,.12);--semantic-border:rgba(96,165,250,.4)}
+[data-semantic-tone=analysis]{--semantic-color:var(--semantic-analysis);--semantic-bg:rgba(196,181,253,.12);--semantic-border:rgba(196,181,253,.4)}
+[data-semantic-tone=neutral]{--semantic-color:var(--semantic-neutral);--semantic-bg:rgba(163,174,191,.12);--semantic-border:rgba(163,174,191,.4)}
+[data-semantic-kind=badge]{color:var(--semantic-color)!important;background:var(--semantic-bg)!important;border:1px solid var(--semantic-border)!important}
+[data-semantic-kind=metric]{border-color:var(--semantic-border)!important;border-top:3px solid var(--semantic-color)!important}
+[data-semantic-kind=metric] :is(.kpi-value,.stat-value,.fac-kpi-val,.of-kpi-val,.ofd-stat-v,.ss-stat-val,.avr-kpi-value),[data-semantic-kind=metric]>strong,[data-semantic-kind=metric]>b,[data-semantic-kind=fact]>b{color:var(--semantic-color)!important}
+[data-semantic-kind=record]{border-left:3px solid var(--semantic-color)}
+.badge-green{color:var(--semantic-success);background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.4)}
+.badge-yellow{color:var(--semantic-warning);background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4)}
+.badge-orange{color:var(--semantic-production);background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.4)}
+.badge-red{color:var(--semantic-danger);background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.4)}
+.badge-blue{color:var(--semantic-info);background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.4)}
+.badge-purple{color:var(--semantic-analysis);background:rgba(196,181,253,.12);border:1px solid rgba(196,181,253,.4)}

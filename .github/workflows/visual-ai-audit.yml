@@ -1,0 +1,42 @@
+name: Visual AI audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'tests/visual-ai-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/visual-ai-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'tests/visual-ai-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/visual-ai-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard-visual-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate test syntax
+        run: node --check tests/visual-ai-wiring.test.js
+
+      - name: Audit Visual AI integration
+        run: node --test tests/visual-ai-wiring.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js
