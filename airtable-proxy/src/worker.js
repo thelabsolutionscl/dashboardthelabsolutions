@@ -2557,6 +2557,190 @@ export class CrmMutationGuard {
   }
 }
 
+
+const BUG_REPORT_META_PREFIX='BUG_REPORT_META:';
+const BUG_REPORT_IMG_PREFIX='BUG_REPORT_IMG:';
+const BUG_REPORT_STATUSES=new Set(['nuevo','analizando','reparando','pr_creado','needs_review','resuelto','error','cerrado']);
+function bugReportIdAllowed(id){
+  return typeof id==='string'&&/^br_[a-z0-9]{12,28}$/.test(id);
+}
+function bugReportText(value,max,min=0){
+  return typeof value==='string'&&value.length>=min&&value.length<=max&&
+    !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value);
+}
+function bugReportContextAllowed(ctx){
+  if(!ctx||typeof ctx!=='object'||Array.isArray(ctx)||
+     Object.keys(ctx).some(k=>!['section','path','build','viewport','userAgent','reporterName'].includes(k)))
+    return false;
+  const vp=ctx.viewport;
+  return bugReportText(ctx.section||'',80)&&bugReportText(ctx.path||'',700)&&
+    bugReportText(ctx.build||'',64)&&bugReportText(ctx.userAgent||'',500)&&
+    bugReportText(ctx.reporterName||'',160)&&
+    vp&&typeof vp==='object'&&!Array.isArray(vp)&&
+    Object.keys(vp).every(k=>['width','height','dpr'].includes(k))&&
+    Number.isFinite(vp.width)&&vp.width>0&&vp.width<=10000&&
+    Number.isFinite(vp.height)&&vp.height>0&&vp.height<=10000&&
+    Number.isFinite(vp.dpr)&&vp.dpr>0&&vp.dpr<=10;
+}
+function bugReportScreenshotAllowed(shot){
+  if(shot===null||shot===undefined)return true;
+  if(!shot||typeof shot!=='object'||Array.isArray(shot)||
+     Object.keys(shot).some(k=>!['dataUrl','mime','width','height','bytes'].includes(k))||
+     shot.mime!=='image/jpeg'||typeof shot.dataUrl!=='string'||shot.dataUrl.length>74000||
+     !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(shot.dataUrl)||
+     !Number.isInteger(shot.width)||shot.width<1||shot.width>2000||
+     !Number.isInteger(shot.height)||shot.height<1||shot.height>2000||
+     !Number.isInteger(shot.bytes)||shot.bytes<1||shot.bytes>60000)return false;
+  return true;
+}
+function bugReportMetaAllowed(meta){
+  if(!meta||typeof meta!=='object'||Array.isArray(meta)||
+     Object.keys(meta).some(k=>!['version','id','createdAt','reporter','reporterName','role','message','section','path','build','viewport','userAgent','status','screenshot','repair'].includes(k))||
+     meta.version!==1||!bugReportIdAllowed(meta.id)||
+     !bugReportText(meta.createdAt,40,20)||Number.isNaN(Date.parse(meta.createdAt))||
+     !bugReportText(meta.reporter,254)||!bugReportText(meta.reporterName||'',160)||
+     !bugReportText(meta.role,30)||!bugReportText(meta.message,5000,10)||
+     !bugReportText(meta.section||'',80)||!bugReportText(meta.path||'',700)||
+     !bugReportText(meta.build||'',64)||!bugReportText(meta.userAgent||'',500)||
+     !BUG_REPORT_STATUSES.has(meta.status))return false;
+  const vp=meta.viewport;
+  if(!vp||typeof vp!=='object'||Array.isArray(vp)||
+     !Number.isFinite(vp.width)||!Number.isFinite(vp.height)||!Number.isFinite(vp.dpr))return false;
+  if(meta.screenshot!==null&&meta.screenshot!==undefined){
+    const info=meta.screenshot;
+    if(!info||typeof info!=='object'||Array.isArray(info)||
+       Object.keys(info).some(k=>!['present','mime','width','height','bytes'].includes(k))||
+       info.present!==true||info.mime!=='image/jpeg'||
+       !Number.isInteger(info.width)||!Number.isInteger(info.height)||!Number.isInteger(info.bytes)||
+       info.bytes<1||info.bytes>60000)return false;
+  }
+  if(meta.repair!==undefined){
+    const r=meta.repair;
+    if(!r||typeof r!=='object'||Array.isArray(r)||
+       Object.keys(r).some(k=>!['analysis','error','prUrl','prNumber','branch','updatedAt','attempts','changedFiles'].includes(k))||
+       (r.analysis!==undefined&&!bugReportText(r.analysis,5000))||
+       (r.error!==undefined&&!bugReportText(r.error,3000))||
+       (r.prUrl!==undefined&&!bugReportText(r.prUrl,1000))||
+       (r.prNumber!==undefined&&(!Number.isInteger(r.prNumber)||r.prNumber<1))||
+       (r.branch!==undefined&&!bugReportText(r.branch,240))||
+       (r.updatedAt!==undefined&&!bugReportText(r.updatedAt,40))||
+       (r.attempts!==undefined&&(!Number.isInteger(r.attempts)||r.attempts<0||r.attempts>20))||
+       (r.changedFiles!==undefined&&(!Array.isArray(r.changedFiles)||r.changedFiles.length>20||
+          !r.changedFiles.every(v=>bugReportText(v,260)))))return false;
+  }
+  return JSON.stringify(meta).length<=15000;
+}
+async function bugMonitorRows(env,formula,maxRecords=100){
+  if(!env.AIRTABLE_TOKEN)return {error:'missing-token'};
+  const q=new URLSearchParams();
+  q.set('maxRecords',String(Math.max(1,Math.min(100,maxRecords))));
+  q.set('filterByFormula',formula);
+  q.append('fields[]','Name');q.append('fields[]','Notes');
+  let r;
+  try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+'?'+q.toString(),{
+      method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+    });
+  }catch(_){return {error:'network'};}
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'upstream'};
+  let body;try{body=await r.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>100)return {error:'invalid-shape'};
+  return {records:body.records};
+}
+async function sharedBugReportList(env){
+  const rows=await bugMonitorRows(env,`LEFT({Name},16)="${BUG_REPORT_META_PREFIX}"`,100);
+  if(rows.error)return rows;
+  const reports=[];
+  for(const row of rows.records){
+    if(!row||typeof row.fields?.Name!=='string'||!row.fields.Name.startsWith(BUG_REPORT_META_PREFIX)||
+       typeof row.fields?.Notes!=='string')continue;
+    let meta;try{meta=JSON.parse(row.fields.Notes);}catch(_){continue;}
+    if(!bugReportMetaAllowed(meta)||row.fields.Name!==BUG_REPORT_META_PREFIX+meta.id)continue;
+    reports.push(meta);
+  }
+  reports.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  return {reports:reports.slice(0,100)};
+}
+async function sharedBugReportLoad(env,id){
+  if(!bugReportIdAllowed(id))return {error:'invalid-id'};
+  const metaRows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_META_PREFIX+id}"`,2);
+  if(metaRows.error||metaRows.records?.length!==1)return {error:metaRows.error||'not-found'};
+  const row=metaRows.records[0];
+  let meta;try{meta=JSON.parse(row.fields?.Notes||'');}catch(_){return {error:'invalid-meta'};}
+  if(!bugReportMetaAllowed(meta)||meta.id!==id)return {error:'invalid-meta'};
+  let screenshot='';
+  if(meta.screenshot?.present){
+    const imgRows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_IMG_PREFIX+id}"`,2);
+    if(!imgRows.error&&imgRows.records?.length===1){
+      const raw=String(imgRows.records[0].fields?.Notes||'');
+      if(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(raw)&&raw.length<=74000)screenshot=raw;
+    }
+  }
+  return {report:meta,screenshot};
+}
+async function sharedBugReportCreate(env,input,actor){
+  if(!env.AIRTABLE_TOKEN)return {error:'missing-token'};
+  if(!input||typeof input!=='object'||Array.isArray(input)||
+     Object.keys(input).some(k=>!['message','context','screenshot'].includes(k))||
+     !bugReportText(input.message,5000,10)||!bugReportContextAllowed(input.context)||
+     !bugReportScreenshotAllowed(input.screenshot))return {error:'invalid-report'};
+  const id='br_'+Date.now().toString(36)+crypto.randomUUID().replace(/-/g,'').slice(0,10).toLowerCase();
+  const now=new Date().toISOString(),ctx=input.context,shot=input.screenshot||null;
+  const meta={
+    version:1,id,createdAt:now,
+    reporter:actor?.email||'legacy-dashboard',
+    reporterName:ctx.reporterName||actor?.email||'Usuario',
+    role:actor?.role||'legacy',
+    message:input.message.trim(),section:ctx.section,path:ctx.path,build:ctx.build,
+    viewport:ctx.viewport,userAgent:ctx.userAgent,status:'nuevo',
+    screenshot:shot?{present:true,mime:'image/jpeg',width:shot.width,height:shot.height,bytes:shot.bytes}:null,
+    repair:{attempts:0,updatedAt:now}
+  };
+  if(!bugReportMetaAllowed(meta))return {error:'invalid-meta'};
+  const records=[{fields:{Name:BUG_REPORT_META_PREFIX+id,Notes:JSON.stringify(meta)}}];
+  if(shot)records.push({fields:{Name:BUG_REPORT_IMG_PREFIX+id,Notes:shot.dataUrl}});
+  let r;
+  try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema'),{
+      method:'POST',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({records})
+    });
+  }catch(_){return {error:'write-uncertain',uncertain:true};}
+  if([400,401,403,404,422].includes(r.status))return {error:'write-rejected'};
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'write-uncertain',uncertain:true};
+  let body;try{body=await r.json();}catch(_){return {error:'write-uncertain',uncertain:true};}
+  if(!Array.isArray(body.records)||body.records.length!==records.length)return {error:'write-uncertain',uncertain:true};
+  return {id,report:meta};
+}
+async function sharedBugReportAction(env,id,action){
+  if(!bugReportIdAllowed(id)||!['retry','close'].includes(action))return {error:'invalid-action'};
+  const current=await sharedBugReportLoad(env,id);
+  if(current.error)return current;
+  const meta=current.report;
+  if(action==='retry'){
+    if(!['error','needs_review','pr_creado'].includes(meta.status))return {error:'retry-not-allowed'};
+    meta.status='nuevo';meta.repair={...(meta.repair||{}),error:'',updatedAt:new Date().toISOString()};
+  }else{
+    meta.status='cerrado';meta.repair={...(meta.repair||{}),updatedAt:new Date().toISOString()};
+  }
+  if(!bugReportMetaAllowed(meta))return {error:'invalid-meta'};
+  const rows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_META_PREFIX+id}"`,2);
+  if(rows.error||rows.records?.length!==1)return {error:rows.error||'not-found'};
+  const recId=String(rows.records[0].id||'');
+  if(!/^rec[A-Za-z0-9]{14}$/.test(recId))return {error:'invalid-record'};
+  let r;
+  try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+'/'+recId,{
+      method:'PATCH',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({fields:{Notes:JSON.stringify(meta)}})
+    });
+  }catch(_){return {error:'write-uncertain'};}
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'write-rejected'};
+  return {report:meta};
+}
+
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
