@@ -148,7 +148,8 @@
     }else if(e==='Rechazada'||e==='Vencida'){
       parts.push(button('Reactivar como enviada','quote-status',`${id}::Enviada`,'op-primary'));
     }else if(e==='Aprobada'){
-      if(q.linkedOrder)parts.push(button('Ver pedido vinculado','quote-linked-order',q.linkedOrder.id,'op-primary'));
+      if(q.historical)parts.push('<span class="op-caption">✓ Venta histórica conciliada · producida y pagada</span>');
+      else if(q.linkedOrder)parts.push(button('Ver pedido vinculado','quote-linked-order',q.linkedOrder.id,'op-primary'));
       else parts.push(button('Crear pedido pendiente','quote-order',id,'op-primary'));
     }
     if(!parts.length)return '';
@@ -158,10 +159,11 @@
     const f=c.fields,e=f['Estado cotización']||'Sin estado';
     const expires=until(f['Fecha vencimiento']),age=until(f['Fecha cotización']);
     const awaiting=e==='Enviada',pending=e==='Solicitada';
+    const historical=!!f['Venta histórica conciliada'];
     const linkedOrder=e==='Aprobada'&&typeof _pedidoDeCot==='function'?_pedidoDeCot(c):undefined;
-    let next=pending?'Preparar y enviar propuesta':awaiting?'Revisar seguimiento':e==='Aprobada'?(linkedOrder===null?'Crear pedido pendiente':'Revisar pedido vinculado'):e==='Negociación'?'Revisar condiciones':'Revisar historial';
+    let next=pending?'Preparar y enviar propuesta':awaiting?'Revisar seguimiento':e==='Aprobada'?(historical?'Venta histórica · producida y pagada':linkedOrder===null?'Crear pedido pendiente':'Revisar pedido vinculado'):e==='Negociación'?'Revisar condiciones':'Revisar historial';
     if(awaiting&&expires!==null&&expires<0)next='Revisar propuesta vencida';
-    return {e,expires,age,awaiting,pending,next,linkedOrder};
+    return {e,expires,age,awaiting,pending,next,linkedOrder,historical};
   }
   // Busca también por el nombre comercial del cliente, sin depender de que
   // cada cotización repita su apodo en "Alias / Título". Una denominación como
