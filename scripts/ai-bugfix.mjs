@@ -78,7 +78,7 @@ function ghJson(args){return safeJson(sh('gh',args))||{};}
 async function reconcileExisting(rows){
   for(const row of rows){
     const m=row.meta,r=m.repair||{};
-    if(m.status==='pr_creado'&&Number.isInteger(r.prNumber)){
+    if(['pr_creado','needs_review'].includes(m.status)&&Number.isInteger(r.prNumber)){
       let pr={};try{pr=ghJson(['pr','view',String(r.prNumber),'--repo',REPO,'--json','state,mergedAt,url']);}catch(_){continue;}
       if(pr.mergedAt){
         await update(row,'resuelto',{analysis:r.analysis||'Reparación fusionada y publicada en main.',prUrl:pr.url||r.prUrl,error:''});
@@ -280,18 +280,22 @@ async function main(){
       branch,changedFiles:changed,error});
 
     if(auto){
+      let mergeBlocked='';
       try{
         // La suite completa ya corrió sobre el parche exacto. Para cambios de
         // bajo riesgo intentamos fusionar inmediatamente; si las reglas de la
         // rama exigen controles adicionales, GitHub lo bloquea y el PR queda abierto.
         sh('gh',['pr','merge',String(pr.number),'--repo',REPO,'--squash','--delete-branch']);
       }catch(e){
-        console.log('GitHub bloqueó el merge automático; PR queda abierto:',String(e.message||e).slice(0,300));
+        mergeBlocked='GitHub bloqueó el merge automático; revisa el Pull Request.';
+        console.log(mergeBlocked,String(e.message||e).slice(0,300));
       }
       await sleep(1200);
       let after={};try{after=ghJson(['pr','view',String(pr.number),'--repo',REPO,'--json','state,mergedAt,url']);}catch(_){}
       if(after.mergedAt)await update(pending,'resuelto',{attempts,analysis:plan.analysis,prUrl:after.url||prUrl,
         prNumber:pr.number,branch,changedFiles:changed,error:''});
+      else if(mergeBlocked)await update(pending,'needs_review',{attempts,analysis:plan.analysis,prUrl:pr.url||prUrl,
+        prNumber:pr.number,branch,changedFiles:changed,error:mergeBlocked});
     }
   }catch(e){
     try{sh('git',['reset','--hard','HEAD']);}catch(_){}
