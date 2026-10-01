@@ -2741,6 +2741,211 @@ async function sharedBugReportAction(env,id,action){
   return {report:meta};
 }
 
+
+const GITHUB_OIDC_ISSUER='https://token.actions.githubusercontent.com';
+const GITHUB_BUGFIX_AUDIENCE='tls-dashboard-bugfix';
+const GITHUB_BUGFIX_REPOSITORY='thelabsolutionscl/dashboardthelabsolutions';
+const GITHUB_BUGFIX_WORKFLOW=GITHUB_BUGFIX_REPOSITORY+'/.github/workflows/ai-bugfix.yml@refs/heads/main';
+let GITHUB_OIDC_KEYS={expires:0,keys:[]};
+
+function bugfixB64UrlJson(segment){
+  if(typeof segment!=='string'||!/^[A-Za-z0-9_-]+$/.test(segment)||segment.length>12000)
+    throw new Error('Malformed OIDC token');
+  const raw=atob(segment.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-segment.length%4)%4));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(raw,c=>c.charCodeAt(0))));
+}
+async function githubOidcKeys(force=false){
+  if(!force&&GITHUB_OIDC_KEYS.expires>Date.now()&&GITHUB_OIDC_KEYS.keys.length)
+    return GITHUB_OIDC_KEYS.keys;
+  const r=await fetch(GITHUB_OIDC_ISSUER+'/.well-known/jwks',{redirect:'error'});
+  if(!r.ok)throw new Error('GitHub OIDC keys unavailable');
+  const body=await r.json();
+  const keys=Array.isArray(body?.keys)?body.keys.filter(k=>k?.kty==='RSA'&&k.kid&&k.n&&k.e):[];
+  if(!keys.length||keys.length>30)throw new Error('Invalid GitHub OIDC JWKS');
+  GITHUB_OIDC_KEYS={keys,expires:Date.now()+5*60*1000};
+  return keys;
+}
+async function verifyGithubBugfixOidc(request){
+  const auth=String(request.headers.get('Authorization')||'');
+  const m=/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(auth);
+  if(!m)throw new Error('Missing GitHub OIDC token');
+  const parts=m[1].split('.'),header=bugfixB64UrlJson(parts[0]),claims=bugfixB64UrlJson(parts[1]);
+  if(header.alg!=='RS256'||typeof header.kid!=='string'||header.kid.length>220)
+    throw new Error('Unsupported GitHub OIDC token');
+  let keys=await githubOidcKeys(),jwk=keys.find(k=>k.kid===header.kid);
+  if(!jwk){keys=await githubOidcKeys(true);jwk=keys.find(k=>k.kid===header.kid);}
+  if(!jwk)throw new Error('Unknown GitHub OIDC key');
+  const key=await crypto.subtle.importKey('jwk',jwk,
+    {name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+  const sig=Uint8Array.from(atob(parts[2].replace(/-/g,'+').replace(/_/g,'/')+
+    '='.repeat((4-parts[2].length%4)%4)),c=>c.charCodeAt(0));
+  const ok=await crypto.subtle.verify('RSASSA-PKCS1-v1_5',key,sig,
+    new TextEncoder().encode(parts[0]+'.'+parts[1]));
+  if(!ok)throw new Error('Invalid GitHub OIDC signature');
+  const now=Math.floor(Date.now()/1000),aud=Array.isArray(claims.aud)?claims.aud:[claims.aud];
+  if(claims.iss!==GITHUB_OIDC_ISSUER||!aud.includes(GITHUB_BUGFIX_AUDIENCE)||
+     claims.repository!==GITHUB_BUGFIX_REPOSITORY||
+     claims.ref!=='refs/heads/main'||claims.workflow_ref!==GITHUB_BUGFIX_WORKFLOW||
+     !['schedule','workflow_dispatch'].includes(claims.event_name)||
+     !Number.isFinite(claims.exp)||claims.exp<=now||
+     (claims.nbf!==undefined&&(!Number.isFinite(claims.nbf)||claims.nbf>now))||
+     (claims.iat!==undefined&&(!Number.isFinite(claims.iat)||claims.iat>now+60)))
+    throw new Error('GitHub OIDC claims denied');
+  return claims;
+}
+function bugfixReportInputAllowed(report,allowScreenshot){
+  if(!report||typeof report!=='object'||Array.isArray(report)||
+     Object.keys(report).some(k=>!['id','message','section','path','build','screenshot'].includes(k))||
+     !bugReportIdAllowed(report.id)||!bugReportText(report.message,5000,10)||
+     !bugReportText(report.section||'',80)||!bugReportText(report.path||'',700)||
+     !bugReportText(report.build||'',64))return false;
+  if(report.screenshot!==undefined){
+    if(!allowScreenshot||typeof report.screenshot!=='string'||report.screenshot.length>44000||
+       !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(report.screenshot))return false;
+  }
+  return true;
+}
+function bugfixPathAllowed(path){
+  return typeof path==='string'&&path.length>0&&path.length<=260&&
+    !path.startsWith('/')&&!path.includes('..')&&
+    /^[A-Za-z0-9_.\/-]+$/.test(path);
+}
+function bugfixPlanRequestAllowed(body){
+  return body&&typeof body==='object'&&!Array.isArray(body)&&
+    Object.keys(body).every(k=>['stage','report','repoMap'].includes(k))&&
+    body.stage==='plan'&&bugfixReportInputAllowed(body.report,true)&&
+    Array.isArray(body.repoMap)&&body.repoMap.length<=1400&&
+    body.repoMap.every(bugfixPathAllowed)&&JSON.stringify(body.repoMap).length<=22000;
+}
+function bugfixPatchRequestAllowed(body){
+  if(!body||typeof body!=='object'||Array.isArray(body)||
+     Object.keys(body).some(k=>!['stage','report','plan','files'].includes(k))||
+     body.stage!=='patch'||!bugfixReportInputAllowed(body.report,false)||
+     !body.plan||typeof body.plan!=='object'||Array.isArray(body.plan)||
+     JSON.stringify(body.plan).length>12000||!Array.isArray(body.files)||body.files.length>8)
+    return false;
+  let total=0;
+  for(const file of body.files){
+    if(!file||typeof file!=='object'||Array.isArray(file)||
+       Object.keys(file).some(k=>!['path','content'].includes(k))||
+       !bugfixPathAllowed(file.path)||typeof file.content!=='string'||file.content.length>26000)
+      return false;
+    total+=file.content.length;
+  }
+  return total<=50000;
+}
+function parseBugfixJson(text){
+  const src=String(text||'').trim(),start=src.indexOf('{');
+  if(start<0)throw new Error('AI response has no JSON');
+  let depth=0,inString=false,escaped=false,end=-1;
+  for(let i=start;i<src.length;i++){
+    const ch=src[i];
+    if(inString){
+      if(escaped){escaped=false;continue;}
+      if(ch==='\\'){escaped=true;continue;}
+      if(ch==='"')inString=false;
+      continue;
+    }
+    if(ch==='"'){inString=true;continue;}
+    if(ch==='{')depth++;
+    else if(ch==='}'&&--depth===0){end=i;break;}
+  }
+  if(end<0)throw new Error('AI JSON truncated');
+  return JSON.parse(src.slice(start,end+1));
+}
+function bugfixResultAllowed(stage,result){
+  if(!result||typeof result!=='object'||Array.isArray(result))return false;
+  if(stage==='plan'){
+    if(Object.keys(result).some(k=>!['analysis','risk','files','queries'].includes(k))||
+       !bugReportText(result.analysis||'',5000,10)||
+       !['low','medium','high'].includes(result.risk)||
+       !Array.isArray(result.files)||result.files.length>8||
+       !result.files.every(bugfixPathAllowed)||
+       !Array.isArray(result.queries)||result.queries.length>10||
+       !result.queries.every(q=>bugReportText(q,120,1)))return false;
+    return true;
+  }
+  if(Object.keys(result).some(k=>!['summary','risk','edits'].includes(k))||
+     !bugReportText(result.summary||'',3000,10)||
+     !['low','medium','high'].includes(result.risk)||
+     !Array.isArray(result.edits)||result.edits.length<1||result.edits.length>6)return false;
+  return result.edits.every(e=>e&&typeof e==='object'&&!Array.isArray(e)&&
+    Object.keys(e).every(k=>['path','find','replace'].includes(k))&&
+    bugfixPathAllowed(e.path)&&typeof e.find==='string'&&e.find.length>=3&&e.find.length<=16000&&
+    typeof e.replace==='string'&&e.replace.length<=20000);
+}
+async function callBugfixClaude(env,ctx,stage,body){
+  const report=body.report;
+  const system=stage==='plan'
+    ?'Eres un ingeniero de software que diagnostica bugs del Dashboard The Lab Solutions. Devuelve SOLO JSON válido. No propongas cambios de seguridad, autenticación, permisos, facturación, SII, secretos, workflows, infraestructura ni dependencias externas. Si el reporte parece tocar esas áreas, marca risk high. Elige como máximo 8 archivos del repoMap y hasta 10 cadenas de búsqueda breves. Formato exacto: {"analysis":"diagnóstico concreto","risk":"low|medium|high","files":["ruta"],"queries":["texto"]}.'
+    :'Eres un ingeniero que prepara un parche mínimo y verificable. Devuelve SOLO JSON válido. Solo puedes editar archivos incluidos en FILES. Cada edición es reemplazo exacto find/replace y find debe ser suficientemente específico. No toques seguridad, autenticación, permisos, facturación, SII, secretos, workflows, infraestructura ni dependencias. No inventes archivos. Formato exacto: {"summary":"qué corrige","risk":"low|medium|high","edits":[{"path":"ruta","find":"texto exacto existente","replace":"texto nuevo"}]}.';
+  let content;
+  if(stage==='plan'){
+    const screenshot=String(report.screenshot||'');
+    const text='REPORTE\n'+JSON.stringify({...report,screenshot:undefined})+
+      '\n\nARCHIVOS DISPONIBLES\n'+body.repoMap.join('\n');
+    content=[{type:'text',text}];
+    if(screenshot){
+      content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',
+        data:screenshot.slice(screenshot.indexOf(',')+1)}});
+    }
+  }else{
+    content='REPORTE\n'+JSON.stringify(report)+'\n\nPLAN\n'+JSON.stringify(body.plan)+
+      '\n\nFILES\n'+body.files.map(f=>'===== '+f.path+' =====\n'+f.content).join('\n');
+  }
+  const payload={
+    model:'claude-sonnet-4-6',
+    max_tokens:stage==='plan'?700:1800,
+    system,
+    messages:[{role:'user',content}]
+  };
+  const reservation=await reserveAiBudget(env,payload,'bugfix-'+stage);
+  if(!reservation.ok)throw Object.assign(new Error(reservation.error||'AI budget unavailable'),
+    {status:reservation.status||429});
+  let upstream;
+  try{
+    upstream=await fetch(ANTHROPIC_BASE+'/v1/messages',{
+      method:'POST',headers:{'x-api-key':env.ANTHROPIC_TOKEN,
+        'anthropic-version':'2023-06-01','Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+  }catch(e){
+    await releaseAiReservation(env,reservation,'bugfix_network');
+    throw e;
+  }
+  const usageCopy=upstream.clone();
+  const accounting=reconcileAiBudget(env,reservation,usageCopy).catch(()=>{});
+  if(ctx&&typeof ctx.waitUntil==='function')ctx.waitUntil(accounting);else await accounting;
+  if(!upstream.ok)throw Object.assign(new Error('Anthropic rejected bugfix request'),{status:upstream.status});
+  const data=await upstream.json();
+  const text=(Array.isArray(data?.content)?data.content:[]).filter(x=>x?.type==='text').map(x=>x.text||'').join('\n');
+  const result=parseBugfixJson(text);
+  if(!bugfixResultAllowed(stage,result))throw new Error('AI bugfix response failed validation');
+  return result;
+}
+async function handleGithubBugfixAi(request,env,ctx){
+  if(request.method!=='POST')return json({error:'Method not allowed'},405);
+  if(!env.ANTHROPIC_TOKEN)return json({error:'AI service unavailable'},503);
+  try{await verifyGithubBugfixOidc(request);}
+  catch(_){return json({error:'Valid GitHub Actions OIDC token required'},401);}
+  if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+     Number(request.headers.get('Content-Length')||0)>125000)
+    return json({error:'Bugfix service expects bounded JSON'},415);
+  let body;try{
+    const raw=await request.text();if(raw.length>125000)throw Error('large');
+    body=JSON.parse(raw);
+  }catch(_){return json({error:'Invalid bugfix service JSON'},422);}
+  const stage=body?.stage;
+  if(stage==='plan'?!bugfixPlanRequestAllowed(body):
+     stage==='patch'?!bugfixPatchRequestAllowed(body):true)
+    return json({error:'Invalid bugfix service request'},422);
+  try{return json({ok:true,result:await callBugfixClaude(env,ctx,stage,body)},200);}
+  catch(e){
+    return json({error:String(e?.message||'Bugfix AI failed').slice(0,500)},
+      Number.isInteger(e?.status)&&e.status>=400&&e.status<=599?e.status:502);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
@@ -2754,6 +2959,12 @@ export default {
 
     if (url.pathname === '/health') {
       return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN, reportes_iso_upsert: !!env.CRM_MUTATION_GUARD, marketing_spend_guard: !!env.CRM_MUTATION_GUARD }, 200, CORS);
+    }
+
+    // GitHub Actions obtains a short-lived OIDC token. This service route never
+    // accepts the public APP_KEY and never exposes the Anthropic secret.
+    if(url.pathname==='/service/github/bugfix-ai'){
+      return handleGithubBugfixAi(request,env,ctx);
     }
 
     // Login is a top-level browser navigation. Cloudflare Access handles the
