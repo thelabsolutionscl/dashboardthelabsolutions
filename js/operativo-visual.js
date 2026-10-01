@@ -3,6 +3,7 @@
   'use strict';
   const views=['overview','pedidos','cotizaciones','finanzas','clientes','maquinas','web','calendario','redes','reporte','equipo','newsletter'];
   const simpleOnlyViews=new Set(['overview','calendario','clientes','cotizaciones','pedidos','maquinas','equipo','web']);
+  const expertOnlyViews=new Set(['newsletter']);
   const closed=['Despachado','Completado','Cancelado'];
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
   const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null};
@@ -26,7 +27,7 @@
     const el=$('tab-'+page);if(!el)return;
     // OVERVIEW, CALENDARIO, CLIENTES, COTIZACIONES, PEDIDOS, MÁQUINAS, EQUIPO y WEB tienen una sola presentación canónica: Simple.
     // En estas secciones, Experto duplicaba la información o empeoraba la lectura visual.
-    value=simpleOnlyViews.has(page)?'simple':(value==='expert'?'expert':'simple');el.dataset.opView=value;
+    value=simpleOnlyViews.has(page)?'simple':expertOnlyViews.has(page)?'expert':(value==='expert'?'expert':'simple');el.dataset.opView=value;
     el.querySelectorAll('.op-revealed').forEach(n=>closeDetail(n.id,false));
     el.querySelectorAll('.op-detail-close').forEach(n=>n.remove());
     el.querySelectorAll('details.op-disclosure,details.op-post-actions').forEach(n=>{n.open=value==='expert';});
@@ -42,6 +43,9 @@
       if(simpleOnlyViews.has(page)){
         header.querySelector?.('.op-switch')?.remove?.();
         mode(page,'simple');
+      }else if(expertOnlyViews.has(page)){
+        header.querySelector?.('.op-switch')?.remove?.();
+        mode(page,'expert');
       }else{
         header.insertAdjacentHTML('beforeend',`<div class="op-switch" role="group" aria-label="Presentación de ${esc(page)}">${button('Simple','mode',page+':simple')}${button('Experto','mode',page+':expert')}</div>`);
         let value='simple';try{value=localStorage.getItem('op_view_'+page)||value;}catch(e){}mode(page,value);
