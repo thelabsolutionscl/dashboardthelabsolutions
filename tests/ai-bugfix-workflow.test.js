@@ -23,9 +23,12 @@ test('servicio IA acepta solo formas acotadas',()=>{
   const report={id:'br_abcdefghijklmn',message:'No puedo enviar un correo correctamente',section:'correo',path:'/#correo',build:'abc1234'};
   assert.equal(api.bugfixPlanRequestAllowed({stage:'plan',report,repoMap:['js/correo.js','styles.css']}),true);
   assert.equal(api.bugfixPlanRequestAllowed({stage:'plan',report:{...report,screenshot:'data:text/html;base64,AAAA'},repoMap:[]}),false);
-  assert.equal(api.bugfixPatchRequestAllowed({stage:'patch',report,plan:{analysis:'x',risk:'low',files:['js/correo.js'],queries:['send']},files:[{path:'js/correo.js',content:'abc'}]}),true);
+  assert.equal(api.bugfixPatchRequestAllowed({stage:'patch',report,plan:{analysis:'El error parece estar en el flujo de envío',risk:'low',files:['js/correo.js'],queries:['send']},files:[{path:'js/correo.js',content:'abc'}]}),true);
   assert.equal(api.bugfixPathAllowed('../secret'),false);
   assert.equal(api.bugfixPathAllowed('/etc/passwd'),false);
+  assert.match(WORKER,/function bugfixAiEditablePath/);
+  assert.match(WORKER,/\^airtable-proxy/);
+  assert.match(WORKER,/\^\\\.github/);
 });
 test('respuesta IA debe ser JSON de plan o ediciones exactas',()=>{
   assert.equal(api.bugfixResultAllowed('plan',{analysis:'El botón no actualiza el estado',risk:'low',files:['js/correo.js'],queries:['sendCompose']}),true);
