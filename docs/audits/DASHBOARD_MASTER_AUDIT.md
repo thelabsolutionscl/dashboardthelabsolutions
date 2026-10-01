@@ -368,3 +368,8 @@ Una sección no se considera auditada solo porque “se ve bien”. Debe tener:
 - comportamiento desktop y móvil revisado;
 - métricas/alertas para fallas silenciosas;
 - lista explícita de riesgos que dependan de servicios externos.
+
+
+### 2026-09-30 — Ventas históricas conciliadas sin duplicar pedidos
+
+Se añadió el campo `Cotizaciones.Venta histórica conciliada` para recuperar ventas antiguas cuya cotización quedó con estado incorrecto aunque el trabajo ya fue aprobado, producido y pagado. Estas cotizaciones pueden quedar en `Aprobada` sin generar un pedido nuevo ni aparecer en la bandeja «Aprobadas sin pedido». La UI las identifica como «Venta histórica · producida y pagada». Esto evita duplicar revenue al corregir históricos.
