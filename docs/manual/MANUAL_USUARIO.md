@@ -1,9 +1,9 @@
 # Manual de Usuario - Dashboard The Lab Solutions
 
-**Versión:** 1.3  
+**Versión:** 1.4  
 **Fecha:** 1 de octubre de 2026  
 **Aplicación:** Dashboard The Lab Solutions  
-**Objetivo:** explicar el uso cotidiano del dashboard sin entrar en administración de servidores, claves ni código.
+**Objetivo:** explicar de forma clara cómo usar las funciones cotidianas del dashboard, qué revisar antes de cambiar datos y qué hacer ante los problemas más comunes.
 
 > IMPORTANTE: las opciones visibles dependen del rol de cada usuario. Si una sección o acción no aparece, no necesariamente es un error: puede estar restringida por permisos.
 
@@ -13,16 +13,16 @@
 
 ![Manual web del Dashboard The Lab Solutions.](assets/manual-web.png)
 
-Este manual está organizado por las mismas áreas del dashboard. Para cada sección se explica para qué sirve, qué información estás viendo, qué acciones puedes realizar, qué cambia datos reales y qué errores o confusiones son habituales.
+Este manual sigue la misma estructura del dashboard. En cada sección encontrarás para qué sirve, qué conviene revisar primero, qué acciones puedes realizar y qué precauciones debes considerar antes de cambiar datos reales.
 
-La versión web del manual incluye buscador y navegación lateral. Se abre desde **Mi cuenta -> Manual de usuario**.
+La versión web incluye buscador, índice lateral en escritorio y selector de secciones en móvil. Se abre desde **Mi cuenta → Manual de usuario**.
 
 ### Convenciones
 
-**INFO** - explicación o dato informativo.  
-**IMPORTANTE** - afecta el flujo de trabajo o la interpretación de los datos.  
-**PRECAUCIÓN** - puede crear, modificar, enviar, facturar, detener o eliminar información.  
-**ERROR COMÚN** - situación conocida que suele confundirse con un fallo.
+**INFO** — explicación o dato informativo.  
+**IMPORTANTE** — afecta el flujo de trabajo o la interpretación de los datos.  
+**PRECAUCIÓN** — la acción puede crear, modificar, enviar, facturar, detener o eliminar información.  
+**ERROR COMÚN** — situación que suele confundirse con un fallo.
 
 ---
 
@@ -42,7 +42,7 @@ En pantallas pequeñas la navegación se adapta al menú móvil.
 
 ### 2.3 Buscador superior
 
-Úsalo para localizar rápidamente información sin recorrer todas las secciones. Si el resultado depende de datos recién modificados y no aparece, prueba **Mi cuenta -> Actualizar datos**.
+Úsalo para localizar rápidamente información sin recorrer todas las secciones. Si buscas sin tildes, el manual encontrará igualmente palabras como “Máquinas” o “Cotización”. Si el dato que buscas acaba de cambiar y aún no aparece en el dashboard, prueba **Mi cuenta → Actualizar datos**.
 
 ### 2.4 Botón Nuevo
 
@@ -69,7 +69,7 @@ Overview resume la operación actual: ventas, pedidos, cotizaciones, clientes, a
 
 ### Qué revisar primero
 
-1. Revenue de la semana y del mes.
+1. Ventas (revenue) de la semana y del mes.
 2. Pedidos activos.
 3. Cotizaciones pendientes.
 4. Clientes / leads.
@@ -142,7 +142,7 @@ Crear, calcular, revisar, enviar y aprobar propuestas comerciales.
 
 ### Estados habituales
 
-Según el flujo disponible, una cotización puede pasar por estados como borrador, enviada, aprobada o rechazada.
+Los estados pueden variar según el flujo. Entre los más habituales están **Solicitada**, **Enviada**, **Aprobada** y **Rechazada**.
 
 ### Crear una cotización
 
@@ -167,7 +167,7 @@ Los ítems se pueden reorganizar. Las observaciones deben describir condiciones 
 
 ### Aprobar
 
-Al aprobar una cotización, el flujo normal debe relacionarla con un pedido. Si una venta es histórica y ya fue producida/pagada, puede estar marcada como **venta histórica conciliada** para evitar crear un pedido nuevo.
+Al aprobar una cotización, el flujo normal debe crear o relacionar el pedido correspondiente. Si se trata de una venta histórica que ya fue producida y pagada, puede quedar registrada como **venta histórica conciliada** para no duplicar pedidos ni ventas actuales.
 
 **PRECAUCIÓN:** no cambies una cotización histórica a Aprobada solo para corregir su apariencia si eso puede crear un pedido nuevo o alterar revenue. Primero verifica si la operación ya existe.
 
@@ -207,7 +207,7 @@ El flujo operativo incluye estados como Confirmado, En producción, Listo para d
 
 ### Estado de pago
 
-Las tarjetas y tabla permiten representar situaciones como Abono, Saldo, Total y Pago a 30 días. El estado de pago y el estado de producción son conceptos distintos.
+Las tarjetas y la tabla permiten registrar situaciones como **Abono**, **Saldo**, **Total** y **Pago a 30 días**. Estos controles describen el pago; no cambian por sí solos el estado de producción del pedido.
 
 ### Equipo
 
@@ -217,7 +217,7 @@ Las etiquetas de equipo indican responsables. Mantén esta información actualiz
 
 El botón de Drive debe mostrar **Drive conectado** cuando OAuth esté autorizado. Puedes conectar desde Pedidos o desde el Centro de Conexiones.
 
-**ERROR COMÚN:** si Centro de Conexiones muestra Drive verde pero Pedidos dice conectar, haz una recarga dura. El estado visual está diseñado para sincronizarse entre secciones.
+**ERROR COMÚN:** si Centro de Conexiones muestra Drive en verde pero Pedidos sigue mostrando “Conectar”, usa **Actualizar datos** o recarga la página antes de volver a autorizar la cuenta.
 
 ### QA y despacho
 
@@ -289,7 +289,7 @@ Ejecutar asistentes especializados para tareas concretas del negocio: análisis,
 
 ![Cola y resultados de Agentes IA.](assets/agentes-cola.png)
 
-La cola permite revisar trabajos pendientes y resultados. Un agente no debe modificar silenciosamente un proceso crítico sin confirmación cuando la acción requiere aprobación humana.
+La cola permite revisar trabajos pendientes y resultados. Antes de aplicar una recomendación de IA a un proceso importante, revisa el resultado y confirma que coincide con los datos reales del dashboard.
 
 ### Costos
 
@@ -370,7 +370,7 @@ Gestionar campañas de email masivo separadas del correo individual 1:1.
 
 ### Estados
 
-Borrador -> En revisión -> Programada -> Enviada.
+Borrador → En revisión → Programada → Enviada.
 
 ### Audiencia
 
@@ -380,7 +380,7 @@ La audiencia proviene del CRM. Las bajas y el consentimiento deben respetarse.
 
 Aperturas/clics pueden generar oportunidades de seguimiento. Revisa el contexto antes de convertir una señal de engagement en una acción comercial.
 
-**PRECAUCIÓN:** Newsletter es comunicación 1:N. No lo uses para reemplazar conversaciones individuales desde Correo.
+**PRECAUCIÓN:** Newsletter está pensado para campañas a múltiples destinatarios. Usa **Correo** para conversaciones individuales.
 
 ---
 
@@ -420,7 +420,7 @@ Muestra impresoras y cámaras para supervisión del taller.
 
 ![Centro de planificación de la granja 3D.](assets/maquinas-planificacion.png)
 
-Distingue entre planificación local, telemetría física reciente y cola durable confirmada por Farm Controller.
+Distingue entre la planificación del dashboard, el estado real informado por las impresoras y la cola confirmada por el controlador de la granja.
 
 **IMPORTANTE:** "Lista para iniciar" no significa necesariamente que el archivo ya esté en una cola física de ejecución.
 
@@ -469,7 +469,7 @@ Crear, editar o eliminar eventos; asignar personas; definir lugar, notas y horar
 ### Conectar vs sincronizar
 
 **Conectar Google Calendar** autoriza tu sesión OAuth.  
-**Sincronizar calendario** empuja o concilia eventos pendientes entre el dashboard y Google Calendar.
+**Sincronizar calendario** actualiza los eventos pendientes entre el dashboard y Google Calendar según la configuración disponible.
 
 ### Pantalla completa TV
 
@@ -513,7 +513,7 @@ Según configuración: analizar sitio, optimizar con IA, configurar integracione
 
 ![Herramientas de Google Ads y marketing web.](assets/web-google-ads.png)
 
-Algunas acciones dependen de Apps Script o APIs externas. Una conexión verde confirma la prueba configurada, pero no implica que todas las mutaciones estén disponibles.
+Algunas acciones dependen de servicios externos. Una conexión verde confirma que la comprobación configurada funciona, pero no garantiza que la cuenta tenga permiso para editar campañas o configuraciones.
 
 **PRECAUCIÓN:** las herramientas de optimización o campañas pueden afectar gasto real. Revisa presupuesto, cuenta y acción antes de ejecutar cambios.
 
@@ -556,7 +556,7 @@ No asumas que una venta aprobada implica automáticamente que está facturada y 
 
 ![Vista Por Cobrar con cartera activa.](assets/finanzas-por-cobrar.png)
 
-La cartera activa utiliza una ruta conciliada. Los registros históricos embebidos no deben generar cobranza por sí solos sin confirmación.
+**Por Cobrar** debe mostrar saldos pendientes confirmados. Un registro histórico no debe convertirse en deuda activa solo por existir en el historial.
 
 ### Tramos de aging
 
@@ -571,7 +571,7 @@ Si aparece una factura antigua como morosa y sabes que fue pagada, no envíes un
 
 ### Facturas / SII
 
-Cuando la emisión tributaria esté habilitada, verifica folio y respuesta SII. No re-emitas automáticamente ante una respuesta incierta; confirma estado antes de intentar de nuevo.
+Cuando la emisión tributaria esté habilitada, verifica el folio y el estado informado por el SII. Si no sabes si un documento fue recibido correctamente, confirma su estado antes de volver a emitirlo.
 
 ---
 
@@ -642,7 +642,7 @@ Centro de Conexiones comprueba ambos sin exponer claves.
 
 ### Dónde está
 
-**Mi cuenta -> Centro de conexiones**
+**Mi cuenta → Centro de conexiones**
 
 ### Para qué sirve
 
@@ -660,15 +660,15 @@ Comprobar si las integraciones necesarias para el dashboard están realmente ope
 ### Conectar vs Verificar
 
 **Conectar / configurar** inicia la autorización o abre la configuración necesaria.  
-**Verificar conexión** ejecuta una prueba de bajo impacto.
+**Verificar conexión** comprueba el servicio sin cambiar configuraciones ni datos del negocio.
 
 ### Integraciones típicas
 
-Airtable / Proxy CRM, Google Drive, Google Calendar, IMAP, Resend, Claude, OpenAI, Make, Google Ads, bridge de impresoras y otras integraciones habilitadas.
+Base de datos (Airtable), Google Drive, Google Calendar, correo de entrada y salida, servicios de IA, Google Ads, conexión con impresoras y otras integraciones habilitadas.
 
 ### Qué hacer ante un amarillo
 
-Lee el texto del diagnóstico. No amplíes permisos de una API solo para que el monitor quede verde si la integración funciona con permisos mínimos.
+Lee el texto del diagnóstico. No amplíes permisos solo para conseguir un estado verde; corrige únicamente lo que la integración necesita.
 
 ### Qué hacer ante un rojo
 
@@ -685,7 +685,7 @@ Lee el texto del diagnóstico. No amplíes permisos de una API solo para que el 
 
 ### Dónde está
 
-**Mi cuenta -> Apariencia**
+**Mi cuenta → Apariencia**
 
 ### Tema
 
@@ -718,11 +718,11 @@ La preferencia se guarda en el navegador. Cambiar apariencia no modifica CRM, pe
 
 ### "No veo los cambios que acabamos de publicar"
 
-Haz una recarga dura: macOS **Command + Shift + R**; Windows **Ctrl + Shift + R**.
+En escritorio, prueba una recarga completa: macOS **Command + Shift + R**; Windows **Ctrl + Shift + R**. En móvil, recarga la página y, si sigue igual, cierra y vuelve a abrir la pestaña.
 
 ### "Los datos parecen antiguos"
 
-1. Mi cuenta -> Actualizar datos.
+1. Mi cuenta → Actualizar datos.
 2. Revisa el Centro de Conexiones.
 3. Abre la sección de origen.
 4. Si el problema persiste, evita modificar registros a ciegas.
@@ -737,7 +737,7 @@ Busca el pedido por cliente y número. Si no existe, revisa si se trata de una v
 
 ### "Una impresora está trabajando pero aparece offline"
 
-Comprueba telemetría y bridge. Una máquina puede seguir imprimiendo con Klipper aunque Moonraker/telemetría estén caídos.
+Comprueba la telemetría y la conexión con la granja. Una impresora puede seguir trabajando aunque el dashboard haya perdido temporalmente la lectura de su estado.
 
 ### "Correo no envía"
 
@@ -760,7 +760,7 @@ Abre la sección fuente y compara el conjunto de registros. Reporta el KPI junto
 1. Buscar antes de crear para evitar duplicados.
 2. Actualizar estados reales, no estados "para ordenar la pantalla".
 3. No borrar históricos sin revisar vínculos.
-4. No usar IA como fuente de verdad.
+4. Verificar en la fuente original cualquier dato crítico generado o resumido por IA.
 5. No compartir credenciales por chat o capturas.
 6. Comprobar conexiones antes de asumir que faltan datos.
 7. Distinguir planificación de ejecución física.
@@ -781,7 +781,7 @@ Base de datos principal utilizada por múltiples módulos del dashboard.
 Conjunto de clientes, leads, cotizaciones, pedidos e historial comercial.
 
 ### Revenue
-Valor de ventas utilizado por los indicadores comerciales. Su definición puede depender de la fuente y periodo del módulo.
+Valor de ventas utilizado por los indicadores comerciales. Antes de comparar cifras, revisa el periodo y la fuente que usa cada módulo.
 
 ### Margen
 Diferencia relativa entre costo y valor de venta.
@@ -808,13 +808,13 @@ Proveedor utilizado para determinados envíos de correo.
 Autorización usada por servicios como Google Drive y Google Calendar.
 
 ### Bridge
-Servicio intermedio que permite al dashboard comunicarse con las impresoras.
+Conexión intermedia que permite al dashboard recibir información y enviar acciones a las impresoras.
 
 ### Moonraker
 API habitual de Klipper utilizada para consultar/controlar impresoras compatibles.
 
 ### Farm Controller
-Componente que mantiene una cola durable de ejecución de impresión.
+Controlador de la granja que mantiene la cola confirmada de trabajos de impresión.
 
 ### CFS
 Sistema de alimentación de filamento en máquinas compatibles.
@@ -855,14 +855,10 @@ Esto permite distinguir rápidamente entre un problema de interfaz, caché, dato
 
 ---
 
-## 27. Control de versión del manual
+## 27. Acerca del manual
 
 ![El manual web se genera desde la fuente versionada del repositorio.](assets/manual-web.png)
 
-Este documento vive dentro del mismo repositorio del dashboard en `docs/manual/MANUAL_USUARIO.md`.
+La versión y la fecha que aparecen al inicio permiten saber qué edición estás consultando.
 
-La versión web se publica como `manual.html`.
-
-Cuando una sección cambia de forma significativa, el manual debe actualizarse en el mismo PR o en un PR inmediatamente posterior.
-
-Las capturas del manual se generan con una sesión **DEMO segura** desde `scripts/capture-manual-screenshots.mjs`, para documentar la interfaz sin exponer datos de clientes ni operar servicios reales.
+El manual debe actualizarse cuando cambien de forma importante los flujos, botones o pantallas del dashboard. Las capturas se generan con datos de demostración para evitar exponer información real de clientes o ejecutar acciones sobre servicios externos.

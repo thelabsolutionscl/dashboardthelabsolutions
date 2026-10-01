@@ -11,8 +11,8 @@
 <style>
 :root{--bg:#090b0c;--surface:#101416;--surface2:#151b1d;--border:#233036;--text:#ecf3f4;--muted:#91a4aa;--cyan:#00d4cc}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% 10%,rgba(0,212,204,.08),transparent 24%),var(--bg);color:var(--text);font:14px/1.65 'DM Sans',sans-serif}
-.shell{display:grid;grid-template-columns:290px minmax(0,1fr);min-height:100vh}.side{position:sticky;top:0;height:100vh;border-right:1px solid var(--border);background:rgba(9,11,12,.94);backdrop-filter:blur(18px);padding:22px;overflow:auto}.brand{display:block;line-height:0}.brand-logo{display:block;width:min(218px,100%);height:auto}.hero-logo{display:none;width:210px;height:auto;margin:0 0 20px}.sub{font-size:11px;color:var(--muted);margin:10px 0 16px}.search{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);outline:none}.search:focus{border-color:var(--cyan)}nav{margin-top:16px}.nav-item{display:block;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:12px}.nav-item:hover,.nav-item.active{color:var(--text);background:rgba(0,212,204,.08)}.actions{display:flex;gap:8px;margin:18px 0}.btn{border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:8px 10px;border-radius:9px;text-decoration:none;font-size:11px;cursor:pointer}.btn:hover{border-color:var(--cyan)}main{width:min(980px,calc(100vw - 340px));padding:48px 52px 90px;margin:0 auto}.hero{padding:28px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(145deg,rgba(0,212,204,.08),rgba(255,255,255,.015));margin-bottom:26px}.hero h1{font-size:34px;margin:0 0 8px;line-height:1.1}.hero p{margin:0;color:var(--muted)}article h1{display:none}article h2{font-size:24px;margin:50px 0 14px;padding-top:8px;border-top:1px solid var(--border)}article h3{font-size:16px;margin:28px 0 8px;color:#fff}article p,article li{color:#c9d5d8}article ul,article ol{padding-left:22px}article li{margin:4px 0}article strong{color:#fff}article code{font-family:'JetBrains Mono',monospace;font-size:.9em;color:#b7fff9;background:rgba(0,212,204,.08);padding:2px 5px;border-radius:5px}article blockquote{margin:18px 0;padding:12px 14px;border-left:3px solid var(--cyan);background:rgba(0,212,204,.06);color:#d8e7e9;border-radius:0 8px 8px 0}article hr{border:0;border-top:1px solid var(--border);margin:32px 0}.manual-shot{margin:18px 0 24px}.manual-shot img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--border);box-shadow:0 18px 50px rgba(0,0,0,.22);background:#080a0b}.manual-shot figcaption{margin-top:7px;color:var(--muted);font-size:11px}.empty{padding:28px;border:1px dashed var(--border);border-radius:14px;color:var(--muted)}
-@media(max-width:850px){.shell{display:block}.side{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--border)}.brand-logo{width:min(230px,72vw)}nav{display:none}main{width:100%;padding:28px 18px 70px}.hero{padding:20px}.hero h1{font-size:28px}}
+.shell{display:grid;grid-template-columns:290px minmax(0,1fr);min-height:100vh}.side{position:sticky;top:0;height:100vh;border-right:1px solid var(--border);background:rgba(9,11,12,.94);backdrop-filter:blur(18px);padding:22px;overflow:auto}.brand{display:block;line-height:0}.brand-logo{display:block;width:min(218px,100%);height:auto}.hero-logo{display:none;width:210px;height:auto;margin:0 0 20px}.sub{font-size:11px;color:var(--muted);margin:10px 0 16px}.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.search-wrap{position:relative}.search{width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);outline:none}.search:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(0,212,204,.08)}.search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;line-height:1}.search-clear:hover,.search-clear:focus{background:rgba(0,212,204,.08);color:var(--text);outline:none}.search-status{min-height:18px;margin:5px 2px 0;color:var(--muted);font-size:10px}.mobile-toc{display:none;width:100%;margin:12px 0 0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text)}nav{margin-top:12px}.nav-item{display:block;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:12px}.nav-item:hover,.nav-item.active{color:var(--text);background:rgba(0,212,204,.08)}.actions{display:flex;gap:8px;margin:18px 0}.btn{border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:8px 10px;border-radius:9px;text-decoration:none;font-size:11px;cursor:pointer}.btn:hover{border-color:var(--cyan)}main{width:min(980px,calc(100vw - 340px));padding:48px 52px 90px;margin:0 auto}.hero{padding:28px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(145deg,rgba(0,212,204,.08),rgba(255,255,255,.015));margin-bottom:26px}.hero h1{font-size:34px;margin:0 0 8px;line-height:1.1}.hero p{margin:0;color:var(--muted)}article h1{display:none}article h2{font-size:24px;margin:50px 0 14px;padding-top:8px;border-top:1px solid var(--border);scroll-margin-top:20px}article h3{font-size:16px;margin:28px 0 8px;color:#fff;scroll-margin-top:20px}article p,article li{color:#c9d5d8}article ul,article ol{padding-left:22px}article li{margin:4px 0}article strong{color:#fff}article code{font-family:'JetBrains Mono',monospace;font-size:.9em;color:#b7fff9;background:rgba(0,212,204,.08);padding:2px 5px;border-radius:5px}article blockquote{margin:18px 0;padding:12px 14px;border-left:3px solid var(--cyan);background:rgba(0,212,204,.06);color:#d8e7e9;border-radius:0 8px 8px 0}article hr{border:0;border-top:1px solid var(--border);margin:32px 0}.manual-shot{margin:18px 0 24px}.manual-shot img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--border);box-shadow:0 18px 50px rgba(0,0,0,.22);background:#080a0b}.manual-shot figcaption{margin-top:7px;color:var(--muted);font-size:11px}.empty{padding:28px;border:1px dashed var(--border);border-radius:14px;color:var(--muted)}
+@media(max-width:850px){.shell{display:block}.side{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--border)}.brand-logo{width:min(230px,72vw)}nav{display:none}.mobile-toc{display:block}main{width:100%;padding:28px 18px 70px}.hero{padding:20px}.hero h1{font-size:28px}.actions{margin-bottom:10px}}
 @media print{.side{display:none}.shell{display:block}main{width:100%;padding:0}.hero{border:0;padding:0;background:none}.hero-logo{display:block;width:190px}article h2{page-break-before:auto}.btn{display:none}}
 </style>
 </head>
@@ -20,45 +20,88 @@
 <div class="shell">
 <aside class="side">
 <div class="brand"><img class="brand-logo" src="logo-thelab.png" alt="The Lab Solutions"></div>
-<div class="sub">Manual de Usuario · <span id="manualVersion">v1.3</span></div>
-<input id="search" class="search" type="search" placeholder="Buscar en el manual…" autocomplete="off">
+<div class="sub">Manual de Usuario · <span id="manualVersion">v1.4</span></div>
+<label class="sr-only" for="search">Buscar en el manual</label>
+<div class="search-wrap"><input id="search" class="search" type="search" placeholder="Buscar en el manual…" autocomplete="off" aria-describedby="searchStatus"><button id="clearSearch" class="search-clear" type="button" aria-label="Limpiar búsqueda" hidden>×</button></div>
+<div id="searchStatus" class="search-status" aria-live="polite"></div>
 <div class="actions"><a class="btn" href="./">← Dashboard</a><button class="btn" onclick="window.print()">Imprimir / PDF</button></div>
-<nav id="toc"></nav>
+<label class="sr-only" for="mobileToc">Ir a una sección del manual</label>
+<select id="mobileToc" class="mobile-toc" aria-label="Ir a una sección del manual"><option value="">Ir a una sección…</option></select>
+<nav id="toc" aria-label="Índice del manual"></nav>
 </aside>
 <main>
 <section class="hero"><img class="hero-logo" src="logo-thelab.png" alt="The Lab Solutions"><h1>Manual de Usuario</h1><p>Dashboard The Lab Solutions · operación, CRM, producción, finanzas e integraciones.</p></section>
-<article id="manual"><div class="empty">Cargando manual…</div></article>
+<article id="manual"><div class="empty">Cargando manual…</div></article><div id="searchEmpty" class="empty" hidden>No encontramos secciones que coincidan con tu búsqueda.</div>
 </main>
 </div>
 <script>
 const SRC='docs/manual/MANUAL_USUARIO.md';
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const normalizeText=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 function inline(s){let x=esc(s);x=x.replace(/\`([^\`]+)\`/g,'<code>$1</code>');x=x.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');return x}
-function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)}
+function slug(s){return normalizeText(s).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)||'seccion'}
 function manualImageSrc(src){src=String(src||'').trim();if(/^(?:https?:|data:|\/)/i.test(src))return src;return 'docs/manual/'+src.replace(/^\.\//,'')}
 function parse(md){
- const lines=md.replace(/\r/g,'').split('\n'),out=[];let list=null,para=[];
- const flushP=()=>{if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[]}};
+ const lines=md.replace(/\r/g,'').split('\n'),out=[],ids=new Map();let list=null,para=[];
+ const flushP=()=>{if(para.length){out.push('<p>'+para.map((p,i)=>inline(p.text)+(p.br&&i<para.length-1?'<br>':' ')).join('').trim()+'</p>');para=[]}};
  const flushL=()=>{if(list){out.push('</'+list+'>');list=null}};
  for(const raw of lines){
-   const line=raw.trimEnd();
+   const hardBreak=/ {2}$/.test(raw),line=raw.trimEnd();
    if(/^---+$/.test(line.trim())){flushP();flushL();out.push('<hr>');continue}
    const h=line.match(/^(#{1,3})\s+(.*)$/);
-   if(h){flushP();flushL();const level=h[1].length,id=slug(h[2]);out.push('<h'+level+' id="'+id+'">'+inline(h[2])+'</h'+level+'>');continue}
+   if(h){flushP();flushL();const level=h[1].length,base=slug(h[2]),count=(ids.get(base)||0)+1;ids.set(base,count);const id=count===1?base:base+'-'+count;out.push('<h'+level+' id="'+id+'">'+inline(h[2])+'</h'+level+'>');continue}
    const img=line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-   if(img){flushP();flushL();const alt=inline(img[1]||'Captura del dashboard'),src=esc(manualImageSrc(img[2]));out.push('<figure class="manual-shot"><img loading="lazy" decoding="async" src="'+src+'" alt="'+alt+'"><figcaption>'+alt+'</figcaption></figure>');continue}
+   if(img){flushP();flushL();const altText=img[1]||'Captura del dashboard',alt=esc(altText),caption=inline(altText),src=esc(manualImageSrc(img[2]));out.push('<figure class="manual-shot"><img loading="lazy" decoding="async" src="'+src+'" alt="'+alt+'"><figcaption>'+caption+'</figcaption></figure>');continue}
    if(/^>\s?/.test(line)){flushP();flushL();out.push('<blockquote>'+inline(line.replace(/^>\s?/,''))+'</blockquote>');continue}
    const ul=line.match(/^[-*]\s+(.*)$/),ol=line.match(/^\d+\.\s+(.*)$/);
    if(ul||ol){flushP();const type=ul?'ul':'ol';if(list!==type){flushL();out.push('<'+type+'>');list=type}out.push('<li>'+inline((ul||ol)[1])+'</li>');continue}
    if(!line.trim()){flushP();flushL();continue}
-   para.push(line.trim());
+   para.push({text:line.trim(),br:hardBreak});
  }
  flushP();flushL();return out.join('\n');
 }
-function buildToc(){const toc=document.getElementById('toc');toc.innerHTML='';document.querySelectorAll('#manual h2').forEach(h=>{const a=document.createElement('a');a.className='nav-item';a.href='#'+h.id;a.textContent=h.textContent;toc.appendChild(a)})}
-function filterManual(q){q=(q||'').trim().toLowerCase();const sections=[...document.querySelectorAll('#manual h2')];sections.forEach(h=>{const nodes=[h];let n=h.nextElementSibling;while(n&&n.tagName!=='H2'){nodes.push(n);n=n.nextElementSibling}const txt=nodes.map(x=>x.textContent).join(' ').toLowerCase();nodes.forEach(x=>x.style.display=!q||txt.includes(q)?'':'none')})}
-fetch(SRC,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(md=>{const v=md.match(/\*\*Versión:\*\*\s*([^\n]+)/i);if(v)document.getElementById('manualVersion').textContent='v'+v[1].trim();document.getElementById('manual').innerHTML=parse(md);buildToc();if(location.hash)setTimeout(()=>document.querySelector(location.hash)?.scrollIntoView(),50)}).catch(e=>{document.getElementById('manual').innerHTML='<div class="empty">No se pudo cargar el manual. '+esc(e.message)+'</div>'});
-document.getElementById('search').addEventListener('input',e=>filterManual(e.target.value));
+function buildToc(){
+ const toc=document.getElementById('toc'),mobile=document.getElementById('mobileToc');toc.innerHTML='';mobile.innerHTML='<option value="">Ir a una sección…</option>';
+ document.querySelectorAll('#manual h2').forEach(h=>{
+   const a=document.createElement('a');a.className='nav-item';a.href='#'+h.id;a.dataset.target=h.id;a.textContent=h.textContent;toc.appendChild(a);
+   const o=document.createElement('option');o.value=h.id;o.textContent=h.textContent;mobile.appendChild(o);
+ });
+}
+function setActiveSection(id){
+ document.querySelectorAll('#toc .nav-item').forEach(a=>a.classList.toggle('active',a.dataset.target===id));
+ const mobile=document.getElementById('mobileToc');if(id&&[...mobile.options].some(o=>o.value===id))mobile.value=id;
+}
+function filterManual(q){
+ const query=normalizeText(q),sections=[...document.querySelectorAll('#manual h2')],tocLinks=[...document.querySelectorAll('#toc .nav-item')],options=[...document.getElementById('mobileToc').options];let count=0;
+ sections.forEach(h=>{
+   const nodes=[h];let n=h.nextElementSibling;while(n&&n.tagName!=='H2'){nodes.push(n);n=n.nextElementSibling}
+   const visible=!query||normalizeText(nodes.map(x=>x.textContent).join(' ')).includes(query);if(visible)count++;
+   nodes.forEach(x=>x.hidden=!visible);
+   tocLinks.filter(a=>a.dataset.target===h.id).forEach(a=>a.hidden=!visible);
+   options.filter(o=>o.value===h.id).forEach(o=>o.hidden=!visible);
+ });
+ const status=document.getElementById('searchStatus'),empty=document.getElementById('searchEmpty'),clear=document.getElementById('clearSearch');
+ status.textContent=query?(count?count+' '+(count===1?'sección encontrada':'secciones encontradas'):'Sin resultados'):'';
+ empty.hidden=!query||count>0;clear.hidden=!query;
+}
+function observeSections(){
+ if(!('IntersectionObserver' in window))return;
+ const observer=new IntersectionObserver(entries=>{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top)[0];if(visible)setActiveSection(visible.target.id)},{rootMargin:'-10% 0px -75% 0px',threshold:[0,1]});
+ document.querySelectorAll('#manual h2').forEach(h=>observer.observe(h));
+}
+function goToSection(id){
+ const el=document.getElementById(id);if(!el)return;history.replaceState(null,'','#'+id);el.scrollIntoView({behavior:'smooth',block:'start'});setActiveSection(id);
+}
+fetch(SRC,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(md=>{
+ const v=md.match(/\*\*Versión:\*\*\s*([^\n]+)/i);if(v)document.getElementById('manualVersion').textContent='v'+v[1].trim();
+ document.getElementById('manual').innerHTML=parse(md);buildToc();filterManual(document.getElementById('search').value);observeSections();
+ if(location.hash){const id=decodeURIComponent(location.hash.slice(1));setTimeout(()=>goToSection(id),50)}
+}).catch(e=>{document.getElementById('manual').innerHTML='<div class="empty">No se pudo cargar el manual. '+esc(e.message)+'</div>'});
+const search=document.getElementById('search');
+search.addEventListener('input',e=>filterManual(e.target.value));
+document.getElementById('clearSearch').addEventListener('click',()=>{search.value='';filterManual('');search.focus()});
+document.getElementById('mobileToc').addEventListener('change',e=>{if(e.target.value)goToSection(e.target.value)});
+document.getElementById('toc').addEventListener('click',e=>{const a=e.target.closest('.nav-item');if(a){e.preventDefault();goToSection(a.dataset.target)}});
 </script>
 </body>
 </html>
