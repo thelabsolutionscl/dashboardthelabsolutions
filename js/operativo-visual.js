@@ -430,7 +430,8 @@
       const due=receivables().filter(r=>r.days>0);cards.push({page:'finanzas',title:'Facturas vencidas',n:due.length,sub:money(due.reduce((s,r)=>s+r.porCobrar,0))+' por cobrar · con IVA',action:'today-aging',arg:'overdue',tone:due.length?'warn':'neutral'});
     }
     el.innerHTML=`<div class="op-section-heading"><div><span class="op-eyebrow">TU JORNADA</span><h2>Hoy requiere tu atención</h2><p>Prioridades de los registros cargados${global._DEMO_MODE?' · DEMO':''}.</p></div>${button('Ver todas las acciones','all-actions')}</div><div class="op-metrics">${cards.filter(c=>allowed(c.page)).map(c=>`<button class="op-priority op-${c.tone}" data-op="${c.action}" data-arg="${c.arg}"><span>${esc(c.title)}</span><strong>${c.n}</strong><p>${esc(c.sub)}</p><b>Revisar →</b></button>`).join('')}</div>`;
-    // Resumen de salud independiente de los datos comerciales de OVERVIEW.
+    // Mantiene el monitor inicializado; su interfaz vive en el menú de usuario,
+    // no dentro de OVERVIEW.
     global.TLSConnections?.mount?.();
   }
   function receivables(){
