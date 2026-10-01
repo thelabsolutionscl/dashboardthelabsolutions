@@ -892,7 +892,7 @@ function calToggleAllDay(){
   const all=document.getElementById('calEvAllDay').checked;
   const horas=document.getElementById('calEvHoras');if(horas)horas.style.display=all?'none':'';
 }
-function calSaveEvento(){
+async function calSaveEvento(){
   const titulo=(document.getElementById('calEvTitulo').value||'').trim();
   const fecha=document.getElementById('calEvFecha').value;
   if(!titulo){toast('Ponle un título al evento','error');return;}
@@ -921,9 +921,37 @@ function calSaveEvento(){
   ev.mts=Date.now();
   _calSave(arr);
   closeCalEventoModal();
-  toast('✓ Evento guardado','success');
   renderCalendario();
-  _calAutoSync();
+
+  // Guardar en el dashboard y publicar en Google son dos confirmaciones
+  // distintas. Como este guardado nace de una acción explícita del usuario,
+  // podemos renovar OAuth si hace falta en vez de depender de _calAutoSync(),
+  // que deliberadamente es silencioso y no hace nada con un token vencido.
+  // El evento local queda persistido aunque Google falle, y _calNeedsSync lo
+  // mantiene pendiente para reintento; nunca mostramos "sincronizado" sin ID.
+  const hasGoogleTarget=(ev.personas||[]).some(pid=>String(_calGmap().map[pid]||'').trim());
+  if(hasGoogleTarget&&_calNeedsSync(ev)){
+    try{
+      await _calGetToken();
+      const syncCopy=_calSyncCandidates().find(x=>x.id===ev.id)||ev;
+      const errs=await _calSyncEvento(syncCopy);
+      if(errs.length){
+        toast('Evento guardado · pendiente de Google: '+errs[0],'error');
+      }else{
+        _calPersistCrmSync(syncCopy);
+        _calWritebackSync(arr,syncCopy);
+        _calSave(arr);
+        toast('✓ Evento guardado y sincronizado con Google','success');
+      }
+    }catch(e){
+      toast('Evento guardado · pendiente de Google: '+e.message,'error');
+    }
+  }else if(hasGoogleTarget){
+    toast('✓ Evento guardado y sincronizado con Google','success');
+  }else{
+    toast('✓ Evento guardado · sin calendario Google configurado','info');
+  }
+  renderCalendario();
 }
 function calDelEvento(){
   if(!_calEditId)return;
