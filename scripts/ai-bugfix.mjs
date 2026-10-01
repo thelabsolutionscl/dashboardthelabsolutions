@@ -139,7 +139,8 @@ function trackedFiles(){
 }
 const FORBIDDEN_PATCH=[
   /^\.github\//,/^airtable-proxy\//,/^lead-worker\//,/^sii-worker\//,/^printer-bridge\//,
-  /^docs\/security\//,/^SECURITY\.md$/,/access-auth/i,/wrangler\.toml$/i,/secrets?/i
+  /^docs\/security\//,/^SECURITY\.md$/,/access-auth/i,/wrangler\.toml$/i,/secrets?/i,
+  /^js\/auth/i,/^js\/ai-cost-control\.js$/i
 ];
 const NO_AUTOMERGE=[
   /^index\.html$/,/^mail-api\.php$/,/^js\/finanzas\.js$/,/^js\/auth/i,/^js\/.*sii/i,
@@ -221,6 +222,24 @@ async function main(){
   if(!pending){console.log('Sin reportes pendientes.');return;}
 
   const m=pending.meta,attempts=Number(m.repair?.attempts||0)+1;
+  const deterministicBranch='ai-fix/'+m.id;
+  try{
+    const prior=ghJson(['pr','list','--repo',REPO,'--head',deterministicBranch,'--state','all','--limit','1','--json','number,url,state,mergedAt']);
+    const found=Array.isArray(prior)?prior[0]:null;
+    if(found?.mergedAt||found?.state==='MERGED'){
+      await update(pending,'resuelto',{attempts,prUrl:found.url,prNumber:found.number,branch:deterministicBranch,
+        error:'',analysis:m.repair?.analysis||'Se adoptó una reparación ya fusionada para este reporte.'});
+      return;
+    }
+    if(found?.state==='OPEN'){
+      await update(pending,'pr_creado',{attempts,prUrl:found.url,prNumber:found.number,branch:deterministicBranch,
+        error:'',analysis:m.repair?.analysis||'Se adoptó el Pull Request abierto que ya existía para este reporte.'});
+      return;
+    }
+    if(found?.state==='CLOSED'){
+      try{sh('git',['push','origin','--delete',deterministicBranch]);}catch(_){}
+    }
+  }catch(_){}
   await update(pending,'analizando',{attempts,error:'',analysis:'Analizando el reporte y localizando el código relacionado.'});
   try{
     const screenshot=await imageFor(m.id);
@@ -245,7 +264,7 @@ async function main(){
       throw new Error('El parche solo modifica pruebas o archivos auxiliares; se requiere un cambio funcional');
     testPatch(changed);
 
-    const branch='ai-fix/'+m.id;
+    const branch=deterministicBranch;
     sh('git',['checkout','-b',branch]);
     sh('git',['add','--',...changed]);
     sh('git',['commit','-m','fix(ai): '+cleanTitle(m.message)+' ('+m.id+')']);
