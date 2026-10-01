@@ -1358,7 +1358,7 @@ const MAIL={
       'border-color','border-style','border-width','border-radius','padding','padding-top',
       'padding-right','padding-bottom','padding-left','margin','margin-top','margin-right',
       'margin-bottom','margin-left','width','min-width','max-width','height','min-height',
-      'max-height','display','border-collapse','opacity'
+      'max-height','display','border-collapse','opacity','list-style','list-style-type','list-style-position'
     ];
     const out=[];
     for(const prop of allowed){
@@ -1374,7 +1374,7 @@ const MAIL={
     if(!raw)return '';
     try{
       const doc=new DOMParser().parseFromString(raw,'text/html');
-      const keep=new Set('p br div span b strong i em u s table thead tbody tfoot tr td th hr a img'.split(' '));
+      const keep=new Set('p br div span b strong i em u s ul ol li table thead tbody tfoot tr td th hr a img'.split(' '));
       const drop=new Set('script style svg math iframe object embed form input button textarea select link meta base video audio source picture template noscript'.split(' '));
       const safe=node=>{
         if(node.nodeType===3)return doc.createTextNode(node.textContent||'');
