@@ -3,7 +3,7 @@
   'use strict';
   const views=['overview','pedidos','cotizaciones','finanzas','clientes','maquinas','web','calendario','redes','reporte','equipo','newsletter'];
   const simpleOnlyViews=new Set(['overview','calendario','clientes','cotizaciones','pedidos','maquinas','equipo','web']);
-  const expertOnlyViews=new Set(['newsletter']);
+  const expertOnlyViews=new Set(['reporte','newsletter']);
   const closed=['Despachado','Completado','Cancelado'];
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
   const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null};
