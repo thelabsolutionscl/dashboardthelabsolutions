@@ -255,3 +255,16 @@ test('COT. ANTERIOR despliega el detalle de productos antes de importar', () => 
   assert.match(parse, /Detalle productos/, 'Las cotizaciones antiguas deben conservar un respaldo de texto');
   assert.match(apply, /_copyCotItems\(f\)/, 'La vista y la importación deben compartir el mismo detalle normalizado');
 });
+
+
+test('ventas históricas conciliadas no vuelven a crear pedidos',()=>{
+  const create=extractFunction('crearPedidoDesdeCotizacion');
+  const update=extractFunction('updateCotizacionEstado');
+  const edit=extractFunction('saveEditCot');
+  assert.match(create,/Venta histórica conciliada/);
+  assert.match(create,/no se crea un pedido nuevo/);
+  assert.match(update,/!_cot\?\.fields\?\.\['Venta histórica conciliada'\]/);
+  assert.match(edit,/!_cotRec\.fields\['Venta histórica conciliada'\]/);
+  const tray=extractFunction('_cotAprobadasSinPedido');
+  assert.match(tray,/Venta histórica conciliada/);
+});
