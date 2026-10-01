@@ -14,6 +14,14 @@ test('el manual vive en el menú de usuario y abre en una pestaña aparte',()=>{
   assert.doesNotMatch(INDEX,/location\.href\s*=\s*['"]manual\.html['"]/);
 });
 
+test('el manual usa el logo horizontal oficial de TLS',()=>{
+  assert.match(PAGE,/class="brand-logo" src="logo-thelab\.png" alt="The Lab Solutions"/);
+  assert.match(PAGE,/class="hero-logo" src="logo-thelab\.png" alt="The Lab Solutions"/);
+  assert.doesNotMatch(PAGE,/<div class="brand">THE LAB/);
+  assert.match(PAGE,/id="manualVersion"/);
+  assert.match(PAGE,/\\*\\*Versión:\\*\\*/);
+});
+
 test('la página del manual carga la fuente markdown y permite imprimir',()=>{
   assert.match(PAGE,/docs\/manual\/MANUAL_USUARIO\.md/);
   assert.match(PAGE,/window\.print\(\)/);
