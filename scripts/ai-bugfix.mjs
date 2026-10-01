@@ -145,7 +145,7 @@ function count(hay,needle){
 }
 function excerpt(path,queries){
   const raw=readFileSync(path,'utf8');
-  if(raw.length<=18000)return raw;
+  if(raw.length<=15000)return raw;
   const lines=raw.split('\n'),hits=new Set();
   for(const q of queries||[]){
     const needle=String(q||'').toLowerCase();if(!needle)continue;
@@ -158,17 +158,17 @@ function excerpt(path,queries){
   let out='',last=-2;
   for(const i of ordered){
     if(i!==last+1)out+='\n/* … fragmento omitido … */\n';
-    out+=String(i+1).padStart(6,' ')+' | '+lines[i]+'\n';last=i;
-    if(out.length>=18000)break;
+    out+=lines[i]+'\n';last=i;
+    if(out.length>=15000)break;
   }
-  return out.slice(0,18000);
+  return out.slice(0,15000);
 }
 function sourceBundle(plan,files){
   const wanted=(plan.files||[]).filter(p=>files.includes(p)&&existsSync(p)&&!forbidden(p));
   const result=[];let total=0;
   for(const path of wanted){
     const content=excerpt(path,plan.queries||[]);
-    if(total+content.length>48000)break;
+    if(total+content.length>40000)break;
     result.push({path,content});total+=content.length;
   }
   return result;
@@ -231,6 +231,8 @@ async function main(){
     if(patch.risk==='high')throw new Error('El parche fue clasificado como alto riesgo');
     const changed=applyEdits(patch,files.map(f=>f.path));
     if(!changed.length)throw new Error('La IA no produjo cambios');
+    if(!changed.some(p=>/^(?:js\/|styles\.css$|index\.html$|mail-api\.php$|manual\.html$|docs\/manual\/)/.test(p)))
+      throw new Error('El parche solo modifica pruebas o archivos auxiliares; se requiere un cambio funcional');
     testPatch(changed);
 
     const branch='ai-fix/'+m.id;
