@@ -161,7 +161,7 @@
     const awaiting=e==='Enviada',pending=e==='Solicitada';
     const historical=!!f['Venta histórica conciliada'];
     const linkedOrder=e==='Aprobada'&&typeof _pedidoDeCot==='function'?_pedidoDeCot(c):undefined;
-    let next=pending?'Preparar y enviar propuesta':awaiting?'Revisar seguimiento':e==='Aprobada'?(historical?'Venta histórica · producida y pagada':linkedOrder===null?'Crear pedido pendiente':'Revisar pedido vinculado'):e==='Negociación'?'Revisar condiciones':'Revisar historial';
+    let next=pending?'Preparar y enviar propuesta':awaiting?'Revisar seguimiento':e==='Aprobada'?(historical?'Venta histórica conciliada · producida y pagada':linkedOrder===null?'Crear pedido pendiente':'Revisar pedido vinculado'):e==='Negociación'?'Revisar condiciones':'Revisar historial';
     if(awaiting&&expires!==null&&expires<0)next='Revisar propuesta vencida';
     return {e,expires,age,awaiting,pending,next,linkedOrder,historical};
   }
@@ -415,7 +415,7 @@
     $('opQuoteSelection').textContent=({all:'Todas',open:'Gestiones comerciales',awaiting:'Sin respuesta',expiring:'Por vencer en 3 días',pending:'Pendientes de envío'})[ui.cot]+' · '+rows.length+' cotizaciones';
     el.innerHTML=rows.length?rows.slice(0,ui.limit).map(c=>{
       const f=c.fields,q=quoteInfo(c),m=getMargenCot(f);
-      const missingOrder=q.e==='Aprobada'&&q.linkedOrder===null;
+      const missingOrder=q.e==='Aprobada'&&!q.historical&&q.linkedOrder===null;
       return `<article class="op-record"><header><div><span class="op-eyebrow">${esc(f['N° Cotización']||'Cotización')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(f['Alias / Título']||'Sin título')}</p></div>${pill(q.e)}</header><div class="op-facts"><div><span>Total neto</span><b>${money(f['Total final (CLP)']==null?null:Number(f['Total final (CLP)'])/1.19)}</b></div><div class="op-margin-fact" style="${m==null?'':`--op-margin-color:${marginColor(m)}`}"><span>Margen</span><b>${m==null?'Sin dato':Number(m).toFixed(1)+'%'}</b></div></div><p class="op-caption">${q.awaiting&&q.age!==null?`${Math.max(0,-q.age)} días desde la fecha de cotización · `:''}Vigencia: ${esc(f['Fecha vencimiento']||'sin fecha')}</p><footer><span><small>Siguiente paso</small>${esc(q.next)}</span>${button(missingOrder?'Crear pedido':'Ver propuesta',missingOrder?'quote-order':'quote',c.id,'op-primary')}</footer></article>`;
     }).join(''):'<div class="op-empty">No hay cotizaciones en esta selección.</div>';
     $('opQuoteMore').innerHTML=rows.length>ui.limit?button(`Ver más · ${rows.length-ui.limit} pendientes`,'more-quotes'):'';
