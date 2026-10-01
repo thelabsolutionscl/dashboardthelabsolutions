@@ -2617,7 +2617,7 @@ function bugReportMetaAllowed(meta){
   if(meta.repair!==undefined){
     const r=meta.repair;
     if(!r||typeof r!=='object'||Array.isArray(r)||
-       Object.keys(r).some(k=>!['analysis','error','prUrl','prNumber','branch','updatedAt','attempts','changedFiles'].includes(k))||
+       Object.keys(r).some(k=>!['analysis','error','prUrl','prNumber','branch','updatedAt','attempts','changedFiles','deployRun','deployedAt'].includes(k))||
        (r.analysis!==undefined&&!bugReportText(r.analysis,5000))||
        (r.error!==undefined&&!bugReportText(r.error,3000))||
        (r.prUrl!==undefined&&!bugReportText(r.prUrl,1000))||
@@ -2625,6 +2625,8 @@ function bugReportMetaAllowed(meta){
        (r.branch!==undefined&&!bugReportText(r.branch,240))||
        (r.updatedAt!==undefined&&!bugReportText(r.updatedAt,40))||
        (r.attempts!==undefined&&(!Number.isInteger(r.attempts)||r.attempts<0||r.attempts>20))||
+       (r.deployRun!==undefined&&(!Number.isInteger(r.deployRun)||r.deployRun<1))||
+       (r.deployedAt!==undefined&&!bugReportText(r.deployedAt,40,20))||
        (r.changedFiles!==undefined&&(!Array.isArray(r.changedFiles)||r.changedFiles.length>20||
           !r.changedFiles.every(v=>bugReportText(v,260)))))return false;
   }
