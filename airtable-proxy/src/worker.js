@@ -2927,9 +2927,9 @@ async function callBugfixClaude(env,ctx,stage,body){
 }
 async function handleGithubBugfixAi(request,env,ctx){
   if(request.method!=='POST')return json({error:'Method not allowed'},405);
-  if(!env.ANTHROPIC_TOKEN)return json({error:'AI service unavailable'},503);
   try{await verifyGithubBugfixOidc(request);}
   catch(_){return json({error:'Valid GitHub Actions OIDC token required'},401);}
+  if(!env.ANTHROPIC_TOKEN)return json({error:'AI service unavailable'},503);
   if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
      Number(request.headers.get('Content-Length')||0)>125000)
     return json({error:'Bugfix service expects bounded JSON'},415);
