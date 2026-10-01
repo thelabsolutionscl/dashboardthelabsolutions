@@ -1,12 +1,14 @@
 name: Capturas Manual Usuario
 
 on:
-  push:
-    branches:
-      - manual-screenshots-v2
+  pull_request:
+    branches: [main]
     paths:
+      - manual.html
+      - docs/manual/MANUAL_USUARIO.md
       - scripts/capture-manual-screenshots.mjs
       - .github/workflows/manual-screenshots.yml
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -15,11 +17,13 @@ jobs:
   capture:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: manual-screenshots-v2
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Node 22
@@ -61,8 +65,10 @@ jobs:
           test -s docs/manual/assets/maquinas-planificacion.png
           test -s docs/manual/assets/finanzas-por-cobrar.png
           test -s docs/manual/assets/correo-redactar.png
+          test -s docs/manual/assets/manual-web.png
 
-      - name: Guardar capturas en la rama
+      - name: Guardar capturas actualizadas en el PR
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -72,4 +78,4 @@ jobs:
             exit 0
           fi
           git commit -m "docs(manual): actualizar screenshots [skip ci]"
-          git push origin HEAD:manual-screenshots-v2
+          git push origin HEAD:"${TARGET_BRANCH}"
