@@ -269,9 +269,12 @@ async function main(){
 
     if(auto){
       try{
-        sh('gh',['pr','merge',String(pr.number),'--repo',REPO,'--squash','--auto']);
+        // La suite completa ya corrió sobre el parche exacto. Para cambios de
+        // bajo riesgo intentamos fusionar inmediatamente; si las reglas de la
+        // rama exigen controles adicionales, GitHub lo bloquea y el PR queda abierto.
+        sh('gh',['pr','merge',String(pr.number),'--repo',REPO,'--squash','--delete-branch']);
       }catch(e){
-        console.log('Auto-merge no disponible; PR queda abierto:',String(e.message||e).slice(0,300));
+        console.log('GitHub bloqueó el merge automático; PR queda abierto:',String(e.message||e).slice(0,300));
       }
       await sleep(1200);
       let after={};try{after=ghJson(['pr','view',String(pr.number),'--repo',REPO,'--json','state,mergedAt,url']);}catch(_){}
