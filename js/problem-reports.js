@@ -9,7 +9,8 @@
 if(!root||!root.document||root.__TLS_PROBLEM_REPORTS__)return;
 root.__TLS_PROBLEM_REPORTS__=true;
 const D=root.document;
-let reports=[],shot=null,busy=false,open=false;\nconst repairBusy=new Set();
+let reports=[],shot=null,busy=false,open=false;
+const repairBusy=new Set();
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function cfg(){
@@ -115,7 +116,8 @@ async function refresh(){
   const list=D.getElementById('problemHistory');if(list)list.innerHTML='<div class="pr-empty">Cargando historial…</div>';
   try{const d=await api('GET');reports=Array.isArray(d.reports)?d.reports:[];render();}
   catch(e){if(list)list.innerHTML='<div class="pr-empty">No se pudo cargar el historial: '+esc(e.message)+'</div>';}
-}\nasync function repairReport(id,btn){
+}
+async function repairReport(id,btn){
   if(!/^rec[A-Za-z0-9]{14}$/.test(String(id||''))||repairBusy.has(id))return;
   repairBusy.add(id);
   const original=btn?.textContent||'⚡ Reparar';
