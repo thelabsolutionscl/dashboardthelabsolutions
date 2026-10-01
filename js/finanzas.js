@@ -449,18 +449,18 @@ function finRenderCobrar(){
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const hoy=Date.now();
   // Aging buckets
-  const buckets={b0:0,b30:0,b60:0,b90:0};
+  const buckets={current:0,b30:0,b60:0,b61:0};
   let sumTotal=0;
   data.forEach(r=>{
     const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
     const cobrar=r.porCobrar||tot;
     sumTotal+=cobrar;
     const venc=finVenc(r);
-    const dias=Math.max(0,Math.floor((hoy-venc.getTime())/86400000));
-    if(dias<=30) buckets.b0+=cobrar;
-    else if(dias<=60) buckets.b30+=cobrar;
-    else if(dias<=90) buckets.b60+=cobrar;
-    else buckets.b90+=cobrar;
+    const rawDias=Math.floor((hoy-venc.getTime())/86400000);
+    if(rawDias<=0)buckets.current+=cobrar;
+    else if(rawDias<=30)buckets.b30+=cobrar;
+    else if(rawDias<=60)buckets.b60+=cobrar;
+    else buckets.b61+=cobrar;
   });
 
   // Resumen aging
@@ -473,10 +473,10 @@ function finRenderCobrar(){
     agingEl.innerHTML=(data.length?`
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">Total cobrar</span><span class="fac-kpi-val" style="color:var(--danger)">${clp(sumTotal)}</span></div>
-      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">0–30 días</span><span class="fac-kpi-val" style="color:var(--warn)">${clp(buckets.b0)}</span></div>
-      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">31–60 días</span><span class="fac-kpi-val" style="color:var(--warn)">${clp(buckets.b30)}</span></div>
-      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">61–90 días</span><span class="fac-kpi-val" style="color:var(--danger)">${clp(buckets.b60)}</span></div>
-      <div class="fac-kpi fac-kpi-danger" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">&gt;90 días</span><span class="fac-kpi-val">${clp(buckets.b90)}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">Por vencer / hoy</span><span class="fac-kpi-val" style="color:var(--accent3)">${clp(buckets.current)}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">Vencidas 1–30 días</span><span class="fac-kpi-val" style="color:var(--warn)">${clp(buckets.b30)}</span></div>
+      <div class="fac-kpi" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">31–60 días</span><span class="fac-kpi-val" style="color:var(--accent2)">${clp(buckets.b60)}</span></div>
+      <div class="fac-kpi fac-kpi-danger" style="flex:1;min-width:80px"><span class="fac-kpi-lbl">Más de 60 días</span><span class="fac-kpi-val">${clp(buckets.b61)}</span></div>
     </div>
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px;font-size:11px;color:var(--text3)">
       <span>Plazo de pago estándar:</span>
@@ -883,8 +883,9 @@ function finExportAgingCSV(){
   data.forEach(r=>{
     const tot=r._total!=null?r._total:(r.valor*r.cant+Math.round(r.valor*r.cant*0.19));
     const cobrar=r.porCobrar||tot;
-    const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
-    const tramo=dias<=30?'Corriente':dias<=60?'31-60 días':dias<=90?'61-90 días':'+90 días';
+    const rawDias=Math.floor((hoy-finVenc(r).getTime())/86400000);
+    const dias=Math.max(0,rawDias);
+    const tramo=rawDias<=0?'Por vencer / hoy':rawDias<=30?'Vencida 1-30 días':rawDias<=60?'31-60 días':'Más de 60 días';
     rows.push([r.nombre||'',r.empresa||'',r.item||r.fact||'',tot,cobrar,dias,tramo]);
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
