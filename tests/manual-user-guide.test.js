@@ -33,3 +33,21 @@ test('documenta las vistas canónicas actuales',()=>{
   assert.match(MANUAL,/Solo Simple:[\s\S]*Overview[\s\S]*Calendario[\s\S]*Clientes[\s\S]*Cotizaciones[\s\S]*Pedidos[\s\S]*Máquinas[\s\S]*Equipo[\s\S]*Web/);
   assert.match(MANUAL,/Solo Experto:[\s\S]*Newsletter/);
 });
+
+
+test('cada capítulo numerado tiene una captura',()=>{
+  const chapters=[...MANUAL.matchAll(/^##\s+(\d+)\.\s+/gm)].map(m=>Number(m[1]));
+  assert.deepEqual(chapters,[...Array(28)].map((_,i)=>i+1));
+  for(let n=1;n<=28;n++){
+    const start=MANUAL.search(new RegExp('^##\\s+'+n+'\\.\\s+','m'));
+    const next=n<28?MANUAL.search(new RegExp('^##\\s+'+(n+1)+'\\.\\s+','m')):MANUAL.length;
+    assert.match(MANUAL.slice(start,next),/!\[[^\]]+\]\(assets\/[a-z0-9-]+\.png\)/i,'capítulo '+n);
+  }
+});
+
+test('manual web convierte imágenes markdown en figuras responsivas',()=>{
+  assert.match(PAGE,/function manualImageSrc\(/);
+  assert.match(PAGE,/manual-shot/);
+  assert.match(PAGE,/loading="lazy"/);
+  assert.match(PAGE,/docs\/manual\//);
+});
