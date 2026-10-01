@@ -15,7 +15,7 @@ const STATUS={
   error:['Error de reparación','var(--danger,#ff4d5e)'],
   cerrado:['Cerrado','var(--text3,#777)']
 };
-const MAX_UPLOAD=12*1024*1024,MAX_DATA_URL=72000;
+const MAX_UPLOAD=12*1024*1024,MAX_DATA_URL=42000;
 let selectedImage=null,history=[],opened=false;
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
