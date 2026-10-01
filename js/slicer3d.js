@@ -666,10 +666,22 @@ RESPONDE SOLO con un objeto JSON válido, sin markdown ni texto extra, con esta 
 En "overrides" incluye ÚNICAMENTE parámetros que realmente cambiarías respecto del perfil base. Si el perfil base ya es adecuado, usa {}.
 No inventes nombres de parámetros: solo puedes usar claves presentes en PERFIL BASE LOCAL.`;
   function _parseIaPayload(raw){
-    const txt=String(raw||'').trim();
-    const a=txt.indexOf('{'),b=txt.lastIndexOf('}');
+    const txt=String(raw||'').trim(),a=txt.indexOf('{');
     if(a<0)throw new Error('la IA respondió sin parámetros JSON');
-    if(b<=a)throw new Error('respuesta IA truncada antes de cerrar el JSON');
+    let depth=0,inString=false,escaped=false,b=-1;
+    for(let i=a;i<txt.length;i++){
+      const ch=txt[i];
+      if(inString){
+        if(escaped){escaped=false;continue;}
+        if(ch==='\\'){escaped=true;continue;}
+        if(ch==='"')inString=false;
+        continue;
+      }
+      if(ch==='"'){inString=true;continue;}
+      if(ch==='{')depth++;
+      else if(ch==='}'&&--depth===0){b=i;break;}
+    }
+    if(b<0||depth!==0||inString)throw new Error('respuesta IA truncada antes de cerrar el JSON');
     let obj;
     try{obj=JSON.parse(txt.slice(a,b+1));}
     catch(_){throw new Error('JSON de IA inválido');}
