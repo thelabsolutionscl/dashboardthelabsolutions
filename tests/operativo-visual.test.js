@@ -328,7 +328,7 @@ test('OVERVIEW, CALENDARIO, CLIENTES, COTIZACIONES, PEDIDOS y MÁQUINAS quedan f
 test('una aprobada histórica no ofrece crear pedido y se muestra como cerrada',()=>{
   const h=setup();h.context._pedidoDeCot=()=>null;
   const cot=record('hist',{'Estado cotización':'Aprobada','Venta histórica conciliada':true,'Cliente':'ABC','Total final (CLP)':119000});
-  assert.equal(h.op.quoteInfo(cot).next,'Venta histórica · producida y pagada');
+  assert.equal(h.op.quoteInfo(cot).next,'Venta histórica conciliada · producida y pagada');
   h.op.quotes([cot]);
   assert.match(h.element('opQuotes').innerHTML,/Venta histórica conciliada/);
   assert.doesNotMatch(h.element('opQuotes').innerHTML,/Crear pedido pendiente/);
