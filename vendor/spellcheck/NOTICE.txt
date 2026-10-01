@@ -106,3 +106,11 @@ creación de este diccionario. Se agradece especialmente a:
    - y a todos los integrantes de la comunidad en español que proponen mejoras
      a este diccionario.
 
+
+
+General Spanish Hunspell dictionary (es-ES / dictionary-es)
+Source: https://github.com/bataak/dictionaries-hunspell/tree/main/dictionaries/es
+Dictionary version: 2.6
+License: GPL-3.0-or-later OR LGPL-3.0-or-later OR MPL-1.1-or-later
+Author/coordinator: Santiago Bosio and contributors to the LibreOffice/Apache OpenOffice Spanish dictionaries.
+This copy is bundled locally only for spellchecking; message content is never sent to the dictionary source.

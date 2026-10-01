@@ -1,9 +1,11 @@
 /* js/correo-spellcheck.js
  * Corrección ortográfica visible para el redactor de CORREO.
  * 1) Mantiene el spellcheck nativo del navegador/WebKit.
- * 2) Carga un diccionario Hunspell completo de español de Chile (es-CL)
- *    y lo ejecuta localmente con Typo.js para marcar palabras desconocidas.
- * 3) Mantiene un fallback pequeño para errores comunes mientras carga el diccionario.
+ * 2) Combina localmente Hunspell español general + español de Chile para cubrir
+ *    vocabulario estándar y regional sin depender del idioma configurado en el SO.
+ * 3) Genera sugerencias bajo demanda con Typo.js y permite corrección manual,
+ *    ignorar temporalmente o añadir vocabulario propio.
+ * 4) Mantiene un fallback pequeño para errores comunes mientras cargan los diccionarios.
  * El contenido NO se envía a ningún servicio externo.
  */
 (function(root,factory){
@@ -40,7 +42,10 @@ const SUGGESTIONS=new Map(Object.entries({
 }));
 
 let target=null,installed=false,observer=null,wired=0,timer=null,mutating=false,mailPatched=false;
-let fullDictionary=null,dictionaryPromise=null,dictionaryState='idle';
+let fullDictionary=null,dictionaryPromise=null,dictionaryState='idle',dictionaryEngines=[];
+let activeSpellMenu=null;
+const suggestionCache=new Map(),ignoredWords=new Set();
+const USER_WORDS_KEY='thelab_mail_spell_custom_es_v1';
 
 const ALLOWED_TERMS=new Set([
   'tls','kai','thelab','airtable','claude','chatgpt','whatsapp','google','drive',
@@ -64,6 +69,29 @@ function loadScriptOnce(src){
     (d.head||d.documentElement).appendChild(s);
   });
 }
+function _compositeDictionary(engines){
+  return{
+    check(word){
+      for(const engine of engines){
+        try{if(engine.check(word))return true;}catch(_){}
+      }
+      return false;
+    },
+    suggest(word,limit=6){
+      const seen=new Set(),out=[];
+      for(const engine of engines){
+        let list=[];try{list=engine.suggest(word,Math.max(limit,6))||[];}catch(_){}
+        for(const item of list){
+          const v=String(item||'').trim(),key=normalizeWord(v);
+          if(!v||seen.has(key))continue;
+          seen.add(key);out.push(v);
+          if(out.length>=limit)return out;
+        }
+      }
+      return out;
+    }
+  };
+}
 function loadFullDictionary(){
   if(fullDictionary)return Promise.resolve(fullDictionary);
   if(dictionaryPromise)return dictionaryPromise;
@@ -72,19 +100,34 @@ function loadFullDictionary(){
   dictionaryPromise=(async()=>{
     try{
       await loadScriptOnce('vendor/spellcheck/typo.js');
-      const [affRes,dicRes]=await Promise.all([
-        target.fetch('vendor/spellcheck/es_CL.aff',{cache:'force-cache'}),
-        target.fetch('vendor/spellcheck/es_CL.dic',{cache:'force-cache'})
-      ]);
-      if(!affRes.ok||!dicRes.ok)throw new Error('No se pudo cargar diccionario es-CL');
-      const [aff,dic]=await Promise.all([affRes.text(),dicRes.text()]);
-      fullDictionary=new target.Typo('es_CL',aff,dic);
-      dictionaryState='ready';
+      const specs=[
+        {code:'es_CL',aff:'vendor/spellcheck/es_CL.aff',dic:'vendor/spellcheck/es_CL.dic'},
+        {code:'es_ES',aff:'vendor/spellcheck/es_ES.aff',dic:'vendor/spellcheck/es_ES.dic'}
+      ];
+      const loaded=await Promise.all(specs.map(async spec=>{
+        try{
+          const [affRes,dicRes]=await Promise.all([
+            target.fetch(spec.aff,{cache:'force-cache'}),
+            target.fetch(spec.dic,{cache:'force-cache'})
+          ]);
+          if(!affRes.ok||!dicRes.ok)throw new Error('HTTP');
+          const [aff,dic]=await Promise.all([affRes.text(),dicRes.text()]);
+          return new target.Typo(spec.code,aff,dic);
+        }catch(e){
+          console.warn('[Correo spellcheck] diccionario '+spec.code+' no disponible:',e?.message||e);
+          return null;
+        }
+      }));
+      dictionaryEngines=loaded.filter(Boolean);
+      if(!dictionaryEngines.length)throw new Error('No se pudo cargar ningún diccionario de español');
+      fullDictionary=_compositeDictionary(dictionaryEngines);
+      dictionaryState=dictionaryEngines.length===specs.length?'ready':'partial';
+      suggestionCache.clear();
       target.setTimeout?.(()=>lintNow(),0);
       return fullDictionary;
     }catch(e){
       dictionaryState='error';
-      console.warn('[Correo spellcheck] diccionario es-CL no disponible:',e?.message||e);
+      console.warn('[Correo spellcheck] diccionarios de español no disponibles:',e?.message||e);
       return null;
     }
   })();
@@ -166,6 +209,48 @@ function suggestionFor(word){
   return preserveCase(word,s);
 }
 
+function _readUserWords(){
+  try{
+    const raw=JSON.parse(target?.localStorage?.getItem(USER_WORDS_KEY)||'[]');
+    return new Set((Array.isArray(raw)?raw:[]).map(normalizeWord).filter(Boolean));
+  }catch(_){return new Set();}
+}
+function isUserWord(word){return _readUserWords().has(normalizeWord(word));}
+function addUserWord(word){
+  const key=normalizeWord(word);if(!key)return false;
+  try{
+    const set=_readUserWords();set.add(key);
+    target?.localStorage?.setItem(USER_WORDS_KEY,JSON.stringify([...set].slice(-1000)));
+    suggestionCache.delete(key);
+    return true;
+  }catch(_){return false;}
+}
+function dictionarySuggestions(word,engine,limit=6){
+  const seen=new Set(),out=[];
+  const add=v=>{
+    const value=String(v||'').trim(),key=normalizeWord(value);
+    if(!value||key===normalizeWord(word)||seen.has(key))return;
+    seen.add(key);out.push(preserveCase(word,value));
+  };
+  add(suggestionFor(word));
+  if(engine&&typeof engine.suggest==='function'){
+    let list=[];try{list=engine.suggest(word,Math.max(limit,6))||[];}catch(_){}
+    for(const v of list){add(v);if(out.length>=limit)break;}
+    if(out.length<limit&&normalizeWord(word)!==word){
+      try{for(const v of engine.suggest(normalizeWord(word),Math.max(limit,6))||[]){add(v);if(out.length>=limit)break;}}catch(_){}
+    }
+  }
+  return out.slice(0,limit);
+}
+async function suggestionsForWord(word,limit=6){
+  const key=normalizeWord(word);
+  if(suggestionCache.has(key))return suggestionCache.get(key).slice(0,limit);
+  const engine=fullDictionary||await loadFullDictionary();
+  const list=dictionarySuggestions(word,engine,limit);
+  suggestionCache.set(key,list);
+  return list.slice(0,limit);
+}
+
 function looksLikeTechnicalToken(word){
   const raw=String(word||'');
   const key=normalizeWord(raw);
@@ -183,6 +268,8 @@ function insideAddressOrUrl(text,index){
   return false;
 }
 function wordIssue(word,text,index,engine){
+  const key=normalizeWord(word);
+  if(ignoredWords.has(key)||isUserWord(word))return{bad:false,suggestion:'',source:'custom'};
   const direct=suggestionFor(word);
   if(direct)return{bad:true,suggestion:direct,source:'fallback'};
   if(looksLikeTechnicalToken(word)||insideAddressOrUrl(text,index))return{bad:false,suggestion:'',source:'skip'};
@@ -239,6 +326,17 @@ function ensureStyle(){
     .${ERROR_CLASS}:hover{background:rgba(255,77,94,.12)!important}
     #mailCmpSubject.mail-local-spell-subject-error{border-bottom-color:#ff4d5e!important;
       box-shadow:inset 0 -1px 0 #ff4d5e!important}
+    .mail-spell-menu{position:fixed;z-index:9999;min-width:210px;max-width:320px;padding:6px;
+      background:#17191d;border:1px solid rgba(255,255,255,.16);border-radius:10px;
+      box-shadow:0 14px 38px rgba(0,0,0,.52);font:12px/1.35 'DM Sans',system-ui,sans-serif;color:#f2f4f7}
+    .mail-spell-menu-title{padding:6px 8px;color:#9ba3af;font-size:10px;font-weight:700;
+      letter-spacing:.06em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .mail-spell-menu button{display:block;width:100%;border:0;background:transparent;color:#f2f4f7;
+      text-align:left;padding:7px 9px;border-radius:7px;cursor:pointer;font:inherit}
+    .mail-spell-menu button:hover,.mail-spell-menu button:focus{background:rgba(0,212,204,.12);outline:none}
+    .mail-spell-menu .mail-spell-primary{color:#65f2ec;font-weight:700}
+    .mail-spell-menu .mail-spell-sep{height:1px;background:rgba(255,255,255,.09);margin:5px 2px}
+    .mail-spell-menu .mail-spell-muted{color:#aab1bb}
   `;
   (d.head||d.documentElement).appendChild(s);
 }
@@ -304,7 +402,7 @@ function lintBody(){
         if(m.index>last)frag.appendChild(target.document.createTextNode(text.slice(last,m.index)));
         const span=target.document.createElement('span');
         span.className=ERROR_CLASS;span.dataset.suggestion=issue.suggestion||'';span.dataset.word=m[0];
-        span.title=issue.suggestion?'Sugerencia: '+issue.suggestion+' · clic para corregir':'Posible falta ortográfica';
+        span.title=issue.suggestion?'Sugerencia: '+issue.suggestion+' · clic para ver opciones':'Posible falta ortográfica · clic para corregir';
         span.textContent=m[0];frag.appendChild(span);last=m.index+m[0].length;count++;
       }
       if(changed){
@@ -369,16 +467,75 @@ function patchMail(){
   return true;
 }
 
-function onClick(e){
-  const span=e.target?.closest?.('.'+ERROR_CLASS);if(!span)return;
-  const sug=span.dataset.suggestion||'';if(!sug)return;
-  e.preventDefault();e.stopPropagation();
-  const text=target.document.createTextNode(sug);span.replaceWith(text);
+function closeSpellMenu(){
+  if(activeSpellMenu){try{activeSpellMenu.remove();}catch(_){}activeSpellMenu=null;}
+}
+function replaceSpellSpan(span,replacement){
+  if(!span?.isConnected||!replacement)return false;
+  const text=target.document.createTextNode(replacement);span.replaceWith(text);
   try{
     const r=target.document.createRange();r.setStart(text,text.nodeValue.length);r.collapse(true);
-    const s=target.getSelection();s.removeAllRanges();s.addRange(r);
+    const sel=target.getSelection();sel.removeAllRanges();sel.addRange(r);
   }catch(_){}
-  scheduleLint();
+  closeSpellMenu();scheduleLint();return true;
+}
+function showSpellMenu(span,suggestions){
+  const d=target?.document;if(!d||!span?.isConnected)return;
+  closeSpellMenu();
+  const word=span.dataset.word||span.textContent||'';
+  const menu=d.createElement('div');menu.className='mail-spell-menu';menu.setAttribute('role','menu');
+  const title=d.createElement('div');title.className='mail-spell-menu-title';title.textContent='Corregir “'+word+'”';menu.appendChild(title);
+
+  (suggestions||[]).slice(0,6).forEach((value,index)=>{
+    const b=d.createElement('button');b.type='button';b.textContent=value;
+    if(index===0)b.className='mail-spell-primary';
+    b.addEventListener('click',ev=>{ev.preventDefault();ev.stopPropagation();replaceSpellSpan(span,value);});
+    menu.appendChild(b);
+  });
+
+  if(suggestions?.length){
+    const sep=d.createElement('div');sep.className='mail-spell-sep';menu.appendChild(sep);
+  }
+
+  const manual=d.createElement('button');manual.type='button';manual.className='mail-spell-muted';manual.textContent='✎ Escribir corrección…';
+  manual.addEventListener('click',ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    const value=target.prompt?.('Corregir “'+word+'” por:',suggestions?.[0]||word);
+    if(value!=null&&String(value).trim())replaceSpellSpan(span,String(value).trim());
+  });
+  menu.appendChild(manual);
+
+  const add=d.createElement('button');add.type='button';add.className='mail-spell-muted';add.textContent='＋ Añadir al vocabulario';
+  add.addEventListener('click',ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    if(addUserWord(word))replaceSpellSpan(span,word);else closeSpellMenu();
+  });
+  menu.appendChild(add);
+
+  const ignore=d.createElement('button');ignore.type='button';ignore.className='mail-spell-muted';ignore.textContent='Ignorar durante esta sesión';
+  ignore.addEventListener('click',ev=>{
+    ev.preventDefault();ev.stopPropagation();ignoredWords.add(normalizeWord(word));replaceSpellSpan(span,word);
+  });
+  menu.appendChild(ignore);
+
+  d.body.appendChild(menu);activeSpellMenu=menu;
+  const r=span.getBoundingClientRect(),mw=Math.min(320,Math.max(210,menu.offsetWidth||210)),mh=menu.offsetHeight||220;
+  const left=Math.max(8,Math.min((target.innerWidth||1024)-mw-8,r.left));
+  const below=r.bottom+6,top=(below+mh<=(target.innerHeight||768)-8)?below:Math.max(8,r.top-mh-6);
+  menu.style.left=left+'px';menu.style.top=top+'px';
+  target.setTimeout?.(()=>menu.querySelector('button')?.focus(),0);
+}
+async function onClick(e){
+  const span=e.target?.closest?.('.'+ERROR_CLASS);
+  if(!span){
+    if(!e.target?.closest?.('.mail-spell-menu'))closeSpellMenu();
+    return;
+  }
+  e.preventDefault();e.stopPropagation();
+  const word=span.dataset.word||span.textContent||'';
+  let suggestions=[];
+  try{suggestions=await suggestionsForWord(word,6);}catch(_){}
+  if(span.isConnected)showSpellMenu(span,suggestions);
 }
 
 function install(root){
@@ -400,6 +557,8 @@ function install(root){
       if(e.target?.id==='mailCmpSubject')scheduleLint();
     });
     root.document.addEventListener('click',onClick);
+    root.document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSpellMenu();});
+    root.addEventListener?.('resize',closeSpellMenu);
     root.document.addEventListener('paste',e=>{
       if(e.target?.id==='mailCmpBody'||e.target?.id==='mailCmpSubject')target.setTimeout?.(scheduleLint,0);
     });
@@ -417,7 +576,7 @@ function install(root){
 
 function status(){
   const body=target?.document?.getElementById('mailCmpBody');
-  return{installed,wired,observing:!!observer,dictionary:dictionaryState,errors:body?.querySelectorAll?.('.'+ERROR_CLASS)?.length||0};
+  return{installed,wired,observing:!!observer,dictionary:dictionaryState,dictionaries:dictionaryEngines.length,errors:body?.querySelectorAll?.('.'+ERROR_CLASS)?.length||0};
 }
-return{install,status,_test:{IDS,SUGGESTIONS,COMMON_WORDS,ALLOWED_TERMS,suggestionFor,normalizeWord,stripMarks,oneEditAway,fuzzySuggestionFor,looksLikeTechnicalToken,insideAddressOrUrl,wordIssue,isLineBreakInput}};
+return{install,status,_test:{IDS,SUGGESTIONS,COMMON_WORDS,ALLOWED_TERMS,suggestionFor,normalizeWord,stripMarks,oneEditAway,fuzzySuggestionFor,looksLikeTechnicalToken,insideAddressOrUrl,wordIssue,isLineBreakInput,dictionarySuggestions,_compositeDictionary}};
 });
