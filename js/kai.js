@@ -452,7 +452,7 @@ CAPACIDADES Y REGLAS:
         // La cobranza pertenece a Finanzas: si el rol no tiene esa sección, no
         // se le entrega el total de la empresa por esta vía.
         let porCobrar=null;
-        if(!_av) try{porCobrar=(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);}catch(e){porCobrar=0;}
+        if(!_av) try{const pendientes=typeof finFacturasPorCobrar==='function'?finFacturasPorCobrar():(typeof finGetAllFacturas==='function'?finGetAllFacturas():[]).filter(r=>r.porCobrar>0);porCobrar=pendientes.reduce((a,r)=>a+r.porCobrar,0);}catch(e){porCobrar=0;}
         return 'Resumen: '+activos.length+' pedidos activos ('+at.length+' atrasados), '+cotPend+' cotizaciones pendientes, '+clp(porCobrar)+' por cobrar, '+(s.clientes||[]).length+' clientes.';
       }
       return 'Consulta no reconocida.';
