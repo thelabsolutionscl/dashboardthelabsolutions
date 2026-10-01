@@ -47,6 +47,7 @@ function cuerpo(nombre, src) {
 const ESC = CORREO.match(/esc\(s\)\{[^}]*\}/)[0];
 // El saneador real del módulo, sin copiar ni una línea.
 const FUENTE_CITA = `return {${ESC},${cuerpo('_sanitizarCita(html,allowImages=false){')}};`;
+const FUENTE_FIRMA = `return {${ESC},${cuerpo('_safeSignatureStyle(styleText){')}},${cuerpo('_sanitizarFirma(html){')}};`;
 // La línea real que pinta el chip de un adjunto.
 const LINEA_CHIP = CORREO.split('\n').find((l) => l.includes('mail-att-chip') && l.includes('downloadAtt')).trim();
 
@@ -163,6 +164,31 @@ test('saneada, la cita no ejecuta nada y conserva el formato', async (t) => {
   }
   assert.doesNotMatch(r.legitimo,/<img\b|data:image\/|style=/i,
     'remote quotes must not load images or retain untrusted inline CSS');
+});
+
+test('la firma conserva formato seguro sin reabrir el XSS de las citas', async (t) => {
+  if (!pagina) return t.skip('sin Chromium');
+  const html = '<br><p><br></p><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background-color:#0a0a0a"><tr>'
+    + '<td style="padding:22px 26px;border-left:2px solid #00d4cc"><div style="font-size:17px;font-weight:700;color:#ffffff">Gustavo</div>'
+    + '<ul style="list-style:none;margin:0;padding:0"><li><a href="https://thelab.solutions" style="color:#00d4cc;text-decoration:none">web</a></li></ul>'
+    + '<img src="data:image/png;base64,iVBORw0KGgo=" width="80" height="75" alt="TLS" onerror="robar(1)"></td></tr></table>'
+    + '<script>robar(2)</script><a href="javascript:robar(3)">malo</a><br>';
+  const out = await pagina.evaluate(({ fuente, html }) => {
+    const mod = new Function(fuente)();
+    window.__robos=0;window.robar=()=>{window.__robos++};
+    const limpio=mod._sanitizarFirma(html);
+    const box=document.createElement('div');box.innerHTML=limpio;document.body.appendChild(box);
+    return {limpio,robos:window.__robos,first:box.firstElementChild?.tagName||'',last:box.lastElementChild?.tagName||''};
+  }, { fuente: FUENTE_FIRMA, html });
+  assert.equal(out.robos,0);
+  assert.equal(out.first,'TABLE','debe quitar blancos iniciales que desplazan la firma');
+  assert.equal(out.last,'TABLE','debe quitar blancos finales');
+  assert.match(out.limpio,/background-color:\s*#0a0a0a/i);
+  assert.match(out.limpio,/padding:\s*22px 26px/i);
+  assert.match(out.limpio,/font-size:\s*17px/i);
+  assert.match(out.limpio,/list-style:\s*none/i);
+  assert.match(out.limpio,/data:image\/png;base64/i,'el logo embebido seguro de una firma debe sobrevivir');
+  assert.doesNotMatch(out.limpio,/onerror|<script|javascript:/i);
 });
 
 test('the sanitizer rebuilds the DOM from an allowlist, not copied attributes',()=>{

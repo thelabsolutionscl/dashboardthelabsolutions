@@ -34,18 +34,31 @@ test('mailbox passwords move from persistent local storage to tab scope',()=>{
  assert.doesNotMatch(pass,/localStorage\.setItem\(k,p\)/);
  assert.match(notify,/MAIL\.getMailPassFor\(email\)/);
 });
-test('quoted HTML and signatures are passed through a strict tag and attribute allowlist',()=>{
+test('correo recibido y firmas usan saneadores separados con allowlists',()=>{
  const sanitize=block('_sanitizarCita(html,allowImages=false){','\n};');
  assert.match(sanitize,/new DOMParser\(\)/);
  assert.match(sanitize,/const keep=new Set/);
  assert.match(sanitize,/const drop=new Set/);
  assert.match(sanitize,/node\.nodeType===3/);
- assert.match(sanitize,/url\.protocol!=='https:'/);
+ assert.match(sanitize,/url\.protocol!==['"]https:['"]/);
  assert.match(sanitize,/return out\.innerHTML/);
  const compose=block('openCompose(opts={}){','closeCompose(){');
  assert.match(compose,/this\._sanitizarCita\(opts\.body\|\|''\)/);
  const sig=block('sigHtml(){','insertSignature(){');
- assert.match(sig,/this\._sanitizarCita\(s,true\)/);
+ assert.match(sig,/this\._sanitizarFirma\(s\)/);
+ const setSig=block('setSig(html){','async _saveSigsAirtable(){');
+ assert.match(setSig,/this\._sanitizarFirma\(html\)/);
+ const sigStyle=block('_safeSignatureStyle(styleText){','_sanitizarFirma(html){');
+ assert.match(sigStyle,/javascript:/);
+ assert.match(sigStyle,/expression/);
+ assert.match(sigStyle,/const allowed=/);
+ assert.match(sigStyle,/background-color/);
+ assert.match(sigStyle,/padding/);
+ assert.match(sigStyle,/list-style/);
+ const sigSan=block('_sanitizarFirma(html){','\/\/ Firma independiente por cuenta');
+ assert.match(sigSan,/this\._safeSignatureStyle/);
+ assert.match(sigSan,/data:image/);
+ assert.match(sigSan,/script style svg math iframe object embed form/);
  const reply=block('reply(){','_validEmails(str){');
  assert.match(reply,/this\._sanitizarCita\(m\.body_html\)/);
 });
