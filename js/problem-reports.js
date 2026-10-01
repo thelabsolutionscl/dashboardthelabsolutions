@@ -9,7 +9,7 @@
 if(!root||!root.document||root.__TLS_PROBLEM_REPORTS__)return;
 root.__TLS_PROBLEM_REPORTS__=true;
 const D=root.document;
-let reports=[],shot=null,busy=false,open=false;
+let reports=[],shot=null,busy=false,open=false;\nconst repairBusy=new Set();
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function cfg(){
@@ -91,7 +91,7 @@ function style(){
   .pr-msg{font-size:12px;line-height:1.45;margin:8px 0;color:var(--text)}.pr-small{font-size:9px;color:var(--text3)}
   .pr-thumb{width:150px;max-height:92px;object-fit:cover;border-radius:7px;border:1px solid #333;margin-top:8px;cursor:pointer}
   .pr-ai{margin-top:9px;padding:9px;border-left:2px solid var(--accent4,#a78bfa);background:rgba(167,139,250,.06);font-size:10px;line-height:1.5;color:var(--text2);white-space:pre-wrap}
-  .pr-link{display:inline-block;margin-top:7px;font-size:10px;color:var(--accent);text-decoration:none}.pr-empty{padding:28px;text-align:center;color:var(--text3);font-size:11px}
+  .pr-link{display:inline-block;margin-top:7px;font-size:10px;color:var(--accent);text-decoration:none}.pr-actions{display:flex;gap:8px;align-items:center;margin-top:10px}.pr-repair{border:1px solid color-mix(in srgb,var(--accent,#00d4cc) 55%,#2a2a2a);background:rgba(0,212,204,.08);color:var(--accent,#74e6df);border-radius:8px;padding:7px 10px;font:700 10px/1 inherit;cursor:pointer}.pr-repair:hover:not(:disabled){background:rgba(0,212,204,.15)}.pr-repair:disabled{opacity:.55;cursor:default}.pr-empty{padding:28px;text-align:center;color:var(--text3);font-size:11px}
   @media(max-width:820px){.pr-shell{padding:18px 12px 50px}.pr-grid{grid-template-columns:1fr}.pr-list{max-height:none}.pr-title{font-size:22px}}
   `;
   D.head.appendChild(s);
@@ -99,7 +99,7 @@ function style(){
 function render(){
   const list=D.getElementById('problemHistory');if(!list)return;
   if(!reports.length){list.innerHTML='<div class="pr-empty">Todavía no hay reportes guardados.</div>';return;}
-  list.innerHTML=reports.map(r=>`<article class="pr-item">
+  list.innerHTML=reports.map(r=>{\n    const queued=r.estado==='Nuevo'&&/^Solicitud manual de reparación recibida\./.test(r.diagnostico||'');\n    const canRepair=r.estado==='Nuevo'||r.estado==='Error';\n    const repairLabel=queued?'✓ En cola':r.estado==='Error'?'↻ Reintentar reparación':'⚡ Reparar';\n    return `<article class="pr-item">
     <div class="pr-item-top"><span class="pr-status ${statusClass(r.estado)}">${esc(r.estado)}</span><span class="pr-id">${esc(r.reportId)}</span><span class="pr-small" style="margin-left:auto">${esc(fmtDate(r.fecha))}</span></div>
     <div class="pr-msg">${esc(r.mensaje)}</div>
     <div class="pr-small">${esc(r.seccion||'sin sección')} · ${esc(r.usuario||'')} ${r.build?'· build '+esc(r.build):''}</div>
@@ -108,12 +108,27 @@ function render(){
     ${r.plan?`<div class="pr-ai"><b>Plan de reparación</b><br>${esc(r.plan)}</div>`:''}
     ${r.error?`<div class="pr-ai" style="border-color:var(--danger,#f44)"><b>Error</b><br>${esc(r.error)}</div>`:''}
     ${r.prUrl?`<a class="pr-link" href="${esc(r.prUrl)}" target="_blank" rel="noopener noreferrer">Ver reparación en GitHub ↗</a>`:''}
-  </article>`).join('');
+    ${canRepair?`<div class="pr-actions"><button type="button" class="pr-repair" data-pr-repair="${esc(r.id)}"${queued?' disabled aria-disabled="true"':''}>${repairLabel}</button></div>`:''}
+  </article>`;}).join('');
 }
 async function refresh(){
   const list=D.getElementById('problemHistory');if(list)list.innerHTML='<div class="pr-empty">Cargando historial…</div>';
   try{const d=await api('GET');reports=Array.isArray(d.reports)?d.reports:[];render();}
   catch(e){if(list)list.innerHTML='<div class="pr-empty">No se pudo cargar el historial: '+esc(e.message)+'</div>';}
+}\nasync function repairReport(id,btn){
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(id||''))||repairBusy.has(id))return;
+  repairBusy.add(id);
+  const original=btn?.textContent||'⚡ Reparar';
+  if(btn){btn.disabled=true;btn.textContent='Enviando…';}
+  try{
+    const d=await api('POST',{action:'repair',recordId:id,reporter:reporter()});
+    if(d.report)reports=reports.map(r=>r.id===d.report.id?d.report:r);
+    render();
+    root.toast?.('Reporte enviado a reparación · el agente lo tomará en el próximo ciclo','success');
+  }catch(e){
+    root.toast?.('No se pudo enviar a reparación: '+e.message,'error');
+    if(btn){btn.disabled=false;btn.textContent=original;}
+  }finally{repairBusy.delete(id);}
 }
 function preview(){
   const img=D.getElementById('problemShotPreview'),txt=D.getElementById('problemShotName');
@@ -176,6 +191,10 @@ function ensure(){
     D.getElementById('problemClose').onclick=closeReporter;
     D.getElementById('problemRefresh').onclick=refresh;
     D.getElementById('problemSubmit').onclick=submit;
+    D.getElementById('problemHistory').onclick=e=>{
+      const btn=e.target?.closest?.('[data-pr-repair]');if(!btn)return;
+      repairReport(btn.dataset.prRepair,btn);
+    };
     const input=D.getElementById('problemFile'),drop=D.getElementById('problemDrop');
     drop.onclick=()=>input.click();drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();}};
     input.onchange=()=>pickFile(input.files?.[0]);
