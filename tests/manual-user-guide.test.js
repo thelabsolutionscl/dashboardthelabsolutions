@@ -29,18 +29,17 @@ test('el manual cubre las secciones operativas principales',()=>{
   ]) assert.ok(MANUAL.includes(title),title);
 });
 
-test('documenta las vistas canónicas actuales',()=>{
-  assert.match(MANUAL,/Solo Simple:[\s\S]*Overview[\s\S]*Calendario[\s\S]*Clientes[\s\S]*Cotizaciones[\s\S]*Pedidos[\s\S]*Máquinas[\s\S]*Equipo[\s\S]*Web/);
-  assert.match(MANUAL,/Solo Experto:[\s\S]*Newsletter/);
+test('no documenta los modos Simple/Experto retirados',()=>{
+  assert.doesNotMatch(MANUAL,/Modo Simple|Modo Experto|Solo Simple|Solo Experto|Simple y Experto/i);
 });
 
 
 test('cada capítulo numerado tiene una captura',()=>{
   const chapters=[...MANUAL.matchAll(/^##\s+(\d+)\.\s+/gm)].map(m=>Number(m[1]));
-  assert.deepEqual(chapters,[...Array(28)].map((_,i)=>i+1));
-  for(let n=1;n<=28;n++){
+  assert.deepEqual(chapters,[...Array(27)].map((_,i)=>i+1));
+  for(let n=1;n<=27;n++){
     const start=MANUAL.search(new RegExp('^##\\s+'+n+'\\.\\s+','m'));
-    const next=n<28?MANUAL.search(new RegExp('^##\\s+'+(n+1)+'\\.\\s+','m')):MANUAL.length;
+    const next=n<27?MANUAL.search(new RegExp('^##\\s+'+(n+1)+'\\.\\s+','m')):MANUAL.length;
     assert.match(MANUAL.slice(start,next),/!\[[^\]]+\]\(assets\/[a-z0-9-]+\.png\)/i,'capítulo '+n);
   }
 });
