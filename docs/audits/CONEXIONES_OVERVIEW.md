@@ -1,8 +1,8 @@
-# Centro de conexiones de OVERVIEW
+# Centro de conexiones · menú de usuario
 
 ## Montaje
 
-El archivo js/operativo-visual.js carga js/operativo-conexiones.js con el hash del build. El nuevo módulo agrega su propio CSS versionado. El resumen se presenta en OVERVIEW y el diálogo contiene 15 integraciones, filtros por categoría, diagnóstico, dependencia afectada, último OK y reparación guiada.
+El archivo `js/operativo-visual.js` carga `js/operativo-conexiones.js` con el hash del build y el módulo agrega su CSS versionado. La interfaz ya no se inserta en OVERVIEW: se abre desde **Mi cuenta → Centro de conexiones**. El diálogo contiene 15 integraciones, filtros por categoría, diagnóstico, dependencia afectada, último OK y reparación guiada.
 
 ## Semáforo
 
