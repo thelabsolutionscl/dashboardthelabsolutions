@@ -2647,7 +2647,7 @@ async function bugMonitorRows(env,formula,maxRecords=100){
   if(!body||!Array.isArray(body.records)||body.records.length>100)return {error:'invalid-shape'};
   return {records:body.records};
 }
-async function sharedBugReportList(env){
+async function sharedBugReportList(env,identity=null){
   const rows=await bugMonitorRows(env,`LEFT({Name},16)="${BUG_REPORT_META_PREFIX}"`,100);
   if(rows.error)return rows;
   const reports=[];
@@ -2656,18 +2656,20 @@ async function sharedBugReportList(env){
        typeof row.fields?.Notes!=='string')continue;
     let meta;try{meta=JSON.parse(row.fields.Notes);}catch(_){continue;}
     if(!bugReportMetaAllowed(meta)||row.fields.Name!==BUG_REPORT_META_PREFIX+meta.id)continue;
+    if(identity&&identity.role!=='admin'&&meta.reporter!==identity.email)continue;
     reports.push(meta);
   }
   reports.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
   return {reports:reports.slice(0,100)};
 }
-async function sharedBugReportLoad(env,id){
+async function sharedBugReportLoad(env,id,identity=null){
   if(!bugReportIdAllowed(id))return {error:'invalid-id'};
   const metaRows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_META_PREFIX+id}"`,2);
   if(metaRows.error||metaRows.records?.length!==1)return {error:metaRows.error||'not-found'};
   const row=metaRows.records[0];
   let meta;try{meta=JSON.parse(row.fields?.Notes||'');}catch(_){return {error:'invalid-meta'};}
   if(!bugReportMetaAllowed(meta)||meta.id!==id)return {error:'invalid-meta'};
+  if(identity&&identity.role!=='admin'&&meta.reporter!==identity.email)return {error:'not-found'};
   let screenshot='';
   if(meta.screenshot?.present){
     const imgRows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_IMG_PREFIX+id}"`,2);
@@ -3089,7 +3091,8 @@ export default {
 
       if(request.method==='GET'){
         const id=url.searchParams.get('id')||'';
-        const result=id?await sharedBugReportLoad(env,id):await sharedBugReportList(env);
+        const identity=authorized.identity||null;
+        const result=id?await sharedBugReportLoad(env,id,identity):await sharedBugReportList(env,identity);
         if(result.error){
           const status=result.error==='not-found'?404:
             result.error==='invalid-id'?422:503;
@@ -3116,6 +3119,8 @@ export default {
       }
 
       if(request.method==='PATCH'){
+        if(authorized.identity?.role!=='admin')
+          return json({error:'Admin role required for bug report actions'},403,scopedHeaders);
         if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
            Number(request.headers.get('Content-Length')||0)>10000)
           return json({error:'Bug report action expects bounded JSON'},415,scopedHeaders);
