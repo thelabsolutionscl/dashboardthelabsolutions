@@ -1,6 +1,6 @@
 # Manual de Usuario - Dashboard The Lab Solutions
 
-**Versión:** 1.0  
+**Versión:** 1.1  
 **Fecha:** 1 de octubre de 2026  
 **Aplicación:** Dashboard The Lab Solutions  
 **Objetivo:** explicar el uso cotidiano del dashboard sin entrar en administración de servidores, claves ni código.
