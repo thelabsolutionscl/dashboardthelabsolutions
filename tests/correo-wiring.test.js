@@ -145,7 +145,7 @@ test('mail-api expone cabeceras RFC de conversación sin descargar cuerpos', () 
     assert.match(list, new RegExp("'" + key + "'"));
     assert.match(search, new RegExp("'" + key + "'"));
   }
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-30-resend-send-evidence/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-30-resend-send-capability/);
 });
 
 test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
@@ -348,18 +348,21 @@ test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de
   const send=phpCase('send');
   assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
   assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
-  assert.match(PHP,/MAIL_API_BUILD', '2026-09-30-resend-send-evidence/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-09-30-resend-send-capability/);
 });
 
-test('verificación Resend exige IMAP, usa GET dominios y no envía mensajes',()=>{
+test('verificación Resend exige IMAP y prueba capacidad de envío sin crear correo',()=>{
   assert.match(PHP,/case 'resend_status':/);
   const branch=PHP.slice(PHP.indexOf("case 'resend_status':"),PHP.indexOf("case 'folders':"));
   assert.match(branch,/open_imap\(\$user, \$pass\)/);
   assert.match(branch,/if \(is_array\(\$conn\)\)/);
-  assert.match(branch,/CURLOPT_HTTPGET\s*=>\s*true/);
-  assert.match(branch,/https:\/\/api\.resend\.com\/domains/);
+  assert.match(branch,/https:\/\/api\.resend\.com\/emails/);
+  assert.match(branch,/_http_post_json\([\s\S]*?'\{\}'[\s\S]*?8\s*\)/);
+  assert.match(branch,/\$probeHttp === 422/);
+  assert.match(branch,/'evidence'=>'send_capability'/);
   assert.doesNotMatch(branch,/resend_send\(/);
-  assert.doesNotMatch(branch,/CURLOPT_POST/);
+  assert.doesNotMatch(branch,/api\.resend\.com\/domains/);
+  assert.doesNotMatch(branch,/['"](?:from|to|subject|html|text)['"]\s*=>/,'la prueba no debe contener campos suficientes para crear un correo');
 });
 
 
@@ -371,9 +374,11 @@ test('Resend conserva evidencia local del último envío exitoso sin PII',()=>{
   assert.doesNotMatch(PHP,/resend_health_mark_ok\([^)]*\$to/);
 });
 
-test('diagnóstico Resend acepta evidencia de envío reciente antes de consultar dominios',()=>{
+test('diagnóstico Resend prioriza evidencia reciente y clasifica el permiso de envío',()=>{
   const branch=PHP.slice(PHP.indexOf("case 'resend_status':"),PHP.indexOf("case 'folders':"));
   assert.match(branch,/if \(resend_health_recent\(\$key\)\)/);
   assert.match(branch,/'evidence'=>'recent_send'/);
-  assert.match(branch,/send_only_or_forbidden/);
+  assert.match(branch,/'evidence'=>'send_capability'/);
+  assert.match(branch,/'error_code'=>'send_unauthorized'/);
+  assert.match(branch,/'error_code'=>'send_forbidden'/);
 });
