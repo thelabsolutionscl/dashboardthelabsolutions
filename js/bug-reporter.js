@@ -109,7 +109,7 @@ function ensure(){
         <div class="tls-bug-drop" id="tlsBugDrop">
           <input id="tlsBugFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
           <button type="button" class="btn btn-ghost btn-sm" id="tlsBugPick">📷 Subir screenshot</button>
-          <div class="tls-bug-note">También puedes arrastrar una imagen aquí. Se comprime localmente antes de guardarla.</div>
+          <div class="tls-bug-note">También puedes arrastrar una imagen aquí. Se comprime localmente antes de guardarla. La descripción y la captura pueden ser analizadas por la IA configurada para diagnosticar el problema.</div>
           <div class="tls-bug-preview" id="tlsBugPreview"><img alt="Screenshot del problema"><button type="button" id="tlsBugRemove">Quitar</button></div>
         </div>
         <div id="tlsBugContext" class="tls-bug-note"></div>
