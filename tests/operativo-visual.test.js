@@ -13,7 +13,7 @@ function setup(role='admin'){
     hoyCL:()=> '2026-09-12',pedFormaPago:f=>f['Forma de pago']||'',getMargenCot:()=>40,
     pedidoAtrasado:p=>p['Estado pedido']==='En producción'&&p['Fecha entrega']<'2026-09-12',
     state:{pedidos:[],cotizaciones:[],clientes:[],cotizacionesById:{}},
-    finGetAllFacturas:()=>[],finVenc:r=>new Date(r.venc+'T00:00:00'),
+    finGetAllFacturas:()=>[],finFacturasPorCobrar:()=>[],finVenc:r=>new Date(r.venc+'T00:00:00'),
     renderCotizaciones:()=>{},renderPedidos:()=>{},_pagosProg:()=>[],ldGetAll:()=>[],
     console,Date,Number,Math};
   vm.createContext(context);vm.runInContext(fs.readFileSync('js/operativo-visual.js','utf8'),context);context.OP=context.window.OP;
@@ -109,10 +109,10 @@ test('presupuesto usa días del período y no confunde disponible proyectado con
   op.ads({},7);assert.match(element('opAds').innerHTML,/Sin datos suficientes/);
 });
 test('cobranza vacía y con filtro sin coincidencias se limpia al volver a calcular',()=>{
-  const {context,op,element,click}=setup();context.finGetAllFacturas=()=>[{porCobrar:1000,venc:'2026-09-10',nombre:'Cliente <A>',fact:'10'},{porCobrar:2000,venc:'2026-09-20',nombre:'Cliente B'}];
+  const {context,op,element,click}=setup();const rows=[{porCobrar:1000,venc:'2026-09-10',nombre:'Cliente <A>',fact:'10'},{porCobrar:2000,venc:'2026-09-20',nombre:'Cliente B'}];context.finGetAllFacturas=()=>rows;context.finFacturasPorCobrar=()=>rows;
   op.collections();assert.match(element('opCollections').innerHTML,/Cliente &lt;A&gt;/);
   click('aging','current');assert.doesNotMatch(element('opCollections').innerHTML,/Cliente &lt;A&gt;/);assert.match(element('opCollections').innerHTML,/Cliente B/);
-  context.finGetAllFacturas=()=>[];op.collections();assert.match(element('opCollections').innerHTML,/No hay facturas en este tramo/);assert.doesNotMatch(element('opCollections').innerHTML,/Cliente B/);
+  context.finGetAllFacturas=()=>[];context.finFacturasPorCobrar=()=>[];op.collections();assert.match(element('opCollections').innerHTML,/No hay facturas en este tramo/);assert.doesNotMatch(element('opCollections').innerHTML,/Cliente B/);
 });
 
 
@@ -332,4 +332,14 @@ test('una aprobada histórica no ofrece crear pedido y se muestra como cerrada',
   h.op.quotes([cot]);
   assert.match(h.element('opQuotes').innerHTML,/Venta histórica conciliada/);
   assert.doesNotMatch(h.element('opQuotes').innerHTML,/Crear pedido pendiente/);
+});
+
+
+test('cobranza simple declara la fuente y usa la conciliación canónica',()=>{
+  const h=setup();
+  h.context.state.facturas=[];
+  h.op.collections();
+  assert.match(h.element('opCollections').innerHTML,/Facturas\/Airtable está vacío/);
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  assert.match(src,/typeof finFacturasPorCobrar==='function'/);
 });

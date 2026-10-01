@@ -1,5 +1,43 @@
 # Auditoría de FINANZAS
 
+## Actualización 2026-09-30 — cobranza histórica falsa
+
+Se auditó específicamente **Finanzas → Por cobrar** después de detectar dos cobros
+antiguos que el negocio confirmó como ya pagados.
+
+**Hallazgos confirmados:**
+
+- La tabla `Facturas` de Airtable está actualmente vacía y `FINANZAS - Ventas`
+  también está vacía. La vista estaba usando el histórico embebido
+  `FIN_FACTURAS_BASE` como si fuera cartera activa.
+- Factura **357 · LifeFitness** conservaba `porCobrar: 69.200` pese a estar pagada.
+- Factura **367 · Graficas City Spa** era internamente contradictoria:
+  `pago: 535.500` cubría el total calculado, pero mantenía
+  `porCobrar: 535.500`.
+- Esos dos registros explicaban exactamente los **$604.700** mostrados en
+  “Por cobrar + IVA”, las dos tarjetas de mora y la alerta de dos facturas vencidas.
+- Los días de mora también tenían falsa precisión: al no existir fecha histórica
+  real, el sistema estimaba vencimiento desde el primer día del mes + plazo estándar.
+
+**Correcciones:**
+
+- 357 y 367 quedan conciliadas como pagadas y con saldo cero.
+- `finFacturasPorCobrar()` pasa a ser la ruta única de cartera activa.
+- El histórico embebido ya no puede disparar cobranza por sí solo: solo Airtable,
+  ventas locales explícitas o un histórico marcado como `cobranzaConfirmada:true`
+  se consideran deuda activa.
+- Una fila histórica con pago registrado igual o superior al total se normaliza a
+  saldo cero para impedir contradicciones imposibles.
+- Overview, flujo de caja, aging, cobranza manual/IA, sparklines, KAI y la vista
+  operativa reutilizan la misma cartera conciliada.
+- La vista Simple muestra si `Facturas/Airtable` está vacía.
+- Aging y CSV separan **Por vencer / hoy**, **1–30**, **31–60** y
+  **más de 60 días**.
+
+**Riesgo que permanece:** mientras la tabla `Facturas` siga vacía, el dashboard
+no dispone de una cartera de cobranza compartida y actualizada desde Airtable. El
+histórico sirve para reporting, pero no sustituye un registro vivo de DTE y pagos.
+
 Fecha: 2026-08-02
 
 ## Actualización 2026-09-26

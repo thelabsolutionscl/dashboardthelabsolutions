@@ -438,7 +438,10 @@
   }
   function receivables(){
     if(typeof finGetAllFacturas!=='function')return [];
-    return finGetAllFacturas().filter(r=>Number(r.porCobrar)>0).map(r=>{
+    const source=typeof finFacturasPorCobrar==='function'
+      ?finFacturasPorCobrar()
+      :finGetAllFacturas().filter(r=>Number(r.porCobrar)>0);
+    return source.map(r=>{
       const date=finVenc(r),ds=Number.isFinite(date.getTime())?`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`:'';
       const n=until(ds);return {...r,porCobrar:Number(r.porCobrar),due:ds,days:n===null?null:-n,estimated:!r.venc};
     });
@@ -449,7 +452,11 @@
     const el=$('opCollections');if(!el)return;
     const all=receivables(),rows=all.filter(r=>agingMatch(r,ui.aging)).sort((a,b)=>(b.days??-Infinity)-(a.days??-Infinity)||b.porCobrar-a.porCobrar);
     const buckets=[['Todas','all'],['Por vencer / hoy','current'],['Vencidas 1–30 días','1-30'],['31–60 días','31-60'],['Más de 60 días','61+']];
-    el.innerHTML=`<div class="op-section-heading"><div><h2>Prioriza tus cobros</h2><p>Saldos con IVA · vencimientos estimados identificados.</p></div></div><div class="op-buckets">${buckets.map(([l,k])=>`<button class="op-metric" data-op="aging" data-arg="${k}" aria-pressed="${ui.aging===k}"><span>${l}</span><strong>${money(all.filter(r=>agingMatch(r,k)).reduce((s,r)=>s+r.porCobrar,0))}</strong></button>`).join('')}</div><p class="op-caption">${rows.length} registros · ${ui.aging==='overdue'?'Todas las vencidas':buckets.find(b=>b[1]===ui.aging)?.[0]||''}</p><div class="op-records">${rows.slice(0,ui.limit).map(r=>{
+    const liveFacturas=(state.facturas||[]).length;
+    const fuente=liveFacturas
+      ?`Fuente activa: ${liveFacturas} DTE en Facturas/Airtable.`
+      :'Facturas/Airtable está vacío: el histórico embebido no se usa como deuda activa sin conciliación.';
+    el.innerHTML=`<div class="op-section-heading"><div><h2>Prioriza tus cobros</h2><p>Saldos con IVA · ${esc(fuente)}</p></div></div><div class="op-buckets">${buckets.map(([l,k])=>`<button class="op-metric" data-op="aging" data-arg="${k}" aria-pressed="${ui.aging===k}"><span>${l}</span><strong>${money(all.filter(r=>agingMatch(r,k)).reduce((s,r)=>s+r.porCobrar,0))}</strong></button>`).join('')}</div><p class="op-caption">${rows.length} registros · ${ui.aging==='overdue'?'Todas las vencidas':buckets.find(b=>b[1]===ui.aging)?.[0]||''}</p><div class="op-records">${rows.slice(0,ui.limit).map(r=>{
       const company=r.empresa&&r.empresa!=='—'?r.empresa:r.nombre;
       const cli=own(state.clientes).find(c=>String(c.fields['Empresa']||'').toLowerCase()===String(company||'').toLowerCase());
       const last=typeof _cobLast==='function'?_cobLast(company):null;

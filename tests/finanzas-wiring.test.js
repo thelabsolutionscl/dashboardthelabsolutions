@@ -41,7 +41,7 @@ test('FINANZAS tiene una sola sección, navegación y módulo cargado',()=>{
 
 test('las funciones críticas de Finanzas existen sin redefiniciones',()=>{
   [
-    'finSwitchTab','finGetAllFacturas','finFacturasFromAirtable','finVentasMerged','finInitKPIs','finRenderFacturas','finRenderCobrar','finVenc','finRenderAging',
+    'finSwitchTab','finGetAllFacturas','finFacturasFromAirtable','finNormalizarFacturaHistorica','finCobranzaConfiable','finFacturasPorCobrar','finVentasMerged','finInitKPIs','finRenderFacturas','finRenderCobrar','finVenc','finRenderAging',
     'finRenderFlujoCaja','finPlanCobranzaIA','ldGuardar','ldGetAll','renderPresupuesto','_presEjecutadoReal','renderBreakEven','_puntoEquilibrio',
     'emitirDTE','uploadCAF','checkFolios','nvGuardar','nvEliminar','_finSetLocalVentas','c3dCalcPieza','c3dAplicarACot','qcalcCompute','qcalcApply',
     '_ventasVendedor','renderComisiones','_ivaMes','renderIvaMensual','renderArqueo','guardarArqueo'
@@ -79,8 +79,7 @@ test('facturación, KPIs y gráficos reutilizan la misma agregación mensual int
 test('cobranza y aging usan un vencimiento común y priorizan por mora',()=>{
   const cobrar=functionBlock(FIN,'finRenderCobrar');
   const aging=functionBlock(FIN,'finRenderAging');
-  assert.match(cobrar,/finGetAllFacturas\s*\(\)/);
-  assert.match(cobrar,/porCobrar\s*>\s*0/);
+  assert.match(cobrar,/finFacturasPorCobrar\s*\(\)/);
   assert.match(cobrar,/finVenc\s*\(/);
   assert.match(cobrar,/\.sort\s*\(/,'debe ordenar la cartera');
   assert.match(aging,/finVenc\s*\(/);
@@ -93,8 +92,7 @@ test('cobranza y aging usan un vencimiento común y priorizan por mora',()=>{
 test('la proyección de caja encadena ocho semanas, facturas y pagos programados',()=>{
   const body=functionBlock(FIN,'finRenderFlujoCaja');
   assert.match(body,/SEMANAS\s*=\s*8/);
-  assert.match(body,/finGetAllFacturas\s*\(\)/);
-  assert.match(body,/porCobrar\s*>\s*0/);
+  assert.match(body,/finFacturasPorCobrar\s*\(\)/);
   assert.match(body,/_pagosProg\s*\(/);
   assert.match(body,/_pagoOcurrencias\s*\(/);
   assert.match(body,/finSaldoInicial\s*\(/);
@@ -289,3 +287,32 @@ test('cobWhatsApp no registra el toque sin confirmación explícita',()=>{
   assert.ok(ask>=0&&log>ask,'debe confirmar el envío antes de registrar cobranza');
 });
 test.todo('punto de equilibrio debe distinguir pedidos creados, facturación y revenue reconocido para no presentar ventas no emitidas como ingreso del mes');
+
+
+test('cobranza activa no confía en saldos embebidos históricos sin conciliación',()=>{
+  const helper=functionBlock(FIN,'finCobranzaConfiable');
+  const pending=functionBlock(FIN,'finFacturasPorCobrar');
+  assert.match(helper,/_source===['"]airtable['"]/);
+  assert.match(helper,/_source===['"]local['"]/);
+  assert.match(helper,/cobranzaConfirmada===true/);
+  assert.match(pending,/finCobranzaConfiable/);
+});
+
+test('históricos pagados e inconsistencias imposibles se cierran antes de cobranza',()=>{
+  const norm=functionBlock(FIN,'finNormalizarFacturaHistorica');
+  assert.match(norm,/pagoConciliado===true/);
+  assert.match(norm,/pago>=total/);
+  assert.match(norm,/out\.porCobrar=0/);
+  assert.match(FIN,/empresa:'LifeFitness'[\s\S]{0,260}fact:'357'[\s\S]{0,140}porCobrar:0[\s\S]{0,140}pagoConciliado:true/);
+  assert.match(FIN,/empresa:'Graficas City Spa'[\s\S]{0,260}fact:'367'[\s\S]{0,140}porCobrar:0[\s\S]{0,140}pagoConciliado:true/);
+});
+
+test('aging detallado y CSV separan por vencer de facturas vencidas',()=>{
+  const cobrar=functionBlock(FIN,'finRenderCobrar');
+  const csv=functionBlock(FIN,'finExportAgingCSV');
+  assert.match(cobrar,/Por vencer \/ hoy/);
+  assert.match(cobrar,/Vencidas 1–30 días/);
+  assert.match(cobrar,/Más de 60 días/);
+  assert.match(csv,/rawDias<=0\?'Por vencer \/ hoy'/);
+  assert.doesNotMatch(csv,/dias<=30\?'Corriente'/);
+});
