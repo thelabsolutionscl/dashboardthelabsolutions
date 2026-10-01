@@ -31,14 +31,17 @@ test('el helper se carga desde el bootstrap visual global',()=>{
   assert.match(LOADER,/load\('js\/correo-spellcheck\.js','corrección ortográfica visible en correo'\)/);
 });
 
-test('el corrector carga un diccionario completo es-CL local y no depende de una lista corta',()=>{
+test('el corrector combina español general y español de Chile localmente',()=>{
   assert.match(SRC,/vendor\/spellcheck\/typo\.js/);
-  assert.match(SRC,/vendor\/spellcheck\/es_CL\.aff/);
-  assert.match(SRC,/vendor\/spellcheck\/es_CL\.dic/);
-  assert.match(SRC,/new target\.Typo\('es_CL',aff,dic\)/);
-  assert.match(SRC,/dict\.check\(word\)/);
-  assert.ok(fs.statSync('vendor/spellcheck/es_CL.dic').size>500000,'el diccionario debe ser el vocabulario completo, no una lista mínima');
-  assert.ok(fs.statSync('vendor/spellcheck/es_CL.aff').size>100000,'deben cargarse reglas Hunspell de flexión');
+  for(const locale of ['es_CL','es_ES']){
+    assert.match(SRC,new RegExp('vendor/spellcheck/'+locale+'\\\\.aff'));
+    assert.match(SRC,new RegExp('vendor/spellcheck/'+locale+'\\\\.dic'));
+    assert.ok(fs.statSync('vendor/spellcheck/'+locale+'.dic').size>500000,locale+' debe usar un vocabulario Hunspell completo');
+    assert.ok(fs.statSync('vendor/spellcheck/'+locale+'.aff').size>100000,locale+' debe incluir reglas Hunspell de flexión');
+  }
+  assert.match(SRC,/new target\.Typo\(spec\.code,aff,dic\)/);
+  assert.match(SRC,/_compositeDictionary/);
+  assert.match(SRC,/dictionaryEngines\.length===specs\.length\?'ready':'partial'/);
   assert.ok(fs.statSync('vendor/spellcheck/typo.js').size>30000,'Typo.js debe estar vendorizado localmente');
   assert.ok(fs.existsSync('vendor/spellcheck/NOTICE.txt'),'debe conservarse la licencia/atribución de terceros');
 });
@@ -54,6 +57,26 @@ test('cualquier palabra rechazada por el diccionario se marca como posible falta
   assert.equal(api._test.wordIssue('TLS','TLS',0,dict).bad,false,'siglas de negocio deben ignorarse');
 });
 
+
+test('toda falta puede ofrecer varias sugerencias o corrección manual',()=>{
+  const api=require('../js/correo-spellcheck.js');
+  const engine={
+    check:w=>['hola','casa'].includes(String(w).toLowerCase()),
+    suggest:w=>String(w).toLowerCase()==='csa'?['casa','cosa','cesa']:[]
+  };
+  assert.deepEqual(api._test.dictionarySuggestions('csa',engine,5).slice(0,3),['casa','cosa','cesa']);
+  const composite=api._test._compositeDictionary([
+    {check:w=>w==='chilote',suggest:()=>['chilote']},
+    {check:w=>w==='ordenador',suggest:()=>['ordenador']}
+  ]);
+  assert.equal(composite.check('chilote'),true);
+  assert.equal(composite.check('ordenador'),true);
+  assert.equal(composite.check('zzzz'),false);
+  assert.match(SRC,/Escribir corrección…/,'si Hunspell no propone nada debe existir corrección manual');
+  assert.match(SRC,/Añadir al vocabulario/);
+  assert.match(SRC,/Ignorar durante esta sesión/);
+  assert.match(SRC,/engine\.suggest/,'las sugerencias deben venir del diccionario completo y no solo del fallback corto');
+});
 
 test('fallback local marca tildes y faltas visibles aunque el navegador no tenga español activo',()=>{
   const api=require('../js/correo-spellcheck.js');
