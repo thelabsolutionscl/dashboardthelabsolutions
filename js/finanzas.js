@@ -23,14 +23,14 @@ const FIN_FACTURAS_BASE = [
   {year:'2026',mes:'01',nombre:'Jourdan Lucente',empresa:'—',item:'DESPACHO',cant:1,valor:30000,canal:'CONTACTO',cat:'IMPRENTA',fact:'356',pago:35700,porCobrar:0},
   {year:'2026',mes:'01',nombre:'Jourdan Lucente',empresa:'—',item:'DESCUENTO',cant:1,valor:-45000,canal:'CONTACTO',cat:'IMPRENTA',fact:'356',pago:-53550,porCobrar:0},
   /* ─ FEB 2026 ─ */
-  {year:'2026',mes:'02',nombre:'Marco Pulgar',empresa:'LifeFitness',item:'DISEÑO 3D (10 modelos)',cant:10,valor:94000,canal:'CONTACTO',cat:'3D',fact:'357',pago:535500,porCobrar:69200},
+  {year:'2026',mes:'02',nombre:'Marco Pulgar',empresa:'LifeFitness',item:'DISEÑO 3D (10 modelos)',cant:10,valor:94000,canal:'CONTACTO',cat:'3D',fact:'357',pago:535500,porCobrar:0,estadoPago:'Pagada',pagoConciliado:true},
   {year:'2026',mes:'02',nombre:'Julio Miranda',empresa:'Comercial TSA SPA',item:'TROFEO',cant:2,valor:57000,canal:'CONTACTO',cat:'3D',fact:'358',pago:135660,porCobrar:0},
   {year:'2026',mes:'02',nombre:'Claudia Carvallo',empresa:'Jardín Taruca',item:'AGENDAS ANILLADAS 122p',cant:100,valor:9000,canal:'CONTACTO',cat:'IMPRENTA',fact:'359',pago:1071000,porCobrar:0},
   {year:'2026',mes:'02',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'CARTEL NEON NIVEA 130×90',cant:1,valor:500000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'360',pago:595000,porCobrar:0},
   {year:'2026',mes:'02',nombre:'Virginia Venturino',empresa:'BCI Pagos',item:'BOLSAS TNT',cant:2000,valor:1550,canal:'CONTACTO',cat:'IMPRENTA',fact:'361',pago:3689000,porCobrar:0},
   /* ─ MAR 2026 ─ */
   {year:'2026',mes:'03',nombre:'María Jesús Vergara',empresa:'Cervecería Chile SA',item:'TABLE TEND STELLA',cant:500,valor:7500,canal:'CONTACTO',cat:'IMPRENTA',fact:'366',pago:4462500,porCobrar:0},
-  {year:'2026',mes:'03',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'PARIS × LOLLA 210×62',cant:1,valor:450000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'367',pago:535500,porCobrar:535500},
+  {year:'2026',mes:'03',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'PARIS × LOLLA 210×62',cant:1,valor:450000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'367',pago:535500,porCobrar:0,estadoPago:'Pagada',pagoConciliado:true},
   {year:'2026',mes:'03',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'ISOTIPO MISTRAL 42cm Ø',cant:2,valor:70000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'365',pago:166600,porCobrar:0},
   {year:'2026',mes:'03',nombre:'Ignacio Besnier',empresa:'Graficas City Spa',item:'LOLLA × MISTRAL 157×31',cant:1,valor:360000,canal:'CONTACTO',cat:'NEON/CARTEL',fact:'368',pago:428400,porCobrar:0},
   {year:'2026',mes:'03',nombre:'Marcelo Cabrera',empresa:'BIG CUT SPA',item:'PAPEL MANTEQUILLA',cant:2000,valor:52,canal:'CONTACTO',cat:'IMPRENTA',fact:'369',pago:123760,porCobrar:0},
@@ -293,14 +293,34 @@ function finClaveDocumento(r){
     /^(52|gu[ií]a de despacho|gu[ií]a de despacho electr[oó]nica)$/.test(raw)?'52':null;
   return tipo?year+'|'+tipo+'|'+folio:null;
 }
+function finNormalizarFacturaHistorica(r,source='legacy'){
+  const out={...(r||{}),_source:source};
+  const neto=Number(out._neto!=null?out._neto:(Number(out.valor)||0)*(Number(out.cant)||1))||0;
+  const total=Number(out._total!=null?out._total:neto+Math.round(neto*0.19))||0;
+  const pago=Number(out.pago),estado=String(out.estadoPago||'').trim();
+  const cerrada=/^(cobrada|pagada|anulada|anulado|cancelada|cancelado|nota de cr[eé]dito)$/i.test(estado);
+  if(out.pagoConciliado===true||cerrada||(Number.isFinite(pago)&&total>0&&pago>=total)){
+    out.porCobrar=0;
+    if(!out.estadoPago)out.estadoPago='Pagada';
+  }
+  return out;
+}
+function finCobranzaConfiable(r){
+  if(!r)return false;
+  if(r._source==='airtable'||r._source==='local')return true;
+  return r._source==='legacy'&&r.cobranzaConfirmada===true;
+}
+function finFacturasPorCobrar(){
+  return finGetAllFacturas().filter(r=>Number(r.porCobrar)>0&&finCobranzaConfiable(r));
+}
 function finGetAllFacturas(){
   let local;try{local=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){local=[];}
   if(!Array.isArray(local))local=[];
   const airtable=finFacturasFromAirtable();
-  // Una factura en Airtable reemplaza TODOS los ítems del histórico de ese
-  // mismo DTE. Un folio de otro año/tipo es una operación independiente.
   const clavesAT=new Set(airtable.map(finClaveDocumento).filter(Boolean));
-  const legacy=[...FIN_FACTURAS_BASE,...local].filter(r=>{
+  const historicas=FIN_FACTURAS_BASE.map(r=>finNormalizarFacturaHistorica(r,'legacy'));
+  const locales=local.map(r=>finNormalizarFacturaHistorica(r,'local'));
+  const legacy=[...historicas,...locales].filter(r=>{
     const clave=finClaveDocumento(r);
     return !clave||!clavesAT.has(clave);
   });
@@ -425,7 +445,7 @@ function finVenc(r){
 }
 function finRenderCobrar(){
   if(window.OP)OP.collections();
-  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const data=finFacturasPorCobrar();
   const MESES_FULL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const hoy=Date.now();
   // Aging buckets
@@ -571,7 +591,7 @@ function finRenderFlujoCaja(){
   const weeks=[];for(let i=0;i<SEMANAS;i++){weeks.push({ini:semIni+i*7*864e5,ingreso:0,egreso:0,detIn:[],detEg:[]});}
   const bucketFor=ts=>{let idx=Math.floor((ts-semIni)/(7*864e5));if(idx<0)idx=0;if(idx>SEMANAS-1)return-1;return idx;};
   // Ingresos: facturas por cobrar, ubicadas por vencimiento (vencidas → semana 0)
-  const facturas=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const facturas=finFacturasPorCobrar();
   facturas.forEach(r=>{
     const venc=finVenc(r).getTime();
     const ts=venc<horizIni?horizIni:venc;   // vencidas/antiguas: se esperan cobrar ya
@@ -639,7 +659,7 @@ function finRenderFlujoCaja(){
 }
 // Exporta la cartera por cobrar (ordenada por mora) a CSV para trabajarla aparte o pasarla a cobranza
 function finExportCobranza(){
-  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const data=finFacturasPorCobrar();
   if(!data.length){toast('No hay facturas pendientes de cobro','error');return;}
   const hoy=Date.now();const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
@@ -663,7 +683,7 @@ function _cobCliente(empresa){
   return (state.clientes||[]).find(c=>((c.fields['Empresa']||'').toLowerCase()===k)||((c.fields['Contacto']||'').toLowerCase()===k))||null;
 }
 function _cobGrupos(){
-  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const data=finFacturasPorCobrar();
   const hoy=Date.now(),byCli=new Map();
   data.forEach(r=>{
     const dias=Math.max(0,Math.floor((hoy-finVenc(r).getTime())/86400000));
@@ -772,7 +792,7 @@ async function cobRegistrar(empresa,via,silent){
 
 // Plan de cobranza con IA: prioriza toda la cartera por mora y monto (FINANCE_AGENT)
 async function finPlanCobranzaIA(){
-  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const data=finFacturasPorCobrar();
   if(!data.length){toast('No hay facturas pendientes de cobro','info');return;}
   const hoy=Date.now(),byCli=new Map();
   data.forEach(r=>{
@@ -806,7 +826,7 @@ async function finPlanCobranzaIA(){
 
 /* ── Antigüedad de cuentas por cobrar ── */
 function finRenderAging(){
-  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const data=finFacturasPorCobrar();
   const filterVal=document.getElementById('fin-aging-filter')?.value||'all';
   const hoy=new Date();hoy.setHours(0,0,0,0);
   const buckets={b0:0,b30:0,b60:0,b90:0};
@@ -857,7 +877,7 @@ function finRenderAging(){
   const tb=document.getElementById('fin-aging-body');if(tb)tb.innerHTML=html;
 }
 function finExportAgingCSV(){
-  const data=finGetAllFacturas().filter(r=>r.porCobrar>0);
+  const data=finFacturasPorCobrar();
   const hoy=Date.now();
   const rows=[['Cliente','Empresa','Referencia','Total c/IVA','Por Cobrar','Días Vencido','Tramo']];
   data.forEach(r=>{
@@ -1046,7 +1066,7 @@ function finInitKPIs(){
   const avg25=Math.round(tot25/12);
   const varAvg=avg25?Math.round((avg26/avg25-1)*100):0;
   // Por cobrar: facturas con porCobrar>0 (incluyendo ventas manuales)
-  const cobrar=finGetAllFacturas().filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
+  const cobrar=finFacturasPorCobrar().reduce((a,r)=>a+r.porCobrar,0);
   const cobrarNeto=Math.round(cobrar/1.19);
   // Prestamo ultimo
   const lastPrestamo=FIN_PRESTAMOS[FIN_PRESTAMOS.length-1];
@@ -1095,7 +1115,7 @@ function finInitKPIs(){
   // Card 2 — Media mensual por año
   setExp(2,[2022,2023,2024,2025,2026].map(y=>{const v=VM[y].filter(x=>x>0);const a=v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length):0;return er(String(y),fmt(a),y===2026,v.length+'m');}).join(''));
   // Card 3 — Top deudores
-  const byC={};finGetAllFacturas().filter(r=>r.porCobrar>0).forEach(r=>{const k=(r.nombre||r.empresa||'—').slice(0,22);byC[k]=(byC[k]||0)+(r.porCobrar||0);});
+  const byC={};finFacturasPorCobrar().forEach(r=>{const k=(r.nombre||r.empresa||'—').slice(0,22);byC[k]=(byC[k]||0)+(r.porCobrar||0);});
   const topC=Object.entries(byC).sort((a,b)=>b[1]-a[1]).slice(0,6);
   setExp(3,topC.length?topC.map(([n,v])=>er(n.length>20?n.slice(0,19)+'…':n,fmt(v),false)).join(''):'<div style="font-size:11px;opacity:0.55;padding:4px 0">Sin facturas pendientes</div>');
   // Card 4 — Historial préstamos (últimas 7 entradas)
@@ -1116,7 +1136,7 @@ function finDrawSparklines(){
   const datasets=[
     VM[2026].slice(0,6),
     VM[2026].slice(0,6),
-    finGetAllFacturas().filter(r=>r.porCobrar>0).reduce((acc,r)=>{const m=parseInt(r.mes)-1;acc[m]=(acc[m]||0)+r.porCobrar;return acc;},Array(6).fill(0)),
+    finFacturasPorCobrar().reduce((acc,r)=>{const m=parseInt(r.mes)-1;acc[m]=(acc[m]||0)+r.porCobrar;return acc;},Array(6).fill(0)),
     FIN_PRESTAMOS.slice(-6).map(r=>r.deuda),
     FIN_PRESTAMOS.slice(-6).map(r=>r.deuda),
     [2022,2023,2024,2025,2026].map(y=>VM[y].reduce((a,b)=>a+b,0)/1e6)
@@ -1528,8 +1548,8 @@ function renderOverviewFinanzas(){
   const avgPrev=Math.round(prev.reduce((a,b)=>a+b,0)/(prev.filter(v=>v>0).length||12));
   const varAvg=avgPrev?Math.round((avg/avgPrev-1)*100):0;
   const allFacts=finGetAllFacturas();
-  const cobrar=allFacts.filter(r=>r.porCobrar>0).reduce((a,r)=>a+r.porCobrar,0);
-  const nFact=allFacts.filter(r=>r.porCobrar>0).length;
+  const cobrar=finFacturasPorCobrar().reduce((a,r)=>a+r.porCobrar,0);
+  const nFact=finFacturasPorCobrar().length;
   const deuda=FIN_PRESTAMOS[FIN_PRESTAMOS.length-1].deuda;
   const lastMonth=Math.max(0,...current.map((v,i)=>v>0?i:-1));
   set('ov-fin-v26',fmt(tot));
