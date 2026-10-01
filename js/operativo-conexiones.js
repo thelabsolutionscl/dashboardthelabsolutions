@@ -414,15 +414,10 @@
   }
   function render(){if(!DOC)return;renderSummary();renderDialog();}
   function mount(){
-    if(!DOC||!user()||!permitted('overview'))return;
-    const rootPanel=DOC.getElementById('tab-overview'),target=DOC.getElementById('opToday');
-    if(!rootPanel||!target)return;
-    let panel=DOC.getElementById('tlsConnectionsPanel');
-    if(!panel){
-      panel=el('section','tls-connections-panel');panel.id='tlsConnectionsPanel';
-      panel.innerHTML='<div class="tls-conn-header"><div><span class="tls-conn-eyebrow">MONITOR DEL SISTEMA</span><h2>Centro de conexiones</h2><p>Diagnóstico sin gastos de IA ni escrituras CRM.</p></div><button type="button" class="tls-conn-open" data-tls-conn="open">Abrir centro de diagnóstico ↗</button></div><div class="tls-conn-kpis" id="tlsConnOverviewMetrics"></div><p class="tls-conn-alert" id="tlsConnOverviewAlert" hidden></p><small id="tlsConnOverviewTime">Aún no se ha ejecutado una revisión</small>';
-      (target.closest('.card')||target).insertAdjacentElement('afterend',panel);
-    }
+    if(!DOC||!user())return;
+    // El Centro de Conexiones vive en el menú de usuario. Si una pestaña quedó
+    // abierta durante una actualización, retirar cualquier panel antiguo de OVERVIEW.
+    DOC.getElementById('tlsConnectionsPanel')?.remove?.();
     if(!DOC.getElementById('tlsConnDialog')){
       const dlg=el('dialog','tls-conn-dialog');dlg.id='tlsConnDialog';dlg.setAttribute('aria-label','Centro de conexiones y diagnóstico');
       dlg.innerHTML='<div class="tls-conn-dialog-head"><div><span class="tls-conn-eyebrow">THE LAB SOLUTIONS</span><h2>Conexiones y diagnóstico</h2><p>Rojo: fallo confirmado. Amarillo: advertencia. Gris: no probado o no configurado.</p></div><button class="tls-conn-close" type="button" data-tls-conn="close" aria-label="Cerrar">✕</button></div><div class="tls-conn-tools"><button type="button" id="tlsConnCheckAll" class="tls-conn-open" data-tls-conn="check-all">Comprobar ahora</button><span id="tlsConnBusy" aria-live="polite"></span></div><nav class="tls-conn-filters" id="tlsConnFilters" aria-label="Filtrar conexiones"></nav><div id="tlsConnServices" class="tls-conn-services"></div><details class="tls-conn-history"><summary>Historial de incidencias de este navegador</summary><div id="tlsConnHistory"></div></details><p class="tls-conn-foot">Los diagnósticos se hacen solo con lecturas autorizadas. Los fallos de red/CORS no se confunden con una caída confirmada. Las claves nunca se muestran ni se guardan aquí.</p><section class="tls-conn-guide" id="tlsConnGuide" hidden><button type="button" data-tls-conn="close-guide" aria-label="Cerrar ayuda">✕</button><h3 id="tlsConnGuideTitle"></h3><p id="tlsConnGuideBody"></p></section>';
@@ -443,7 +438,7 @@
     if(store.autoStarted||!user()||root._DEMO_MODE)return;
     store.autoStarted=true;
     setTimeout(()=>{if(!DOC.hidden&&user())void sweep(false,true);},1800);
-    setInterval(()=>{if(!DOC.hidden&&permitted('overview'))void sweep(false);},FIVE_MIN);
+    setInterval(()=>{if(!DOC.hidden&&user())void sweep(false);},FIVE_MIN);
     DOC.addEventListener('visibilitychange',()=>{
       if(!DOC.hidden&&Date.now()-store.lastSweep>=FIVE_MIN)void sweep(false);
     });
