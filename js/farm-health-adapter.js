@@ -94,4 +94,5 @@ return{install,refresh,probe,ack,status,_test:{}};
   load('js/comisiones-35-standard.js','comisión de ventas estándar 3,5%');
   load('js/remuneraciones-dias.js','remuneraciones por días trabajados');
   load('js/remuneraciones-personas.js','remuneraciones desde fichas de personas');
+  load('js/problem-reports.js','reporte e historial de problemas');
 })();
