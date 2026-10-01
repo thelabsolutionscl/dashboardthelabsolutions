@@ -54,7 +54,7 @@ jobs:
         run: |
           count=$(find docs/manual/assets -maxdepth 1 -name '*.png' | wc -l)
           echo "Capturas generadas: $count"
-          test "$count" -ge 41
+          test "$count" -ge 42
           test -s docs/manual/assets/overview.png
           test -s docs/manual/assets/maquinas.png
           test -s docs/manual/assets/finanzas.png
@@ -64,7 +64,7 @@ jobs:
           test -s docs/manual/assets/pedidos-tabla.png
           test -s docs/manual/assets/maquinas-planificacion.png
           test -s docs/manual/assets/finanzas-por-cobrar.png
-          test -s docs/manual/assets/correo-redactar.png
+          test -s docs/manual/assets/correo-redactar.png\n          test -s docs/manual/assets/reportar-problema.png
           test -s docs/manual/assets/manual-web.png
 
       - name: Guardar capturas actualizadas en el PR
