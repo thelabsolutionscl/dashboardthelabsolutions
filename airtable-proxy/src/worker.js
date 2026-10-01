@@ -332,6 +332,48 @@ async function problemReportCreate(env,body){
   }
   return {report:problemProjectRecord(created)};
 }
+function problemRepairPayloadAllowed(body){
+  return !!body&&typeof body==='object'&&!Array.isArray(body)&&
+    Object.keys(body).every(k=>['action','recordId','reporter'].includes(k))&&
+    body.action==='repair'&&/^rec[A-Za-z0-9]{14}$/.test(String(body.recordId||''))&&
+    (body.reporter===undefined||problemEmail(body.reporter));
+}
+async function problemReportRepair(env,body,identity,legacy){
+  if(!env.AIRTABLE_TOKEN)return {error:'Problem report storage unavailable',status:503};
+  const recordId=String(body.recordId||'');
+  const endpoint=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+PROBLEM_REPORTS_TABLE+'/'+recordId;
+  let current;
+  try{
+    const r=await fetch(endpoint,{method:'GET',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+    if(r.status===404)return {error:'Reporte no encontrado',status:404};
+    if(!r.ok||r.status>=300&&r.status<400)return {error:'No se pudo leer el reporte',status:502};
+    current=await r.json();
+  }catch(_){return {error:'No se pudo leer el reporte',status:503};}
+  const projected=problemProjectRecord(current);
+  const identityEmail=String(identity?.email||'').toLowerCase();
+  const legacyEmail=problemEmail(body.reporter)?String(body.reporter).toLowerCase():'';
+  const owns=identity?.role==='admin'||
+    (identityEmail&&projected.usuario.toLowerCase()===identityEmail)||
+    (legacy===true&&legacyEmail&&projected.usuario.toLowerCase()===legacyEmail);
+  if(!owns)return {error:'No tienes permiso para reparar este reporte',status:403};
+  if(!['Nuevo','Error'].includes(projected.estado))
+    return {error:projected.estado==='Reparado'?'El reporte ya está reparado':'El reporte ya está siendo procesado',status:409};
+  const now=new Date().toISOString();
+  const fields={
+    Estado:'Nuevo','Auto reparar':true,
+    'Diagnóstico IA':'Solicitud manual de reparación recibida. En cola para el próximo ciclo del agente.',
+    'Plan reparación':'','PR URL':'',Error:'',Actualizado:now
+  };
+  try{
+    const r=await fetch(endpoint,{method:'PATCH',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify({fields})});
+    if(!r.ok||r.status>=300&&r.status<400)return {error:'No se pudo poner el reporte en cola',status:502};
+    const updated=await r.json();
+    return {report:problemProjectRecord(updated)};
+  }catch(_){return {error:'No se pudo poner el reporte en cola',status:503};}
+}
 
 const SHARED_CALENDAR_EMPTY=Object.freeze({events:[],gmap:{},gmapMts:0,crmSync:{}});
 const SHARED_CALENDAR_EVENT_KEYS=new Set([
@@ -2809,6 +2851,13 @@ export default {
         const raw=await request.text();if(raw.length>7500000)throw Error('large');
         body=JSON.parse(raw);
       }catch(_){return json({error:'Invalid problem report JSON'},422,scopedHeaders);}
+      if(body?.action==='repair'){
+        if(!problemRepairPayloadAllowed(body))
+          return json({error:'Invalid repair request'},422,scopedHeaders);
+        const queued=await problemReportRepair(env,body,authorized.identity,authorized.legacy===true);
+        if(queued.error)return json({error:queued.error},queued.status||503,scopedHeaders);
+        return json({ok:true,queued:true,report:queued.report},200,scopedHeaders);
+      }
       if(!problemReportPayloadAllowed(body))
         return json({error:'Invalid problem report'},422,scopedHeaders);
       const reporter=authorized.identity?.email||
