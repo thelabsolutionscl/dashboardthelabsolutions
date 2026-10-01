@@ -36,8 +36,19 @@
 <link rel="icon" type="image/png" href="https://dashboard.thelab.solutions/isotipo-thelab.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0a0a0a">
+<script>
+(function(){
+  try{
+    const root=document.documentElement;
+    const pick=(key,allowed,fallback)=>{const v=localStorage.getItem(key)||fallback;return allowed.includes(v)?v:fallback;};
+    root.dataset.theme=pick('tls_ui_theme',['dark','light'],'dark');
+    root.dataset.wallpaper=pick('tls_ui_wallpaper',['blueprint','holographic','glass'],'blueprint');
+    root.dataset.font=pick('tls_ui_font',['dm','inter','space'],'dm');
+  }catch(_){}
+})();
+</script>
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=%%BUILD%%">
 <link rel="stylesheet" href="operativo-visual.css?v=%%BUILD%%">
 <link rel="stylesheet" href="semantic-colors.css?v=%%BUILD%%">
@@ -260,6 +271,7 @@
         <div class="user-menu-header">Mi cuenta</div>
         <div class="user-menu-item" onclick="loadAllData();closeUserMenu()">↺ Actualizar datos</div>
         <div class="user-menu-item" onclick="openConnectionsCenterFromUserMenu()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Centro de conexiones</div>
+        <div class="user-menu-item" onclick="openAppearanceSettings()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-visual"/></svg> Apariencia</div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-token">
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-key"/></svg> Token Airtable</div>
@@ -7099,6 +7111,110 @@ function closeTokenModal(){}
 function saveToken(){const v=(document.getElementById('modalTokenInput')?.value||'').trim();if(!v) return;lsSet('airtable_token',v);toast('Token guardado ✓','success');loadAllData();}
 // ── User menu ──────────────────────────────────────────────────
 function toggleUserMenu(e){e.stopPropagation();const m=document.getElementById('userMenu');const isOpen=m.classList.contains('open');closeUserMenu();if(!isOpen){openUserMenu();}}
+
+const _APPEARANCE_KEYS={theme:'tls_ui_theme',wallpaper:'tls_ui_wallpaper',font:'tls_ui_font'};
+const _APPEARANCE_ALLOWED={theme:['dark','light'],wallpaper:['blueprint','holographic','glass'],font:['dm','inter','space']};
+const _APPEARANCE_DEFAULTS={theme:'dark',wallpaper:'blueprint',font:'dm'};
+function _appearanceValue(kind){
+  const root=document.documentElement;
+  const current=root.dataset[kind]||_APPEARANCE_DEFAULTS[kind];
+  return (_APPEARANCE_ALLOWED[kind]||[]).includes(current)?current:_APPEARANCE_DEFAULTS[kind];
+}
+function _appearanceRefreshControls(){
+  const root=document.documentElement;
+  document.querySelectorAll('[data-appearance-kind][data-appearance-value]').forEach(btn=>{
+    const kind=btn.dataset.appearanceKind,val=btn.dataset.appearanceValue;
+    const active=root.dataset[kind]===val;
+    btn.classList.toggle('is-active',active);
+    btn.setAttribute('aria-pressed',active?'true':'false');
+  });
+}
+function applyAppearancePrefs(next,persist){
+  const root=document.documentElement;
+  const values={};
+  Object.keys(_APPEARANCE_ALLOWED).forEach(kind=>{
+    const candidate=next&&next[kind]!=null?String(next[kind]):_appearanceValue(kind);
+    values[kind]=_APPEARANCE_ALLOWED[kind].includes(candidate)?candidate:_APPEARANCE_DEFAULTS[kind];
+    root.dataset[kind]=values[kind];
+    if(persist!==false)try{localStorage.setItem(_APPEARANCE_KEYS[kind],values[kind]);}catch(_){}
+  });
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta)meta.setAttribute('content',values.theme==='light'?'#f3f7f8':'#0a0a0a');
+  root.style.colorScheme=values.theme;
+  _appearanceRefreshControls();
+  try{window.dispatchEvent(new CustomEvent('tls:appearance-changed',{detail:values}));}catch(_){}
+  return values;
+}
+function appearanceSet(kind,value){
+  if(!_APPEARANCE_ALLOWED[kind]?.includes(value))return;
+  const next={theme:_appearanceValue('theme'),wallpaper:_appearanceValue('wallpaper'),font:_appearanceValue('font')};
+  next[kind]=value;
+  applyAppearancePrefs(next,true);
+}
+function resetAppearanceSettings(){
+  Object.values(_APPEARANCE_KEYS).forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
+  applyAppearancePrefs({..._APPEARANCE_DEFAULTS},false);
+  toast('Apariencia restaurada','info');
+}
+function _appearanceChoice(kind,value,title,subtitle,previewClass){
+  return '<button type="button" class="appearance-choice" data-appearance-kind="'+kind+'" data-appearance-value="'+value+'" onclick="appearanceSet(\''+kind+'\',\''+value+'\')" aria-pressed="false">'+
+    (previewClass?'<span class="appearance-preview '+previewClass+'" aria-hidden="true"></span>':'')+
+    '<span class="appearance-choice-copy"><strong>'+title+'</strong><small>'+subtitle+'</small></span><span class="appearance-check">✓</span></button>';
+}
+function openAppearanceSettings(){
+  closeUserMenu();
+  let modal=document.getElementById('appearanceModal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='appearanceModal';
+    modal.className='appearance-modal-overlay';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.setAttribute('aria-labelledby','appearanceModalTitle');
+    modal.innerHTML='<div class="appearance-modal-card">'+
+      '<div class="appearance-modal-head"><div><span class="appearance-eyebrow">PERSONALIZACIÓN</span><h2 id="appearanceModalTitle">Apariencia del dashboard</h2><p>Los cambios se aplican al instante y quedan guardados en este navegador.</p></div><button type="button" class="appearance-close" onclick="closeAppearanceSettings()" aria-label="Cerrar">✕</button></div>'+
+      '<section class="appearance-section"><div class="appearance-section-title"><span>Tema</span><small>Contraste general de toda la interfaz</small></div><div class="appearance-grid appearance-grid-2">'+
+      _appearanceChoice('theme','dark','Oscuro','Negro / carbón','ap-theme-dark')+
+      _appearanceChoice('theme','light','Claro','Blanco / gris hielo','ap-theme-light')+
+      '</div></section>'+
+      '<section class="appearance-section"><div class="appearance-section-title"><span>Fondo</span><small>3 fondos inspirados en la interfaz de The Lab</small></div><div class="appearance-grid">'+
+      _appearanceChoice('wallpaper','blueprint','Blueprint Grid','Grilla técnica + glow cyan','ap-wall-blueprint')+
+      _appearanceChoice('wallpaper','holographic','Holographic','Paneles flotantes + flujo de datos','ap-wall-holographic')+
+      _appearanceChoice('wallpaper','glass','Glass Panels','Cristal + geometría de tarjetas','ap-wall-glass')+
+      '</div></section>'+
+      '<section class="appearance-section"><div class="appearance-section-title"><span>Tipografía</span><small>Cambia la personalidad visual sin afectar los datos</small></div><div class="appearance-grid">'+
+      _appearanceChoice('font','dm','DM Sans','Actual · equilibrada','ap-font-dm')+
+      _appearanceChoice('font','inter','Inter','Compacta · muy legible','ap-font-inter')+
+      _appearanceChoice('font','space','Space Grotesk','Técnica · contemporánea','ap-font-space')+
+      '</div></section>'+
+      '<div class="appearance-modal-actions"><button type="button" class="btn btn-ghost" onclick="resetAppearanceSettings()">Restaurar predeterminado</button><button type="button" class="btn btn-primary" onclick="closeAppearanceSettings()">Listo</button></div>'+
+      '</div>';
+    modal.addEventListener('click',e=>{if(e.target===modal)closeAppearanceSettings();});
+    document.body.appendChild(modal);
+    if(!window.__appearanceEscBound){
+      window.__appearanceEscBound=true;
+      document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('appearanceModal')?.classList.contains('open'))closeAppearanceSettings();});
+    }
+  }
+  applyAppearancePrefs({
+    theme:_appearanceValue('theme'),
+    wallpaper:_appearanceValue('wallpaper'),
+    font:_appearanceValue('font')
+  },false);
+  modal.classList.add('open');
+  document.body.classList.add('appearance-modal-open');
+  setTimeout(()=>modal.querySelector('.appearance-close')?.focus(),0);
+}
+function closeAppearanceSettings(){
+  document.getElementById('appearanceModal')?.classList.remove('open');
+  document.body.classList.remove('appearance-modal-open');
+}
+applyAppearancePrefs({
+  theme:_appearanceValue('theme'),
+  wallpaper:_appearanceValue('wallpaper'),
+  font:_appearanceValue('font')
+},false);
+
 function openConnectionsCenterFromUserMenu(){
   closeUserMenu();
   let tries=0;
