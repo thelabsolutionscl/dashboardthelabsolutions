@@ -2864,8 +2864,23 @@ html[data-font] .field-textarea,
 html[data-font] .btn,
 html[data-font] .btn-icon,
 html[data-font] .btn-mini{font-family:var(--font-ui)!important;}
-html[data-font] .section-title,
-html[data-font] .kpi-value{font-family:var(--font-display)!important;}
+html[data-font] .section-title{font-family:var(--font-display)!important;}
+
+/* Los números operativos conservan una tipografía numérica estable.
+   Inter/Space Grotesk son más anchas y podían cortar montos como $8.186.040. */
+html[data-font] .kpi-value{
+  font-family:'Bebas Neue',sans-serif!important;
+  font-weight:400!important;
+  letter-spacing:1px!important;
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:'tnum' 1;
+}
+html[data-font] .op-metric>strong,
+html[data-font] .op-priority>strong{
+  font-family:'DM Sans',sans-serif!important;
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:'tnum' 1;
+}
 html[data-font] .status-text,
 html[data-font] .kpi-sub,
 html[data-font] .card-badge,
@@ -2873,8 +2888,6 @@ html[data-font] code,
 html[data-font] pre{font-family:'JetBrains Mono',monospace!important;}
 html[data-font="inter"] .section-title,
 html[data-font="space"] .section-title{font-weight:700;letter-spacing:.4px;}
-html[data-font="inter"] .kpi-value,
-html[data-font="space"] .kpi-value{font-weight:700;letter-spacing:-.7px;}
 
 /* Base compartida de wallpaper */
 html[data-wallpaper] body::before{
