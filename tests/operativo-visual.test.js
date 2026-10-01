@@ -313,9 +313,9 @@ test('VER PROPUESTA muestra descripción, cantidades, costos, ventas y resumen d
 });
 
 
-test('OVERVIEW, CALENDARIO, CLIENTES, COTIZACIONES, PEDIDOS, MÁQUINAS y EQUIPO quedan fijos en Simple',()=>{
+test('OVERVIEW, CALENDARIO, CLIENTES, COTIZACIONES, PEDIDOS, MÁQUINAS, EQUIPO y WEB quedan fijos en Simple',()=>{
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
-  assert.match(src,/const simpleOnlyViews=new Set\(\['overview','calendario','clientes','cotizaciones','pedidos','maquinas','equipo'\]\)/);
+  assert.match(src,/const simpleOnlyViews=new Set\(\['overview','calendario','clientes','cotizaciones','pedidos','maquinas','equipo','web'\]\)/);
   assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple':\(value==='expert'\?'expert':'simple'\)/);
   assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?mode\(page,'simple'\);[\s\S]*?\}else\{/);
   const branch=/if\(simpleOnlyViews\.has\(page\)\)\{([\s\S]*?)\}else\{/.exec(src);
@@ -348,6 +348,14 @@ test('cobranza simple declara la fuente y usa la conciliación canónica',()=>{
 test('EQUIPO no expone selector Experto y fuerza vista Simple',()=>{
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
   assert.match(src,/simpleOnlyViews=new Set\(\[[^\]]*'equipo'[^\]]*\]\)/);
+  assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple'/);
+  assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?header\.querySelector\?\.\('\.op-switch'\)\?\.remove\?\.\(\);[\s\S]*?mode\(page,'simple'\)/);
+});
+
+
+test('WEB no expone selector Experto y fuerza vista Simple',()=>{
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  assert.match(src,/simpleOnlyViews=new Set\(\[[^\]]*'web'[^\]]*\]\)/);
   assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple'/);
   assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?header\.querySelector\?\.\('\.op-switch'\)\?\.remove\?\.\(\);[\s\S]*?mode\(page,'simple'\)/);
 });
