@@ -130,7 +130,7 @@ async function verifyService(){
 function trackedFiles(){
   const all=sh('git',['ls-files']).split('\n').filter(Boolean);
   const allowed=all.filter(p=>
-    /^(?:index\.html|manual\.html|styles\.css|mail-api\.php|js\/|tests\/|docs\/)/.test(p)&&
+    /^(?:[^/]+\.(?:html|css|php)|js\/|tests\/|docs\/)/.test(p)&&
     !/^docs\/security\//.test(p)&&
     !/^vendor\//.test(p)&&
     !/\.(?:png|jpe?g|gif|webp|pdf|zip|csv|woff2?|ttf|ico)$/i.test(p)
@@ -143,7 +143,7 @@ const FORBIDDEN_PATCH=[
   /^js\/auth/i,/^js\/ai-cost-control\.js$/i
 ];
 const NO_AUTOMERGE=[
-  /^index\.html$/,/^mail-api\.php$/,/^js\/finanzas\.js$/,/^js\/auth/i,/^js\/.*sii/i,
+  /^[^/]+\.html$/,/^mail-api\.php$/,/^js\/finanzas\.js$/,/^js\/auth/i,/^js\/.*sii/i,
   /^js\/.*factur/i,/^tests\/access-/,/^tests\/.*security/i
 ];
 function forbidden(path){return FORBIDDEN_PATCH.some(r=>r.test(path));}
@@ -260,7 +260,7 @@ async function main(){
     if(patch.risk==='high')throw new Error('El parche fue clasificado como alto riesgo');
     const changed=applyEdits(patch,files.map(f=>f.path));
     if(!changed.length)throw new Error('La IA no produjo cambios');
-    if(!changed.some(p=>/^(?:js\/|styles\.css$|index\.html$|mail-api\.php$|manual\.html$|docs\/manual\/)/.test(p)))
+    if(!changed.some(p=>/^(?:js\/|[^/]+\.css$|[^/]+\.html$|mail-api\.php$|docs\/manual\/)/.test(p)))
       throw new Error('El parche solo modifica pruebas o archivos auxiliares; se requiere un cambio funcional');
     testPatch(changed);
 
