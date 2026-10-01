@@ -2769,6 +2769,7 @@ async function githubOidcKeys(force=false){
 }
 async function verifyGithubBugfixOidc(request){
   const auth=String(request.headers.get('Authorization')||'');
+  if(auth.length>20000)throw new Error('OIDC token too large');
   const m=/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(auth);
   if(!m)throw new Error('Missing GitHub OIDC token');
   const parts=m[1].split('.'),header=bugfixB64UrlJson(parts[0]),claims=bugfixB64UrlJson(parts[1]);
@@ -2812,6 +2813,14 @@ function bugfixPathAllowed(path){
     !path.startsWith('/')&&!path.includes('..')&&
     /^[A-Za-z0-9_.\/-]+$/.test(path);
 }
+function bugfixAiEditablePath(path){
+  if(!bugfixPathAllowed(path))return false;
+  return ![
+    /^\.github\//,/^airtable-proxy\//,/^lead-worker\//,/^sii-worker\//,/^printer-bridge\//,
+    /^docs\/security\//,/^SECURITY\.md$/,/access-auth/i,/wrangler\.toml$/i,
+    /^js\/auth/i,/^js\/ai-cost-control\.js$/i
+  ].some(re=>re.test(path));
+}
 function bugfixPlanRequestAllowed(body){
   return body&&typeof body==='object'&&!Array.isArray(body)&&
     Object.keys(body).every(k=>['stage','report','repoMap'].includes(k))&&
@@ -2823,14 +2832,14 @@ function bugfixPatchRequestAllowed(body){
   if(!body||typeof body!=='object'||Array.isArray(body)||
      Object.keys(body).some(k=>!['stage','report','plan','files'].includes(k))||
      body.stage!=='patch'||!bugfixReportInputAllowed(body.report,false)||
-     !body.plan||typeof body.plan!=='object'||Array.isArray(body.plan)||
+     !bugfixResultAllowed('plan',body.plan)||
      JSON.stringify(body.plan).length>12000||!Array.isArray(body.files)||body.files.length>8)
     return false;
   let total=0;
   for(const file of body.files){
     if(!file||typeof file!=='object'||Array.isArray(file)||
        Object.keys(file).some(k=>!['path','content'].includes(k))||
-       !bugfixPathAllowed(file.path)||typeof file.content!=='string'||file.content.length>26000)
+       !bugfixAiEditablePath(file.path)||typeof file.content!=='string'||file.content.length>26000)
       return false;
     total+=file.content.length;
   }
@@ -2873,7 +2882,7 @@ function bugfixResultAllowed(stage,result){
      !Array.isArray(result.edits)||result.edits.length<1||result.edits.length>6)return false;
   return result.edits.every(e=>e&&typeof e==='object'&&!Array.isArray(e)&&
     Object.keys(e).every(k=>['path','find','replace'].includes(k))&&
-    bugfixPathAllowed(e.path)&&typeof e.find==='string'&&e.find.length>=3&&e.find.length<=16000&&
+    bugfixAiEditablePath(e.path)&&typeof e.find==='string'&&e.find.length>=3&&e.find.length<=16000&&
     typeof e.replace==='string'&&e.replace.length<=20000);
 }
 async function callBugfixClaude(env,ctx,stage,body){
