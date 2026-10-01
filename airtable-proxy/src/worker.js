@@ -2938,6 +2938,8 @@ async function handleGithubBugfixAi(request,env,ctx){
     body=JSON.parse(raw);
   }catch(_){return json({error:'Invalid bugfix service JSON'},422);}
   const stage=body?.stage;
+  if(stage==='ping'&&Object.keys(body).length===1)
+    return json({ok:true,pong:true},200);
   if(stage==='plan'?!bugfixPlanRequestAllowed(body):
      stage==='patch'?!bugfixPatchRequestAllowed(body):true)
     return json({error:'Invalid bugfix service request'},422);
