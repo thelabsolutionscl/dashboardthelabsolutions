@@ -1,0 +1,39 @@
+name: Reparación automática de reportes
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: tls-ai-bugfix
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Procesar un reporte pendiente
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ai-bugfix.mjs

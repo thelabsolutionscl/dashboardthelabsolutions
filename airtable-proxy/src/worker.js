@@ -2557,6 +2557,410 @@ export class CrmMutationGuard {
   }
 }
 
+
+const BUG_REPORT_META_PREFIX='BUG_REPORT_META:';
+const BUG_REPORT_IMG_PREFIX='BUG_REPORT_IMG:';
+const BUG_REPORT_STATUSES=new Set(['nuevo','analizando','reparando','pr_creado','needs_review','resuelto','error','cerrado']);
+function bugReportIdAllowed(id){
+  return typeof id==='string'&&/^br_[a-z0-9]{12,28}$/.test(id);
+}
+function bugReportText(value,max,min=0){
+  return typeof value==='string'&&value.length>=min&&value.length<=max&&
+    !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value);
+}
+function bugReportContextAllowed(ctx){
+  if(!ctx||typeof ctx!=='object'||Array.isArray(ctx)||
+     Object.keys(ctx).some(k=>!['section','path','build','viewport','userAgent','reporterName'].includes(k)))
+    return false;
+  const vp=ctx.viewport;
+  return bugReportText(ctx.section||'',80)&&bugReportText(ctx.path||'',700)&&
+    bugReportText(ctx.build||'',64)&&bugReportText(ctx.userAgent||'',500)&&
+    bugReportText(ctx.reporterName||'',160)&&
+    vp&&typeof vp==='object'&&!Array.isArray(vp)&&
+    Object.keys(vp).every(k=>['width','height','dpr'].includes(k))&&
+    Number.isFinite(vp.width)&&vp.width>0&&vp.width<=10000&&
+    Number.isFinite(vp.height)&&vp.height>0&&vp.height<=10000&&
+    Number.isFinite(vp.dpr)&&vp.dpr>0&&vp.dpr<=10;
+}
+function bugReportScreenshotAllowed(shot){
+  if(shot===null||shot===undefined)return true;
+  if(!shot||typeof shot!=='object'||Array.isArray(shot)||
+     Object.keys(shot).some(k=>!['dataUrl','mime','width','height','bytes'].includes(k))||
+     shot.mime!=='image/jpeg'||typeof shot.dataUrl!=='string'||shot.dataUrl.length>74000||
+     !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(shot.dataUrl)||
+     !Number.isInteger(shot.width)||shot.width<1||shot.width>2000||
+     !Number.isInteger(shot.height)||shot.height<1||shot.height>2000||
+     !Number.isInteger(shot.bytes)||shot.bytes<1||shot.bytes>60000)return false;
+  return true;
+}
+function bugReportMetaAllowed(meta){
+  if(!meta||typeof meta!=='object'||Array.isArray(meta)||
+     Object.keys(meta).some(k=>!['version','id','createdAt','reporter','reporterName','role','message','section','path','build','viewport','userAgent','status','screenshot','repair'].includes(k))||
+     meta.version!==1||!bugReportIdAllowed(meta.id)||
+     !bugReportText(meta.createdAt,40,20)||Number.isNaN(Date.parse(meta.createdAt))||
+     !bugReportText(meta.reporter,254)||!bugReportText(meta.reporterName||'',160)||
+     !bugReportText(meta.role,30)||!bugReportText(meta.message,5000,10)||
+     !bugReportText(meta.section||'',80)||!bugReportText(meta.path||'',700)||
+     !bugReportText(meta.build||'',64)||!bugReportText(meta.userAgent||'',500)||
+     !BUG_REPORT_STATUSES.has(meta.status))return false;
+  const vp=meta.viewport;
+  if(!vp||typeof vp!=='object'||Array.isArray(vp)||
+     !Number.isFinite(vp.width)||!Number.isFinite(vp.height)||!Number.isFinite(vp.dpr))return false;
+  if(meta.screenshot!==null&&meta.screenshot!==undefined){
+    const info=meta.screenshot;
+    if(!info||typeof info!=='object'||Array.isArray(info)||
+       Object.keys(info).some(k=>!['present','mime','width','height','bytes'].includes(k))||
+       info.present!==true||info.mime!=='image/jpeg'||
+       !Number.isInteger(info.width)||!Number.isInteger(info.height)||!Number.isInteger(info.bytes)||
+       info.bytes<1||info.bytes>60000)return false;
+  }
+  if(meta.repair!==undefined){
+    const r=meta.repair;
+    if(!r||typeof r!=='object'||Array.isArray(r)||
+       Object.keys(r).some(k=>!['analysis','error','prUrl','prNumber','branch','updatedAt','attempts','changedFiles','deployRun','deployedAt'].includes(k))||
+       (r.analysis!==undefined&&!bugReportText(r.analysis,5000))||
+       (r.error!==undefined&&!bugReportText(r.error,3000))||
+       (r.prUrl!==undefined&&!bugReportText(r.prUrl,1000))||
+       (r.prNumber!==undefined&&(!Number.isInteger(r.prNumber)||r.prNumber<1))||
+       (r.branch!==undefined&&!bugReportText(r.branch,240))||
+       (r.updatedAt!==undefined&&!bugReportText(r.updatedAt,40))||
+       (r.attempts!==undefined&&(!Number.isInteger(r.attempts)||r.attempts<0||r.attempts>20))||
+       (r.deployRun!==undefined&&(!Number.isInteger(r.deployRun)||r.deployRun<1))||
+       (r.deployedAt!==undefined&&!bugReportText(r.deployedAt,40,20))||
+       (r.changedFiles!==undefined&&(!Array.isArray(r.changedFiles)||r.changedFiles.length>20||
+          !r.changedFiles.every(v=>bugReportText(v,260)))))return false;
+  }
+  return JSON.stringify(meta).length<=15000;
+}
+async function bugMonitorRows(env,formula,maxRecords=100){
+  if(!env.AIRTABLE_TOKEN)return {error:'missing-token'};
+  const q=new URLSearchParams();
+  q.set('maxRecords',String(Math.max(1,Math.min(100,maxRecords))));
+  q.set('filterByFormula',formula);
+  q.append('fields[]','Name');q.append('fields[]','Notes');
+  let r;
+  try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+'?'+q.toString(),{
+      method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+    });
+  }catch(_){return {error:'network'};}
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'upstream'};
+  let body;try{body=await r.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>100)return {error:'invalid-shape'};
+  return {records:body.records};
+}
+async function sharedBugReportList(env,identity=null){
+  const rows=await bugMonitorRows(env,`LEFT({Name},16)="${BUG_REPORT_META_PREFIX}"`,100);
+  if(rows.error)return rows;
+  const reports=[];
+  for(const row of rows.records){
+    if(!row||typeof row.fields?.Name!=='string'||!row.fields.Name.startsWith(BUG_REPORT_META_PREFIX)||
+       typeof row.fields?.Notes!=='string')continue;
+    let meta;try{meta=JSON.parse(row.fields.Notes);}catch(_){continue;}
+    if(!bugReportMetaAllowed(meta)||row.fields.Name!==BUG_REPORT_META_PREFIX+meta.id)continue;
+    if(identity&&identity.role!=='admin'&&meta.reporter!==identity.email)continue;
+    reports.push(meta);
+  }
+  reports.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  return {reports:reports.slice(0,100)};
+}
+async function sharedBugReportLoad(env,id,identity=null){
+  if(!bugReportIdAllowed(id))return {error:'invalid-id'};
+  const metaRows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_META_PREFIX+id}"`,2);
+  if(metaRows.error||metaRows.records?.length!==1)return {error:metaRows.error||'not-found'};
+  const row=metaRows.records[0];
+  let meta;try{meta=JSON.parse(row.fields?.Notes||'');}catch(_){return {error:'invalid-meta'};}
+  if(!bugReportMetaAllowed(meta)||meta.id!==id)return {error:'invalid-meta'};
+  if(identity&&identity.role!=='admin'&&meta.reporter!==identity.email)return {error:'not-found'};
+  let screenshot='';
+  if(meta.screenshot?.present){
+    const imgRows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_IMG_PREFIX+id}"`,2);
+    if(!imgRows.error&&imgRows.records?.length===1){
+      const raw=String(imgRows.records[0].fields?.Notes||'');
+      if(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(raw)&&raw.length<=74000)screenshot=raw;
+    }
+  }
+  return {report:meta,screenshot};
+}
+async function sharedBugReportCreate(env,input,actor){
+  if(!env.AIRTABLE_TOKEN)return {error:'missing-token'};
+  if(!input||typeof input!=='object'||Array.isArray(input)||
+     Object.keys(input).some(k=>!['message','context','screenshot'].includes(k))||
+     !bugReportText(input.message,5000,10)||!bugReportContextAllowed(input.context)||
+     !bugReportScreenshotAllowed(input.screenshot))return {error:'invalid-report'};
+  const id='br_'+Date.now().toString(36)+crypto.randomUUID().replace(/-/g,'').slice(0,10).toLowerCase();
+  const now=new Date().toISOString(),ctx=input.context,shot=input.screenshot||null;
+  const meta={
+    version:1,id,createdAt:now,
+    reporter:actor?.email||'legacy-dashboard',
+    reporterName:ctx.reporterName||actor?.email||'Usuario',
+    role:actor?.role||'legacy',
+    message:input.message.trim(),section:ctx.section,path:ctx.path,build:ctx.build,
+    viewport:ctx.viewport,userAgent:ctx.userAgent,status:'nuevo',
+    screenshot:shot?{present:true,mime:'image/jpeg',width:shot.width,height:shot.height,bytes:shot.bytes}:null,
+    repair:{attempts:0,updatedAt:now}
+  };
+  if(!bugReportMetaAllowed(meta))return {error:'invalid-meta'};
+  const records=[{fields:{Name:BUG_REPORT_META_PREFIX+id,Notes:JSON.stringify(meta)}}];
+  if(shot)records.push({fields:{Name:BUG_REPORT_IMG_PREFIX+id,Notes:shot.dataUrl}});
+  let r;
+  try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema'),{
+      method:'POST',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({records})
+    });
+  }catch(_){return {error:'write-uncertain',uncertain:true};}
+  if([400,401,403,404,422].includes(r.status))return {error:'write-rejected'};
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'write-uncertain',uncertain:true};
+  let body;try{body=await r.json();}catch(_){return {error:'write-uncertain',uncertain:true};}
+  if(!Array.isArray(body.records)||body.records.length!==records.length)return {error:'write-uncertain',uncertain:true};
+  return {id,report:meta};
+}
+async function sharedBugReportAction(env,id,action){
+  if(!bugReportIdAllowed(id)||!['retry','close'].includes(action))return {error:'invalid-action'};
+  const current=await sharedBugReportLoad(env,id);
+  if(current.error)return current;
+  const meta=current.report;
+  if(action==='retry'){
+    if(!['error','needs_review','pr_creado'].includes(meta.status))return {error:'retry-not-allowed'};
+    meta.status='nuevo';meta.repair={...(meta.repair||{}),error:'',updatedAt:new Date().toISOString()};
+  }else{
+    meta.status='cerrado';meta.repair={...(meta.repair||{}),updatedAt:new Date().toISOString()};
+  }
+  if(!bugReportMetaAllowed(meta))return {error:'invalid-meta'};
+  const rows=await bugMonitorRows(env,`{Name}="${BUG_REPORT_META_PREFIX+id}"`,2);
+  if(rows.error||rows.records?.length!==1)return {error:rows.error||'not-found'};
+  const recId=String(rows.records[0].id||'');
+  if(!/^rec[A-Za-z0-9]{14}$/.test(recId))return {error:'invalid-record'};
+  let r;
+  try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+'/'+recId,{
+      method:'PATCH',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({fields:{Notes:JSON.stringify(meta)}})
+    });
+  }catch(_){return {error:'write-uncertain'};}
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'write-rejected'};
+  return {report:meta};
+}
+
+
+const GITHUB_OIDC_ISSUER='https://token.actions.githubusercontent.com';
+const GITHUB_BUGFIX_AUDIENCE='tls-dashboard-bugfix';
+const GITHUB_BUGFIX_REPOSITORY='thelabsolutionscl/dashboardthelabsolutions';
+const GITHUB_BUGFIX_WORKFLOW=GITHUB_BUGFIX_REPOSITORY+'/.github/workflows/ai-bugfix.yml@refs/heads/main';
+let GITHUB_OIDC_KEYS={expires:0,keys:[]};
+
+function bugfixB64UrlJson(segment){
+  if(typeof segment!=='string'||!/^[A-Za-z0-9_-]+$/.test(segment)||segment.length>12000)
+    throw new Error('Malformed OIDC token');
+  const raw=atob(segment.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-segment.length%4)%4));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(raw,c=>c.charCodeAt(0))));
+}
+async function githubOidcKeys(force=false){
+  if(!force&&GITHUB_OIDC_KEYS.expires>Date.now()&&GITHUB_OIDC_KEYS.keys.length)
+    return GITHUB_OIDC_KEYS.keys;
+  const r=await fetch(GITHUB_OIDC_ISSUER+'/.well-known/jwks',{redirect:'error'});
+  if(!r.ok)throw new Error('GitHub OIDC keys unavailable');
+  const body=await r.json();
+  const keys=Array.isArray(body?.keys)?body.keys.filter(k=>k?.kty==='RSA'&&k.kid&&k.n&&k.e):[];
+  if(!keys.length||keys.length>30)throw new Error('Invalid GitHub OIDC JWKS');
+  GITHUB_OIDC_KEYS={keys,expires:Date.now()+5*60*1000};
+  return keys;
+}
+async function verifyGithubBugfixOidc(request){
+  const auth=String(request.headers.get('Authorization')||'');
+  if(auth.length>20000)throw new Error('OIDC token too large');
+  const m=/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(auth);
+  if(!m)throw new Error('Missing GitHub OIDC token');
+  const parts=m[1].split('.'),header=bugfixB64UrlJson(parts[0]),claims=bugfixB64UrlJson(parts[1]);
+  if(header.alg!=='RS256'||typeof header.kid!=='string'||header.kid.length>220)
+    throw new Error('Unsupported GitHub OIDC token');
+  let keys=await githubOidcKeys(),jwk=keys.find(k=>k.kid===header.kid);
+  if(!jwk){keys=await githubOidcKeys(true);jwk=keys.find(k=>k.kid===header.kid);}
+  if(!jwk)throw new Error('Unknown GitHub OIDC key');
+  const key=await crypto.subtle.importKey('jwk',jwk,
+    {name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+  const sig=Uint8Array.from(atob(parts[2].replace(/-/g,'+').replace(/_/g,'/')+
+    '='.repeat((4-parts[2].length%4)%4)),c=>c.charCodeAt(0));
+  const ok=await crypto.subtle.verify('RSASSA-PKCS1-v1_5',key,sig,
+    new TextEncoder().encode(parts[0]+'.'+parts[1]));
+  if(!ok)throw new Error('Invalid GitHub OIDC signature');
+  const now=Math.floor(Date.now()/1000),aud=Array.isArray(claims.aud)?claims.aud:[claims.aud];
+  if(claims.iss!==GITHUB_OIDC_ISSUER||!aud.includes(GITHUB_BUGFIX_AUDIENCE)||
+     claims.repository!==GITHUB_BUGFIX_REPOSITORY||
+     claims.ref!=='refs/heads/main'||claims.workflow_ref!==GITHUB_BUGFIX_WORKFLOW||
+     !['schedule','workflow_dispatch'].includes(claims.event_name)||
+     !Number.isFinite(claims.exp)||claims.exp<=now||
+     (claims.nbf!==undefined&&(!Number.isFinite(claims.nbf)||claims.nbf>now))||
+     (claims.iat!==undefined&&(!Number.isFinite(claims.iat)||claims.iat>now+60)))
+    throw new Error('GitHub OIDC claims denied');
+  return claims;
+}
+function bugfixReportInputAllowed(report,allowScreenshot){
+  if(!report||typeof report!=='object'||Array.isArray(report)||
+     Object.keys(report).some(k=>!['id','message','section','path','build','screenshot'].includes(k))||
+     !bugReportIdAllowed(report.id)||!bugReportText(report.message,5000,10)||
+     !bugReportText(report.section||'',80)||!bugReportText(report.path||'',700)||
+     !bugReportText(report.build||'',64))return false;
+  if(report.screenshot!==undefined){
+    if(!allowScreenshot||typeof report.screenshot!=='string'||report.screenshot.length>44000||
+       !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(report.screenshot))return false;
+  }
+  return true;
+}
+function bugfixPathAllowed(path){
+  return typeof path==='string'&&path.length>0&&path.length<=260&&
+    !path.startsWith('/')&&!path.includes('..')&&
+    /^[A-Za-z0-9_.\/-]+$/.test(path);
+}
+function bugfixAiEditablePath(path){
+  if(!bugfixPathAllowed(path))return false;
+  return ![
+    /^\.github\//,/^airtable-proxy\//,/^lead-worker\//,/^sii-worker\//,/^printer-bridge\//,
+    /^docs\/security\//,/^SECURITY\.md$/,/access-auth/i,/wrangler\.toml$/i,
+    /^js\/auth/i,/^js\/ai-cost-control\.js$/i
+  ].some(re=>re.test(path));
+}
+function bugfixPlanRequestAllowed(body){
+  return body&&typeof body==='object'&&!Array.isArray(body)&&
+    Object.keys(body).every(k=>['stage','report','repoMap'].includes(k))&&
+    body.stage==='plan'&&bugfixReportInputAllowed(body.report,true)&&
+    Array.isArray(body.repoMap)&&body.repoMap.length<=1400&&
+    body.repoMap.every(bugfixPathAllowed)&&JSON.stringify(body.repoMap).length<=22000;
+}
+function bugfixPatchRequestAllowed(body){
+  if(!body||typeof body!=='object'||Array.isArray(body)||
+     Object.keys(body).some(k=>!['stage','report','plan','files'].includes(k))||
+     body.stage!=='patch'||!bugfixReportInputAllowed(body.report,false)||
+     !bugfixResultAllowed('plan',body.plan)||
+     JSON.stringify(body.plan).length>12000||!Array.isArray(body.files)||body.files.length>8)
+    return false;
+  let total=0;
+  for(const file of body.files){
+    if(!file||typeof file!=='object'||Array.isArray(file)||
+       Object.keys(file).some(k=>!['path','content'].includes(k))||
+       !bugfixAiEditablePath(file.path)||typeof file.content!=='string'||file.content.length>26000)
+      return false;
+    total+=file.content.length;
+  }
+  return total<=50000;
+}
+function parseBugfixJson(text){
+  const src=String(text||'').trim(),start=src.indexOf('{');
+  if(start<0)throw new Error('AI response has no JSON');
+  let depth=0,inString=false,escaped=false,end=-1;
+  for(let i=start;i<src.length;i++){
+    const ch=src[i];
+    if(inString){
+      if(escaped){escaped=false;continue;}
+      if(ch==='\\'){escaped=true;continue;}
+      if(ch==='"')inString=false;
+      continue;
+    }
+    if(ch==='"'){inString=true;continue;}
+    if(ch==='{')depth++;
+    else if(ch==='}'&&--depth===0){end=i;break;}
+  }
+  if(end<0)throw new Error('AI JSON truncated');
+  return JSON.parse(src.slice(start,end+1));
+}
+function bugfixResultAllowed(stage,result){
+  if(!result||typeof result!=='object'||Array.isArray(result))return false;
+  if(stage==='plan'){
+    if(Object.keys(result).some(k=>!['analysis','risk','files','queries'].includes(k))||
+       !bugReportText(result.analysis||'',5000,10)||
+       !['low','medium','high'].includes(result.risk)||
+       !Array.isArray(result.files)||result.files.length>8||
+       !result.files.every(bugfixPathAllowed)||
+       !Array.isArray(result.queries)||result.queries.length>10||
+       !result.queries.every(q=>bugReportText(q,120,1)))return false;
+    return true;
+  }
+  if(Object.keys(result).some(k=>!['summary','risk','edits'].includes(k))||
+     !bugReportText(result.summary||'',3000,10)||
+     !['low','medium','high'].includes(result.risk)||
+     !Array.isArray(result.edits)||result.edits.length<1||result.edits.length>6)return false;
+  return result.edits.every(e=>e&&typeof e==='object'&&!Array.isArray(e)&&
+    Object.keys(e).every(k=>['path','find','replace'].includes(k))&&
+    bugfixAiEditablePath(e.path)&&typeof e.find==='string'&&e.find.length>=3&&e.find.length<=16000&&
+    typeof e.replace==='string'&&e.replace.length<=20000);
+}
+async function callBugfixClaude(env,ctx,stage,body){
+  const report=body.report;
+  const system=stage==='plan'
+    ?'Eres un ingeniero de software que diagnostica bugs del Dashboard The Lab Solutions. Devuelve SOLO JSON válido. No propongas cambios de seguridad, autenticación, permisos, facturación, SII, secretos, workflows, infraestructura ni dependencias externas. Si el reporte parece tocar esas áreas, marca risk high. Elige como máximo 8 archivos del repoMap y hasta 10 cadenas de búsqueda breves. Formato exacto: {"analysis":"diagnóstico concreto","risk":"low|medium|high","files":["ruta"],"queries":["texto"]}.'
+    :'Eres un ingeniero que prepara un parche mínimo y verificable. Devuelve SOLO JSON válido. Solo puedes editar archivos incluidos en FILES. Cada edición es reemplazo exacto find/replace y find debe ser suficientemente específico. No toques seguridad, autenticación, permisos, facturación, SII, secretos, workflows, infraestructura ni dependencias. No inventes archivos. Formato exacto: {"summary":"qué corrige","risk":"low|medium|high","edits":[{"path":"ruta","find":"texto exacto existente","replace":"texto nuevo"}]}.';
+  let content;
+  if(stage==='plan'){
+    const screenshot=String(report.screenshot||'');
+    const text='REPORTE\n'+JSON.stringify({...report,screenshot:undefined})+
+      '\n\nARCHIVOS DISPONIBLES\n'+body.repoMap.join('\n');
+    content=[{type:'text',text}];
+    if(screenshot){
+      content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',
+        data:screenshot.slice(screenshot.indexOf(',')+1)}});
+    }
+  }else{
+    content='REPORTE\n'+JSON.stringify(report)+'\n\nPLAN\n'+JSON.stringify(body.plan)+
+      '\n\nFILES\n'+body.files.map(f=>'===== '+f.path+' =====\n'+f.content).join('\n');
+  }
+  const payload={
+    model:stage==='plan'?'claude-haiku-4-5':'claude-sonnet-4-6',
+    max_tokens:stage==='plan'?700:1800,
+    system,
+    messages:[{role:'user',content}]
+  };
+  const reservation=await reserveAiBudget(env,payload,'bugfix-'+stage);
+  if(!reservation.ok)throw Object.assign(new Error(reservation.error||'AI budget unavailable'),
+    {status:reservation.status||429});
+  let upstream;
+  try{
+    upstream=await fetch(ANTHROPIC_BASE+'/v1/messages',{
+      method:'POST',headers:{'x-api-key':env.ANTHROPIC_TOKEN,
+        'anthropic-version':'2023-06-01','Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+  }catch(e){
+    await releaseAiReservation(env,reservation,'bugfix_network');
+    throw e;
+  }
+  const usageCopy=upstream.clone();
+  const accounting=reconcileAiBudget(env,reservation,usageCopy).catch(()=>{});
+  if(ctx&&typeof ctx.waitUntil==='function')ctx.waitUntil(accounting);else await accounting;
+  if(!upstream.ok)throw Object.assign(new Error('Anthropic rejected bugfix request'),{status:upstream.status});
+  const data=await upstream.json();
+  const text=(Array.isArray(data?.content)?data.content:[]).filter(x=>x?.type==='text').map(x=>x.text||'').join('\n');
+  const result=parseBugfixJson(text);
+  if(!bugfixResultAllowed(stage,result))throw new Error('AI bugfix response failed validation');
+  return result;
+}
+async function handleGithubBugfixAi(request,env,ctx){
+  if(request.method!=='POST')return json({error:'Method not allowed'},405);
+  try{await verifyGithubBugfixOidc(request);}
+  catch(_){return json({error:'Valid GitHub Actions OIDC token required'},401);}
+  if(!env.ANTHROPIC_TOKEN)return json({error:'AI service unavailable'},503);
+  if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+     Number(request.headers.get('Content-Length')||0)>125000)
+    return json({error:'Bugfix service expects bounded JSON'},415);
+  let body;try{
+    const raw=await request.text();if(raw.length>125000)throw Error('large');
+    body=JSON.parse(raw);
+  }catch(_){return json({error:'Invalid bugfix service JSON'},422);}
+  const stage=body?.stage;
+  if(stage==='ping'&&Object.keys(body).length===1)
+    return json({ok:true,pong:true},200);
+  if(stage==='plan'?!bugfixPlanRequestAllowed(body):
+     stage==='patch'?!bugfixPatchRequestAllowed(body):true)
+    return json({error:'Invalid bugfix service request'},422);
+  try{return json({ok:true,result:await callBugfixClaude(env,ctx,stage,body)},200);}
+  catch(e){
+    return json({error:String(e?.message||'Bugfix AI failed').slice(0,500)},
+      Number.isInteger(e?.status)&&e.status>=400&&e.status<=599?e.status:502);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
@@ -2570,6 +2974,12 @@ export default {
 
     if (url.pathname === '/health') {
       return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN, reportes_iso_upsert: !!env.CRM_MUTATION_GUARD, marketing_spend_guard: !!env.CRM_MUTATION_GUARD }, 200, CORS);
+    }
+
+    // GitHub Actions obtains a short-lived OIDC token. This service route never
+    // accepts the public APP_KEY and never exposes the Anthropic secret.
+    if(url.pathname==='/service/github/bugfix-ai'){
+      return handleGithubBugfixAi(request,env,ctx);
     }
 
     // Login is a top-level browser navigation. Cloudflare Access handles the
@@ -2612,7 +3022,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/bug-reports'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -2682,6 +3092,68 @@ export default {
         email:authorized.identity.email,role:authorized.identity.role,
         method:request.method,path:url.pathname.slice(0,180),
       }));
+    }
+
+    // Internal bug reports get a narrow endpoint. Screenshots are stored
+    // separately from metadata so history reads stay small.
+    if(url.pathname==='/shared/bug-reports'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      const keys=[...url.searchParams.keys()];
+      if(keys.some(k=>k!=='id')||url.searchParams.getAll('id').length>1)
+        return json({error:'Bug report query invalid'},422,scopedHeaders);
+
+      if(request.method==='GET'){
+        const id=url.searchParams.get('id')||'';
+        const identity=authorized.identity||null;
+        const result=id?await sharedBugReportLoad(env,id,identity):await sharedBugReportList(env,identity);
+        if(result.error){
+          const status=result.error==='not-found'?404:
+            result.error==='invalid-id'?422:503;
+          return json({error:result.error},status,scopedHeaders);
+        }
+        return id
+          ?json({ok:true,report:result.report,screenshot:result.screenshot||''},200,scopedHeaders)
+          :json({ok:true,reports:result.reports||[]},200,scopedHeaders);
+      }
+
+      if(url.search)return json({error:'Bug report write query not allowed'},422,scopedHeaders);
+
+      if(request.method==='POST'){
+        if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+           Number(request.headers.get('Content-Length')||0)>100000)
+          return json({error:'Bug report expects bounded JSON'},415,scopedHeaders);
+        let body;try{
+          const raw=await request.text();if(raw.length>100000)throw Error('large');
+          body=JSON.parse(raw);
+        }catch(_){return json({error:'Invalid bug report JSON'},422,scopedHeaders);}
+        const result=await sharedBugReportCreate(env,body,authorized.identity||null);
+        if(result.error)return json({error:result.error},result.uncertain?503:422,scopedHeaders);
+        return json({ok:true,id:result.id,report:result.report},201,scopedHeaders);
+      }
+
+      if(request.method==='PATCH'){
+        if(authorized.identity?.role!=='admin')
+          return json({error:'Admin role required for bug report actions'},403,scopedHeaders);
+        if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+           Number(request.headers.get('Content-Length')||0)>10000)
+          return json({error:'Bug report action expects bounded JSON'},415,scopedHeaders);
+        let body;try{
+          const raw=await request.text();if(raw.length>10000)throw Error('large');
+          body=JSON.parse(raw);
+        }catch(_){return json({error:'Invalid bug report action JSON'},422,scopedHeaders);}
+        if(!body||typeof body!=='object'||Array.isArray(body)||
+           Object.keys(body).some(k=>!['id','action'].includes(k))||
+           !bugReportIdAllowed(body.id)||!['retry','close'].includes(body.action))
+          return json({error:'Invalid bug report action'},422,scopedHeaders);
+        const result=await sharedBugReportAction(env,body.id,body.action);
+        if(result.error){
+          const status=result.error==='not-found'?404:
+            result.error==='retry-not-allowed'?409:422;
+          return json({error:result.error},status,scopedHeaders);
+        }
+        return json({ok:true,report:result.report},200,scopedHeaders);
+      }
+      return json({error:'Method not allowed'},405,scopedHeaders);
     }
 
     // Calendar collaboration gets a dedicated document endpoint instead of

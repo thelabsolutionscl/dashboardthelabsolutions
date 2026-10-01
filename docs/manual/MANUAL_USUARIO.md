@@ -1,6 +1,6 @@
 # Manual de Usuario - Dashboard The Lab Solutions
 
-**Versión:** 1.4  
+**Versión:** 1.5  
 **Fecha:** 1 de octubre de 2026  
 **Aplicación:** Dashboard The Lab Solutions  
 **Objetivo:** explicar de forma clara cómo usar las funciones cotidianas del dashboard, qué revisar antes de cambiar datos y qué hacer ante los problemas más comunes.
@@ -836,22 +836,43 @@ Operación antigua ya cerrada que se registra como aprobada sin volver a crear p
 
 ---
 
-## 26. Qué hacer cuando encuentras un error
+## 26. REPORTAR UN PROBLEMA
 
-![Menú y contexto general para reportar correctamente un problema.](assets/primeros-pasos.png)
+![Pantalla para reportar un problema y revisar su historial.](assets/reportar-problema.png)
 
-Al reportar un problema, entrega:
+### Dónde está
 
-1. sección;
-2. registro afectado;
-3. qué esperabas ver;
-4. qué aparece realmente;
-5. captura;
-6. si acababas de crear/editar algo;
-7. si Centro de Conexiones estaba verde;
-8. hora aproximada.
+**Mi cuenta → Reportar problema**
 
-Esto permite distinguir rápidamente entre un problema de interfaz, caché, datos, permisos o integración.
+### Para qué sirve
+
+Permite informar un error directamente desde el dashboard sin tener que copiarlo a otro chat. El reporte queda guardado en un historial y entra en la cola de reparación con IA.
+
+### Qué enviar
+
+1. Describe qué estabas intentando hacer y qué ocurrió.
+2. Adjunta un screenshot cuando ayude a entender el problema.
+3. Pulsa **Enviar a reparación IA**.
+
+El dashboard agrega automáticamente la sección abierta, la versión publicada, la ruta y datos básicos del navegador. No incluye contraseñas ni claves de servicios.
+
+### Estados del historial
+
+- **Nuevo:** el reporte quedó guardado.
+- **Analizando con IA:** el sistema está localizando la causa probable.
+- **Reparando:** la IA está preparando un cambio de código.
+- **PR creado:** existe un Pull Request con el arreglo y sus pruebas.
+- **Requiere revisión:** el cambio toca un área sensible o GitHub no permitió fusionarlo automáticamente.
+- **Resuelto:** el arreglo seguro fue fusionado.
+- **Error de reparación:** la automatización no pudo terminar después de sus reintentos.
+
+### Cómo se repara
+
+La IA no modifica producción directamente. Trabaja sobre una rama separada, propone cambios exactos, ejecuta las pruebas del repositorio y crea un Pull Request. Los cambios de bajo riesgo pueden fusionarse automáticamente si GitHub los permite.
+
+Áreas sensibles como autenticación, seguridad, SII, infraestructura y permisos quedan fuera de la autoedición y requieren revisión.
+
+**PRECAUCIÓN:** antes de subir un screenshot, revisa que no muestre contraseñas, claves API, códigos de recuperación u otras credenciales.
 
 ---
 

@@ -273,6 +273,7 @@
         <div class="user-menu-item" onclick="openConnectionsCenterFromUserMenu()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Centro de conexiones</div>
         <div class="user-menu-item" onclick="openAppearanceSettings()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-visual"/></svg> Apariencia</div>
         <div class="user-menu-item" onclick="openUserManual()"><span aria-hidden="true" style="width:14px;text-align:center;font-weight:800">?</span> Manual de usuario</div>
+        <div class="user-menu-item" onclick="openBugReporter()"><span aria-hidden="true" style="width:14px;text-align:center;font-weight:800;color:var(--warning)">!</span> Reportar problema</div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-token">
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-key"/></svg> Token Airtable</div>
@@ -7219,6 +7220,11 @@ applyAppearancePrefs({
 function openUserManual(){
   closeUserMenu();
   window.open('manual.html','_blank','noopener,noreferrer');
+}
+
+function openBugReporter(){
+  if(window.BUG_REPORTER?.open)return window.BUG_REPORTER.open();
+  try{toast('El módulo de reportes todavía está cargando. Intenta nuevamente en un momento.','warning');}catch(_){}
 }
 function openConnectionsCenterFromUserMenu(){
   closeUserMenu();
@@ -20167,6 +20173,7 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
 </script>
 
 <script src="js/slicer3d.js?v=%%BUILD%%"></script>
+<script src="js/bug-reporter.js?v=%%BUILD%%"></script>
 
 <script>
 // ── Nav Drag/Reorder ─────────────────────────────────────────────────
