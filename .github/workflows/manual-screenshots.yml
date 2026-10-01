@@ -77,5 +77,5 @@ jobs:
             echo "Sin cambios en capturas"
             exit 0
           fi
-          git commit -m "docs(manual): actualizar screenshots [skip ci]"
+          git commit -m "docs(manual): actualizar screenshots"
           git push origin HEAD:"${TARGET_BRANCH}"
