@@ -63,3 +63,12 @@ test('cambiar tema actualiza theme-color y dispara evento global',()=>{
   assert.match(HTML,/tls:appearance-changed/);
   assert.match(HTML,/values\.theme==='light'\?'#f3f7f8':'#0a0a0a'/);
 });
+
+
+test('cambiar la fuente no deforma ni corta los números de KPIs',()=>{
+  assert.match(CSS,/html\[data-font\] \.kpi-value\{[\s\S]*?font-family:'Bebas Neue',sans-serif!important/);
+  assert.match(CSS,/html\[data-font\] \.op-metric>strong,[\s\S]*?\.op-priority>strong\{[\s\S]*?font-family:'DM Sans',sans-serif!important/);
+  assert.match(CSS,/font-variant-numeric:tabular-nums/);
+  assert.doesNotMatch(CSS,/data-font="inter"\] \.kpi-value/);
+  assert.doesNotMatch(CSS,/data-font="space"\] \.kpi-value/);
+});
