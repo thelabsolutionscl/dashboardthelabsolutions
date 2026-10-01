@@ -24,9 +24,11 @@ test('tema, wallpaper y fuente se persisten y se aplican antes de pintar',()=>{
 
 test('hay exactamente dos temas y tres fondos seleccionables',()=>{
   assert.match(HTML,/_APPEARANCE_ALLOWED=\{theme:\['dark','light'\],wallpaper:\['blueprint','holographic','glass'\],font:\['dm','inter','space'\]\}/);
-  for(const v of ['dark','light','blueprint','holographic','glass']){
-    assert.match(HTML,new RegExp("data-appearance-value=\\\""+v+"\\\""));
-  }
+  assert.match(HTML,/_appearanceChoice\('theme','dark'/);
+  assert.match(HTML,/_appearanceChoice\('theme','light'/);
+  assert.match(HTML,/_appearanceChoice\('wallpaper','blueprint'/);
+  assert.match(HTML,/_appearanceChoice\('wallpaper','holographic'/);
+  assert.match(HTML,/_appearanceChoice\('wallpaper','glass'/);
 });
 
 test('los tres fondos son CSS responsivo y funcionan en claro/oscuro',()=>{
