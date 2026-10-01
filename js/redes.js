@@ -1227,8 +1227,20 @@ function _nlMdToHtml(md){
     const line=raw.trim();
     if(!line){closeList();continue;}
     let m;
-    // Imagen ![alt](url)
-    if(m=line.match(/^!\[([^\]]*)\]\(([^)\s]+)\)/)){closeList();html+=`<img src="${escapeHtml(m[2])}" alt="${escapeHtml(m[1])}" style="display:block;width:100%;max-width:100%;height:auto;border-radius:10px;margin:16px 0">`;continue;}
+    // Varias imágenes en una misma línea → galería horizontal apta para email.
+    // Ej: ![A](https://...) ![B](https://...) ![C](https://...)
+    const gallery=[...line.matchAll(/!\\[([^\\]]*)\\]\\((https?:\\/\\/[^)\\s]+)\\)/g)];
+    const galleryRemainder=line.replace(/!\\[[^\\]]*\\]\\(https?:\\/\\/[^)\\s]+\\)/g,'').trim();
+    if(gallery.length>=2 && !galleryRemainder){
+      closeList();
+      const gap=8;
+      html+='<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0;border-collapse:separate;border-spacing:'+gap+'px 0"><tr>'+
+        gallery.map(g=>'<td width="'+(100/gallery.length)+'%" valign="top" style="padding:0"><img src="'+escapeHtml(g[2])+'" alt="'+escapeHtml(g[1])+'" style="display:block;width:100%;max-width:100%;height:auto;border-radius:10px"></td>').join('')+
+        '</tr></table>';
+      continue;
+    }
+    // Imagen individual ![alt](url)
+    if(m=line.match(/^!\\[([^\\]]*)\\]\\((https?:\\/\\/[^)\\s]+)\\)/)){closeList();html+=`<img src="${escapeHtml(m[2])}" alt="${escapeHtml(m[1])}" style="display:block;width:100%;max-width:100%;height:auto;border-radius:10px;margin:18px auto">`;continue;}
     // Regla horizontal: --- *** ___
     if(/^([-*_])\1{2,}$/.test(line)){closeList();html+='<hr style="border:none;border-top:1px solid #e6e6e9;margin:24px 0">';continue;}
     // CTA (línea que es solo un enlace) → botón
