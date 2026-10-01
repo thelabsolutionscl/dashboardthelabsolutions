@@ -7221,6 +7221,11 @@ function openUserManual(){
   closeUserMenu();
   window.open('manual.html','_blank','noopener,noreferrer');
 }
+
+function openBugReporter(){
+  if(window.BUG_REPORTER?.open)return window.BUG_REPORTER.open();
+  try{toast('El módulo de reportes todavía está cargando. Intenta nuevamente en un momento.','warning');}catch(_){}
+}
 function openConnectionsCenterFromUserMenu(){
   closeUserMenu();
   let tries=0;
