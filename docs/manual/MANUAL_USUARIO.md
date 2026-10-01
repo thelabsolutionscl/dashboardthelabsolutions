@@ -1,6 +1,6 @@
 # Manual de Usuario - Dashboard The Lab Solutions
 
-**Versión:** 1.1  
+**Versión:** 1.2  
 **Fecha:** 1 de octubre de 2026  
 **Aplicación:** Dashboard The Lab Solutions  
 **Objetivo:** explicar el uso cotidiano del dashboard sin entrar en administración de servidores, claves ni código.
@@ -56,23 +56,10 @@ La campana superior agrupa avisos y alertas. Puedes filtrar por tipo y consultar
 
 Desde tu nombre en la esquina superior puedes acceder a **Actualizar datos**, **Centro de conexiones**, **Apariencia**, **Manual de usuario**, configuraciones técnicas visibles para tu rol y **Cerrar sesión**.
 
----
-
-## 3. Modos Simple y Experto
-
-![Newsletter como ejemplo de sección fijada en modo Experto.](assets/newsletter.png)
-
-El dashboard ha ido eliminando vistas duplicadas. Actualmente:
-
-- **Solo Simple:** Overview, Calendario, Clientes, Cotizaciones, Pedidos, Máquinas, Equipo y Web.
-- **Solo Experto:** Newsletter.
-- Otras secciones pueden conservar un selector cuando realmente cambia el nivel de detalle.
-
-**INFO:** Simple no significa "menos datos"; en las secciones anteriores es la vista canónica y contiene las mismas acciones útiles sin duplicar interfaz.
 
 ---
 
-## 4. OVERVIEW - Centro de comando
+## 3. OVERVIEW - Centro de comando
 
 ![Vista general del Centro de Comando.](assets/overview.png)
 
@@ -106,7 +93,7 @@ Agrupa situaciones operativas que requieren acción: entregas, gestiones comerci
 
 ---
 
-## 5. CLIENTES
+## 4. CLIENTES
 
 ![Vista principal de Clientes.](assets/clientes.png)
 
@@ -139,7 +126,7 @@ Un mismo cliente puede existir más de una vez si históricamente fue creado con
 
 ---
 
-## 6. COTIZACIONES
+## 5. COTIZACIONES
 
 ![Vista principal de Cotizaciones.](assets/cotizaciones.png)
 
@@ -182,7 +169,7 @@ La vista de propuesta permite revisar descripción, unidades, costos y valores d
 
 ---
 
-## 7. PEDIDOS
+## 6. PEDIDOS
 
 ![Vista principal de Pedidos.](assets/pedidos.png)
 
@@ -224,7 +211,7 @@ No marques un pedido como despachado solo para sacarlo de la lista. Usa QA y los
 
 ---
 
-## 8. INVENTARIO
+## 7. INVENTARIO
 
 ![Vista principal de Inventario.](assets/inventario.png)
 
@@ -244,7 +231,7 @@ Registrar materiales y consultar stock operativo.
 
 ---
 
-## 9. PROVEEDORES
+## 8. PROVEEDORES
 
 ![Vista principal de Proveedores.](assets/proveedores.png)
 
@@ -267,7 +254,7 @@ Evita duplicar proveedores por diferencias de escritura. Registra condiciones de
 
 ---
 
-## 10. AGENTES IA
+## 9. AGENTES IA
 
 ![Vista principal de Agentes IA.](assets/agentes.png)
 
@@ -292,7 +279,7 @@ El dashboard contiene controles de gasto para Claude/OpenAI. Evita regenerar el 
 
 ---
 
-## 11. OFICINA
+## 10. OFICINA
 
 ![Vista operativa de Oficina.](assets/oficina.png)
 
@@ -310,7 +297,7 @@ La Oficina es una visualización de operación, no una fuente independiente. Si 
 
 ---
 
-## 12. REDES SOCIALES
+## 11. REDES SOCIALES
 
 ![Vista principal de Redes Sociales.](assets/redes.png)
 
@@ -334,9 +321,9 @@ Planificar contenido, generar ideas, organizar publicaciones y revisar métricas
 
 ---
 
-## 13. NEWSLETTER - solo modo Experto
+## 12. NEWSLETTER
 
-![Newsletter en su vista canónica Experto.](assets/newsletter.png)
+![Vista principal de Newsletter.](assets/newsletter.png)
 
 ### Para qué sirve
 
@@ -377,7 +364,7 @@ Aperturas/clics pueden generar oportunidades de seguimiento. Revisa el contexto 
 
 ---
 
-## 14. MÁQUINAS
+## 13. MÁQUINAS
 
 ![Panel principal de la granja de impresión 3D.](assets/maquinas.png)
 
@@ -415,7 +402,7 @@ Distingue entre planificación local, telemetría física reciente y cola durabl
 
 ---
 
-## 15. EQUIPO - solo modo Simple
+## 14. EQUIPO
 
 ![Vista principal de Equipo.](assets/equipo.png)
 
@@ -433,11 +420,9 @@ Gestionar personas, agenda, metas, comisiones y elementos operativos asociados a
 - Guardar cambios.
 - Consultar información asociada.
 
-El antiguo modo Experto fue retirado porque duplicaba la información del modo Simple.
-
 ---
 
-## 16. CALENDARIO - solo modo Simple
+## 15. CALENDARIO
 
 ![Vista principal de Calendario.](assets/calendario.png)
 
@@ -466,7 +451,7 @@ Muestra únicamente el calendario, pensada para monitor compartido.
 
 ---
 
-## 17. REPORTES
+## 16. REPORTES
 
 ![Vista principal de Reportes.](assets/reportes.png)
 
@@ -484,7 +469,7 @@ Verifica que los datos base estén actualizados. Distingue entre cifras calculad
 
 ---
 
-## 18. WEB - solo modo Simple
+## 17. WEB
 
 ![Vista principal de Web y marketing.](assets/web.png)
 
@@ -504,7 +489,7 @@ Algunas acciones dependen de Apps Script o APIs externas. Una conexión verde co
 
 ---
 
-## 19. FINANZAS
+## 18. FINANZAS
 
 ![Vista principal de Finanzas.](assets/finanzas.png)
 
@@ -554,7 +539,7 @@ Cuando la emisión tributaria esté habilitada, verifica folio y respuesta SII. 
 
 ---
 
-## 20. REMUNERACIONES
+## 19. REMUNERACIONES
 
 ![Vista principal de Remuneraciones.](assets/remuneraciones.png)
 
@@ -574,7 +559,7 @@ Exportar CSV, configurar sueldos y guardar sueldos.
 
 ---
 
-## 21. CORREO
+## 20. CORREO
 
 ![Vista principal de Correo.](assets/correo.png)
 
@@ -613,7 +598,7 @@ Centro de Conexiones comprueba ambos sin exponer claves.
 
 ---
 
-## 22. CENTRO DE CONEXIONES
+## 21. CENTRO DE CONEXIONES
 
 ![Centro de Conexiones desde Mi cuenta.](assets/centro-conexiones.png)
 
@@ -654,7 +639,7 @@ Lee el texto del diagnóstico. No amplíes permisos de una API solo para que el 
 
 ---
 
-## 23. APARIENCIA
+## 22. APARIENCIA
 
 ![Selector de tema, fondo y tipografía.](assets/apariencia.png)
 
@@ -687,7 +672,7 @@ La preferencia se guarda en el navegador. Cambiar apariencia no modifica CRM, pe
 
 ---
 
-## 24. Solución rápida de problemas
+## 23. Solución rápida de problemas
 
 ![Centro de Conexiones, punto de partida para diagnosticar integraciones.](assets/centro-conexiones.png)
 
@@ -728,7 +713,7 @@ Abre la sección fuente y compara el conjunto de registros. Reporta el KPI junto
 
 ---
 
-## 25. Buenas prácticas operativas
+## 24. Buenas prácticas operativas
 
 ![Overview como punto de partida para revisar la operación.](assets/overview.png)
 
@@ -745,7 +730,7 @@ Abre la sección fuente y compara el conjunto de registros. Reporta el KPI junto
 
 ---
 
-## 26. Glosario
+## 25. Glosario
 
 ![Manual web con índice y buscador.](assets/manual-web.png)
 
@@ -811,7 +796,7 @@ Operación antigua ya cerrada que se registra como aprobada sin volver a crear p
 
 ---
 
-## 27. Qué hacer cuando encuentras un error
+## 26. Qué hacer cuando encuentras un error
 
 ![Menú y contexto general para reportar correctamente un problema.](assets/primeros-pasos.png)
 
@@ -830,7 +815,7 @@ Esto permite distinguir rápidamente entre un problema de interfaz, caché, dato
 
 ---
 
-## 28. Control de versión del manual
+## 27. Control de versión del manual
 
 ![El manual web se genera desde la fuente versionada del repositorio.](assets/manual-web.png)
 
