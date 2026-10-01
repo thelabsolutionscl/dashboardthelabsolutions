@@ -213,7 +213,11 @@
       const token=(typeof _driveAccessToken!=='undefined'&&typeof _driveTokenExpiry!=='undefined'&&_driveTokenExpiry>Date.now()+60000)?_driveAccessToken:'';
       if(!token)return {status:'gray',message:'Drive aún no autorizado en esta sesión'};
       const r=await getJson('https://www.googleapis.com/drive/v3/files?pageSize=1&fields=files(id)',{headers:{Authorization:'Bearer '+token}});
-      return r.status==='green'?{status:'green',message:'Google Drive autoriza consultas de archivos'}:r;
+      if(r.status==='green'){
+        try{if(typeof _refreshDriveBtns==='function')_refreshDriveBtns();}catch(_){}
+        return {status:'green',message:'Google Drive autoriza consultas de archivos'};
+      }
+      return r;
     }
     if(id==='imap'){
       if(typeof MAIL==='undefined'||!MAIL.getMailPass?.())return {status:'gray',message:'Abre Correos y autentica la cuenta activa'};
