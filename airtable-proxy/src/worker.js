@@ -363,7 +363,7 @@ async function problemReportRepair(env,body,identity,legacy){
   const fields={
     Estado:'Nuevo','Auto reparar':true,
     'Diagnóstico IA':'Solicitud manual de reparación recibida. En cola para el próximo ciclo del agente.',
-    'Plan reparación':'','PR URL':'',Error:'',Actualizado:now
+    'Plan reparación':null,'PR URL':null,Error:null,Actualizado:now
   };
   try{
     const r=await fetch(endpoint,{method:'PATCH',redirect:'manual',
