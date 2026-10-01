@@ -11047,7 +11047,9 @@ async function updateCotizacionEstado(id,estado){
       const _cot=state.cotizacionesById[id];
       const _cid=Array.isArray(_cot?.fields['Cliente'])?_cot.fields['Cliente'][0]:null;
       await _advanceEtapaCliente(_cid,'Cliente activo',['','Lead nuevo','Contactado','Propuesta enviada','Negociación']);
-      await crearPedidoDesdeCotizacion(id);
+      // Una venta histórica ya producida/pagada no debe crear un pedido nuevo:
+      // eso duplicaría revenue y reabriría una operación cerrada.
+      if(!_cot?.fields?.['Venta histórica conciliada']) await crearPedidoDesdeCotizacion(id);
       // Crea/actualiza la carpeta del cliente + carpeta de cotización en Drive.
       // Solo si ya hay sesión de Drive activa (evita un popup bloqueado a mitad
       // del flujo). Si no, la carpeta se crea sola al abrir "Ver adjuntos".
@@ -11122,6 +11124,10 @@ async function crearPedidoDesdeCotizacion(cotId,opts){
   _pedidosCotEnCurso.add(cotId);
   try{
   const cot=state.cotizacionesById[cotId];if(!cot) return false;const f=cot.fields;
+  if(f['Venta histórica conciliada']){
+    if(!opts.silent) toast('Esta venta histórica ya fue producida y pagada; no se crea un pedido nuevo','info');
+    return false;
+  }
   const numCot=f['N° Cotización']||'';
   // Guard anti-duplicado: si ya existe un pedido para esta cotización, no crear otro.
   const existente=_pedidoDeCot(cot);
@@ -11209,6 +11215,7 @@ function _cotAprobadasSinPedido(){
   return _base.filter(c=>{
     const est=c.fields['Estado cotización']||'';
     if(est!=='Aprobada') return false;
+    if(c.fields['Venta histórica conciliada']) return false;
     return !_pedidoDeCot(c);
   }).sort((a,b)=>(b.fields['Fecha cotización']||b.createdTime||'').localeCompare(a.fields['Fecha cotización']||a.createdTime||''));
 }
@@ -11438,7 +11445,7 @@ async function saveEditCot(){
     // cliente, plazo e ítems que acaban de guardarse en el formulario.
     if(_cotRec)Object.assign(_cotRec.fields,fields);
     let _pedidoPendiente=false;
-    if(fields['Estado cotización']==='Aprobada'&&_cotRec&&!_pedidoDeCot(_cotRec)){
+    if(fields['Estado cotización']==='Aprobada'&&_cotRec&&!_cotRec.fields['Venta histórica conciliada']&&!_pedidoDeCot(_cotRec)){
       const _cid=Array.isArray(_cotRec.fields['Cliente'])?_cotRec.fields['Cliente'][0]:null;
       await _advanceEtapaCliente(_cid,'Cliente activo',['','Lead nuevo','Contactado','Propuesta enviada','Negociación']);
       const _pedidoCreado=await crearPedidoDesdeCotizacion(cotId);
