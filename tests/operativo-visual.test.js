@@ -316,9 +316,9 @@ test('VER PROPUESTA muestra descripción, cantidades, costos, ventas y resumen d
 test('OVERVIEW, CALENDARIO, CLIENTES, COTIZACIONES, PEDIDOS, MÁQUINAS, EQUIPO y WEB quedan fijos en Simple',()=>{
   const src=fs.readFileSync('js/operativo-visual.js','utf8');
   assert.match(src,/const simpleOnlyViews=new Set\(\['overview','calendario','clientes','cotizaciones','pedidos','maquinas','equipo','web'\]\)/);
-  assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple':\(value==='expert'\?'expert':'simple'\)/);
-  assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?mode\(page,'simple'\);[\s\S]*?\}else\{/);
-  const branch=/if\(simpleOnlyViews\.has\(page\)\)\{([\s\S]*?)\}else\{/.exec(src);
+  assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple':expertOnlyViews\.has\(page\)\?'expert':\(value==='expert'\?'expert':'simple'\)/);
+  assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?mode\(page,'simple'\);[\s\S]*?\}else if\(expertOnlyViews\.has\(page\)\)\{/);
+  const branch=/if\(simpleOnlyViews\.has\(page\)\)\{([\s\S]*?)\}else if\(expertOnlyViews\.has\(page\)\)\{/.exec(src);
   assert.ok(branch,'debe existir una rama dedicada para vistas solo Simple');
   assert.doesNotMatch(branch[1],/Experto|page\+':expert'/,'las vistas simple-only no deben crear botón Experto');
   assert.match(src,/let layout='tarjetas';[\s\S]*?op_layout_pedidos/,'Tabla/Tarjetas debe quedar independiente de Simple/Experto en Pedidos');
