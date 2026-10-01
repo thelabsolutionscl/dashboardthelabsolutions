@@ -49,6 +49,11 @@ async function shot(name,{tab,action,delay=1200,scrollY=0}={}){
   }
   if(action)await page.evaluate(action);
   await page.waitForTimeout(delay);
+  await page.evaluate(()=>{
+    document.querySelectorAll('.op-switch,.op-scope-note').forEach(el=>{
+      if(/simple|experto/i.test(el.textContent||''))el.style.display='none';
+    });
+  });
   await page.evaluate(y=>window.scrollTo(0,y),scrollY);
   await page.waitForTimeout(250);
   await page.screenshot({path:`${OUT}/${name}.png`,fullPage:false});
