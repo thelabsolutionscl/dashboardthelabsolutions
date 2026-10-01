@@ -95,10 +95,10 @@ test('cada capítulo numerado tiene una captura',()=>{
 test('el manual mantiene cobertura visual detallada',()=>{
   const refs=[...MANUAL.matchAll(/assets\/([a-z0-9-]+)\.png/gi)].map(m=>m[1]);
   const unique=new Set(refs);
-  assert.ok(unique.size>=41,'se esperan al menos 41 screenshots únicos');
+  assert.ok(unique.size>=42,'se esperan al menos 42 screenshots únicos');
   for(const shot of [
     'nueva-cotizacion','pedidos-tabla','pedidos-planificacion','maquinas-planificacion',
-    'finanzas-facturas','finanzas-por-cobrar','correo-redactar','centro-conexiones-detalle'
+    'finanzas-facturas','finanzas-por-cobrar','correo-redactar','centro-conexiones-detalle','reportar-problema'
   ]) assert.ok(unique.has(shot),'falta screenshot '+shot);
 });
 
