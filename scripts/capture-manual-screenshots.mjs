@@ -88,7 +88,7 @@ await shot('equipo',{tab:'equipo',delay:1600});
 await shot('calendario',{tab:'calendario',delay:1600});
 await shot('reportes',{tab:'reporte',delay:1200});
 await shot('web',{tab:'web',delay:1800});
-await shot('finanzas',{tab:'finanzas',delay:1600});
+await shot('finanzas',{tab:'finanzas',delay:1600,scrollY:220});
 await shot('remuneraciones',{tab:'remuneraciones',delay:1400});
 await shot('correo',{tab:'correo',delay:1800});
 await shot('centro-conexiones',{tab:'overview',action:()=>{try{openConnectionsCenterFromUserMenu()}catch(_){}} ,delay:1600});
@@ -107,10 +107,10 @@ await shot('maquinas-planificacion',{tab:'maquinas',action:()=>{try{MachineOps.s
 await shot('calendario-agenda',{tab:'calendario',action:()=>{try{calSetVista('agenda')}catch(_){}},delay:1200});
 await shot('reportes-historial',{tab:'reporte',scrollY:600,delay:1200});
 await shot('web-google-ads',{tab:'web',scrollY:650,delay:1500});
-await shot('finanzas-facturas',{tab:'finanzas',action:()=>{try{finSwitchTab('facturas')}catch(_){}},delay:1200});
-await shot('finanzas-por-cobrar',{tab:'finanzas',action:()=>{try{finSwitchTab('cobrar')}catch(_){}},delay:1200});
-await shot('correo-redactar',{tab:'correo',action:()=>{try{MAIL.openCompose({to:'cliente.demo@example.com',subject:'Ejemplo de correo',body:'Este es un borrador de demostración para el manual de usuario.'})}catch(_){}},delay:1000});
-await shot('centro-conexiones-detalle',{tab:'overview',action:()=>{try{openConnectionsCenterFromUserMenu()}catch(_){}},delay:1000,scrollY:420});
+await shot('finanzas-facturas',{tab:'finanzas',action:()=>{try{finSwitchTab('facturas')}catch(_){}},delay:1200,scrollY:220});
+await shot('finanzas-por-cobrar',{tab:'finanzas',action:()=>{try{finSwitchTab('cobrar')}catch(_){}},delay:1200,scrollY:220});
+await shot('correo-redactar',{tab:'correo',action:()=>{try{const p=document.getElementById('mailPassModal');if(p)p.style.display='none';MAIL.openCompose({to:'cliente.demo@example.com',subject:'Ejemplo de correo',body:'Este es un borrador de demostración para el manual de usuario.'})}catch(_){}},delay:1000});
+await shot('centro-conexiones-detalle',{tab:'overview',action:()=>{try{openConnectionsCenterFromUserMenu();const d=document.getElementById('tlsConnDialog');if(d)d.scrollTop=620}catch(_){}},delay:1000});
 
 await shot('apariencia',{tab:'overview',action:()=>{try{openAppearanceSettings()}catch(_){}} ,delay:800});
 
