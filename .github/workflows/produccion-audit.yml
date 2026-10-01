@@ -1,0 +1,64 @@
+name: Auditoría Producción
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/maquinas.js'
+      - 'js/maquinas-operaciones.js'
+      - 'js/slicer3d.js'
+      - 'tests/produccion-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/maquinas-wiring.test.js'
+      - 'tests/maquinas-operaciones.test.js'
+      - 'tests/maquinas-telemetria.test.js'
+      - '.github/workflows/produccion-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/maquinas.js'
+      - 'js/maquinas-operaciones.js'
+      - 'js/slicer3d.js'
+      - 'tests/produccion-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/maquinas-wiring.test.js'
+      - 'tests/maquinas-operaciones.test.js'
+      - 'tests/maquinas-telemetria.test.js'
+      - '.github/workflows/produccion-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  produccion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validar sintaxis de módulos productivos
+        shell: bash
+        run: |
+          node --check js/maquinas.js
+          node --check js/maquinas-operaciones.js
+          if [ -f js/slicer3d.js ]; then node --check js/slicer3d.js; fi
+
+      - name: Auditar orden y cableado de Producción
+        run: node --test tests/produccion-wiring.test.js
+
+      - name: Validar relación con Pedidos
+        run: node --test tests/pedidos-wiring.test.js
+
+      - name: Validar operación de Máquinas
+        run: |
+          node --test tests/maquinas-wiring.test.js
+          node --test tests/maquinas-operaciones.test.js
+          node --test tests/maquinas-telemetria.test.js

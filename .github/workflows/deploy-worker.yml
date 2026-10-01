@@ -1,0 +1,168 @@
+name: Deploy Cloudflare Workers
+
+# Despliega exclusivamente los Workers cuyo código cambió en main;
+# nunca obliga a desplegar SII por un cambio de Reportes en el proxy.
+# También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
+#
+# Requisito de una sola vez: crear el secreto CLOUDFLARE_API_TOKEN en
+#   Settings → Secrets and variables → Actions
+# con un API Token de Cloudflare que tenga permiso "Edit Cloudflare Workers".
+# Mientras no exista el secreto, este workflow no falla: solo avisa y se omite.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lead-worker/**'
+      - 'airtable-proxy/**'
+      - 'sii-worker/**'
+      - '.github/workflows/deploy-worker.yml'
+      - 'scripts/worker-deploy-targets.sh'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy all Workers or only the selected component
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - lead
+          - proxy
+          - sii
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloudflare-workers
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      lead: ${{ steps.targets.outputs.lead }}
+      proxy: ${{ steps.targets.outputs.proxy }}
+      sii: ${{ steps.targets.outputs.sii }}
+    steps:
+      - name: Checkout commit history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect affected Workers
+        id: targets
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          TARGET: ${{ inputs.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            bash scripts/worker-deploy-targets.sh manual "$TARGET" >> "$GITHUB_OUTPUT"
+          else
+            if [[ "$BEFORE" =~ ^0+$ ]]; then
+              bash scripts/worker-deploy-targets.sh manual all >> "$GITHUB_OUTPUT"
+            else
+              git diff --name-only "$BEFORE" "$SHA" |
+                bash scripts/worker-deploy-targets.sh push >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+  deploy:
+    needs: detect
+    if: needs.detect.outputs.lead == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comprobar token de Cloudflare
+        id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLOUDFLARE_API_TOKEN no configurado — se omite el deploy del worker. Añádelo en Settings → Secrets para activar el auto-deploy."
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Desplegar Worker
+        if: steps.check.outputs.has_token == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: lead-worker
+          # El lead-worker no recibe una key Anthropic. Solo recibe la clave del
+          # proxy ya usada por el dashboard y toda IA pasa por su hard cap.
+          secrets: |
+            AI_PROXY_KEY
+        env:
+          AI_PROXY_KEY: ${{ secrets.PROXY_KEY }}
+
+  deploy-proxy:
+    needs: detect
+    if: needs.detect.outputs.proxy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comprobar token de Cloudflare
+        id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLOUDFLARE_API_TOKEN no configurado — se omite el deploy del proxy."
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Desplegar proxy seguro
+        if: steps.check.outputs.has_token == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: airtable-proxy
+
+
+  deploy-sii:
+    needs: detect
+    if: needs.detect.outputs.sii == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verificar credenciales críticas SII
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SII_KEY: ${{ secrets.SII_WORKER_KEY }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN no configurado — no se puede desplegar el Worker SII."
+            exit 1
+          fi
+          if [ -z "$SII_KEY" ]; then
+            echo "::error::SII_WORKER_KEY no configurado — se bloquea el deploy para no dejar el emisor tributario sin autenticación."
+            exit 1
+          fi
+
+      - name: Desplegar Worker SII cerrado
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: sii-worker
+          secrets: |
+            WORKER_KEY
+        env:
+          WORKER_KEY: ${{ secrets.SII_WORKER_KEY }}

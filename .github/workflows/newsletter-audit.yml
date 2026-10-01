@@ -1,0 +1,64 @@
+name: Newsletter audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/redes.js'
+      - 'js/correo.js'
+      - 'lead-worker/src/index.js'
+      - 'docs/NEWSLETTER.md'
+      - 'tests/newsletter-wiring.test.js'
+      - 'tests/correo-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/newsletter-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/redes.js'
+      - 'js/correo.js'
+      - 'lead-worker/src/index.js'
+      - 'docs/NEWSLETTER.md'
+      - 'tests/newsletter-wiring.test.js'
+      - 'tests/correo-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/newsletter-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  campaigns-consent-and-tracking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate audit syntax
+        run: node --check tests/newsletter-wiring.test.js
+
+      - name: Validate newsletter modules
+        run: |
+          node --check js/redes.js
+          node --check js/correo.js
+          node --check lead-worker/src/index.js
+
+      - name: Audit newsletter wiring and consent
+        run: node --test tests/newsletter-wiring.test.js
+
+      - name: Audit mail transport dependency
+        run: |
+          if [ -f tests/correo-wiring.test.js ]; then
+            node --test tests/correo-wiring.test.js
+          fi
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js

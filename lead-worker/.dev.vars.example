@@ -1,0 +1,21 @@
+# Copia este archivo a .dev.vars (NO se commitea) para desarrollo local con wrangler dev.
+# En producción usar:  npx wrangler secret put NOMBRE
+
+AIRTABLE_TOKEN=patXXXXXXXXXXXXXX.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+AIRTABLE_BASE_ID=app1YtD74AqiPWQhy
+PUBLIC_LEAD_KEY=genera-una-clave-larga-aleatoria
+GOOGLE_ADS_WEBHOOK_KEY=otra-clave-larga-aleatoria
+LINKEDIN_WEBHOOK_KEY=otra-clave-larga-aleatoria
+
+# Opcionales
+TURNSTILE_SECRET=
+AI_PROXY_KEY=
+AUTO_PROCESS_LEADS=false
+
+# Piloto automático de Google Ads (semanal, con aprobación por email)
+ADS_AUTOPILOT=false
+ADS_ENDPOINT=https://script.google.com/macros/s/XXXX/exec
+WORKER_PUBLIC_URL=http://localhost:8787
+ADS_AUTOPILOT_EMAIL=
+ADS_APPROVAL_SECRET=clave-larga-para-firmar-links
+ADS_SCRIPT_SECRET=thelab2025

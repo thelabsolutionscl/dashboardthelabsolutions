@@ -1,0 +1,209 @@
+/* js/dashboard-notification-badges.js
+ * Globos de notificación contextuales para el dock y corrección de anclaje
+ * del badge de la campana. No duplica el panel de NOTIFY: solo resume pendientes
+ * relevantes por módulo y añade salud/config drift activo de la granja a Máquinas.
+ */
+(function(root,factory){
+  const api=factory();
+  if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  if(root){root.DashboardNotificationBadges=api;api.install(root);}
+})(typeof window!=='undefined'?window:null,function(){
+'use strict';
+
+const MODULES=new Set(['correo','pedidos','cotizaciones','clientes','proveedores','maquinas','finanzas','equipo','agentes','oficina','web','reporte','visual','remuneraciones']);
+let target=null,installed=false,timer=null,lastState=null,lastLeadCount=null,lastMailCount=null;
+
+function moduleForItem(item){
+  if(!item||item.read)return'';
+  const type=String(item.type||'').toLowerCase();
+  // Confirmaciones de envío/éxito no son pendientes que requieran atención.
+  if(type==='sent'||type==='success')return'';
+  if(type==='mail')return'correo';
+  const action=String(item.action||'').trim().toLowerCase();
+  if(!action||action.startsWith('@'))return'';
+  return MODULES.has(action)?action:'';
+}
+function rank(sev){return sev==='critical'?3:sev==='warning'?2:1;}
+function severityForItem(item){
+  const type=String(item?.type||'').toLowerCase();
+  return type==='warning'?'warning':type==='mail'?'info':'info';
+}
+function buildState(items,farmAlerts,driftAlerts){
+  const out={};
+  const add=(module,severity,id)=>{
+    if(!module)return;
+    const cur=out[module]||(out[module]={count:0,severity:'info',ids:new Set()});
+    const key=String(id||module+':'+cur.count);
+    if(cur.ids.has(key))return;
+    cur.ids.add(key);cur.count++;
+    if(rank(severity)>rank(cur.severity))cur.severity=severity;
+  };
+  (Array.isArray(items)?items:[]).forEach(item=>{
+    const module=moduleForItem(item);if(!module)return;
+    add(module,severityForItem(item),'notify:'+String(item.id||item.key||''));
+  });
+  (Array.isArray(farmAlerts)?farmAlerts:[]).forEach(a=>{
+    if(!a||a.acked)return;
+    add('maquinas',String(a.severity||'warning').toLowerCase(),'farm:'+String(a.id||a.message||''));
+  });
+  // FarmDrift sólo expone drift real. Las máquinas sin baseline NO se convierten
+  // en notificación para evitar una avalancha de badges durante la instalación.
+  (Array.isArray(driftAlerts)?driftAlerts:[]).forEach(a=>{
+    if(!a)return;
+    add('maquinas',String(a.severity||'warning').toLowerCase(),'drift:'+String(a.id||a.machineId||a.message||''));
+  });
+  const plain={};
+  Object.entries(out).forEach(([k,v])=>plain[k]={count:v.count,severity:v.severity});
+  return plain;
+}
+function farmAlerts(){try{return target?.FarmHealth?.status?.().alerts||[];}catch(_){return[];}}
+function driftAlerts(){try{return target?.FarmDrift?.status?.().alerts||[];}catch(_){return[];}}
+function notifyItems(){try{return Array.isArray(target?.NOTIFY?.items)?target.NOTIFY.items:[];}catch(_){return[];}}
+function isLeadRecord(record){
+  try{if(typeof target?.esClienteValidado==='function')return !target.esClienteValidado(record);}catch(_){}
+  const f=record?.fields||{};
+  if(f['Validado']===true)return false;
+  if(f['Validado']===false)return true;
+  return !['Cliente activo','Cliente inactivo','Inactivo'].includes(String(f['Etapa venta']||''));
+}
+function leadQueueRows(){
+  try{
+    let rows=Array.isArray(target?.state?.clientes)?target.state.clientes:[];
+    if(typeof target?.isVendorMode==='function'&&target.isVendorMode()&&typeof target?.vendorOwnsRecord==='function')rows=rows.filter(r=>target.vendorOwnsRecord(r));
+    return rows.filter(isLeadRecord);
+  }catch(_){return[];}
+}
+function leadQueueCount(){return leadQueueRows().length;}
+function syncLeadPriority(rows){
+  try{
+    if(!target?.state?.loaded||!target?.NOTIFY?.priority)return;
+    const persona=target.NOTIFY.persona?.()||'';if(!['nicanor','gustavo'].includes(persona))return;
+    const storage=target.localStorage;if(!storage)return;
+    const key='thelab_lead_seen_v2_'+persona,ids=rows.map(r=>String(r?.id||'')).filter(Boolean);
+    let knownRaw=storage.getItem(key);
+    if(knownRaw===null){storage.setItem(key,JSON.stringify(ids.slice(-500)));return;}
+    let known=[];try{known=JSON.parse(knownRaw||'[]');}catch(_){known=[];}
+    const seen=new Set(Array.isArray(known)?known:[]);
+    rows.filter(r=>r?.id&&!seen.has(String(r.id))).forEach(r=>{
+      const f=r.fields||{},empresa=f['Empresa']||f['Razón social']||f['Cliente']||'Lead sin empresa';
+      const contacto=f['Contacto']||f['Nombre contacto']||'',origen=f['Origen lead']||f['Origen']||'';
+      target.NOTIFY.priority('lead','Nuevo lead',[empresa,contacto,origen].filter(Boolean).join(' · '),'clientes',{key:'lead:'+r.id,personas:['nicanor','gustavo'],tone:'info'});
+      seen.add(String(r.id));
+    });
+    storage.setItem(key,JSON.stringify([...seen].slice(-500)));
+  }catch(_){}
+}
+function mailUnreadCount(){
+  try{
+    if(typeof target?.MAIL?.unseenTotal==='function')return Math.max(0,Number(target.MAIL.unseenTotal())||0);
+    const map=target?.MAIL?._accountUnseen||{};
+    return Object.values(map).reduce((sum,n)=>sum+Math.max(0,Number(n)||0),0);
+  }catch(_){return 0;}
+}
+function bellHost(){
+  const b=target?.document?.getElementById('notifBadge');if(!b)return null;
+  const host=b.closest('button,a,[role="button"],.topbar-action,.topbar-icon-btn')||b.parentElement;
+  if(host){host.setAttribute('data-notif-bell-host','1');host.style.position='relative';}
+  return host;
+}
+function navTargets(module){
+  const d=target?.document;if(!d)return[];
+  const sels=[
+    `.dock-btn[data-tab="${module}"]`,`.mbd-btn[data-tab="${module}"]`,`.mg-item[data-tab="${module}"]`,`.mobile-tab-btn[data-tab="${module}"]`,
+    `.dock-btn[onclick*="switchTab('${module}')"]`,`.mbd-btn[onclick*="switchTab('${module}')"]`,`.mg-item[onclick*="switchTab('${module}')"]`,`.mobile-tab-btn[onclick*="('${module}')"]`,
+    `.dock-btn[onclick*='switchTab("${module}")']`,`.mbd-btn[onclick*='switchTab("${module}")']`,`.mg-item[onclick*='switchTab("${module}")']`
+  ];
+  const set=new Set();
+  for(const sel of sels){try{d.querySelectorAll(sel).forEach(el=>set.add(el));}catch(_){}}
+  return[...set];
+}
+function ensureStyle(){
+  const d=target?.document;if(!d||d.getElementById('dashboardNotifBadgeStyle'))return;
+  const s=d.createElement('style');s.id='dashboardNotifBadgeStyle';
+  s.textContent=`
+    [data-notif-bell-host]{position:relative!important;overflow:visible!important}
+    .dashboard-context-badge{position:absolute;top:-2px;right:-2px;z-index:12;pointer-events:none;box-shadow:0 0 0 2px rgba(10,10,10,.92),0 2px 7px rgba(0,0,0,.35)}
+    .dashboard-context-badge.sev-critical{background:var(--danger,#ff4444)!important;color:#fff!important}
+    .dashboard-context-badge.sev-warning{background:var(--warn,#ffaa00)!important;color:#111!important}
+    .dashboard-context-badge.sev-info{background:var(--accent,#00d4cc)!important;color:#061716!important}
+    .dashboard-lead-queue-badge{position:absolute;top:-5px;right:-5px;z-index:14;pointer-events:none;min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#ff4655!important;color:#fff!important;font:800 10px/1 'JetBrains Mono',monospace;box-shadow:0 0 0 2px rgba(10,10,10,.96),0 4px 13px rgba(255,70,85,.35)}
+    .dashboard-lead-queue-badge.is-new{animation:leadQueuePop .7s cubic-bezier(.2,.8,.2,1)}
+    .dashboard-mail-unread-badge{position:absolute;top:-5px;right:-5px;z-index:15;pointer-events:none;min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#ff4655!important;color:#fff!important;font:800 10px/1 'JetBrains Mono',monospace;box-shadow:0 0 0 2px rgba(10,10,10,.96),0 4px 13px rgba(255,70,85,.38)}
+    .dashboard-mail-unread-badge.is-new{animation:mailUnreadPop .72s cubic-bezier(.2,.8,.2,1)}
+    @keyframes mailUnreadPop{0%{transform:scale(.72)}45%{transform:scale(1.28);box-shadow:0 0 0 3px rgba(10,10,10,.96),0 0 22px rgba(255,70,85,.75)}100%{transform:scale(1)}}
+    @keyframes leadQueuePop{0%{transform:scale(.72)}45%{transform:scale(1.28);box-shadow:0 0 0 3px rgba(10,10,10,.96),0 0 22px rgba(255,70,85,.72)}100%{transform:scale(1)}}
+    @media(max-width:900px){.dashboard-context-badge{top:0;right:2px}}
+  `;
+  (d.head||d.documentElement).appendChild(s);
+}
+function render(){
+  if(!target?.document)return{};
+  ensureStyle();bellHost();
+  const state=buildState(notifyItems(),farmAlerts(),driftAlerts());
+  const leadRows=leadQueueRows();syncLeadPriority(leadRows);
+  const leads=leadRows.length;
+  // CLIENTES usa una burbuja propia: su número representa exactamente los leads
+  // aún no validados, no una mezcla con otras notificaciones del módulo.
+  target.document.querySelectorAll?.('.dashboard-lead-queue-badge').forEach(b=>b.remove());
+  if(leads>0){
+    for(const host of navTargets('clientes')){
+      host.style.position='relative';host.style.overflow='visible';
+      const b=target.document.createElement('span');b.className='dock-badge dashboard-lead-queue-badge';
+      if(lastLeadCount!==null&&leads>lastLeadCount)b.classList.add('is-new');
+      b.dataset.leadQueue='1';b.textContent=leads>99?'99+':String(leads);
+      b.title=`${leads} lead${leads===1?'':'s'} en cola · pendiente${leads===1?'':'s'} de validar`;
+      b.setAttribute('aria-label',b.title);host.appendChild(b);
+    }
+  }
+  lastLeadCount=leads;
+
+  // CORREO muestra correos realmente no leídos (sumados entre las cuentas
+  // conocidas), no el número de avisos históricos de la campana.
+  const mailUnread=mailUnreadCount();
+  target.document.querySelectorAll?.('.dashboard-mail-unread-badge').forEach(b=>b.remove());
+  if(mailUnread>0){
+    for(const host of navTargets('correo')){
+      host.style.position='relative';host.style.overflow='visible';
+      const b=target.document.createElement('span');b.className='dock-badge dashboard-mail-unread-badge';
+      if(lastMailCount!==null&&mailUnread>lastMailCount)b.classList.add('is-new');
+      b.dataset.mailUnread='1';b.textContent=mailUnread>99?'99+':String(mailUnread);
+      b.title=`${mailUnread} correo${mailUnread===1?'':'s'} sin leer`;
+      b.setAttribute('aria-label',b.title);host.appendChild(b);
+    }
+  }
+  lastMailCount=mailUnread;
+
+  target.document.querySelectorAll('.dashboard-context-badge[data-module]').forEach(b=>{
+    const module=b.dataset.module;if(!state[module]||state[module].count<1)b.remove();
+  });
+  for(const[module,meta]of Object.entries(state)){
+    if(!meta.count)continue;
+    if(module==='clientes'&&leads>0)continue;
+    if(module==='correo')continue;
+    for(const host of navTargets(module)){
+      host.style.position='relative';host.style.overflow='visible';
+      let b=host.querySelector(`:scope > .dashboard-context-badge[data-module="${module}"]`);
+      if(!b){b=target.document.createElement('span');b.className='dock-badge dashboard-context-badge';b.dataset.module=module;host.appendChild(b);}
+      b.classList.remove('sev-critical','sev-warning','sev-info');b.classList.add('sev-'+(meta.severity||'info'));
+      b.textContent=meta.count>99?'99+':String(meta.count);
+      b.title=`${meta.count} notificación${meta.count===1?'':'es'} pendiente${meta.count===1?'':'s'} en ${module}`;b.setAttribute('aria-label',b.title);
+    }
+  }
+  lastState=state;return state;
+}
+function wireNotify(){
+  const n=target?.NOTIFY;if(!n||typeof n.updateBadge!=='function')return false;
+  if(n.__dashboardContextBadges)return true;
+  const original=n.updateBadge;n.updateBadge=function(){const r=original.apply(this,arguments);try{render();}catch(_){}return r;};n.__dashboardContextBadges=true;return true;
+}
+function install(root){
+  if(installed||!root||!root.document)return false;target=root;installed=true;
+  const tick=()=>{wireNotify();render();};
+  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',tick,{once:true});else setTimeout(tick,0);
+  root.addEventListener?.('farm-health-updated',tick);root.addEventListener?.('farm-drift-updated',tick);
+  root.addEventListener?.('storage',e=>{if(!e||String(e.key||'').startsWith('thelab_'))tick();});root.addEventListener?.('focus',tick);
+  timer=root.setInterval?.(()=>{if(!root.document.hidden)tick();},5000)||null;return true;
+}
+function status(){return{installed,lastState:lastState||{},leadQueue:leadQueueCount(),mailUnread:mailUnreadCount(),hasNotify:!!target?.NOTIFY,hasFarmHealth:!!target?.FarmHealth,hasFarmDrift:!!target?.FarmDrift};}
+return{install,render,status,_test:{moduleForItem,buildState,rank,isLeadRecord,leadQueueRows,mailUnreadCount}};
+});

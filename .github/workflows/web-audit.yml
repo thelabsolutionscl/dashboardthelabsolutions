@@ -1,0 +1,50 @@
+name: Web audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/seo-ads.js'
+      - 'js/maquinas.js'
+      - 'js/maquinas-operaciones.js'
+      - 'tests/web-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/web-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/seo-ads.js'
+      - 'js/maquinas.js'
+      - 'js/maquinas-operaciones.js'
+      - 'tests/web-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/web-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-marketing-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check js/seo-ads.js
+          node --check tests/web-wiring.test.js
+
+      - name: Audit WEB wiring
+        run: node --test tests/web-wiring.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js

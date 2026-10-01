@@ -1,0 +1,151 @@
+name: Auditoría Máquinas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'sw.js'
+      - 'js/maquinas.js'
+      - 'js/maquinas-led.js'
+      - 'js/maquinas-operaciones.js'
+      - 'js/maquinas-farm-controller.js'
+      - 'js/maquinas-eta-clarity.js'
+      - 'js/maquinas-capacidad-confiable.js'
+      - 'js/machineops-storage-adapter.js'
+      - 'js/machineops-unattended-safety.js'
+      - 'js/printer-history-adapter.js'
+      - 'js/farm-health-adapter.js'
+      - 'js/farm-drift-adapter.js'
+      - 'js/dashboard-notification-badges.js'
+      - 'js/correo-input-compat.js'
+      - 'js/slicer3d.js'
+      - 'printer-bridge/**'
+      - 'tests/maquinas-*.test.js'
+      - 'tests/machine-ops-*.test.js'
+      - 'tests/machineops-storage-adapter.test.js'
+      - 'tests/machineops-unattended-safety.test.js'
+      - 'tests/printer-history-adapter.test.js'
+      - 'tests/printer-history-wiring.test.js'
+      - 'tests/farm-controller.test.js'
+      - 'tests/farm-production-preload.test.js'
+      - 'tests/farm-health-*.test.js'
+      - 'tests/farm-drift-*.test.js'
+      - 'tests/dashboard-notification-badges.test.js'
+      - 'tests/correo-input-compat.test.js'
+      - 'tests/service-worker-*.test.js'
+      - '.github/workflows/maquinas-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'sw.js'
+      - 'js/maquinas.js'
+      - 'js/maquinas-led.js'
+      - 'js/maquinas-operaciones.js'
+      - 'js/maquinas-farm-controller.js'
+      - 'js/maquinas-eta-clarity.js'
+      - 'js/maquinas-capacidad-confiable.js'
+      - 'js/machineops-storage-adapter.js'
+      - 'js/machineops-unattended-safety.js'
+      - 'js/printer-history-adapter.js'
+      - 'js/farm-health-adapter.js'
+      - 'js/farm-drift-adapter.js'
+      - 'js/dashboard-notification-badges.js'
+      - 'js/correo-input-compat.js'
+      - 'js/slicer3d.js'
+      - 'printer-bridge/**'
+      - 'tests/maquinas-*.test.js'
+      - 'tests/machine-ops-*.test.js'
+      - 'tests/machineops-storage-adapter.test.js'
+      - 'tests/machineops-unattended-safety.test.js'
+      - 'tests/printer-history-adapter.test.js'
+      - 'tests/printer-history-wiring.test.js'
+      - 'tests/farm-controller.test.js'
+      - 'tests/farm-production-preload.test.js'
+      - 'tests/farm-health-*.test.js'
+      - 'tests/farm-drift-*.test.js'
+      - 'tests/dashboard-notification-badges.test.js'
+      - 'tests/correo-input-compat.test.js'
+      - 'tests/service-worker-*.test.js'
+      - '.github/workflows/maquinas-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maquinas-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  maquinas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validar sintaxis
+        run: |
+          node --check js/maquinas.js
+          node --check js/maquinas-led.js
+          node --check js/maquinas-operaciones.js
+          node --check js/maquinas-farm-controller.js
+          node --check js/maquinas-eta-clarity.js
+          node --check js/maquinas-capacidad-confiable.js
+          node --check js/machineops-storage-adapter.js
+          node --check js/machineops-unattended-safety.js
+          node --check js/printer-history-adapter.js
+          node --check js/farm-health-adapter.js
+          node --check js/farm-drift-adapter.js
+          node --check js/dashboard-notification-badges.js
+          node --check js/correo-input-compat.js
+          node --check js/slicer3d.js
+          node --check sw.js
+          node --check printer-bridge/server.js
+          node --check printer-bridge/farm-controller.js
+          node --check printer-bridge/farm-production-preload.js
+          node --check printer-bridge/farm-drift-preload.js
+          node --check printer-bridge/farm-health-preload.js
+          bash -n printer-bridge/install-farm-controller.sh
+          bash -n printer-bridge/rollback-farm-controller.sh
+
+      - name: Probar cache y actualización del dashboard
+        run: node --test tests/service-worker-cache-safety.test.js tests/service-worker-registration.test.js
+
+      - name: Probar controlador de granja
+        run: node --test tests/farm-controller.test.js tests/farm-production-preload.test.js
+
+      - name: Probar observabilidad central
+        run: node --test tests/farm-health-preload.test.js tests/farm-health-adapter.test.js tests/farm-health-wiring.test.js
+
+      - name: Probar config drift y firmware
+        run: node --test tests/farm-drift-preload.test.js tests/farm-drift-adapter.test.js tests/farm-drift-wiring.test.js
+
+      - name: Probar badges y teclado de correo
+        run: node --test tests/dashboard-notification-badges.test.js tests/correo-input-compat.test.js
+
+      - name: Probar persistencia normalizada de MachineOps
+        run: node --test tests/machineops-storage-adapter.test.js
+
+      - name: Probar seguridad desatendida
+        run: node --test tests/machineops-unattended-safety.test.js
+
+      - name: Probar historial y odómetro durable
+        run: node --test tests/printer-history-adapter.test.js tests/printer-history-wiring.test.js
+
+      - name: Auditar cableado integral
+        run: node --test tests/maquinas-wiring.test.js
+
+      - name: Probar operaciones, telemetría y regresiones de Máquinas
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(tests/maquinas-*.test.js tests/machine-ops-*.test.js tests/recuperar-telemetria.test.js tests/capacidad-futura.test.js tests/ocupacion-agrupada.test.js)
+          printf 'Ejecutando %s tests\n' "${#files[@]}"
+          node --test "${files[@]}"

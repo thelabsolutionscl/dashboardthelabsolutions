@@ -1,0 +1,64 @@
+name: Inventario audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'tests/inventario-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/produccion-wiring.test.js'
+      - 'tests/maquinas-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/inventario-audit.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'tests/inventario-wiring.test.js'
+      - 'tests/pedidos-wiring.test.js'
+      - 'tests/produccion-wiring.test.js'
+      - 'tests/maquinas-wiring.test.js'
+      - 'tests/smoke.test.js'
+      - '.github/workflows/inventario-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          node --check tests/inventario-wiring.test.js
+          for file in js/*.js; do
+            node --check "$file"
+          done
+
+      - name: Audit inventory lifecycle
+        run: node --test tests/inventario-wiring.test.js
+
+      - name: Audit linked order lifecycle
+        run: node --test tests/pedidos-wiring.test.js
+
+      - name: Audit linked production lifecycle
+        run: node --test tests/produccion-wiring.test.js
+
+      - name: Audit linked machine lifecycle
+        run: node --test tests/maquinas-wiring.test.js
+
+      - name: General smoke audit
+        run: node tests/smoke.test.js

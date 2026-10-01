@@ -1,0 +1,130 @@
+#!/usr/bin/env node
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const ROOT = path.join(__dirname, '..');
+const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const JS_DIR = path.join(ROOT, 'js');
+const MODULES = fs.existsSync(JS_DIR)
+  ? fs.readdirSync(JS_DIR).filter(name => name.endsWith('.js')).sort()
+      .map(name => fs.readFileSync(path.join(JS_DIR, name), 'utf8')).join('\n')
+  : '';
+const SOURCE = `${INDEX}\n${MODULES}`;
+
+function esc(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function count(re, text = SOURCE) {
+  return (text.match(re) || []).length;
+}
+function unique(name) {
+  assert.equal(
+    count(new RegExp(`(?:async\\s+)?function\\s+${esc(name)}\\s*\\(`, 'g')),
+    1,
+    `${name} debe existir una sola vez`
+  );
+}
+
+test('REMUNERACIONES tiene sección y navegación únicas', () => {
+  assert.equal(count(/id=["']tab-remuneraciones["']/g, INDEX), 1);
+  assert.match(INDEX, /data-tab=["']remuneraciones["'][^>]*switchTab\('remuneraciones'\)/);
+  assert.match(INDEX, /data-tab=["']remuneraciones["'][^>]*switchTabMobile\('remuneraciones'\)/);
+});
+
+test('la vista conserva sus contenedores operativos', () => {
+  for (const id of ['remPeriodoBar', 'remKpis', 'remSueldoPanel', 'remSueldoGrid', 'remLiqBody', 'remPipeBody', 'remTableBody']) {
+    assert.equal(count(new RegExp(`id=["']${id}["']`, 'g'), INDEX), 1, `${id} debe existir una vez`);
+  }
+});
+
+test('las funciones implementadas de comisiones existen una sola vez', () => {
+  ['setRemPeriodo', '_remFiltrarPorPeriodo', '_remOwnsRecord', '_remSueldoStorage', '_remPersonas', '_remLoadSueldos', 'remRenderLiquidacion', 'remRenderSueldoGrid', 'remToggleSueldos', 'remSaveSueldos', 'renderRemuneraciones', 'exportRemCSV'].forEach(unique);
+});
+
+test('la vista se actualiza al cargar pedidos y al abrir la pestaña', () => {
+  assert.match(SOURCE, /tab-remuneraciones[^\n]*classList\.contains\('active'\)[^\n]*renderRemuneraciones/);
+  assert.match(SOURCE, /if\(name==='remuneraciones'\)\s*renderRemuneraciones\(\)/);
+});
+
+test('el rol comercial tiene acceso explícito y los registros se filtran por vendedor', () => {
+  assert.match(SOURCE, /comercial\s*:\s*\[[^\]]*['"]remuneraciones['"]/s);
+  assert.match(SOURCE, /state\.pedidos[\s\S]*?filter\(_remOwnsRecord\)/);
+  assert.match(SOURCE, /state\.cotizaciones[\s\S]*?filter\(_remOwnsRecord\)/);
+});
+
+test('la vista distingue ventas finalizadas, pipeline y pedidos en proceso', () => {
+  assert.match(SOURCE, /['"]Despachado['"],['"]Completado['"]/);
+  assert.match(SOURCE, /['"]Solicitada['"],['"]Enviada['"]/);
+  assert.match(SOURCE, /Comisión en Proceso \(3\.5%\)/);
+  assert.match(SOURCE, /procComision=Math\.round\(procNeto\*TASA\)/);
+  assert.match(SOURCE, /Comisión Ganada \(3\.5%\)/);
+});
+
+test('un pedido sin vendedor hereda el propietario desde su cotización vinculada', () => {
+  const start=INDEX.indexOf('function vendorOwnsRecord(r){');
+  const end=INDEX.indexOf('\n// ─',start);
+  assert.ok(start>=0&&end>start,'vendorOwnsRecord debe existir');
+  const body=INDEX.slice(start,end);
+  assert.match(body,/f\['Cotizaciones'\]/,'debe revisar el vínculo del pedido con Cotizaciones');
+  assert.match(body,/state\.cotizacionesById/,'debe resolver la cotización vinculada');
+  assert.match(body,/cot\?\.fields\?\.\['Vendedor'\]/,'debe heredar el vendedor de la cotización');
+});
+
+test('pedidos en proceso muestran comisión estimada separada de la ganada', () => {
+  assert.match(INDEX,/const procNeto=enProceso\.reduce/);
+  assert.match(INDEX,/const procComision=Math\.round\(procNeto\*TASA\)/);
+  assert.match(INDEX,/Comisión en Proceso \(3\.5%\)/);
+  assert.match(INDEX,/\$\{enProceso\.length\} pedido/);
+  assert.match(INDEX,/neto \$\{formatCLP\(procNeto\)\}/);
+});
+
+test('la liquidación y configuración de sueldo están implementadas', () => {
+  assert.match(SOURCE, /function remRenderLiquidacion\([^)]*totalNeto[^)]*totalComision/);
+  assert.match(SOURCE, /function remToggleSueldos\(/);
+  assert.match(SOURCE, /function remSaveSueldos\(/);
+  assert.match(SOURCE, /REM_SUELDO_KEY=['"]rem_sueldos_v1['"]/);
+});
+test.todo('centralizar y versionar la tasa de comisión por vendedor, contrato y vigencia');
+test.todo('reconocer comisión ganada con una política explícita de cobro, pago y reversas');
+test.todo('calcular neto desde datos tributarios reales y no dividiendo siempre por 1.19');
+test.todo('excluir o separar cotizaciones vencidas del pipeline potencial');
+test.todo('aplicar probabilidad, vigencia y etapa al pipeline potencial');
+test.todo('proteger remuneraciones con autorización de datos en backend, no solo filtro del navegador');
+test('demo limita remuneraciones al vendedor ficticio y usa almacenamiento de sesión', () => {
+  assert.match(SOURCE, /window\._DEMO_MODE\?personas\.filter\(p=>p\.id===['"]florencia['"]\)/);
+  assert.match(SOURCE, /u\.role!==['"]demo['"]\)return vendorOwnsRecord/);
+  assert.match(SOURCE, /window\._DEMO_MODE\?sessionStorage:localStorage/);
+  assert.match(SOURCE, /window\._DEMO_MODE&&!sueldos\[['"]Florencia Cancino['"]\]/);
+});
+test.todo('cerrar períodos y registrar aprobaciones, ajustes, reversas y auditoría');
+test.todo('exportar CSV con escape RFC 4180, BOM UTF-8 y nombre de período/vendedor');
+test.todo('usar zona America/Santiago y una definición empresarial de inicio de semana');
+test.todo('distinguir sueldo base, comisión estimada, devengada, aprobada y pagada');
+
+test('la comisión del KPI y la de Remuneraciones miden el mismo período', () => {
+  // La comisión se gana al ENTREGAR. Remuneraciones (el módulo que paga) filtra
+  // por 'Fecha entrega'; el KPI del vendedor usaba la fecha de creación del
+  // pedido, así que mostraba una comisión distinta para el mismo mes.
+  assert.match(
+    INDEX,
+    /const revDespMes=despachados\.filter\(p=>\{const d=p\.fields\['Fecha entrega'\]/,
+    'el KPI de comisión debe filtrar por Fecha entrega, igual que Remuneraciones',
+  );
+  assert.doesNotMatch(
+    INDEX,
+    /const revDespMes=despachados\.filter\(p=>p\.createdTime/,
+    'el KPI de comisión no debe volver a filtrar por fecha de creación',
+  );
+  // Remuneraciones sigue siendo la fuente autoritativa del criterio.
+  assert.match(
+    INDEX,
+    /_remPeriodo==='mes'[\s\S]{0,200}?p\.fields\['Fecha entrega'\]/,
+    'Remuneraciones debe seguir filtrando el mes por Fecha entrega',
+  );
+  // Misma tasa en los tres cálculos (KPI, panel y CSV).
+  assert.equal(count(/const TASA=0\.035;/g, INDEX), 3, 'la tasa de comisión debe ser única en los tres puntos');
+});

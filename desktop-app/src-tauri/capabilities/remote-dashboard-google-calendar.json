@@ -1,0 +1,20 @@
+{
+  "identifier": "remote-dashboard-google-calendar",
+  "description": "The official remote dashboard may invoke only the native Google Calendar OAuth bridge.",
+  "windows": [
+    "main",
+    "dashboard-*"
+  ],
+  "remote": {
+    "urls": [
+      "https://dashboard.thelab.solutions/*"
+    ]
+  },
+  "platforms": [
+    "macOS"
+  ],
+  "permissions": [
+    "core:default",
+    "allow-google-calendar-oauth"
+  ]
+}
