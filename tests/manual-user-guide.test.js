@@ -54,6 +54,14 @@ test('screenshots del manual se regeneran desde el PR actual',()=>{
   assert.doesNotMatch(SCREENSHOT_WORKFLOW,/manual-screenshots-v2/);
 });
 
+test('el manual documenta Reportar problema y su reparación IA segura',()=>{
+  assert.match(MANUAL,/Mi cuenta → Reportar problema/);
+  assert.match(MANUAL,/Enviar a reparación IA/);
+  assert.match(MANUAL,/assets\/reportar-problema\.png/);
+  assert.match(MANUAL,/Pull Request/);
+  assert.match(MANUAL,/autenticación, seguridad, SII, infraestructura y permisos/);
+});
+
 test('el manual cubre las secciones operativas principales',()=>{
   for(const title of [
     'OVERVIEW','CLIENTES','COTIZACIONES','PEDIDOS','INVENTARIO','PROVEEDORES',
@@ -64,7 +72,7 @@ test('el manual cubre las secciones operativas principales',()=>{
 });
 
 test('redacción del manual evita jerga retirada y mantiene versión actual',()=>{
-  assert.match(MANUAL,/\*\*Versión:\*\* 1\.4/);
+  assert.match(MANUAL,/\*\*Versión:\*\* 1\.5/);
   assert.doesNotMatch(MANUAL,/Control de versión del manual/);
   assert.doesNotMatch(MANUAL,/\bmutaciones\b/i);
 });
