@@ -42,7 +42,8 @@ test('el reparador no ejecuta comandos generados por la IA y bloquea infraestruc
   assert.doesNotMatch(SCRIPT,/eval\(|new Function\(/);
   assert.match(SCRIPT,/node --test|--test/);
   assert.match(SCRIPT,/gh.*pr.*create|\['pr','create'/);
-  assert.match(SCRIPT,/--auto/);
+  assert.match(SCRIPT,/--squash/);
+  assert.match(SCRIPT,/--delete-branch/);
 });
 test('proxy verifica identidad OIDC del workflow exacto y mantiene presupuesto IA',()=>{
   assert.match(WORKER,/token\.actions\.githubusercontent\.com/);
