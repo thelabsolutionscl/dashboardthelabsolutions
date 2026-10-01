@@ -272,6 +272,7 @@
         <div class="user-menu-item" onclick="loadAllData();closeUserMenu()">↺ Actualizar datos</div>
         <div class="user-menu-item" onclick="openConnectionsCenterFromUserMenu()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Centro de conexiones</div>
         <div class="user-menu-item" onclick="openAppearanceSettings()"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-visual"/></svg> Apariencia</div>
+        <div class="user-menu-item" onclick="openUserManual()"><span aria-hidden="true" style="width:14px;text-align:center;font-weight:800">?</span> Manual de usuario</div>
         <div class="user-menu-sep"></div>
         <div class="user-menu-token">
           <div class="user-menu-token-label"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-key"/></svg> Token Airtable</div>
@@ -7215,6 +7216,11 @@ applyAppearancePrefs({
   font:_appearanceValue('font')
 },false);
 
+function openUserManual(){
+  closeUserMenu();
+  const w=window.open('manual.html','_blank','noopener');
+  if(!w)location.href='manual.html';
+}
 function openConnectionsCenterFromUserMenu(){
   closeUserMenu();
   let tries=0;
