@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090b0c">
+<title>Manual de Usuario · The Lab Solutions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#090b0c;--surface:#101416;--surface2:#151b1d;--border:#233036;--text:#ecf3f4;--muted:#91a4aa;--cyan:#00d4cc}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% 10%,rgba(0,212,204,.08),transparent 24%),var(--bg);color:var(--text);font:14px/1.65 'DM Sans',sans-serif}
+.shell{display:grid;grid-template-columns:290px minmax(0,1fr);min-height:100vh}.side{position:sticky;top:0;height:100vh;border-right:1px solid var(--border);background:rgba(9,11,12,.94);backdrop-filter:blur(18px);padding:22px;overflow:auto}.brand{font-weight:800;letter-spacing:.6px}.brand span{color:var(--cyan)}.sub{font-size:11px;color:var(--muted);margin:3px 0 16px}.search{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);outline:none}.search:focus{border-color:var(--cyan)}nav{margin-top:16px}.nav-item{display:block;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:12px}.nav-item:hover,.nav-item.active{color:var(--text);background:rgba(0,212,204,.08)}.actions{display:flex;gap:8px;margin:18px 0}.btn{border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:8px 10px;border-radius:9px;text-decoration:none;font-size:11px;cursor:pointer}.btn:hover{border-color:var(--cyan)}main{width:min(980px,calc(100vw - 340px));padding:48px 52px 90px;margin:0 auto}.hero{padding:28px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(145deg,rgba(0,212,204,.08),rgba(255,255,255,.015));margin-bottom:26px}.hero h1{font-size:34px;margin:0 0 8px;line-height:1.1}.hero p{margin:0;color:var(--muted)}article h1{display:none}article h2{font-size:24px;margin:50px 0 14px;padding-top:8px;border-top:1px solid var(--border)}article h3{font-size:16px;margin:28px 0 8px;color:#fff}article p,article li{color:#c9d5d8}article ul,article ol{padding-left:22px}article li{margin:4px 0}article strong{color:#fff}article code{font-family:'JetBrains Mono',monospace;font-size:.9em;color:#b7fff9;background:rgba(0,212,204,.08);padding:2px 5px;border-radius:5px}article blockquote{margin:18px 0;padding:12px 14px;border-left:3px solid var(--cyan);background:rgba(0,212,204,.06);color:#d8e7e9;border-radius:0 8px 8px 0}article hr{border:0;border-top:1px solid var(--border);margin:32px 0}.empty{padding:28px;border:1px dashed var(--border);border-radius:14px;color:var(--muted)}
+@media(max-width:850px){.shell{display:block}.side{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--border)}nav{display:none}main{width:100%;padding:28px 18px 70px}.hero{padding:20px}.hero h1{font-size:28px}}
+@media print{.side{display:none}.shell{display:block}main{width:100%;padding:0}.hero{border:0;padding:0;background:none}article h2{page-break-before:auto}.btn{display:none}}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="side">
+<div class="brand">THE LAB <span>SOLUTIONS</span></div>
+<div class="sub">Manual de Usuario · v1.0</div>
+<input id="search" class="search" type="search" placeholder="Buscar en el manual…" autocomplete="off">
+<div class="actions"><a class="btn" href="./">← Dashboard</a><button class="btn" onclick="window.print()">Imprimir / PDF</button></div>
+<nav id="toc"></nav>
+</aside>
+<main>
+<section class="hero"><h1>Manual de Usuario</h1><p>Dashboard The Lab Solutions · operación, CRM, producción, finanzas e integraciones.</p></section>
+<article id="manual"><div class="empty">Cargando manual…</div></article>
+</main>
+</div>
+<script>
+const SRC='docs/manual/MANUAL_USUARIO.md';
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+function inline(s){let x=esc(s);x=x.replace(/\`([^\`]+)\`/g,'<code>$1</code>');x=x.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');return x}
+function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)}
+function parse(md){
+ const lines=md.replace(/\r/g,'').split('\n'),out=[];let list=null,para=[];
+ const flushP=()=>{if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[]}};
+ const flushL=()=>{if(list){out.push('</'+list+'>');list=null}};
+ for(const raw of lines){
+   const line=raw.trimEnd();
+   if(/^---+$/.test(line.trim())){flushP();flushL();out.push('<hr>');continue}
+   const h=line.match(/^(#{1,3})\s+(.*)$/);
+   if(h){flushP();flushL();const level=h[1].length,id=slug(h[2]);out.push('<h'+level+' id="'+id+'">'+inline(h[2])+'</h'+level+'>');continue}
+   if(/^>\s?/.test(line)){flushP();flushL();out.push('<blockquote>'+inline(line.replace(/^>\s?/,''))+'</blockquote>');continue}
+   const ul=line.match(/^[-*]\s+(.*)$/),ol=line.match(/^\d+\.\s+(.*)$/);
+   if(ul||ol){flushP();const type=ul?'ul':'ol';if(list!==type){flushL();out.push('<'+type+'>');list=type}out.push('<li>'+inline((ul||ol)[1])+'</li>');continue}
+   if(!line.trim()){flushP();flushL();continue}
+   para.push(line.trim());
+ }
+ flushP();flushL();return out.join('\n');
+}
+function buildToc(){const toc=document.getElementById('toc');toc.innerHTML='';document.querySelectorAll('#manual h2').forEach(h=>{const a=document.createElement('a');a.className='nav-item';a.href='#'+h.id;a.textContent=h.textContent;toc.appendChild(a)})}
+function filterManual(q){q=(q||'').trim().toLowerCase();const sections=[...document.querySelectorAll('#manual h2')];sections.forEach(h=>{const nodes=[h];let n=h.nextElementSibling;while(n&&n.tagName!=='H2'){nodes.push(n);n=n.nextElementSibling}const txt=nodes.map(x=>x.textContent).join(' ').toLowerCase();nodes.forEach(x=>x.style.display=!q||txt.includes(q)?'':'none')})}
+fetch(SRC,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(md=>{document.getElementById('manual').innerHTML=parse(md);buildToc();if(location.hash)setTimeout(()=>document.querySelector(location.hash)?.scrollIntoView(),50)}).catch(e=>{document.getElementById('manual').innerHTML='<div class="empty">No se pudo cargar el manual. '+esc(e.message)+'</div>'});
+document.getElementById('search').addEventListener('input',e=>filterManual(e.target.value));
+</script>
+</body>
+</html>
