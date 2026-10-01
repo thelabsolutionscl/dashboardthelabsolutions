@@ -11,6 +11,8 @@
 
 ## 1. Cómo usar este manual
 
+![Manual web del Dashboard The Lab Solutions.](assets/manual-web.png)
+
 Este manual está organizado por las mismas áreas del dashboard. Para cada sección se explica para qué sirve, qué información estás viendo, qué acciones puedes realizar, qué cambia datos reales y qué errores o confusiones son habituales.
 
 La versión web del manual incluye buscador y navegación lateral. Se abre desde **Mi cuenta -> Manual de usuario**.
@@ -25,6 +27,8 @@ La versión web del manual incluye buscador y navegación lateral. Se abre desde
 ---
 
 ## 2. Primeros pasos
+
+![Menú de usuario y navegación general del dashboard.](assets/primeros-pasos.png)
 
 ### 2.1 Iniciar sesión
 
@@ -56,6 +60,8 @@ Desde tu nombre en la esquina superior puedes acceder a **Actualizar datos**, **
 
 ## 3. Modos Simple y Experto
 
+![Newsletter como ejemplo de sección fijada en modo Experto.](assets/newsletter.png)
+
 El dashboard ha ido eliminando vistas duplicadas. Actualmente:
 
 - **Solo Simple:** Overview, Calendario, Clientes, Cotizaciones, Pedidos, Máquinas, Equipo y Web.
@@ -67,6 +73,8 @@ El dashboard ha ido eliminando vistas duplicadas. Actualmente:
 ---
 
 ## 4. OVERVIEW - Centro de comando
+
+![Vista general del Centro de Comando.](assets/overview.png)
 
 ### Para qué sirve
 
@@ -100,6 +108,8 @@ Agrupa situaciones operativas que requieren acción: entregas, gestiones comerci
 
 ## 5. CLIENTES
 
+![Vista principal de Clientes.](assets/clientes.png)
+
 ### Para qué sirve
 
 Centraliza clientes, leads, datos de contacto, estado comercial e historial relacionado.
@@ -130,6 +140,8 @@ Un mismo cliente puede existir más de una vez si históricamente fue creado con
 ---
 
 ## 6. COTIZACIONES
+
+![Vista principal de Cotizaciones.](assets/cotizaciones.png)
 
 ### Para qué sirve
 
@@ -172,6 +184,8 @@ La vista de propuesta permite revisar descripción, unidades, costos y valores d
 
 ## 7. PEDIDOS
 
+![Vista principal de Pedidos.](assets/pedidos.png)
+
 ### Para qué sirve
 
 Controlar el ciclo posterior a una venta aprobada: producción, pagos, equipo, despacho, QA y documentación.
@@ -212,6 +226,8 @@ No marques un pedido como despachado solo para sacarlo de la lista. Usa QA y los
 
 ## 8. INVENTARIO
 
+![Vista principal de Inventario.](assets/inventario.png)
+
 ### Para qué sirve
 
 Registrar materiales y consultar stock operativo.
@@ -229,6 +245,8 @@ Registrar materiales y consultar stock operativo.
 ---
 
 ## 9. PROVEEDORES
+
+![Vista principal de Proveedores.](assets/proveedores.png)
 
 ### Para qué sirve
 
@@ -250,6 +268,8 @@ Evita duplicar proveedores por diferencias de escritura. Registra condiciones de
 ---
 
 ## 10. AGENTES IA
+
+![Vista principal de Agentes IA.](assets/agentes.png)
 
 ### Para qué sirve
 
@@ -274,6 +294,8 @@ El dashboard contiene controles de gasto para Claude/OpenAI. Evita regenerar el 
 
 ## 11. OFICINA
 
+![Vista operativa de Oficina.](assets/oficina.png)
+
 ### Para qué sirve
 
 Dar una representación operativa del día: agentes, automatizaciones, impresoras y bloqueos.
@@ -289,6 +311,8 @@ La Oficina es una visualización de operación, no una fuente independiente. Si 
 ---
 
 ## 12. REDES SOCIALES
+
+![Vista principal de Redes Sociales.](assets/redes.png)
 
 ### Para qué sirve
 
@@ -311,6 +335,8 @@ Planificar contenido, generar ideas, organizar publicaciones y revisar métricas
 ---
 
 ## 13. NEWSLETTER - solo modo Experto
+
+![Newsletter en su vista canónica Experto.](assets/newsletter.png)
 
 ### Para qué sirve
 
@@ -353,6 +379,8 @@ Aperturas/clics pueden generar oportunidades de seguimiento. Revisa el contexto 
 
 ## 14. MÁQUINAS
 
+![Panel principal de la granja de impresión 3D.](assets/maquinas.png)
+
 ### Para qué sirve
 
 Supervisar la granja 3D, cámaras, telemetría, trabajos, calibración y operación remota.
@@ -389,6 +417,8 @@ Distingue entre planificación local, telemetría física reciente y cola durabl
 
 ## 15. EQUIPO - solo modo Simple
 
+![Vista principal de Equipo.](assets/equipo.png)
+
 ### Para qué sirve
 
 Gestionar personas, agenda, metas, comisiones y elementos operativos asociados al equipo.
@@ -408,6 +438,8 @@ El antiguo modo Experto fue retirado porque duplicaba la información del modo S
 ---
 
 ## 16. CALENDARIO - solo modo Simple
+
+![Vista principal de Calendario.](assets/calendario.png)
 
 ### Para qué sirve
 
@@ -436,6 +468,8 @@ Muestra únicamente el calendario, pensada para monitor compartido.
 
 ## 17. REPORTES
 
+![Vista principal de Reportes.](assets/reportes.png)
+
 ### Para qué sirve
 
 Generar y consultar resúmenes ejecutivos basados en la información del negocio.
@@ -451,6 +485,8 @@ Verifica que los datos base estén actualizados. Distingue entre cifras calculad
 ---
 
 ## 18. WEB - solo modo Simple
+
+![Vista principal de Web y marketing.](assets/web.png)
 
 ### Para qué sirve
 
@@ -469,6 +505,8 @@ Algunas acciones dependen de Apps Script o APIs externas. Una conexión verde co
 ---
 
 ## 19. FINANZAS
+
+![Vista principal de Finanzas.](assets/finanzas.png)
 
 ### Para qué sirve
 
@@ -518,6 +556,8 @@ Cuando la emisión tributaria esté habilitada, verifica folio y respuesta SII. 
 
 ## 20. REMUNERACIONES
 
+![Vista principal de Remuneraciones.](assets/remuneraciones.png)
+
 ### Para qué sirve
 
 Consultar remuneraciones, periodos y configuraciones relacionadas con personas y comisiones.
@@ -535,6 +575,8 @@ Exportar CSV, configurar sueldos y guardar sueldos.
 ---
 
 ## 21. CORREO
+
+![Vista principal de Correo.](assets/correo.png)
 
 ### Para qué sirve
 
@@ -572,6 +614,8 @@ Centro de Conexiones comprueba ambos sin exponer claves.
 ---
 
 ## 22. CENTRO DE CONEXIONES
+
+![Centro de Conexiones desde Mi cuenta.](assets/centro-conexiones.png)
 
 ### Dónde está
 
@@ -612,6 +656,8 @@ Lee el texto del diagnóstico. No amplíes permisos de una API solo para que el 
 
 ## 23. APARIENCIA
 
+![Selector de tema, fondo y tipografía.](assets/apariencia.png)
+
 ### Dónde está
 
 **Mi cuenta -> Apariencia**
@@ -642,6 +688,8 @@ La preferencia se guarda en el navegador. Cambiar apariencia no modifica CRM, pe
 ---
 
 ## 24. Solución rápida de problemas
+
+![Centro de Conexiones, punto de partida para diagnosticar integraciones.](assets/centro-conexiones.png)
 
 ### "No veo los cambios que acabamos de publicar"
 
@@ -682,6 +730,8 @@ Abre la sección fuente y compara el conjunto de registros. Reporta el KPI junto
 
 ## 25. Buenas prácticas operativas
 
+![Overview como punto de partida para revisar la operación.](assets/overview.png)
+
 1. Buscar antes de crear para evitar duplicados.
 2. Actualizar estados reales, no estados "para ordenar la pantalla".
 3. No borrar históricos sin revisar vínculos.
@@ -696,6 +746,8 @@ Abre la sección fuente y compara el conjunto de registros. Reporta el KPI junto
 ---
 
 ## 26. Glosario
+
+![Manual web con índice y buscador.](assets/manual-web.png)
 
 ### Airtable
 Base de datos principal utilizada por múltiples módulos del dashboard.
@@ -761,6 +813,8 @@ Operación antigua ya cerrada que se registra como aprobada sin volver a crear p
 
 ## 27. Qué hacer cuando encuentras un error
 
+![Menú y contexto general para reportar correctamente un problema.](assets/primeros-pasos.png)
+
 Al reportar un problema, entrega:
 
 1. sección;
@@ -777,6 +831,8 @@ Esto permite distinguir rápidamente entre un problema de interfaz, caché, dato
 ---
 
 ## 28. Control de versión del manual
+
+![El manual web se genera desde la fuente versionada del repositorio.](assets/manual-web.png)
 
 Este documento vive dentro del mismo repositorio del dashboard en `docs/manual/MANUAL_USUARIO.md`.
 
