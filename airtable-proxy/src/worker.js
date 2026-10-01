@@ -226,6 +226,113 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
 }
 
 
+const PROBLEM_REPORTS_TABLE='tbl2kU5lGg1JYcrPi';
+const PROBLEM_SCREENSHOT_FIELD='fldV1AHUN24F2lkdW';
+const PROBLEM_REPORT_STATES=new Set(['Nuevo','En análisis','Reparación preparada','PR abierto','Reparado','Error']);
+function problemText(v,max){
+  return typeof v==='string'&&v.length<=max&&!/[\x00-\x08\x0b\x0e-\x1f]/.test(v);
+}
+function problemEmail(v){
+  return typeof v==='string'&&v.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+function problemReportPayloadAllowed(body){
+  if(!body||typeof body!=='object'||Array.isArray(body)||
+     Object.keys(body).some(k=>!['message','section','url','build','navigator','screenshot','autoRepair','reporter'].includes(k))||
+     !problemText(body.message||'',6000)||(body.message||'').trim().length<5||
+     !problemText(body.section||'',120)||!problemText(body.build||'',160)||
+     !problemText(body.navigator||'',1200)||
+     (body.url!==undefined&&(!problemText(body.url||'',1200)||
+       !/^https:\/\/dashboard\.thelab\.solutions(?:\/|$)/.test(body.url||'')))||
+     (body.autoRepair!==undefined&&typeof body.autoRepair!=='boolean')||
+     (body.reporter!==undefined&&!problemEmail(body.reporter)))return false;
+  if(body.screenshot!==undefined&&body.screenshot!==null){
+    const shot=body.screenshot;
+    if(!shot||typeof shot!=='object'||Array.isArray(shot)||
+       Object.keys(shot).some(k=>!['filename','contentType','base64'].includes(k))||
+       !problemText(shot.filename||'',180)||
+       !['image/png','image/jpeg','image/webp'].includes(shot.contentType)||
+       typeof shot.base64!=='string'||shot.base64.length<20||shot.base64.length>6800000||
+       !/^[A-Za-z0-9+/=\r\n]+$/.test(shot.base64))return false;
+  }
+  return true;
+}
+function problemProjectRecord(rec){
+  const f=rec?.fields||{},attachments=Array.isArray(f.Screenshot)?f.Screenshot:[];
+  return{
+    id:String(rec?.id||''),reportId:String(f['Reporte ID']||''),estado:PROBLEM_REPORT_STATES.has(f.Estado)?f.Estado:'Nuevo',
+    mensaje:String(f.Mensaje||''),usuario:String(f.Usuario||''),seccion:String(f['Sección']||''),
+    url:String(f.URL||''),build:String(f.Build||''),navegador:String(f.Navegador||''),
+    diagnostico:String(f['Diagnóstico IA']||''),plan:String(f['Plan reparación']||''),
+    prUrl:String(f['PR URL']||''),error:String(f.Error||''),autoReparar:f['Auto reparar']===true,
+    fecha:String(f.Fecha||rec?.createdTime||''),actualizado:String(f.Actualizado||''),
+    screenshot:attachments.slice(0,1).map(a=>({
+      id:String(a?.id||''),filename:String(a?.filename||''),url:String(a?.url||''),
+      type:String(a?.type||''),width:Number(a?.width)||0,height:Number(a?.height)||0,
+      thumb:String(a?.thumbnails?.large?.url||a?.thumbnails?.small?.url||'')
+    }))[0]||null
+  };
+}
+async function problemReportsList(env,identity,legacy){
+  if(!env.AIRTABLE_TOKEN)return {error:'missing-token'};
+  const q=new URLSearchParams();
+  q.set('pageSize','100');
+  q.append('sort[0][field]','Fecha');q.append('sort[0][direction]','desc');
+  for(const field of ['Reporte ID','Estado','Mensaje','Screenshot','Usuario','Sección','URL','Build','Navegador',
+    'Diagnóstico IA','Plan reparación','PR URL','Error','Auto reparar','Fecha','Actualizado'])q.append('fields[]',field);
+  let r;try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+PROBLEM_REPORTS_TABLE+'?'+q.toString(),{
+      method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+    });
+  }catch(_){return {error:'network'};}
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'upstream'};
+  let data;try{data=await r.json();}catch(_){return {error:'invalid-json'};}
+  if(!Array.isArray(data?.records))return {error:'invalid-shape'};
+  const all=data.records.map(problemProjectRecord);
+  const reports=identity?.role==='admin'||legacy?all:all.filter(x=>x.usuario.toLowerCase()===String(identity?.email||'').toLowerCase());
+  return {reports:reports.slice(0,100)};
+}
+async function problemReportCreate(env,body){
+  if(!env.AIRTABLE_TOKEN)return {error:'Problem report storage unavailable',status:503};
+  const now=new Date().toISOString();
+  const reportId='BUG-'+now.slice(0,10).replace(/-/g,'')+'-'+crypto.randomUUID().slice(0,8).toUpperCase();
+  const fields={
+    'Reporte ID':reportId,'Estado':'Nuevo','Mensaje':body.message.trim(),'Usuario':body.reporter,
+    'Sección':body.section||'','URL':body.url||'','Build':body.build||'','Navegador':body.navigator||'',
+    'Auto reparar':body.autoRepair!==false,'Fecha':now,'Actualizado':now
+  };
+  let created;
+  try{
+    const r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+PROBLEM_REPORTS_TABLE,{
+      method:'POST',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({fields})
+    });
+    if(!r.ok||r.status>=300&&r.status<400)return {error:'No se pudo guardar el reporte',status:502};
+    created=await r.json();
+  }catch(_){return {error:'No se pudo guardar el reporte',status:503};}
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(created?.id||'')))
+    return {error:'Resultado de guardado inválido',status:503};
+  if(body.screenshot){
+    try{
+      const r=await fetch('https://content.airtable.com/v0/app1YtD74AqiPWQhy/'+created.id+'/'+
+        PROBLEM_SCREENSHOT_FIELD+'/uploadAttachment',{
+        method:'POST',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+        body:JSON.stringify({contentType:body.screenshot.contentType,filename:body.screenshot.filename,
+          file:body.screenshot.base64.replace(/[\r\n]/g,'')})
+      });
+      if(!r.ok||r.status>=300&&r.status<400){
+        await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+PROBLEM_REPORTS_TABLE+'/'+created.id,{
+          method:'PATCH',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+          body:JSON.stringify({fields:{Error:'El reporte se guardó, pero no se pudo adjuntar el screenshot',Actualizado:new Date().toISOString()}})
+        }).catch(()=>{});
+      }else{
+        try{created=await (await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+PROBLEM_REPORTS_TABLE+'/'+created.id,{
+          headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}})).json();}catch(_){}
+      }
+    }catch(_){}
+  }
+  return {report:problemProjectRecord(created)};
+}
+
 const SHARED_CALENDAR_EMPTY=Object.freeze({events:[],gmap:{},gmapMts:0,crmSync:{}});
 const SHARED_CALENDAR_EVENT_KEYS=new Set([
   'id','ts','creadoPor','gcal','titulo','fecha','allDay','hIni','hFin',
@@ -2612,7 +2719,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -2683,6 +2790,35 @@ export default {
         method:request.method,path:url.pathname.slice(0,180),
       }));
     }
+
+    // Problem reports are stored in their own Airtable table. Every signed user
+    // may report and review their own issues; admins see the complete history.
+    if(url.pathname==='/shared/problems'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search)return json({error:'Problem report query parameters not allowed'},422,scopedHeaders);
+      if(request.method==='GET'){
+        const out=await problemReportsList(env,authorized.identity,authorized.legacy===true);
+        if(out.error)return json({error:'Problem reports unavailable'},503,scopedHeaders);
+        return json({ok:true,reports:out.reports},200,scopedHeaders);
+      }
+      if(request.method!=='POST')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>7500000)
+        return json({error:'Problem report expects bounded JSON'},415,scopedHeaders);
+      let body;try{
+        const raw=await request.text();if(raw.length>7500000)throw Error('large');
+        body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid problem report JSON'},422,scopedHeaders);}
+      if(!problemReportPayloadAllowed(body))
+        return json({error:'Invalid problem report'},422,scopedHeaders);
+      const reporter=authorized.identity?.email||
+        (authorized.legacy===true&&problemEmail(body.reporter)?String(body.reporter).toLowerCase():'');
+      if(!reporter)return json({error:'Reporter identity required'},403,scopedHeaders);
+      const created=await problemReportCreate(env,{...body,reporter});
+      if(created.error)return json({error:created.error},created.status||503,scopedHeaders);
+      return json({ok:true,report:created.report},201,scopedHeaders);
+    }
+
 
     // Calendar collaboration gets a dedicated document endpoint instead of
     // granting browsers generic Monitor Sistema access.
