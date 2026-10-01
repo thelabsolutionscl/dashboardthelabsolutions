@@ -235,6 +235,7 @@ function accessAllows(identity,method,path){
     (method==='PUT'&&['sales','operator','finance','admin'].includes(identity.role));
   if(path==='/shared/mail')return method==='GET'||
     (method==='PUT'&&['sales','operator','finance','admin'].includes(identity.role));
+  if(path==='/shared/problems')return ['GET','POST'].includes(method);
   if(path==='/shared/machineops')return ['operator','admin'].includes(identity.role)&&
     ['GET','PUT'].includes(method);
   if(path==='/shared/simulation')return (admin||identity.email==='marketing@thelab.solutions')&&
