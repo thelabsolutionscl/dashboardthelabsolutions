@@ -137,6 +137,37 @@ test('G-code final tiene auditor de envelope antes de quedar listo',()=>{
   assert.match(g,/G-code fuera del volumen seguro/);
 });
 
+test('respuesta IA compacta usa perfil base y solo overrides permitidos',()=>{
+  const analyze=fn('analizarIA');
+  assert.match(SRC,/PERFIL BASE LOCAL \(cambia solo lo necesario\)/);
+  assert.match(SRC,/"overrides":\{"campoQueCambias":valor\}/);
+  assert.doesNotMatch(SRC,/con EXACTAMENTE estas claves/);
+  assert.match(analyze,/const base=perfilBaseParams\(\)/);
+  assert.match(analyze,/Object\.keys\(base\)/);
+  assert.match(analyze,/Object\.prototype\.hasOwnProperty\.call\(parsed\.overrides,k\)/);
+  assert.match(analyze,/clampParams\(\{\.\.\.base,\.\.\.patch\}\)/);
+  assert.equal((analyze.match(/callAgentClaude\(/g)||[]).length,1,'no debe gastar una segunda llamada para reparar formato');
+});
+
+test('parser IA distingue JSON truncado de JSON inválido y acepta fences/texto alrededor',()=>{
+  const parse=new Function(fn('_parseIaPayload')+';return _parseIaPayload;')();
+  const ok=parse('texto previo\n```json\n{"overrides":{"speed":90},"razonamiento":"ajuste","advertencias":["malla abierta"]}\n```');
+  assert.equal(ok.overrides.speed,90);
+  assert.equal(ok.razonamiento,'ajuste');
+  assert.deepEqual(ok.advertencias,['malla abierta']);
+  assert.throws(()=>parse('{"overrides":{"speed":90}'),/truncada/);
+  assert.throws(()=>parse('no hubo objeto'),/sin parámetros JSON/);
+  assert.throws(()=>parse('{esto no es json}'),/JSON de IA inválido/);
+});
+
+test('perfil heurístico queda reutilizable como base sin tocar la UI',()=>{
+  const base=fn('perfilBaseParams');
+  assert.match(base,/return clampParams\(p\)/);
+  assert.doesNotMatch(base,/showRazon|renderParams/);
+  const fallback=fn('usarPerfilBase');
+  assert.match(fallback,/S\.params=perfilBaseParams\(\)/);
+});
+
 test('la UI aclara qué datos salen del navegador al usar IA',()=>{
   assert.match(SRC,/procesamiento local/);
   assert.match(SRC,/no la malla\/triángulos/);
