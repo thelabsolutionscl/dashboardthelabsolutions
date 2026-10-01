@@ -7,10 +7,11 @@ const INDEX=fs.readFileSync('index.html','utf8');
 const PAGE=fs.readFileSync('manual.html','utf8');
 const MANUAL=fs.readFileSync('docs/manual/MANUAL_USUARIO.md','utf8');
 
-test('el manual vive en el menú de usuario',()=>{
+test('el manual vive en el menú de usuario y abre en una pestaña aparte',()=>{
   assert.match(INDEX,/openUserManual\(\)[\s\S]{0,240}Manual de usuario/);
   assert.match(INDEX,/function openUserManual\(\)/);
-  assert.match(INDEX,/manual\.html/);
+  assert.match(INDEX,/window\.open\('manual\.html','_blank','noopener,noreferrer'\)/);
+  assert.doesNotMatch(INDEX,/location\.href\s*=\s*['"]manual\.html['"]/);
 });
 
 test('la página del manual carga la fuente markdown y permite imprimir',()=>{
