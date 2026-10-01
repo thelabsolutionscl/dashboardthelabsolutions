@@ -4,6 +4,7 @@ const center=require('../js/operativo-conexiones.js');
 const source=fs.readFileSync('js/operativo-conexiones.js','utf8');
 const visual=fs.readFileSync('js/operativo-visual.js','utf8');
 const css=fs.readFileSync('js/operativo-conexiones.css','utf8');
+const index=fs.readFileSync('index.html','utf8');
 
 test('catálogo tiene 15 servicios independientes, sin estados verdes ficticios',()=>{
   assert.equal(center.catalog.length,15);
@@ -138,24 +139,26 @@ test('los 15 servicios tienen Conectar/configurar y Verificar conexión',()=>{
   assert.doesNotMatch(source,/requestAccessToken\(/);
 });
 
-test('OVERVIEW integra script y estilos versionados con panel fuera del render comercial',()=>{
+test('el Centro de Conexiones se carga versionado pero no se renderiza dentro de OVERVIEW',()=>{
   assert.match(visual,/global\.TLSConnections\?\.mount\?\.\(\)/);
+  assert.match(visual,/su interfaz vive en el menú de usuario/);
   assert.match(visual,/document\.currentScript\?\.src/);
   assert.match(visual,/new URL\('operativo-conexiones\.js',src\)/);
   assert.match(visual,/url\.searchParams\.set\('v',original\.searchParams\.get\('v'\)\)/);
   assert.match(source,/new URL\('operativo-conexiones\.css',script\)/);
-  assert.match(source,/target\.closest\('\.card'\)\|\|target/);
-  assert.match(css,/\.tls-conn-kpi-green/);assert.match(css,/\.tls-conn-kpi-yellow/);
-  assert.match(css,/\.tls-conn-kpi-red/);assert.match(css,/\.tls-conn-kpi-gray/);
+  assert.doesNotMatch(source,/panel\.id='tlsConnectionsPanel'/);
+  assert.doesNotMatch(source,/insertAdjacentElement\('afterend',panel\)/);
+  assert.match(index,/openConnectionsCenterFromUserMenu\(\)[^<]*<svg[\s\S]*?Centro de conexiones/);
+  assert.match(index,/function openConnectionsCenterFromUserMenu\(\)/);
 });
 
-test('el centro aparece una sola vez en OVERVIEW y carga CSS con el hash del build',()=>{
+test('el centro monta un único diálogo global y nunca inserta una tarjeta en OVERVIEW',()=>{
   const vm=require('node:vm'),ids=new Map(),listeners={},inserted=[],styles=[];
   function element(tag){
     const node={tag,dataset:{},children:[],hidden:false,
       setAttribute(){},classList:{toggle(){}},append(...x){this.children.push(...x);},
       appendChild(x){this.children.push(x);},replaceChildren(...x){this.children=x;},
-      insertAdjacentElement(pos,x){inserted.push({pos,x});},closest(){return null;},
+      insertAdjacentElement(pos,x){inserted.push({pos,x});},closest(){return null;},remove(){ids.delete(this._id);},
       scrollIntoView(){},showModal(){this.open=true;},close(){this.open=false;}};
     Object.defineProperty(node,'id',{get(){return this._id;},set(x){this._id=x;ids.set(x,this);}});
     return node;
@@ -174,12 +177,14 @@ test('el centro aparece una sola vez en OVERVIEW y carga CSS con el hash del bui
   vm.runInNewContext(source,sandbox);
   assert.equal(typeof root.TLSConnections.mount,'function');
   listeners.DOMContentLoaded();
-  assert.equal(inserted.length,1);
-  assert.equal(inserted[0].x.id,'tlsConnectionsPanel');
+  assert.equal(inserted.length,0,'no debe insertar tarjetas en OVERVIEW');
+  const firstDialog=ids.get('tlsConnDialog');
+  assert.ok(firstDialog,'debe crear el diálogo global');
   assert.equal(styles.length,1);
   assert.equal(styles[0].href,'https://dashboard.example/js/operativo-conexiones.css?v=abc12345');
   root.TLSConnections.mount();
-  assert.equal(inserted.length,1,'no duplicar el panel al actualizar el overview');
+  assert.equal(ids.get('tlsConnDialog'),firstDialog,'no debe duplicar el diálogo');
+  assert.equal(inserted.length,0);
   root.TLSConnections.result('proxy','red','Error simulado','manual');
   assert.equal(root.TLSConnections.summary().red,1);
   sandbox.AUTH.getUser=()=>({username:'otro@ejemplo.cl',role:'admin'});
