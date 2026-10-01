@@ -115,7 +115,9 @@ async function ai(stage,body){
     body:JSON.stringify({stage,...body})
   });
   let d={};try{d=await r.json();}catch(_){}
-  if(!r.ok||d.ok!==true)throw new Error(String(d.error||('Bugfix AI HTTP '+r.status)).slice(0,700));
+  if(!r.ok||d.ok!==true){
+    const e=new Error(String(d.error||('Bugfix AI HTTP '+r.status)).slice(0,700));e.status=r.status;throw e;
+  }
   return d.result;
 }
 async function verifyService(){
@@ -245,7 +247,15 @@ async function main(){
     const screenshot=await imageFor(m.id);
     const repoMap=trackedFiles();
     const report={id:m.id,message:m.message,section:m.section||'',path:m.path||'',build:m.build||'',...(screenshot?{screenshot}:{})};
-    const plan=await ai('plan',{report,repoMap});
+    let plan;
+    try{plan=await ai('plan',{report,repoMap});}
+    catch(e){
+      // Si la imagen hace que la estimación supere el techo por solicitud,
+      // conserva el reporte y reintenta el diagnóstico solo con texto/contexto.
+      if(report.screenshot&&e?.status===429&&/per-request cost limit/i.test(String(e.message||''))){
+        delete report.screenshot;plan=await ai('plan',{report,repoMap});
+      }else throw e;
+    }
     await update(pending,'reparando',{attempts,analysis:plan.analysis,error:''});
 
     if(plan.risk==='high'||(plan.files||[]).some(forbidden)){
@@ -319,11 +329,16 @@ async function main(){
   }catch(e){
     try{sh('git',['reset','--hard','HEAD']);}catch(_){}
     const msg=String(e?.message||e).slice(0,2800);
-    await update(pending,attempts<MAX_ATTEMPTS?'nuevo':'error',{attempts,error:msg,
-      analysis:pending.meta.repair?.analysis||'La reparación automática no pudo completarse.'});
-    if(attempts<MAX_ATTEMPTS)console.log('Reparación falló; quedará para reintento automático:',msg);
-    else console.error('Reparación agotó reintentos:',msg);
-    if(attempts>=MAX_ATTEMPTS)process.exitCode=1;
+    const transient=e?.status===503||
+      (e?.status===429&&!/per-request cost limit/i.test(msg))||
+      /Daily AI budget reached|Too many concurrent AI requests|AI cost guard unavailable/i.test(msg);
+    const countedAttempts=transient?Math.max(0,attempts-1):attempts;
+    const next=transient||countedAttempts<MAX_ATTEMPTS?'nuevo':'error';
+    await update(pending,next,{attempts:countedAttempts,error:transient
+      ?'La reparación IA está temporalmente en espera por disponibilidad o presupuesto. Se reintentará automáticamente.'
+      :msg,analysis:pending.meta.repair?.analysis||'La reparación automática no pudo completarse.'});
+    if(next==='nuevo')console.log('Reparación pendiente de reintento:',msg);
+    else{console.error('Reparación agotó reintentos:',msg);process.exitCode=1;}
   }
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
