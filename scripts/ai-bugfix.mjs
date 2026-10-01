@@ -118,6 +118,15 @@ async function ai(stage,body){
   if(!r.ok||d.ok!==true)throw new Error(String(d.error||('Bugfix AI HTTP '+r.status)).slice(0,700));
   return d.result;
 }
+async function verifyService(){
+  const token=await oidcToken();
+  const r=await fetch(PROXY+'/service/github/bugfix-ai',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({stage:'ping'})
+  });
+  let d={};try{d=await r.json();}catch(_){}
+  if(!r.ok||d.ok!==true||d.pong!==true)throw new Error('El servicio de reparación IA no superó el healthcheck OIDC');
+}
 function trackedFiles(){
   const all=sh('git',['ls-files']).split('\n').filter(Boolean);
   const allowed=all.filter(p=>
@@ -202,6 +211,7 @@ function cleanTitle(message){
   return one.length>72?one.slice(0,69)+'…':one;
 }
 async function main(){
+  await verifyService();
   sh('git',['config','user.name','tls-ai-repair[bot]']);
   sh('git',['config','user.email','tls-ai-repair@users.noreply.github.com']);
   let rows=await listReports();
