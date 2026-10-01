@@ -41,14 +41,15 @@ async function dismiss(){
   }).catch(()=>{});
 }
 
-async function shot(name,{tab,action,delay=1200}={}){
+async function shot(name,{tab,action,delay=1200,scrollY=0}={}){
   await dismiss();
   if(tab){
     await page.evaluate(t=>{ try{switchTab(t)}catch(e){console.warn(e)} },tab);
   }
   if(action)await page.evaluate(action);
   await page.waitForTimeout(delay);
-  await page.evaluate(()=>window.scrollTo(0,0));
+  await page.evaluate(y=>window.scrollTo(0,y),scrollY);
+  await page.waitForTimeout(250);
   await page.screenshot({path:`${OUT}/${name}.png`,fullPage:false});
   console.log('captured',name);
 }
@@ -90,6 +91,26 @@ await shot('finanzas',{tab:'finanzas',delay:1600});
 await shot('remuneraciones',{tab:'remuneraciones',delay:1400});
 await shot('correo',{tab:'correo',delay:1800});
 await shot('centro-conexiones',{tab:'overview',action:()=>{try{openConnectionsCenterFromUserMenu()}catch(_){}} ,delay:1600});
+await shot('overview-atencion',{tab:'overview',scrollY:620});
+await shot('clientes-listado',{tab:'clientes',scrollY:520});
+await shot('clientes-nuevo',{tab:'nuevo-lead',delay:1000});
+await shot('cotizaciones-listado',{tab:'cotizaciones',scrollY:520});
+await shot('nueva-cotizacion',{tab:'nueva-cot',delay:1200});
+await shot('pedidos-tabla',{tab:'pedidos',action:()=>{try{setPedidosView('tabla')}catch(_){}},delay:1000});
+await shot('pedidos-planificacion',{tab:'pedidos',action:()=>{try{setPedidosView('planificacion')}catch(_){}},delay:1000});
+await shot('inventario-stock',{tab:'inventario',scrollY:520});
+await shot('agentes-cola',{tab:'agentes',scrollY:560});
+await shot('newsletter-campanas',{tab:'newsletter',scrollY:650,delay:1400});
+await shot('maquinas-telemetria',{tab:'maquinas',scrollY:650,delay:2200});
+await shot('maquinas-planificacion',{tab:'maquinas',action:()=>{try{MachineOps.showView('planificacion')}catch(_){}},delay:1800});
+await shot('calendario-agenda',{tab:'calendario',action:()=>{try{calSetVista('agenda')}catch(_){}},delay:1200});
+await shot('reportes-historial',{tab:'reporte',scrollY:600,delay:1200});
+await shot('web-google-ads',{tab:'web',scrollY:650,delay:1500});
+await shot('finanzas-facturas',{tab:'finanzas',action:()=>{try{finSwitchTab('facturas')}catch(_){}},delay:1200});
+await shot('finanzas-por-cobrar',{tab:'finanzas',action:()=>{try{finSwitchTab('cobrar')}catch(_){}},delay:1200});
+await shot('correo-redactar',{tab:'correo',action:()=>{try{MAIL.openCompose({to:'cliente.demo@example.com',subject:'Ejemplo de correo',body:'Este es un borrador de demostración para el manual de usuario.'})}catch(_){}},delay:1000});
+await shot('centro-conexiones-detalle',{tab:'overview',action:()=>{try{openConnectionsCenterFromUserMenu()}catch(_){}},delay:1000,scrollY:420});
+
 await shot('apariencia',{tab:'overview',action:()=>{try{openAppearanceSettings()}catch(_){}} ,delay:800});
 
 // El propio manual se captura al final, cuando todas las imágenes anteriores
