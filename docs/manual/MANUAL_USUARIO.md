@@ -839,3 +839,5 @@ Este documento vive dentro del mismo repositorio del dashboard en `docs/manual/M
 La versión web se publica como `manual.html`.
 
 Cuando una sección cambia de forma significativa, el manual debe actualizarse en el mismo PR o en un PR inmediatamente posterior.
+
+Las capturas del manual se generan con una sesión **DEMO segura** desde `scripts/capture-manual-screenshots.mjs`, para documentar la interfaz sin exponer datos de clientes ni operar servicios reales.
