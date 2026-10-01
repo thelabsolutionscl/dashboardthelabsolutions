@@ -3,7 +3,7 @@ name: Capturas Manual Usuario
 on:
   push:
     branches:
-      - manual-screenshots-v1
+      - manual-screenshots-v2
     paths:
       - scripts/capture-manual-screenshots.mjs
       - .github/workflows/manual-screenshots.yml
@@ -19,7 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: manual-screenshots-v1
+          ref: manual-screenshots-v2
           fetch-depth: 0
 
       - name: Node 22
@@ -50,12 +50,17 @@ jobs:
         run: |
           count=$(find docs/manual/assets -maxdepth 1 -name '*.png' | wc -l)
           echo "Capturas generadas: $count"
-          test "$count" -ge 22
+          test "$count" -ge 41
           test -s docs/manual/assets/overview.png
           test -s docs/manual/assets/maquinas.png
           test -s docs/manual/assets/finanzas.png
           test -s docs/manual/assets/centro-conexiones.png
           test -s docs/manual/assets/apariencia.png
+          test -s docs/manual/assets/nueva-cotizacion.png
+          test -s docs/manual/assets/pedidos-tabla.png
+          test -s docs/manual/assets/maquinas-planificacion.png
+          test -s docs/manual/assets/finanzas-por-cobrar.png
+          test -s docs/manual/assets/correo-redactar.png
 
       - name: Guardar capturas en la rama
         run: |
@@ -67,4 +72,4 @@ jobs:
             exit 0
           fi
           git commit -m "docs(manual): actualizar screenshots [skip ci]"
-          git push origin HEAD:manual-screenshots-v1
+          git push origin HEAD:manual-screenshots-v2
