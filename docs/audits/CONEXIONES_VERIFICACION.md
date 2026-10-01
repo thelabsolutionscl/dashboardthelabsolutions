@@ -1,6 +1,6 @@
 # Centro de Conexiones · Conectar y verificar
 
-El panel OVERVIEW ofrece dos acciones separadas por integración: **Conectar / configurar** y **Verificar conexión**. El semáforo verde solo se muestra si una prueba de solo lectura responde correctamente; tener una credencial presente NO significa que sea válida. No se llama a modelos de IA para verificarlos.
+El **Centro de conexiones**, accesible desde el menú de usuario (**Mi cuenta → Centro de conexiones**), ofrece dos acciones separadas por integración: **Conectar / configurar** y **Verificar conexión**. El semáforo verde solo se muestra si una prueba de solo lectura responde correctamente; tener una credencial presente NO significa que sea válida. No se llama a modelos de IA para verificarlos.
 
 ## Verificaciones de bajo impacto
 
@@ -20,7 +20,7 @@ Google Calendar y Drive usan el OAuth existente, siempre tras clic del usuario; 
 ## Comprobación tras despliegue
 
 1. Verificar que GitHub Pages y Cloudflare Worker publicaron el mismo cambio y que las pruebas CI aprobaron.
-2. En sesión de administrador, abrir OVERVIEW → Centro de conexiones y pulsar **Verificar conexión** en las APIs. Una clave válida debe pasar a verde, una inválida a rojo y una no configurada a gris.
+2. En sesión de administrador, abrir **Mi cuenta → Centro de conexiones** y pulsar **Verificar conexión** en las APIs. Una clave válida debe pasar a verde, una inválida a rojo y una no configurada a gris.
 3. Conectar Google Calendar y Drive en la sesión real; después volver a verificar. Verificar IMAP autenticando la casilla y comprobando carpetas. 
 4. El `mail-api.php` del alojamiento se actualiza de forma manual; sin esa instalación el diagnóstico de Resend debe permanecer amarillo y NO declarar una conexión verificada.
 5. No publicar claves en GitHub, tickets, screenshots, URL del navegador o campos de la página.
