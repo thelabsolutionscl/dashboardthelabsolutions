@@ -1240,7 +1240,7 @@ function _nlMdToHtml(md){
       continue;
     }
     // Imagen individual ![alt](url)
-    if(m=line.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/)){closeList();html+=`<img src="${escapeHtml(m[2])}" alt="${escapeHtml(m[1])}" style="display:block;width:100%;max-width:100%;height:auto;border-radius:10px;margin:18px auto">`;continue;}
+    if(m=line.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/)){closeList();html+=`<img src="${escapeHtml(m[2])}" alt="${escapeHtml(m[1])}" style="display:block;width:auto;max-width:100%;height:auto;border-radius:10px;margin:18px auto">`;continue;}
     // Regla horizontal: --- *** ___
     if(/^([-*_])\1{2,}$/.test(line)){closeList();html+='<hr style="border:none;border-top:1px solid #e6e6e9;margin:24px 0">';continue;}
     // CTA (línea que es solo un enlace) → botón
