@@ -33,7 +33,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-09-30-resend-send-evidence');
+define('MAIL_API_BUILD', '2026-09-30-resend-send-capability');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -510,13 +510,15 @@ function resend_health_recent($key, $maxAge = 2592000) {
     if (!hash_equals((string)$d['key_hash'], hash('sha256',(string)$key))) return false;
     return (time() - (int)$d['ts']) <= $maxAge;
 }
-function _http_post_json($url, $headers, $bodyJson) {
+function _http_post_json($url, $headers, $bodyJson, $timeout = 30) {
+    $timeout = max(1, min(30, (int)$timeout));
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_CONNECTTIMEOUT => min(4, $timeout),
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_POSTFIELDS     => $bodyJson,
         ]);
@@ -530,7 +532,7 @@ function _http_post_json($url, $headers, $bodyJson) {
         'method'        => 'POST',
         'header'        => implode("\r\n", $headers),
         'content'       => $bodyJson,
-        'timeout'       => 30,
+        'timeout'       => $timeout,
         'ignore_errors' => true,
     ]]);
     $resp = @file_get_contents($url, false, $ctx);
@@ -634,39 +636,59 @@ function mail_send_reserve($user, $testFile = null) {
 // ── Router ────────────────────────────────────────────────────
 switch ($action) {
 
-// ── Diagnóstico Resend: sin envío de mensajes ───────────────────
-// Exige credenciales IMAP reales antes de consultar la clave global del servidor.
+// ── Diagnóstico Resend: verifica la capacidad real de envío sin entregar correo ──
+// Exige credenciales IMAP reales antes de tocar la clave global del servidor.
+// Las claves "Sending access" no pueden leer /domains, por lo que esa ruta no
+// sirve para diagnosticar la salida. En su lugar hacemos POST /emails con un
+// JSON vacío: Resend autentica/autorización primero y responde 422 por campos
+// obligatorios ausentes. Sin from/to/subject/body no existe mensaje que entregar.
 case 'resend_status':
     $conn = open_imap($user, $pass);
     if (is_array($conn)) { echo json_out(['ok'=>false, 'verified'=>false]); exit; }
     imap_close($conn);
     $key = resend_api_key();
     if (!$key) { echo json_out(['ok'=>false,'verified'=>false,'configured'=>false]); exit; }
-    if (!function_exists('curl_init')) {
-        echo json_out(['ok'=>false,'verified'=>false,'configured'=>true]); exit;
-    }
-    // Si esta misma clave ya envió correctamente por Resend recientemente,
-    // esa es una prueba más fuerte que consultar /domains y además funciona
-    // con claves "Sending access". No enviamos correo de prueba.
+
+    // Un envío real reciente sigue siendo la evidencia más fuerte y evita
+    // incluso la solicitud de validación al proveedor.
     if (resend_health_recent($key)) {
         echo json_out(['ok'=>true,'verified'=>true,'configured'=>true,'evidence'=>'recent_send']);
         exit;
     }
-    $ch = curl_init('https://api.resend.com/domains');
-    curl_setopt_array($ch, [
-        CURLOPT_HTTPGET=>true, CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key],
-        CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>8, CURLOPT_CONNECTTIMEOUT=>4,
-        CURLOPT_FOLLOWLOCATION=>false,
+
+    list($probeBody, $probeHttp, $probeErr) = _http_post_json(
+        'https://api.resend.com/emails',
+        ['Authorization: Bearer ' . $key, 'Content-Type: application/json'],
+        '{}',
+        8
+    );
+    $probePayload = is_string($probeBody) ? json_decode($probeBody, true) : null;
+
+    // 422 es una respuesta de validación: la clave llegó autenticada a la ruta
+    // de envío, pero la API rechazó el payload vacío antes de crear un email.
+    if ($probeHttp === 422) {
+        echo json_out(['ok'=>true,'verified'=>true,'configured'=>true,'evidence'=>'send_capability']);
+        exit;
+    }
+    if ($probeHttp === 401) {
+        echo json_out(['ok'=>false,'verified'=>false,'configured'=>true,'error_code'=>'send_unauthorized']);
+        exit;
+    }
+    if ($probeHttp === 403) {
+        echo json_out(['ok'=>false,'verified'=>false,'configured'=>true,'error_code'=>'send_forbidden']);
+        exit;
+    }
+    if ($probeHttp === 429) {
+        echo json_out(['ok'=>false,'verified'=>false,'configured'=>true,'error_code'=>'rate_limited']);
+        exit;
+    }
+
+    $probeName = is_array($probePayload) ? strtolower((string)($probePayload['name'] ?? '')) : '';
+    echo json_out([
+        'ok'=>false,'verified'=>false,'configured'=>true,'error_code'=>'unverified',
+        'provider_status'=>$probeHttp ?: null,
+        'provider_error'=>$probeName ?: ($probeErr ? 'network' : null),
     ]);
-    $body = curl_exec($ch);
-    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    $payload = is_string($body) ? json_decode($body, true) : null;
-    $verified = $http >= 200 && $http < 300 && is_array($payload) && isset($payload['data']) && is_array($payload['data']);
-    // Sending-access de Resend puede enviar pero no listar dominios. En 403 no
-    // elevamos permisos solo para el monitor: pedimos evidencia de un envío real.
-    echo json_out(['ok'=>$verified,'verified'=>$verified,'configured'=>true,
-        'error_code'=>$verified?'':($http===401?'unauthorized':($http===403?'send_only_or_forbidden':'unverified'))]);
     exit;
 
 // ── folders ──────────────────────────────────────────────────
