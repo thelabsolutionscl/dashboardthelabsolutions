@@ -100,7 +100,11 @@ function style(){
 function render(){
   const list=D.getElementById('problemHistory');if(!list)return;
   if(!reports.length){list.innerHTML='<div class="pr-empty">Todavía no hay reportes guardados.</div>';return;}
-  list.innerHTML=reports.map(r=>{\n    const queued=r.estado==='Nuevo'&&/^Solicitud manual de reparación recibida\./.test(r.diagnostico||'');\n    const canRepair=r.estado==='Nuevo'||r.estado==='Error';\n    const repairLabel=queued?'✓ En cola':r.estado==='Error'?'↻ Reintentar reparación':'⚡ Reparar';\n    return `<article class="pr-item">
+  list.innerHTML=reports.map(r=>{
+    const queued=r.estado==='Nuevo'&&/^Solicitud manual de reparación recibida\./.test(r.diagnostico||'');
+    const canRepair=r.estado==='Nuevo'||r.estado==='Error';
+    const repairLabel=queued?'✓ En cola':r.estado==='Error'?'↻ Reintentar reparación':'⚡ Reparar';
+    return `<article class="pr-item">
     <div class="pr-item-top"><span class="pr-status ${statusClass(r.estado)}">${esc(r.estado)}</span><span class="pr-id">${esc(r.reportId)}</span><span class="pr-small" style="margin-left:auto">${esc(fmtDate(r.fecha))}</span></div>
     <div class="pr-msg">${esc(r.mensaje)}</div>
     <div class="pr-small">${esc(r.seccion||'sin sección')} · ${esc(r.usuario||'')} ${r.build?'· build '+esc(r.build):''}</div>
