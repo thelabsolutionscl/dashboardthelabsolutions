@@ -123,6 +123,16 @@ await shot('apariencia',{tab:'overview',action:()=>{try{openAppearanceSettings()
 // ya existen en disco y el servidor local puede mostrarlas.
 await page.goto(BASE+'manual.html',{waitUntil:'domcontentloaded',timeout:60000});
 await page.waitForTimeout(1500);
+// Evita que la captura del manual se fotografíe a sí misma y genere un efecto
+// recursivo cada vez más pequeño en regeneraciones sucesivas.
+await page.evaluate(()=>{
+  document.querySelectorAll('.manual-shot img[src*="manual-web.png"]').forEach(img=>{
+    const figure=img.closest('.manual-shot');
+    if(figure)figure.style.display='none';
+  });
+  window.scrollTo(0,0);
+});
+await page.waitForTimeout(150);
 await page.screenshot({path:`${OUT}/manual-web.png`,fullPage:false});
 console.log('captured manual-web');
 
