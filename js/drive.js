@@ -4,11 +4,23 @@ let _driveTokenClient=null;
 let _driveAccessToken=null;
 let _driveTokenExpiry=0;
 
+// Mantiene sincronizados todos los indicadores visuales de Drive. El OAuth puede
+// iniciarse desde Pedidos, Cotizaciones o el Centro de Conexiones; antes solo el
+// botón que originaba el flujo sabía que la sesión ya estaba autorizada.
+function _driveSyncConnectionUi(){
+  try{if(typeof _refreshDriveBtns==='function')_refreshDriveBtns();}catch(_){}
+  try{
+    if(typeof window!=='undefined'&&typeof window.dispatchEvent==='function'&&typeof CustomEvent!=='undefined'){
+      window.dispatchEvent(new CustomEvent('tls:drive-connection-changed',{detail:{connected:!!(_driveAccessToken&&_driveTokenExpiry>Date.now()+5000)}}));
+    }
+  }catch(_){}
+}
+
 function _driveGetClientId(){return localStorage.getItem('google_drive_client_id')||_DEFAULTS.GOOGLE_CLIENT_ID;}
 
 function _driveGetToken(){
   return new Promise((resolve,reject)=>{
-    if(_driveAccessToken&&Date.now()<_driveTokenExpiry-60000){resolve(_driveAccessToken);return;}
+    if(_driveAccessToken&&Date.now()<_driveTokenExpiry-60000){_driveSyncConnectionUi();resolve(_driveAccessToken);return;}
     const clientId=_driveGetClientId();
     if(!clientId){reject(new Error('Configura el Google Drive Client ID en ⚙️ Mi cuenta'));return;}
     if(typeof google==='undefined'||!google.accounts){reject(new Error('SDK de Google no cargado aún, intenta en unos segundos'));return;}
@@ -17,9 +29,15 @@ function _driveGetToken(){
         client_id:clientId,
         scope:'https://www.googleapis.com/auth/drive',
         callback:(resp)=>{
-          if(resp.error){reject(new Error('OAuth: '+resp.error));return;}
+          if(resp.error){
+            _driveAccessToken=null;
+            _driveTokenExpiry=0;
+            _driveSyncConnectionUi();
+            reject(new Error('OAuth: '+resp.error));return;
+          }
           _driveAccessToken=resp.access_token;
           _driveTokenExpiry=Date.now()+(resp.expires_in||3600)*1000;
+          _driveSyncConnectionUi();
           resolve(_driveAccessToken);
         }
       });
