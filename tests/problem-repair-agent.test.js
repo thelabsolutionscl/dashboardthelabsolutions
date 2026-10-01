@@ -51,3 +51,17 @@ test('screenshot remoto se limita a hosts de Airtable y HTTPS',()=>{
   assert.match(QUEUE,/dl\.airtable\.com/);
   assert.match(WORKFLOW,/--proto '=https'/);
 });
+
+
+test('no usa cadenas vacías en ternarios simulados de GitHub Actions',()=>{
+  assert.doesNotMatch(WORKFLOW,/&&\s*''\s*\|\|/,'una cadena vacía es falsy y activaría el fallback incorrectamente');
+  assert.match(WORKFLOW,/Cerrar reporte fusionado/);
+  assert.match(WORKFLOW,/github\.event\.pull_request\.merged == true/);
+  assert.match(WORKFLOW,/Cerrar reporte sin fusionar/);
+  assert.match(WORKFLOW,/github\.event\.pull_request\.merged != true/);
+});
+
+test('un PR con tests aprobados no escribe un Error falso',()=>{
+  assert.match(WORKFLOW,/Vincular PR aprobado al reporte[\s\S]*?steps\.tests\.outcome == 'success'[\s\S]*?PROBLEM_STATE: PR abierto/);
+  assert.match(WORKFLOW,/Vincular PR con pruebas fallidas[\s\S]*?steps\.tests\.outcome != 'success'[\s\S]*?PROBLEM_STATE: Error/);
+});

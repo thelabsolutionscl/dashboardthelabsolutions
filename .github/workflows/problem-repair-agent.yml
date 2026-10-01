@@ -267,16 +267,27 @@ jobs:
           PROBLEM_ERROR: La rama se publicó, pero GitHub no pudo crear el PR.
         run: node scripts/problem-repair-queue.mjs update
 
-      - name: Vincular PR al reporte
-        if: steps.pr.outcome == 'success'
+      - name: Vincular PR aprobado al reporte
+        if: steps.pr.outcome == 'success' && steps.tests.outcome == 'success'
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
           PROBLEM_RECORD_ID: ${{ steps.claim.outputs.record_id }}
-          PROBLEM_STATE: ${{ steps.tests.outcome == 'success' && 'PR abierto' || 'Error' }}
+          PROBLEM_STATE: PR abierto
           PROBLEM_DIAGNOSIS: ${{ steps.result.outputs.diagnosis }}
           PROBLEM_PLAN: ${{ steps.result.outputs.plan }}
           PROBLEM_PR_URL: ${{ steps.pr.outputs.url }}
-          PROBLEM_ERROR: ${{ steps.tests.outcome == 'success' && '' || 'La reparación generó cambios, pero la suite completa falló. El PR no se fusionó automáticamente.' }}
+        run: node scripts/problem-repair-queue.mjs update
+
+      - name: Vincular PR con pruebas fallidas
+        if: steps.pr.outcome == 'success' && steps.tests.outcome != 'success'
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
+          PROBLEM_RECORD_ID: ${{ steps.claim.outputs.record_id }}
+          PROBLEM_STATE: Error
+          PROBLEM_DIAGNOSIS: ${{ steps.result.outputs.diagnosis }}
+          PROBLEM_PLAN: ${{ steps.result.outputs.plan }}
+          PROBLEM_PR_URL: ${{ steps.pr.outputs.url }}
+          PROBLEM_ERROR: La reparación generó cambios, pero la suite completa falló. El PR no se fusionó automáticamente.
         run: node scripts/problem-repair-queue.mjs update
 
       - name: Fusionar automáticamente cambio de bajo riesgo
@@ -356,13 +367,24 @@ jobs:
           console.log('record_id='+(match?.[1]||''));
           NODE
 
-      - name: Cerrar estado del reporte
-        if: steps.report.outputs.record_id != ''
+      - name: Cerrar reporte fusionado
+        if: steps.report.outputs.record_id != '' && github.event.pull_request.merged == true
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
           PROBLEM_RECORD_ID: ${{ steps.report.outputs.record_id }}
-          PROBLEM_STATE: ${{ github.event.pull_request.merged && 'Reparado' || 'Error' }}
+          PROBLEM_STATE: Reparado
           PROBLEM_PR_URL: ${{ github.event.pull_request.html_url }}
-          PROBLEM_PLAN: ${{ github.event.pull_request.merged && 'PR revisado y fusionado. El cambio queda listo para el flujo normal de despliegue.' || 'El PR fue cerrado sin fusionar.' }}
-          PROBLEM_ERROR: ${{ github.event.pull_request.merged && '' || 'El PR asociado fue cerrado sin merge.' }}
+          PROBLEM_PLAN: PR revisado y fusionado. El cambio queda listo para el flujo normal de despliegue.
+          PROBLEM_ERROR: ''
+        run: node scripts/problem-repair-queue.mjs update
+
+      - name: Cerrar reporte sin fusionar
+        if: steps.report.outputs.record_id != '' && github.event.pull_request.merged != true
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE }}
+          PROBLEM_RECORD_ID: ${{ steps.report.outputs.record_id }}
+          PROBLEM_STATE: Error
+          PROBLEM_PR_URL: ${{ github.event.pull_request.html_url }}
+          PROBLEM_PLAN: El PR fue cerrado sin fusionar.
+          PROBLEM_ERROR: El PR asociado fue cerrado sin merge.
         run: node scripts/problem-repair-queue.mjs update
