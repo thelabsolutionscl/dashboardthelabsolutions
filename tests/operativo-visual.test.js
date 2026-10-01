@@ -359,3 +359,11 @@ test('WEB no expone selector Experto y fuerza vista Simple',()=>{
   assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple'/);
   assert.match(src,/if\(simpleOnlyViews\.has\(page\)\)\{[\s\S]*?header\.querySelector\?\.\('\.op-switch'\)\?\.remove\?\.\(\);[\s\S]*?mode\(page,'simple'\)/);
 });
+
+
+test('NEWSLETTER queda fijo en modo Experto y no muestra selector Simple/Experto',()=>{
+  const src=fs.readFileSync('js/operativo-visual.js','utf8');
+  assert.match(src,/const expertOnlyViews=new Set\(\['newsletter'\]\)/);
+  assert.match(src,/expertOnlyViews\.has\(page\)\?'expert'/);
+  assert.match(src,/else if\(expertOnlyViews\.has\(page\)\)\{[\s\S]*?header\.querySelector\?\.\('\.op-switch'\)\?\.remove\?\.\(\);[\s\S]*?mode\(page,'expert'\)/);
+});
