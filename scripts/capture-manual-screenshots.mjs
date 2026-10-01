@@ -35,6 +35,7 @@ async function dismiss(){
   await page.evaluate(()=>{
     try{closeUserMenu?.()}catch(_){}
     try{closeAppearanceSettings?.()}catch(_){}
+    try{document.getElementById('tlsConnDialog')?.close()}catch(_){}
     document.querySelectorAll('.appearance-modal-overlay.open').forEach(el=>el.classList.remove('open'));
     document.querySelectorAll('.toast,.toast-item,.sys-loader,.system-loader').forEach(el=>{el.style.display='none'});
     window.scrollTo(0,0);
