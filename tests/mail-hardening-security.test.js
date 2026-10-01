@@ -48,10 +48,17 @@ test('correo recibido y firmas usan saneadores separados con allowlists',()=>{
  assert.match(sig,/this\._sanitizarFirma\(s\)/);
  const setSig=block('setSig(html){','async _saveSigsAirtable(){');
  assert.match(setSig,/this\._sanitizarFirma\(html\)/);
+ const sigStyle=block('_safeSignatureStyle(styleText){','_sanitizarFirma(html){');
+ assert.match(sigStyle,/javascript:/);
+ assert.match(sigStyle,/expression/);
+ assert.match(sigStyle,/const allowed=/);
+ assert.match(sigStyle,/background-color/);
+ assert.match(sigStyle,/padding/);
+ assert.match(sigStyle,/list-style/);
  const sigSan=block('_sanitizarFirma(html){','\/\/ Firma independiente por cuenta');
  assert.match(sigSan,/this\._safeSignatureStyle/);
  assert.match(sigSan,/data:image/);
- assert.match(sigSan,/javascript:/);
+ assert.match(sigSan,/script style svg math iframe object embed form/);
  const reply=block('reply(){','_validEmails(str){');
  assert.match(reply,/this\._sanitizarCita\(m\.body_html\)/);
 });
