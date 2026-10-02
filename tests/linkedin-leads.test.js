@@ -100,3 +100,25 @@ test('conversion and analysis have in-flight guards against repeated clicks',()=
   assert.match(LI,/convertBusy\.has\(id\)/);
   assert.match(LI,/f\.Convertido&&Array\.isArray\(f\.Cliente\)/);
 });
+
+
+test('funnel rejects impossible transitions and re-analysis does not regress active stages',()=>{
+  assert.match(LI,/function stateAllowed\(/);
+  assert.match(LI,/stateAllowed\(id,\['Calificado'\],'pasar a Por contactar'\)/);
+  assert.match(LI,/stateAllowed\(id,\['Contactado'\],'marcar como Respondió'\)/);
+  assert.match(LI,/stateAllowed\(id,\['Respondió'\],'marcar como Oportunidad'\)/);
+  assert.match(LI,/\['Descubierto','Analizado','Calificado'\]\.indexOf\(f\.Estado\|\|'Descubierto'\)>=0/);
+});
+
+test('short phone fragments are not used as dedupe identifiers',()=>{
+  assert.match(LI,/d\.length>=9\?d\.slice\(-9\):''/);
+  assert.match(WORKER,/phoneDigitsRaw\.length >= 9 \? phoneDigitsRaw\.slice\(-9\) : ""/);
+});
+
+test('webhook idempotency uses the real LinkedIn lead id, not click attribution',()=>{
+  const start=WORKER.indexOf('async function handleLinkedin');
+  const end=WORKER.indexOf('async function syncLinkedinInboundProspect',start);
+  const fn=WORKER.slice(start,end);
+  assert.match(fn,/const eventId = norm\.linkedinLeadId;/);
+  assert.doesNotMatch(fn,/const eventId = norm\.linkedinLeadId \|\| norm\.linkedinClickId/);
+});
