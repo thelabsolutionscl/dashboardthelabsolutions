@@ -22,14 +22,14 @@ var CONVERTIBLE_STATES=['Calificado','Por contactar','Contactado','Respondió','
 function cleanText(v){return String(v||'').trim().replace(/\s+/g,' ');}
 function normText(v){return cleanText(v).toLowerCase();}
 function normEmail(v){return cleanText(v).toLowerCase();}
-function normPhone(v){return String(v||'').replace(/\D/g,'');}
+function normPhone(v){var d=String(v||'').replace(/\D/g,'');return d.length>=9?d.slice(-9):d;}
 function canonicalLinkedinUrl(v){
  var raw=cleanText(v);if(!raw)return '';
  try{
    var u=new URL(raw);
    if(!/(^|\.)linkedin\.com$/i.test(u.hostname))return '';
    var path=(u.pathname||'').replace(/\/{2,}/g,'/').replace(/\/$/,'');
-   return 'https://www.linkedin.com'+(path||'');
+   return ('https://www.linkedin.com'+(path||'')).toLowerCase();
  }catch(_){return '';}
 }
 function prospectDue(f){
@@ -67,7 +67,7 @@ function modal(){
 async function linkedinLoad(force){
  mount();if(typeof _redesDemo!=='undefined'&&_redesDemo){state.linkedinProspects=[];loaded=true;linkedinRender();return;}
  if(busy)return;if(loaded&&!force){linkedinRender();return;}busy=true;
- try{var r=await airtableFetch(TABLE,500);state.linkedinProspects=r.records||[];loaded=true;linkedinRender();}
+ try{var r=await airtableFetch(TABLE,1000);state.linkedinProspects=r.records||[];loaded=true;linkedinRender();}
  catch(err){var x=document.getElementById('linkedinProspectList');if(x)x.innerHTML='<div class="empty">⚠ '+e(err.message)+'</div>';}finally{busy=false;}
 }
 function crmLeads(){return (state.clientes||[]).filter(function(c){return String((c.fields||{})['Origen lead']||'').toLowerCase()==='linkedin';});}
@@ -133,7 +133,7 @@ function linkedinCopyMessage(id){var r=(state.linkedinProspects||[]).find(functi
 function linkedinCopyFollowup(id){var r=(state.linkedinProspects||[]).find(function(x){return x.id===id;}),m=r&&r.fields?r.fields['Follow-up']:'';if(!m){say('No hay follow-up generado','error');return;}navigator.clipboard.writeText(m).then(function(){say('Follow-up copiado ✓','success');}).catch(function(){say('No se pudo copiar','error');});}
 function linkedinOpenProfile(id){var r=(state.linkedinProspects||[]).find(function(x){return x.id===id;}),u=r&&r.fields?r.fields['LinkedIn URL']:'';if(!/^https:\/\/(www\.)?linkedin\.com\//i.test(u||'')){say('Falta URL de LinkedIn','error');return;}window.open(u,'_blank','noopener,noreferrer');}
 async function status(id,st,extra){
- if(statusBusy.has(id))return;var r=(state.linkedinProspects||[]).find(function(x){return x.id===id;});if(!r)return;
+ if(STATES.indexOf(st)<0)throw new Error('Estado LinkedIn inválido');if(statusBusy.has(id))return;var r=(state.linkedinProspects||[]).find(function(x){return x.id===id;});if(!r)return;
  statusBusy.add(id);try{var p=Object.assign({Estado:st},extra||{});await wr(TABLE,'PATCH',id,p);Object.assign(r.fields,p);linkedinRender();}finally{statusBusy.delete(id);}
 }
 async function linkedinQueueForContact(id){try{await status(id,'Por contactar');say('Prospecto puesto en cola de contacto ✓','success');}catch(err){say(err.message,'error');}}
