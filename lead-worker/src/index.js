@@ -1775,10 +1775,12 @@ async function handleLinkedin(request, env, ctx, cors) {
   const result = await response.clone().json().catch(() => null);
   if (response.ok && result?.ok && result.clienteId) {
     if (idemKey && env.RL) {
-      ctx.waitUntil(env.RL.put(idemKey, JSON.stringify({
-        clienteId: result.clienteId,
-        queueId: result.queueId || null,
-      }), { expirationTtl: 30 * 86400 }).catch(() => {}));
+      try {
+        await env.RL.put(idemKey, JSON.stringify({
+          clienteId: result.clienteId,
+          queueId: result.queueId || null,
+        }), { expirationTtl: 30 * 86400 });
+      } catch (_) {}
     }
     ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId));
   }
@@ -2517,6 +2519,19 @@ function normalizeGoogleAds(b) {
   };
 }
 
+function canonicalLinkedinUrl(v) {
+  const raw = str(v);
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) return "";
+    const path = (u.pathname || "").replace(/\/{2,}/g, "/").replace(/\/$/, "");
+    return ("https://www.linkedin.com" + (path || "")).toLowerCase();
+  } catch (_) {
+    return "";
+  }
+}
+
 function normalizeLinkedin(b) {
   const name = str(b.name) || [str(b.firstName), str(b.lastName)].filter(Boolean).join(" ");
   return {
@@ -2533,7 +2548,7 @@ function normalizeLinkedin(b) {
     linkedinCampaignId: str(b.linkedinCampaignId) || str(b.campaignId),
     linkedinLeadGenFormId: str(b.linkedinLeadGenFormId) || str(b.formId),
     linkedinClickId: str(b.linkedinClickId) || str(b.li_fat_id),
-    linkedinUrl: str(b.linkedinUrl) || str(b.profileUrl),
+    linkedinUrl: canonicalLinkedinUrl(str(b.linkedinUrl) || str(b.profileUrl)),
     landingUrl: str(b.landingUrl),
     utmCampaign: str(b.campaign) || str(b.campaignName),
   };
@@ -2635,9 +2650,10 @@ async function airtableFindCliente(env, { email, phone, linkedinUrl }) {
   const esc = (s) => String(s).replace(/'/g, "\\'");
   const clauses = [];
   if (email) clauses.push(`LOWER(TRIM({Email}))=LOWER('${esc(String(email).trim())}')`);
-  const phoneDigits = phone ? String(phone).replace(/[^0-9]/g, "") : "";
+  const phoneDigitsRaw = phone ? String(phone).replace(/[^0-9]/g, "") : "";
+  const phoneDigits = phoneDigitsRaw.length >= 9 ? phoneDigitsRaw.slice(-9) : phoneDigitsRaw;
   if (phoneDigits)
-    clauses.push(`REGEX_REPLACE({Teléfono} & "", "[^0-9]", "") = '${phoneDigits}'`);
+    clauses.push(`RIGHT(REGEX_REPLACE({Teléfono} & "", "[^0-9]", ""), ${phoneDigits.length}) = '${phoneDigits}'`);
   if (linkedinUrl) clauses.push(`LOWER({LinkedIn URL} & "")=LOWER('${esc(String(linkedinUrl).trim())}')`);
   if (!clauses.length) return null;
   const formula = clauses.length > 1 ? `OR(${clauses.join(",")})` : clauses[0];
