@@ -38,7 +38,7 @@ const ACCESS_ALLOWED_TABLES=new Set([
   // Do not automatically widen reader/operator/finance access to campaign,
   // notification or operational logs, which can contain personal information.
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
-  'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
+  'Social_Interactions','Social_Metrics','LinkedIn_Prospects','LinkedIn_Events',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
 ]);
 const ACCESS_ADMIN_ONLY_TABLES=new Set([
@@ -47,7 +47,7 @@ const ACCESS_ADMIN_ONLY_TABLES=new Set([
   // Read/write requires admin until a per-record scoped service exists.
   'Monitor Sistema',
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
-  'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
+  'Social_Interactions','Social_Metrics','LinkedIn_Prospects','LinkedIn_Events',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
 ]);
 const ACCESS_JWKS_CACHE=new Map();
@@ -240,6 +240,16 @@ function accessAllows(identity,method,path){
     ['GET','PUT'].includes(method);
   if(path==='/shared/simulation')return (admin||identity.email==='marketing@thelab.solutions')&&
     ['GET','PUT'].includes(method);
+  // LinkedIn uses dedicated server-side routes instead of granting marketing/sales
+  // generic Airtable access to staging, CRM and event history.
+  if(path.startsWith('/linkedin/')){
+    const marketing=identity.email==='marketing@thelab.solutions';
+    const commercial=['sales','operator','admin'].includes(identity.role)||marketing;
+    if(path==='/linkedin/prospects')return method==='GET'&&commercial;
+    if(path==='/linkedin/metrics')return method==='GET'&&(commercial||finance);
+    if(path==='/linkedin/command')return method==='POST'&&commercial;
+    return false;
+  }
   // Sales reads remain owner-scoped. The sole write shape admitted by RBAC
   // is a single-record PATCH on an approved commercial table; the Worker
   // applies a *separate opt-in switch*, field allowlist, optimistic precondition
