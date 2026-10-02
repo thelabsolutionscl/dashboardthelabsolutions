@@ -2077,7 +2077,8 @@ export class CrmMutationGuard {
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
-                ?this._handleSharedSimulation(request):path==='/scoped-patch'
+                ?this._handleSharedSimulation(request):path==='/linkedin-command'
+                ?this._handleLinkedinCommand(request):path==='/scoped-patch'
                   ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
@@ -2087,6 +2088,157 @@ export class CrmMutationGuard {
       status, headers: { 'Content-Type': 'application/json' },
     });
   }
+  async _handleLinkedinCommand(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'LinkedIn command unavailable'},503);
+    let data;try{data=await request.json();}catch(_){return this._json({error:'Invalid LinkedIn command'},422);}
+    const actor=data?.actor||{},legacy=actor.legacy===true;
+    const allowed=legacy||['sales','operator','admin'].includes(actor.role)||actor.email==='marketing@thelab.solutions';
+    if(!allowed)return this._json({error:'LinkedIn command denied'},403);
+    const action=String(data?.action||''),id=String(data?.id||'');
+    const validId=/^rec[A-Za-z0-9]{14}$/.test(id);
+    const read=async()=>validId?await liReadOne(this.env,LINKEDIN_PROSPECTS_TABLE,id):null;
+
+    if(action==='create'){
+      const fields=liProspectInput(data.fields);
+      if(!fields)return this._json({error:'Datos del prospecto inválidos'},422);
+      let all;try{all=await liReadAll(this.env,LINKEDIN_PROSPECTS_TABLE);}
+      catch(_){return this._json({error:'No se pudo verificar duplicados de LinkedIn'},503);}
+      const dup=all.find(r=>liDuplicate(fields,r.fields||{}));
+      if(dup)return this._json({ok:true,duplicate:true,record:liProject(dup)},200);
+      fields.Estado='Descubierto';fields['Fecha descubrimiento']=new Date().toISOString();
+      let created;try{created=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'POST','',fields);}
+      catch(e){return this._json({error:e.message||'No se pudo crear el prospecto'},e.status&&e.status<500?422:503);}
+      await liWriteEvent(this.env,{prospect:created,type:'Creación',oldState:'',newState:'Descubierto',actor,detail:'Prospecto creado en staging'});
+      return this._json({ok:true,record:liProject(created)},201);
+    }
+
+    if(!validId)return this._json({error:'Prospecto inválido'},422);
+    let prospect;try{prospect=await read();}catch(_){return this._json({error:'No se pudo leer el prospecto'},503);}
+    if(!prospect)return this._json({error:'Prospecto no encontrado'},404);
+    const current=prospect.fields||{},oldState=current.Estado||'Descubierto';
+
+    if(action==='update'){
+      const next=liProspectInput(data.fields);
+      if(!next)return this._json({error:'Datos del prospecto inválidos'},422);
+      let all;try{all=await liReadAll(this.env,LINKEDIN_PROSPECTS_TABLE);}
+      catch(_){return this._json({error:'No se pudo verificar duplicados de LinkedIn'},503);}
+      if(all.some(r=>r.id!==id&&liDuplicate(next,r.fields||{})))
+        return this._json({error:'Ese prospecto ya existe en LinkedIn'},409);
+      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,next);}
+      catch(e){return this._json({error:e.message||'No se pudo editar el prospecto'},e.status&&e.status<500?422:503);}
+      return this._json({ok:true,record:liProject(updated)},200);
+    }
+
+    if(action==='analysis'){
+      const fields=liAnalysisInput(data.fields);
+      if(!fields)return this._json({error:'Análisis LinkedIn inválido'},422);
+      const score=fields['Score B2B'];
+      fields.Estado=['Descubierto','Analizado','Calificado'].includes(oldState)
+        ?(score>=7?'Calificado':'Analizado'):oldState;
+      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,fields);}
+      catch(e){return this._json({error:e.message||'No se pudo guardar el análisis'},e.status&&e.status<500?422:503);}
+      await liWriteEvent(this.env,{prospect:updated,type:'Análisis',oldState,newState:fields.Estado,actor,detail:'LINKEDIN_AGENT · score '+score});
+      return this._json({ok:true,record:liProject(updated)},200);
+    }
+
+    if(action==='transition'){
+      const target=String(data.target||'');
+      const allowedFrom={
+        'Por contactar':['Calificado'],
+        'Contactado':['Calificado','Por contactar'],
+        'Respondió':['Contactado'],
+        'Oportunidad':['Respondió'],
+        'Descartado':['Descubierto','Analizado','Calificado','Por contactar','Contactado','Respondió','Oportunidad']
+      };
+      if(!LINKEDIN_STATES.includes(target)||!allowedFrom[target]?.includes(oldState))
+        return this._json({error:'Transición LinkedIn inválida',from:oldState,to:target},409);
+      const patch={Estado:target},now=new Date();
+      if(target==='Contactado'){
+        patch['Fecha último contacto']=now.toISOString();
+        patch['Próximo seguimiento']=new Date(now.getTime()+3*86400000).toISOString();
+      }
+      if(target==='Respondió'){patch['Fecha último contacto']=now.toISOString();patch['Próximo seguimiento']=null;}
+      if(target==='Descartado')patch['Próximo seguimiento']=null;
+      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,patch);}
+      catch(e){return this._json({error:e.message||'No se pudo cambiar el estado'},e.status&&e.status<500?422:503);}
+      await liWriteEvent(this.env,{prospect:updated,type:'Estado',oldState,newState:target,actor,detail:'Cambio de etapa comercial'});
+      return this._json({ok:true,record:liProject(updated)},200);
+    }
+
+    if(action==='convert'){
+      if(current.Convertido&&Array.isArray(current.Cliente)&&current.Cliente[0]){
+        const client=await liReadOne(this.env,'Clientes',current.Cliente[0]).catch(()=>null);
+        return this._json({ok:true,already_converted:true,record:liProject(prospect),client:client?{id:client.id,fields:client.fields||{}}:{id:current.Cliente[0]}},200);
+      }
+      if(!LINKEDIN_CONVERTIBLE.has(oldState))
+        return this._json({error:'Primero califica el prospecto antes de pasarlo a Clientes'},409);
+
+      const key='linkedin:convert:'+id;
+      let marker=null;try{marker=await this.state.storage.get(key);}catch(_){}
+      if(marker?.clientId){
+        const client=await liReadOne(this.env,'Clientes',marker.clientId).catch(()=>null);
+        if(client){
+          let linked;try{linked=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,{Cliente:[client.id],Convertido:true,Estado:'Cliente','Próximo seguimiento':null});}
+          catch(_){return this._json({error:'Cliente creado; falta reconciliar el vínculo LinkedIn',code:'LINKEDIN_CONVERSION_RECONCILE'},503);}
+          await liWriteEvent(this.env,{prospect:linked,clienteId:client.id,type:'Conversión',oldState,newState:'Cliente',actor,detail:'Conversión reconciliada'});
+          return this._json({ok:true,reconciled:true,record:liProject(linked),client:{id:client.id,fields:client.fields||{}}},200);
+        }
+      }
+
+      let clients;try{clients=await liReadAll(this.env,'Clientes');}
+      catch(_){return this._json({error:'No se pudo verificar Clientes antes de convertir'},503);}
+      let client=clients.find(r=>liClientMatches(current,r.fields||{}))||null,created=false;
+      if(!client&&marker){
+        return this._json({error:'Una conversión anterior tiene resultado incierto; no se creará un duplicado',code:'LINKEDIN_CONVERSION_PENDING_RECONCILIATION'},503);
+      }
+
+      if(!client){
+        try{await this.state.storage.put(key,{pending:true,at:new Date().toISOString()});}
+        catch(_){return this._json({error:'No se pudo reservar la conversión'},503);}
+        const cf={
+          Empresa:current.Empresa||current.Prospecto||'Lead LinkedIn',Contacto:current.Prospecto||undefined,
+          'Cargo contacto':current.Cargo||undefined,'Teléfono':current['Teléfono']||undefined,Email:current.Email||undefined,
+          'Sitio web':current['Sitio web']||undefined,'LinkedIn URL':current['LinkedIn URL']||undefined,
+          'Etapa venta':'Lead nuevo','Origen lead':'LinkedIn',Validado:false,
+          'Lead Score IA':Number(current['Score B2B'])||undefined,'Servicio interés':current['Servicio interés']||undefined,
+          'Próxima acción IA':current['Próxima acción']||undefined,'Resumen IA':current['Motivo IA']||undefined,
+          'Último agente ejecutado':Number(current['Score B2B'])?'LINKEDIN_AGENT':undefined,
+          'Fecha primer contacto':liChileDate(),
+          'Notas internas':['Prospección LinkedIn',current.Identidad?'Identidad: '+current.Identidad:'',current.Campaña?'Campaña: '+current.Campaña:'',current['LinkedIn URL']||''].filter(Boolean).join(' · ')
+        };
+        if(actor.role==='sales'&&['florencia','nicanor','gustavo'].includes(actor.seller))cf.Vendedor=actor.seller;
+        else if(['admin','operator'].includes(actor.role)||legacy){
+          if(current.Identidad==='Gustavo')cf.Vendedor='gustavo';
+          if(current.Identidad==='Nicanor')cf.Vendedor='nicanor';
+        }
+        Object.keys(cf).forEach(k=>cf[k]===undefined&&delete cf[k]);
+        try{
+          client=await liMutate(this.env,'Clientes','POST','',cf);created=true;
+          await this.state.storage.put(key,{clientId:client.id,committed:true,at:new Date().toISOString()});
+        }catch(e){
+          if([400,401,403,422].includes(e.status||0)){try{await this.state.storage.delete(key);}catch(_){}
+            return this._json({error:e.message||'Airtable rechazó el Cliente'},422);}
+          return this._json({error:'La creación del Cliente tiene resultado incierto; no se repetirá automáticamente',code:'LINKEDIN_CONVERSION_PENDING_RECONCILIATION'},503);
+        }
+      }else{
+        const patch={};
+        if(!client.fields?.['LinkedIn URL']&&current['LinkedIn URL'])patch['LinkedIn URL']=current['LinkedIn URL'];
+        if(!client.fields?.['Lead Score IA']&&current['Score B2B'])patch['Lead Score IA']=Number(current['Score B2B']);
+        if(!client.fields?.['Servicio interés']&&current['Servicio interés'])patch['Servicio interés']=current['Servicio interés'];
+        if(Object.keys(patch).length)try{client=await liMutate(this.env,'Clientes','PATCH',client.id,patch);}catch(_){}
+      }
+
+      let linked;try{linked=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,{Cliente:[client.id],Convertido:true,Estado:'Cliente','Próximo seguimiento':null});}
+      catch(_){return this._json({error:'Cliente identificado, pero falta reconciliar el vínculo LinkedIn',code:'LINKEDIN_CONVERSION_RECONCILE',clientId:client.id},503);}
+      if(created)try{await this.state.storage.put(key,{clientId:client.id,committed:true,at:new Date().toISOString()});}catch(_){}
+      await liWriteEvent(this.env,{prospect:linked,clienteId:client.id,type:'Conversión',oldState,newState:'Cliente',actor,detail:created?'Cliente creado desde LinkedIn':'Vinculado a Cliente existente'});
+      return this._json({ok:true,created,record:liProject(linked),client:{id:client.id,fields:client.fields||{}}},200);
+    }
+
+    return this._json({error:'Acción LinkedIn no soportada'},422);
+  }
+
   async _handleSharedCalendar(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
       return this._json({error:'Shared calendar guard unavailable'},503);
