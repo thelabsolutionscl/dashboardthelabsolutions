@@ -388,3 +388,25 @@ test('solo Access admin puede verificar claves de integraciones externas',()=>{
   }
   assert.equal(accessAllows({role:'admin'},'POST','/integrations/check'),false);
 });
+
+
+test('LinkedIn dedicated routes align marketing/sales RBAC without granting generic Airtable writes',()=>{
+  const mkt={role:'viewer',email:'marketing@thelab.solutions'};
+  const sales={role:'sales',email:'vendedor@example.com',seller:'nicanor'};
+  const operator={role:'operator',email:'operador@example.com'};
+  const finance={role:'finance',email:'finanzas@example.com'};
+  for(const identity of [mkt,sales,operator]){
+    assert.equal(accessAllows(identity,'GET','/linkedin/prospects'),true,identity.email);
+    assert.equal(accessAllows(identity,'GET','/linkedin/metrics'),true,identity.email);
+    assert.equal(accessAllows(identity,'POST','/linkedin/command'),true,identity.email);
+  }
+  assert.equal(accessAllows(finance,'GET','/linkedin/metrics'),true);
+  assert.equal(accessAllows(finance,'GET','/linkedin/prospects'),false);
+  assert.equal(accessAllows(finance,'POST','/linkedin/command'),false);
+  for(const identity of [mkt,sales]){
+    assert.equal(accessAllows(identity,'POST','/v0/app1YtD74AqiPWQhy/LinkedIn_Prospects'),false);
+    assert.equal(accessAllows(identity,'GET','/v0/app1YtD74AqiPWQhy/LinkedIn_Events'),false);
+  }
+  assert.equal(accessAllows({role:'viewer',email:'otro@thelab.solutions'},'GET','/linkedin/prospects'),false);
+  assert.equal(accessAllows({role:'viewer',email:'marketing@thelab.solutions'},'DELETE','/linkedin/command'),false);
+});
