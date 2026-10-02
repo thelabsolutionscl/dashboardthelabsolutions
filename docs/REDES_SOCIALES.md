@@ -277,11 +277,8 @@ La sección **Redes Sociales** incorpora un bloque específico de LinkedIn para 
    - follow-up;
    - próxima acción;
    - identidad recomendada.
-5. El usuario puede copiar el mensaje, abrir el perfil y registrar
-   **Contactado** / **Respondió**.
-6. Al pulsar **→ Clientes**, el dashboard deduplica por email, URL de LinkedIn y
-   nombre+empresa. Si no existe, crea el Cliente con `Origen lead = LinkedIn`;
-   si ya existe, lo vincula y completa datos útiles sin duplicarlo.
+5. El flujo operativo es **Calificado → Por contactar → Contactado → Respondió → Oportunidad**. El follow-up queda visible, se prioriza si venció y puede copiarse desde la tarjeta.
+6. **→ Clientes** solo está disponible desde estados comercialmente válidos; no desde `Descubierto`, `Analizado` o `Descartado`. Antes de crear, refresca Clientes y deduplica por email, teléfono, URL canónica de LinkedIn y nombre+empresa. Si no existe, crea el Cliente con `Origen lead = LinkedIn`; si ya existe, lo vincula y completa datos útiles sin duplicarlo.
 
 Los perfiles personales funcionan en modo **asistido**: la IA prepara y el humano
 ejecuta la acción en LinkedIn. Esto separa automatización CRM de automatización
@@ -289,11 +286,7 @@ no autorizada de una cuenta personal.
 
 ### 8.2 Flujo inbound
 
-El pipeline existente `POST /webhooks/linkedin` sigue siendo la puerta de entrada
-para Lead Gen Forms / integraciones autorizadas. Esos registros terminan en
-`Clientes` + `Agent_Queue` con `LINKEDIN_AGENT`. El nuevo panel muestra también
-los Clientes recientes con `Origen lead = LinkedIn`, de modo que inbound y
-outbound quedan visibles desde Redes Sociales.
+El pipeline `POST /webhooks/linkedin` sigue siendo la puerta de entrada para Lead Gen Forms / integraciones autorizadas. Requiere `LINKEDIN_WEBHOOK_KEY` exclusiva, rechaza payloads vacíos y usa `linkedinLeadId`/KV para reducir duplicados por reintentos. Esos registros terminan en `Clientes` + `Agent_Queue` con `LINKEDIN_AGENT` y además se reflejan en `LinkedIn_Prospects` como `Fuente = Lead Gen Form`, vinculados al Cliente.
 
 ### 8.3 Tabla `LinkedIn_Prospects`
 
