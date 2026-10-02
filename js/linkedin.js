@@ -22,7 +22,7 @@ var CONVERTIBLE_STATES=['Calificado','Por contactar','Contactado','Respondió','
 function cleanText(v){return String(v||'').trim().replace(/\s+/g,' ');}
 function normText(v){return cleanText(v).toLowerCase();}
 function normEmail(v){return cleanText(v).toLowerCase();}
-function normPhone(v){var d=String(v||'').replace(/\D/g,'');return d.length>=9?d.slice(-9):d;}
+function normPhone(v){var d=String(v||'').replace(/\D/g,'');return d.length>=9?d.slice(-9):'';}
 function canonicalLinkedinUrl(v){
  var raw=cleanText(v);if(!raw)return '';
  try{
