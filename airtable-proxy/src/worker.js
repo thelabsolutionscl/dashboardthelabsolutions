@@ -1850,6 +1850,209 @@ export class AiBudgetGuard {
   }
 }
 
+
+/* ── LinkedIn B2B: staging, event log and server-side metrics ─────────── */
+const LINKEDIN_PROSPECTS_TABLE='LinkedIn_Prospects';
+const LINKEDIN_EVENTS_TABLE='LinkedIn_Events';
+const LINKEDIN_STATES=['Descubierto','Analizado','Calificado','Por contactar','Contactado','Respondió','Oportunidad','Cliente','Descartado'];
+const LINKEDIN_CONVERTIBLE=new Set(['Calificado','Por contactar','Contactado','Respondió','Oportunidad']);
+const LINKEDIN_IDENTITIES=new Set(['The Lab Solutions','Gustavo','Nicanor']);
+const LINKEDIN_SEGMENTS=new Set(['Agencia marketing / BTL','Marketing / Brand','Trade Marketing','RRHH / People','Compras','Eventos / Productora','Retail / Locales','Merchandising','Otro']);
+const LINKEDIN_SOURCES=new Set(['Outbound','Lead Gen Form','Interacción','Importado']);
+function liText(v,max=4000){return String(v??'').trim().replace(/[\u0000-\u0008\u000b\u000e-\u001f]/g,'').slice(0,max);}
+function liNorm(v){return liText(v,1000).replace(/\s+/g,' ').toLowerCase();}
+function liEmail(v){return liText(v,320).toLowerCase();}
+function liPhone(v){const d=String(v||'').replace(/\D/g,'');return d.length>=9?d.slice(-9):'';}
+function liUrl(v){
+  const raw=liText(v,2000);if(!raw)return '';
+  try{const u=new URL(raw);if(!/(^|\.)linkedin\.com$/i.test(u.hostname))return '';
+    const path=(u.pathname||'').replace(/\/{2,}/g,'/').replace(/\/$/,'');
+    return ('https://www.linkedin.com'+(path||'')).toLowerCase();
+  }catch(_){return '';}
+}
+function liChileDate(){
+  try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+  catch(_){return new Date().toISOString().slice(0,10);}
+}
+async function liReadAll(env,table){
+  if(!env.AIRTABLE_TOKEN)throw new Error('Airtable unavailable');
+  const rows=[],seen=new Set();let offset='';
+  for(let page=0;page<100;page++){
+    const u=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+'?pageSize=100'+(offset?'&offset='+encodeURIComponent(offset):'');
+    const r=await fetch(u,{method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+    if(!r.ok||r.status>=300&&r.status<400)throw new Error('Airtable '+table+' read '+r.status);
+    const j=await r.json();
+    if(!Array.isArray(j?.records))throw new Error('Airtable malformed '+table);
+    rows.push(...j.records);
+    if(!j.offset)return rows;
+    if(typeof j.offset!=='string'||seen.has(j.offset))throw new Error('Airtable invalid pagination');
+    seen.add(j.offset);offset=j.offset;
+  }
+  throw new Error('Airtable pagination limit');
+}
+async function liReadOne(env,table,id){
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(id||'')))return null;
+  const r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+'/'+id,{
+    method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+  if(r.status===404)return null;
+  if(!r.ok||r.status>=300&&r.status<400)throw new Error('Airtable '+table+' record read '+r.status);
+  const row=await r.json();
+  return row&&row.id?row:null;
+}
+async function liMutate(env,table,method,id,fields){
+  const url=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+(id?'/'+id:'');
+  const r=await fetch(url,{method,redirect:'manual',
+    headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json',Accept:'application/json'},
+    body:JSON.stringify({fields,typecast:true})});
+  if(!r.ok||r.status>=300&&r.status<400){
+    const err=await r.clone().json().catch(()=>null);
+    const e=new Error(err?.error?.message||('Airtable '+table+' '+method+' '+r.status));e.status=r.status;throw e;
+  }
+  return await r.json();
+}
+function liProject(row){
+  const f=row?.fields||{};
+  const names=['Prospecto','Empresa','Cargo','LinkedIn URL','Sitio web','Email','Teléfono','Industria','Segmento','Fuente','Identidad','Estado','Score B2B','Servicio interés','Decisor','Motivo IA','Mensaje inicial','Follow-up','Próxima acción','Campaña','Notas','Cliente','Fecha descubrimiento','Fecha último contacto','Próximo seguimiento','Convertido','LinkedIn Lead ID'];
+  const fields={};for(const k of names)if(Object.hasOwn(f,k))fields[k]=f[k];
+  return{id:row.id,createdTime:row.createdTime,fields};
+}
+function liDuplicate(a,b){
+  const af=a||{},bf=b||{},ae=liEmail(af.Email),be=liEmail(bf.Email),
+    au=liUrl(af['LinkedIn URL']),bu=liUrl(bf['LinkedIn URL']),
+    ap=liPhone(af['Teléfono']),bp=liPhone(bf['Teléfono']),
+    an=liNorm(af.Prospecto),bn=liNorm(bf.Prospecto),ac=liNorm(af.Empresa),bc=liNorm(bf.Empresa);
+  return !!((ae&&be&&ae===be)||(au&&bu&&au===bu)||(ap&&bp&&ap===bp)||(an&&bn&&ac&&bc&&an===bn&&ac===bc));
+}
+function liClientMatches(prospect,client){
+  const p=prospect||{},c=client||{},pe=liEmail(p.Email),ce=liEmail(c.Email),
+    pu=liUrl(p['LinkedIn URL']),cu=liUrl(c['LinkedIn URL']),
+    pp=liPhone(p['Teléfono']),cp=liPhone(c['Teléfono']),
+    pn=liNorm(p.Prospecto),cn=liNorm(c.Contacto),pc=liNorm(p.Empresa),cc=liNorm(c.Empresa);
+  return !!((pe&&ce&&pe===ce)||(pu&&cu&&pu===cu)||(pp&&cp&&pp===cp)||(pn&&cn&&pc&&cc&&pn===cn&&pc===cc));
+}
+function liProspectInput(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const out={
+    Prospecto:liText(raw.Prospecto,500),Empresa:liText(raw.Empresa,500),Cargo:liText(raw.Cargo,500),
+    'LinkedIn URL':liUrl(raw['LinkedIn URL']),'Sitio web':liText(raw['Sitio web'],2000),
+    Email:liEmail(raw.Email),'Teléfono':liText(raw['Teléfono'],100),Industria:liText(raw.Industria,500),
+    Segmento:liText(raw.Segmento,100),Fuente:liText(raw.Fuente,100),Identidad:liText(raw.Identidad,100),
+    Campaña:liText(raw.Campaña,500),Notas:liText(raw.Notas,8000)
+  };
+  if(!out.Prospecto&&!out.Empresa)return null;
+  if(raw['LinkedIn URL']&&!out['LinkedIn URL'])return null;
+  if(out.Email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(out.Email))return null;
+  if(out.Segmento&&!LINKEDIN_SEGMENTS.has(out.Segmento))return null;
+  if(out.Fuente&&!LINKEDIN_SOURCES.has(out.Fuente))return null;
+  if(out.Identidad&&!LINKEDIN_IDENTITIES.has(out.Identidad))return null;
+  Object.keys(out).forEach(k=>{if(out[k]==='')delete out[k];});
+  return out;
+}
+function liAnalysisInput(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const score=Number(raw['Score B2B']);
+  if(!Number.isInteger(score)||score<1||score>10)return null;
+  const out={
+    'Score B2B':score,'Servicio interés':liText(raw['Servicio interés'],200),
+    Decisor:liText(raw.Decisor,20),'Mensaje inicial':liText(raw['Mensaje inicial'],6000),
+    'Follow-up':liText(raw['Follow-up'],6000),'Próxima acción':liText(raw['Próxima acción'],6000),
+    'Motivo IA':liText(raw['Motivo IA'],8000),Identidad:liText(raw.Identidad,100)
+  };
+  if(out.Decisor&&!['Alto','Medio','Bajo'].includes(out.Decisor))delete out.Decisor;
+  if(out.Identidad&&!LINKEDIN_IDENTITIES.has(out.Identidad))delete out.Identidad;
+  Object.keys(out).forEach(k=>{if(out[k]==='')delete out[k];});
+  return out;
+}
+async function liWriteEvent(env,{prospect,clienteId,type,oldState,newState,actor,detail}){
+  try{
+    const f=prospect?.fields||{},eventId='LI-'+Date.now().toString(36)+'-'+crypto.randomUUID().slice(0,8);
+    await liMutate(env,LINKEDIN_EVENTS_TABLE,'POST','',{
+      'Evento ID':eventId,'Prospecto':prospect?.id?[prospect.id]:undefined,
+      'Cliente':clienteId?[clienteId]:undefined,'Tipo':type,
+      'Estado anterior':oldState||undefined,'Estado nuevo':newState||undefined,
+      'Fecha':new Date().toISOString(),'Campaña':f.Campaña||undefined,
+      'Identidad':f.Identidad||undefined,'Segmento':f.Segmento||undefined,
+      'Fuente':f.Fuente||undefined,'Actor':liText(actor?.email||actor?.role||'dashboard',300),
+      'Score B2B':Number(f['Score B2B'])||undefined,'Detalle':liText(detail,8000)||undefined
+    });
+  }catch(e){console.error('[linkedin-event]',e.message);}
+}
+async function liMetrics(env){
+  const [prospects,events,orders]=await Promise.all([
+    liReadAll(env,LINKEDIN_PROSPECTS_TABLE),liReadAll(env,LINKEDIN_EVENTS_TABLE),liReadAll(env,'Pedidos')
+  ]);
+  const stateRank={Descubierto:0,Analizado:1,Calificado:2,'Por contactar':3,Contactado:4,'Respondió':5,Oportunidad:6,Cliente:7,Descartado:-1};
+  const active=prospects.filter(r=>!['Cliente','Descartado'].includes(r.fields?.Estado||'Descubierto'));
+  const atLeast=(n)=>prospects.filter(r=>(stateRank[r.fields?.Estado||'Descubierto']??0)>=n).length;
+  const contacted=atLeast(4),responded=atLeast(5),opportunities=atLeast(6),clients=prospects.filter(r=>r.fields?.Estado==='Cliente'||r.fields?.Convertido).length;
+  const overdue=prospects.filter(r=>{
+    const f=r.fields||{};if(!f['Próximo seguimiento']||['Cliente','Descartado'].includes(f.Estado))return false;
+    const t=Date.parse(f['Próximo seguimiento']);return Number.isFinite(t)&&t<=Date.now();
+  }).length;
+  const byProspect=new Map();
+  for(const e of events){
+    const p=Array.isArray(e.fields?.Prospecto)&&e.fields.Prospecto[0];
+    if(!p)continue;const arr=byProspect.get(p)||[];arr.push(e);byProspect.set(p,arr);
+  }
+  const responseHours=[];
+  for(const [pid,arr] of byProspect){
+    const sorted=arr.slice().sort((a,b)=>Date.parse(a.fields?.Fecha||a.createdTime)-Date.parse(b.fields?.Fecha||b.createdTime));
+    const contact=sorted.find(e=>e.fields?.['Estado nuevo']==='Contactado');
+    const reply=contact&&sorted.find(e=>e.fields?.['Estado nuevo']==='Respondió'&&Date.parse(e.fields?.Fecha||e.createdTime)>=Date.parse(contact.fields?.Fecha||contact.createdTime));
+    if(contact&&reply){
+      const h=(Date.parse(reply.fields?.Fecha||reply.createdTime)-Date.parse(contact.fields?.Fecha||contact.createdTime))/36e5;
+      if(Number.isFinite(h)&&h>=0&&h<24*365)responseHours.push(h);
+    }
+  }
+  const orderAttribution=new Map();
+  const linkedByClient=new Map();
+  for(const p of prospects){
+    const cid=Array.isArray(p.fields?.Cliente)&&p.fields.Cliente[0];if(!cid)continue;
+    const arr=linkedByClient.get(cid)||[];arr.push(p);linkedByClient.set(cid,arr);
+  }
+  for(const arr of linkedByClient.values())arr.sort((a,b)=>Date.parse(a.fields?.['Fecha descubrimiento']||a.createdTime)-Date.parse(b.fields?.['Fecha descubrimiento']||b.createdTime));
+  for(const o of orders){
+    const f=o.fields||{};if(String(f['Estado pedido']||'')==='Cancelado')continue;
+    const cid=Array.isArray(f.Cliente)&&f.Cliente[0],date=Date.parse(String(f['Fecha ingreso']||'').slice(0,10)+'T12:00:00Z');
+    if(!cid||!Number.isFinite(date))continue;
+    const arr=(linkedByClient.get(cid)||[]).filter(p=>Date.parse(p.fields?.['Fecha descubrimiento']||p.createdTime)<=date);
+    if(!arr.length)continue;const p=arr[arr.length-1];
+    const net=Math.max(0,Number(f['Monto total (CLP)'])||0)/1.19;
+    orderAttribution.set(o.id,{prospectId:p.id,net});
+  }
+  const dims=['Campaña','Identidad','Segmento'];
+  const groups={};
+  for(const dim of dims){
+    const map=new Map();
+    for(const p of prospects){
+      const f=p.fields||{},key=liText(f[dim]||'Sin '+dim.toLowerCase(),500),st=f.Estado||'Descubierto';
+      const g=map.get(key)||{name:key,prospects:0,contacted:0,responded:0,opportunities:0,clients:0,revenue_net_after_linkedin:0,orders:0};
+      g.prospects++;if((stateRank[st]??0)>=4)g.contacted++;if((stateRank[st]??0)>=5)g.responded++;if((stateRank[st]??0)>=6)g.opportunities++;if(st==='Cliente'||f.Convertido)g.clients++;
+      map.set(key,g);
+    }
+    for(const a of orderAttribution.values()){
+      const p=prospects.find(x=>x.id===a.prospectId);if(!p)continue;
+      const key=liText(p.fields?.[dim]||'Sin '+dim.toLowerCase(),500),g=map.get(key);if(g){g.revenue_net_after_linkedin+=a.net;g.orders++;}
+    }
+    groups[dim.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')]=[...map.values()].map(g=>({
+      ...g,response_rate:g.contacted?g.responded/g.contacted:0,
+      opportunity_rate:g.responded?g.opportunities/g.responded:0,
+      client_rate:g.prospects?g.clients/g.prospects:0,
+      revenue_net_after_linkedin:Math.round(g.revenue_net_after_linkedin)
+    })).sort((a,b)=>b.revenue_net_after_linkedin-a.revenue_net_after_linkedin||b.clients-a.clients||b.prospects-a.prospects);
+  }
+  const avg=responseHours.length?responseHours.reduce((a,b)=>a+b,0)/responseHours.length:null;
+  const median=responseHours.length?responseHours.slice().sort((a,b)=>a-b)[Math.floor(responseHours.length/2)]:null;
+  return{
+    generated_at:new Date().toISOString(),
+    summary:{prospects:prospects.length,active:active.length,contacted,responded,opportunities,clients,overdue,
+      response_rate:contacted?responded/contacted:0,opportunity_rate:responded?opportunities/responded:0,
+      client_rate:prospects.length?clients/prospects.length:0,avg_response_hours:avg,median_response_hours:median,
+      revenue_net_after_linkedin:Math.round([...orderAttribution.values()].reduce((s,x)=>s+x.net,0)),attributed_orders:orderAttribution.size},
+    groups
+  };
+}
+
 /**
  * Serializa TODAS las altas de Pedidos/Cotizaciones recibidas por este proxy.
  * El GET y el POST se ejecutan dentro de la misma cola del mismo Durable
