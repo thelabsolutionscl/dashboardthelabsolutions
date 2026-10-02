@@ -25,6 +25,7 @@
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
  *   GET|POST /webhooks/linkedin/official (LinkedIn Lead Sync oficial — challenge + X-LI-Signature)
+ *   GET|POST|DELETE /linkedin/subscriptions (admin Lead Sync — clave LINKEDIN_ADMIN_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
  *   POST /notify/printer        (farm-controller — impresión con error/finalizada → WhatsApp; clave WA_NOTIFY_KEY)
  *   POST /notify/test           (prueba de WhatsApp a nicanor/gustavo; clave WA_NOTIFY_KEY)
@@ -155,6 +156,10 @@ export default {
 
       if (url.pathname === "/webhooks/linkedin/official" && (request.method === "GET" || request.method === "POST")) {
         return await handleLinkedinOfficial(request, env, ctx, cors, url);
+      }
+
+      if (url.pathname === "/linkedin/subscriptions" && ["GET","POST","DELETE"].includes(request.method)) {
+        return await handleLinkedinSubscriptions(request, env, cors, url);
       }
 
       if (request.method === "POST" && url.pathname === "/webhooks/linkedin") {
@@ -1949,6 +1954,90 @@ async function handleLinkedinOfficial(request, env, ctx, cors, url) {
   return json({ ok: true, clienteId: result.clienteId || null, queueId: result.queueId || null, buffered: !!result.buffered }, 200, cors);
 }
 
+async function linkedinApiHeaders(env) {
+  const token = await linkedinAccessToken(env);
+  if (!token) throw new Error("Token Lead Sync no configurado");
+  const version = String(env.LINKEDIN_API_VERSION || "202609").replace(/\D/g, "").slice(0, 6) || "202609";
+  return {
+    Authorization: "Bearer " + token,
+    "Linkedin-Version": version,
+    "X-Restli-Protocol-Version": "2.0.0",
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+}
+
+function linkedinOwner(raw) {
+  const kind = String(raw?.kind || raw?.type || "").trim();
+  const urn = String(raw?.urn || "").trim();
+  if (!["sponsoredAccount","organization"].includes(kind)) return null;
+  const re = kind === "sponsoredAccount"
+    ? /^urn:li:sponsoredAccount:\d+$/
+    : /^urn:li:organization:\d+$/;
+  if (!re.test(urn)) return null;
+  return { kind, urn };
+}
+
+async function handleLinkedinSubscriptions(request, env, cors, url) {
+  const provided = String(request.headers.get("X-Linkedin-Admin-Key") || "");
+  const expected = String(env.LINKEDIN_ADMIN_KEY || "").trim();
+  if (!expected) return json({ ok: false, error: "Administrador LinkedIn no configurado" }, 503, cors);
+  if (!timingSafeEqual(provided, expected)) return json({ ok: false, error: "No autorizado" }, 401, cors);
+
+  let headers;
+  try { headers = await linkedinApiHeaders(env); }
+  catch (e) { return json({ ok: false, error: e.message }, 503, cors); }
+
+  if (request.method === "POST") {
+    const body = await readJson(request);
+    const owner = linkedinOwner(body?.owner);
+    const leadType = String(body?.leadType || "SPONSORED").toUpperCase();
+    if (!owner || !["SPONSORED","COMPANY","EVENT","ORGANIZATION_PRODUCT"].includes(leadType))
+      return json({ ok: false, error: "owner/leadType inválidos" }, 422, cors);
+    let webhook = String(body?.webhook || "").trim();
+    if (!webhook) webhook = url.origin + "/webhooks/linkedin/official";
+    try {
+      const u = new URL(webhook);
+      if (u.protocol !== "https:" || u.username || u.password || u.hash)
+        return json({ ok: false, error: "Webhook debe ser HTTPS público" }, 422, cors);
+    } catch (_) { return json({ ok: false, error: "Webhook inválido" }, 422, cors); }
+
+    const payload = { webhook, owner: { [owner.kind]: owner.urn }, leadType };
+    const r = await fetch("https://api.linkedin.com/rest/leadNotifications", {
+      method: "POST", headers, body: JSON.stringify(payload),
+    });
+    const data = await r.clone().json().catch(() => null);
+    if (!r.ok) return json({ ok: false, error: data?.message || data?.error || ("LinkedIn " + r.status), status: r.status }, 502, cors);
+    return json({ ok: true, status: r.status, id: r.headers.get("x-restli-id") || data?.id || null, subscription: data || payload }, 201, cors);
+  }
+
+  if (request.method === "GET") {
+    const owner = linkedinOwner({
+      kind: url.searchParams.get("ownerType"),
+      urn: url.searchParams.get("ownerUrn"),
+    });
+    const leadType = String(url.searchParams.get("leadType") || "SPONSORED").toUpperCase();
+    if (!owner || !["SPONSORED","COMPANY","EVENT","ORGANIZATION_PRODUCT"].includes(leadType))
+      return json({ ok: false, error: "ownerType/ownerUrn/leadType requeridos" }, 422, cors);
+    const ownerParam = "(value:(" + owner.kind + ":" + encodeURIComponent(owner.urn) + "))";
+    const target = "https://api.linkedin.com/rest/leadNotifications?q=criteria&owner=" + ownerParam +
+      "&leadType=(leadType:" + encodeURIComponent(leadType) + ")";
+    const r = await fetch(target, { method: "GET", headers });
+    const data = await r.json().catch(() => null);
+    if (!r.ok) return json({ ok: false, error: data?.message || data?.error || ("LinkedIn " + r.status), status: r.status }, 502, cors);
+    return json({ ok: true, data }, 200, cors);
+  }
+
+  const id = String(url.searchParams.get("id") || "");
+  if (!/^\d+$/.test(id)) return json({ ok: false, error: "id de suscripción requerido" }, 422, cors);
+  const r = await fetch("https://api.linkedin.com/rest/leadNotifications/" + id, { method: "DELETE", headers });
+  if (!r.ok && r.status !== 404) {
+    const data = await r.json().catch(() => null);
+    return json({ ok: false, error: data?.message || data?.error || ("LinkedIn " + r.status), status: r.status }, 502, cors);
+  }
+  return json({ ok: true, deleted: true, id }, 200, cors);
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * RUTA: POST /webhooks/linkedin   (vía Make / Zapier / HubSpot)
  * ══════════════════════════════════════════════════════════════════════ */
@@ -3185,7 +3274,7 @@ function corsHeaders(origin, env) {
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Public-Lead-Key, X-Portal-Admin-Key",
+    "Access-Control-Allow-Headers": "Content-Type, X-Public-Lead-Key, X-Portal-Admin-Key, X-Linkedin-Webhook-Key, X-Linkedin-Admin-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
