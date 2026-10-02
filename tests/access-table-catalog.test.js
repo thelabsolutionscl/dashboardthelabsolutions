@@ -35,7 +35,7 @@ test('all actual literal Airtable tables in major dashboard modules are in the s
 });
 test('campaign and agent tables remain admin-only pending explicit per-role record scoping',()=>{
   const names=['Automations','Agent_Queue','Agent_Log','Social_Posts',
-    'Social_Interactions','Social_Metrics','Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'];
+    'Social_Interactions','Social_Metrics','LinkedIn_Prospects','Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'];
   const prefix='/v0/app1YtD74AqiPWQhy/';
   for(const name of names){
     assert.ok(ACCESS_ADMIN_ONLY_TABLES.has(name),name);
