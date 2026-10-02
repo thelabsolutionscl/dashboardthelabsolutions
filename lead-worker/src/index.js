@@ -1899,7 +1899,7 @@ async function handleLinkedinOfficial(request, env, ctx, cors, url) {
   if (!provided || !timingSafeEqual(provided, expected))
     return json({ ok: false, error: "Firma LinkedIn inválida" }, 401, cors);
 
-  const notification = safeJson(raw);
+  let notification;try { notification = JSON.parse(raw); } catch (_) { return json({ ok: false, error: "JSON LinkedIn inválido" }, 400, cors); }
   if (!notification || notification.type !== "LEAD_ACTION")
     return json({ ok: true, ignored: true }, 200, cors);
   const urn = str(notification.leadGenFormResponse), occurredAt = String(notification.occurredAt || "");
@@ -2009,7 +2009,44 @@ async function handleLinkedin(request, env, ctx, cors) {
   return response;
 }
 
-async function syncLinkedinInboundProspect(env, norm, clienteId) {
+async function findLinkedinProspectByLeadId(env, leadId) {
+  if (!leadId) return null;
+  const safe = String(leadId).replace(/'/g, "\\'");
+  const url =
+    `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("LinkedIn_Prospects")}` +
+    `?maxRecords=1&filterByFormula=${encodeURIComponent(`{LinkedIn Lead ID}='${safe}'`)}`;
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+  if (!r.ok) return null;
+  return (await r.json())?.records?.[0] || null;
+}
+
+async function logLinkedinInboundEvent(env, { prospect, leadId, clienteId, detail, actor = "Webhook LinkedIn" }) {
+  try {
+    const row = prospect || await findLinkedinProspectByLeadId(env, leadId);
+    const f = row?.fields || {};
+    const linkedClient = clienteId || (Array.isArray(f.Cliente) && f.Cliente[0]) || "";
+    await airtableCreateTolerant(env, "LinkedIn_Events", stripEmpty({
+      "Evento ID": "LI-IN-" + Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 8),
+      Prospecto: row?.id ? [row.id] : undefined,
+      Cliente: linkedClient ? [linkedClient] : undefined,
+      Tipo: "Inbound",
+      "Estado anterior": "",
+      "Estado nuevo": f.Estado || "Cliente",
+      Fecha: new Date().toISOString(),
+      Campaña: f.Campaña,
+      Identidad: f.Identidad,
+      Segmento: f.Segmento,
+      Fuente: f.Fuente || "Lead Gen Form",
+      Actor: actor,
+      "Score B2B": Number(f["Score B2B"]) || undefined,
+      Detalle: detail || "Lead recibido por LinkedIn",
+    }));
+  } catch (e) {
+    console.error("[leads-worker] LinkedIn_Events:", e.message);
+  }
+}
+
+async function syncLinkedinInboundProspect(env, norm, clienteId, actor = "Webhook LinkedIn") {
   try {
     const leadId = norm.linkedinLeadId;
     const fields = stripEmpty({
@@ -2019,6 +2056,7 @@ async function syncLinkedinInboundProspect(env, norm, clienteId) {
       "LinkedIn URL": norm.linkedinUrl,
       Email: norm.email,
       "Teléfono": norm.phone,
+      Industria: norm.industry,
       Fuente: "Lead Gen Form",
       Estado: "Cliente",
       Campaña: norm.campaign || norm.utmCampaign,
@@ -2028,25 +2066,23 @@ async function syncLinkedinInboundProspect(env, norm, clienteId) {
       "Fecha descubrimiento": new Date().toISOString(),
     });
 
-    let existing = null;
-    if (leadId) {
-      const safe = String(leadId).replace(/'/g, "\\'");
-      const url =
-        `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("LinkedIn_Prospects")}` +
-        `?maxRecords=1&filterByFormula=${encodeURIComponent(`{LinkedIn Lead ID}='${safe}'`)}`;
-      const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
-      if (r.ok) existing = (await r.json())?.records?.[0]?.id || null;
-    }
-
-    if (existing) {
+    const found = await findLinkedinProspectByLeadId(env, leadId);
+    let row;
+    if (found?.id) {
       const patch = { ...fields };
       delete patch["Fecha descubrimiento"];
-      await airtableUpdateTolerant(env, "LinkedIn_Prospects", existing, patch);
+      row = await airtableUpdateTolerant(env, "LinkedIn_Prospects", found.id, patch) || found;
     } else {
-      await airtableCreateTolerant(env, "LinkedIn_Prospects", fields);
+      row = await airtableCreateTolerant(env, "LinkedIn_Prospects", fields);
     }
+    await logLinkedinInboundEvent(env, {
+      prospect: row, leadId, clienteId, actor,
+      detail: actor === "LinkedIn Lead Sync" ? "Lead recibido por integración oficial Lead Sync" : "Lead recibido por webhook LinkedIn",
+    });
+    return row;
   } catch (e) {
     console.error("[leads-worker] LinkedIn_Prospects:", e.message);
+    return null;
   }
 }
 
@@ -2687,6 +2723,7 @@ function normalizeWeb(b) {
     email: str(b.email),
     phone: str(b.phone),
     jobTitle: str(b.jobTitle),
+    industry: str(b.industry),
     service: str(b.service),
     product: str(b.product),
     quantity: str(b.quantity),
