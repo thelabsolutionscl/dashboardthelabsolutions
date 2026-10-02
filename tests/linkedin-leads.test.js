@@ -50,3 +50,52 @@ test('server-side access catalog explicitly recognizes prospect staging',()=>{
   assert.equal((ACCESS.match(/'LinkedIn_Prospects'/g)||[]).length,2);
   assert.match(INDEX,/socialWriteTables:[^\n]*LinkedIn_Prospects/);
 });
+
+
+const WORKER=fs.readFileSync(path.join(ROOT,'lead-worker','src','index.js'),'utf8');
+
+test('LinkedIn webhook requires its own secret and never falls back to the public lead key',()=>{
+  const start=WORKER.indexOf('async function handleLinkedin');
+  const end=WORKER.indexOf('async function syncLinkedinInboundProspect',start);
+  const fn=WORKER.slice(start,end);
+  assert.match(fn,/X-Linkedin-Webhook-Key/);
+  assert.match(fn,/LINKEDIN_WEBHOOK_KEY/);
+  assert.doesNotMatch(fn,/X-Public-Lead-Key/);
+  assert.doesNotMatch(fn,/PUBLIC_LEAD_KEY/);
+  assert.match(fn,/Webhook LinkedIn no configurado/);
+});
+
+test('inbound LinkedIn uses canonical CRM origin and staging/idempotency metadata',()=>{
+  assert.match(WORKER,/const ORIGEN_LABEL = \{ web: "Web", linkedin: "LinkedIn" \}/);
+  assert.match(WORKER,/linkedinLeadId/);
+  assert.match(WORKER,/linkedin:webhook:/);
+  assert.match(WORKER,/syncLinkedinInboundProspect/);
+  assert.match(WORKER,/"LinkedIn_Prospects"/);
+  assert.match(WORKER,/"Etapa venta": source === "linkedin" \? "Lead nuevo"/);
+  assert.match(WORKER,/"LinkedIn URL": source === "linkedin" \? norm\.linkedinUrl/);
+});
+
+test('outbound normalizes LinkedIn URLs and deduplicates by profile, email and phone',()=>{
+  assert.match(LI,/function canonicalLinkedinUrl\(/);
+  assert.match(LI,/u\.search|new URL\(/);
+  assert.match(LI,/normPhone/);
+  assert.match(LI,/canonicalLinkedinUrl\(x\['LinkedIn URL'\]\)/);
+  assert.match(LI,/normPhone\(x\['Teléfono'\]\)/);
+});
+
+test('funnel exposes real transitions and follow-up actions',()=>{
+  for(const fn of ['linkedinQueueForContact','linkedinMarkContacted','linkedinMarkReplied','linkedinMarkOpportunity','linkedinDiscard','linkedinCopyFollowup'])
+    assert.match(LI,new RegExp('function\\s+'+fn+'\\s*\\('),fn);
+  assert.match(LI,/CONVERTIBLE_STATES/);
+  assert.match(LI,/Primero califica el prospecto antes de pasarlo a Clientes/);
+  assert.match(LI,/Próximo seguimiento/);
+  assert.match(LI,/VENCIDO/);
+});
+
+test('conversion and analysis have in-flight guards against repeated clicks',()=>{
+  assert.match(LI,/analyzeBusy=new Set\(\)/);
+  assert.match(LI,/convertBusy=new Set\(\)/);
+  assert.match(LI,/statusBusy=new Set\(\)/);
+  assert.match(LI,/convertBusy\.has\(id\)/);
+  assert.match(LI,/f\.Convertido&&Array\.isArray\(f\.Cliente\)/);
+});
