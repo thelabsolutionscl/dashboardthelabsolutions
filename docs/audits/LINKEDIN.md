@@ -39,7 +39,7 @@ Ahora:
 **Estado:** CORREGIDO / CONTENIDO.
 
 - Se acepta `linkedinLeadId`.
-- Se usa KV `RL` con una clave de idempotencia por evento durante 30 días.
+- Se usa KV `RL` con una clave de idempotencia basada **solo en el ID real del lead** durante 30 días; `li_fat_id` queda reservado a atribución y no se usa para bloquear eventos.
 - El mismo `linkedinLeadId` devuelve el Cliente/queue previamente creado.
 - El evento inbound se refleja en `LinkedIn_Prospects` y se actualiza por `LinkedIn Lead ID`.
 
@@ -86,7 +86,7 @@ Ahora:
 - la URL se canoniza a `https://www.linkedin.com/<path>`;
 - se eliminan query/hash/trailing slash;
 - email se normaliza;
-- teléfono se compara por los últimos 9 dígitos;
+- teléfono solo participa si tiene al menos 9 dígitos y se compara por los últimos 9;
 - se mantiene fallback nombre + empresa;
 - antes de convertir se refresca `Clientes` desde Airtable.
 
@@ -111,6 +111,14 @@ Se añadieron guards `analyzeBusy`, `convertBusy` y `statusBusy`. Si el prospect
 - prioriza vencidos al ordenar;
 - permite copiar el follow-up;
 - al registrar respuesta limpia el seguimiento pendiente.
+
+### P1 — Reanalizar podía hacer retroceder el embudo
+
+**Problema:** el botón de análisis está disponible durante toda la vida del prospecto. Un reanálisis de alguien ya `Contactado`, `Respondió` u `Oportunidad` podía sobrescribir el estado y devolverlo a `Calificado` o `Analizado`.
+
+**Estado:** CORREGIDO.
+
+El análisis puede recalcular score, mensaje y próxima acción, pero solo modifica etapa mientras el registro está en `Descubierto`, `Analizado` o `Calificado`. Las acciones de avance además validan su estado origen; no dependen únicamente de que el botón esté oculto.
 
 ### P2 — Una respuesta IA malformada podía dejar score 0
 
