@@ -8,28 +8,32 @@ const ROOT=path.join(__dirname,'..');
 const LI=fs.readFileSync(path.join(ROOT,'js','linkedin.js'),'utf8');
 const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
 const ACCESS=fs.readFileSync(path.join(ROOT,'airtable-proxy','src','access-auth.js'),'utf8');
+const PROXY=fs.readFileSync(path.join(ROOT,'airtable-proxy','src','worker.js'),'utf8');
 
 test('LinkedIn engine is loaded once inside dashboard bundle order',()=>{
   assert.equal((INDEX.match(/js\/linkedin\.js\?v=%%BUILD%%/g)||[]).length,1);
   assert.match(INDEX,/js\/redes\.js\?v=%%BUILD%%[\s\S]{0,100}js\/linkedin\.js\?v=%%BUILD%%/);
 });
 
-test('prospecting uses staging before CRM conversion',()=>{
+test('prospecting uses staging and protected server conversion',()=>{
   assert.match(LI,/LinkedIn_Prospects/);
   for(const state of ['Descubierto','Analizado','Calificado','Por contactar','Contactado','Respondió','Oportunidad','Cliente','Descartado'])
     assert.ok(LI.includes("'"+state+"'"),state);
-  assert.match(LI,/'Origen lead':'LinkedIn'/);
-  assert.match(LI,/'Etapa venta':'Lead nuevo'/);
-  assert.match(LI,/Convertido:true/);
+  assert.match(LI,/linkedinApi\('\/linkedin\/command','POST'/);
+  assert.match(PROXY,/'Origen lead':'LinkedIn'/);
+  assert.match(PROXY,/'Etapa venta':'Lead nuevo'/);
+  assert.match(PROXY,/Convertido:true/);
 });
 
-test('prospect conversion deduplicates before creating Clientes',()=>{
-  assert.match(LI,/function findClient\(/);
-  assert.match(LI,/normEmail\(f\.Email\)/);
-  assert.match(LI,/canonicalLinkedinUrl\(f\['LinkedIn URL'\]\)/);
-  assert.match(LI,/normPhone\(f\['Teléfono'\]\)/);
-  assert.match(LI,/normText\(f\.Prospecto\)/);
-  assert.match(LI,/wr\('Clientes','POST'/);
+test('prospect conversion deduplicates server-side before creating Clientes',()=>{
+  assert.doesNotMatch(LI,/function findClient\(/);
+  assert.doesNotMatch(LI,/wr\('Clientes','POST'/);
+  assert.match(PROXY,/function liClientMatches\(/);
+  assert.match(PROXY,/liEmail\(p\.Email\)/);
+  assert.match(PROXY,/liUrl\(p\['LinkedIn URL'\]\)/);
+  assert.match(PROXY,/liPhone\(p\['Teléfono'\]\)/);
+  assert.match(PROXY,/clients\.find\(r=>liClientMatches/);
+  assert.match(PROXY,/liMutate\(this\.env,'Clientes','POST'/);
 });
 
 test('LINKEDIN_AGENT scores and drafts outreach',()=>{
@@ -47,8 +51,13 @@ test('personal outreach remains human initiated',()=>{
   assert.doesNotMatch(LI,/\/messagingApi|\/invitations|voyager\/api/i);
 });
 
-test('server-side access catalog explicitly recognizes prospect staging',()=>{
-  assert.equal((ACCESS.match(/'LinkedIn_Prospects'/g)||[]).length,2);
+test('server-side access catalog recognizes staging/events while LinkedIn uses dedicated RBAC routes',()=>{
+  assert.ok((ACCESS.match(/'LinkedIn_Prospects'/g)||[]).length>=2);
+  assert.ok((ACCESS.match(/'LinkedIn_Events'/g)||[]).length>=2);
+  assert.match(ACCESS,/path\.startsWith\('\/linkedin\/'\)/);
+  assert.match(ACCESS,/path==='\/linkedin\/prospects'/);
+  assert.match(ACCESS,/path==='\/linkedin\/metrics'/);
+  assert.match(ACCESS,/path==='\/linkedin\/command'/);
   assert.match(INDEX,/socialWriteTables:[^\n]*LinkedIn_Prospects/);
 });
 
@@ -121,4 +130,63 @@ test('webhook idempotency uses the real LinkedIn lead id, not click attribution'
   const fn=WORKER.slice(start,end);
   assert.match(fn,/const eventId = norm\.linkedinLeadId;/);
   assert.doesNotMatch(fn,/const eventId = norm\.linkedinLeadId \|\| norm\.linkedinClickId/);
+});
+
+
+test('browser never performs direct LinkedIn/CRM persistence anymore',()=>{
+  assert.match(LI,/linkedinApi\('\/linkedin\/prospects','GET'\)/);
+  assert.match(LI,/linkedinApi\('\/linkedin\/metrics','GET'\)/);
+  assert.match(LI,/action:'convert'/);
+  assert.doesNotMatch(LI,/await\s+wr\(/);
+  assert.doesNotMatch(LI,/airtableFetch\(TABLE/);
+  assert.doesNotMatch(LI,/airtableFetch\('Clientes'/);
+});
+
+test('server serializes LinkedIn commands in the same global CRM Durable Object',()=>{
+  assert.match(PROXY,/path==='\/linkedin-command'/);
+  assert.match(PROXY,/_handleLinkedinCommand\(request\)/);
+  assert.match(PROXY,/idFromName\('tls-crm-global'\)/);
+  assert.match(PROXY,/linkedin:convert:/);
+  assert.match(PROXY,/LINKEDIN_CONVERSION_PENDING_RECONCILIATION/);
+  assert.match(PROXY,/this\.state\.storage\.put\(key/);
+});
+
+test('LinkedIn metrics use event history and non-causal post-LinkedIn revenue labeling',()=>{
+  assert.match(PROXY,/LinkedIn_Events/);
+  assert.match(PROXY,/avg_response_hours/);
+  assert.match(PROXY,/median_response_hours/);
+  assert.match(PROXY,/revenue_net_after_linkedin/);
+  assert.match(PROXY,/Monto total \(CLP\)/);
+  assert.match(PROXY,/\/1\.19/);
+  assert.match(LI,/Contacto → respuesta/);
+  assert.match(LI,/Revenue neto posterior/);
+  assert.match(LI,/no implica causalidad/);
+});
+
+test('official Lead Sync verifies challenge, raw-body signature and notification dedupe',()=>{
+  assert.match(WORKER,/\/webhooks\/linkedin\/official/);
+  assert.match(WORKER,/hmacHex\(secret, challengeCode\)/);
+  assert.match(WORKER,/request\.headers\.get\("X-LI-Signature"\)/);
+  assert.match(WORKER,/hmacHex\(secret, "hmacsha256=" \+ raw\)/);
+  assert.match(WORKER,/linkedin:official:/);
+  assert.match(WORKER,/notification\.leadGenFormResponse/);
+  assert.match(WORKER,/notification\.occurredAt/);
+  assert.match(WORKER,/fetchLinkedinLeadResponse/);
+  assert.match(WORKER,/r_marketing_leadgen_automation|Lead Sync/);
+});
+
+test('official Lead Sync can manage subscriptions and refresh OAuth tokens',()=>{
+  assert.match(WORKER,/\/linkedin\/subscriptions/);
+  assert.match(WORKER,/X-Linkedin-Admin-Key/);
+  assert.match(WORKER,/https:\/\/api\.linkedin\.com\/rest\/leadNotifications/);
+  assert.match(WORKER,/grant_type: "refresh_token"/);
+  assert.match(WORKER,/LINKEDIN_REFRESH_TOKEN/);
+  assert.match(WORKER,/LINKEDIN_API_VERSION \|\| "202609"/);
+});
+
+test('prospect edits can intentionally clear optional fields without bypassing validation',()=>{
+  assert.match(PROXY,/function liProspectEdit\(/);
+  assert.match(PROXY,/patch\[key\]=value\|\|null/);
+  assert.match(PROXY,/!liText\(merged\.Prospecto,500\)&&!liText\(merged\.Empresa,500\)/);
+  assert.match(PROXY,/liDuplicate\(edit\.merged/);
 });
