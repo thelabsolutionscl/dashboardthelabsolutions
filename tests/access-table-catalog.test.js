@@ -10,7 +10,7 @@ const source=fs.readFileSync(path.join(root,'airtable-proxy/src/access-auth.js')
 const {accessAllows,accessTable,ACCESS_ALLOWED_TABLES,ACCESS_ADMIN_ONLY_TABLES}=
   new Function(source+'\nreturn {accessAllows,accessTable,ACCESS_ALLOWED_TABLES,ACCESS_ADMIN_ONLY_TABLES};')();
 const sourceFiles=[
-  'js/redes.js','js/oficina.js','js/seo-ads.js','js/agentes.js','js/proveedores.js',
+  'js/redes.js','js/linkedin.js','js/oficina.js','js/seo-ads.js','js/agentes.js','js/proveedores.js',
   'js/finanzas.js','js/calendario-base.js','js/maquinas-operaciones.js','js/correo.js'
 ];
 test('all actual literal Airtable tables in major dashboard modules are in the signed-access catalog',()=>{
@@ -35,7 +35,7 @@ test('all actual literal Airtable tables in major dashboard modules are in the s
 });
 test('campaign and agent tables remain admin-only pending explicit per-role record scoping',()=>{
   const names=['Automations','Agent_Queue','Agent_Log','Social_Posts',
-    'Social_Interactions','Social_Metrics','Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'];
+    'Social_Interactions','Social_Metrics','LinkedIn_Prospects','Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'];
   const prefix='/v0/app1YtD74AqiPWQhy/';
   for(const name of names){
     assert.ok(ACCESS_ADMIN_ONLY_TABLES.has(name),name);

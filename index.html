@@ -17808,6 +17808,7 @@ function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classLi
 
 </script>
 <script src="js/redes.js?v=%%BUILD%%"></script>
+<script src="js/linkedin.js?v=%%BUILD%%"></script>
 <script src="js/agentes.js?v=%%BUILD%%"></script>
 <script src="js/machine-activity.js?v=%%BUILD%%"></script>
 <script src="js/oficina.js?v=%%BUILD%%"></script>
@@ -18985,7 +18986,7 @@ const RBAC={
 
   // Tablas donde un rol con acceso a la sección Redes (pero sin escritura global, p.ej. marketing)
   // SÍ puede escribir — acotado a redes + Clientes (leads) + Agent_Queue (encolar lead para scoring).
-  socialWriteTables: ['Social_Posts','Social_Interactions','Social_Metrics','Clientes','Agent_Queue'],
+  socialWriteTables: ['Social_Posts','Social_Interactions','Social_Metrics','LinkedIn_Prospects','Clientes','Agent_Queue'],
   // Tablas donde un rol con acceso a Newsletter (sin escritura global) SÍ puede escribir.
   newsletterWriteTables: ['Newsletter_Campañas','Newsletter_Envios','Clientes','Agent_Queue'],
   canWriteRole(role){return !!(this.canWrite[role]);},

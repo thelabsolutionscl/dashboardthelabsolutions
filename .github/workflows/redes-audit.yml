@@ -6,22 +6,26 @@ on:
     paths:
       - 'index.html'
       - 'js/redes.js'
+      - 'js/linkedin.js'
       - 'lead-worker/src/index.js'
       - 'docs/REDES_SOCIALES.md'
       - 'docs/audits/REDES_SOCIALES.md'
       - 'tests/redes.test.js'
       - 'tests/redes-wiring.test.js'
+      - 'tests/linkedin-leads.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/redes-audit.yml'
   pull_request:
     paths:
       - 'index.html'
       - 'js/redes.js'
+      - 'js/linkedin.js'
       - 'lead-worker/src/index.js'
       - 'docs/REDES_SOCIALES.md'
       - 'docs/audits/REDES_SOCIALES.md'
       - 'tests/redes.test.js'
       - 'tests/redes-wiring.test.js'
+      - 'tests/linkedin-leads.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/redes-audit.yml'
   workflow_dispatch:
@@ -48,13 +52,16 @@ jobs:
       - name: Validate social modules
         run: |
           node --check js/redes.js
+          node --check js/linkedin.js
           node --check lead-worker/src/index.js
 
       - name: Audit social wiring and safety
         run: node --test tests/redes-wiring.test.js
 
       - name: Run social logic tests
-        run: node tests/redes.test.js
+        run: |
+          node tests/redes.test.js
+          node --test tests/linkedin-leads.test.js
 
       - name: General smoke audit
         run: node tests/smoke.test.js

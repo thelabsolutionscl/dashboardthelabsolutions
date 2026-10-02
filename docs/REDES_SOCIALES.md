@@ -253,3 +253,71 @@ Los campos `Queja` y `WA: aviso enviado` ya existen en `Social_Interactions`.
 `tests/redes.test.js` (correr con `node tests/redes.test.js`) extrae las funciones
 reales de `index.html` y prueba el parser por red (`_redesSplitByNetwork`), el
 sentimiento (`_redesSentiment`) y el mejor día (`_redesBestByWeekday`). 12 aserciones.
+
+
+---
+
+## 8. LinkedIn — motor comercial B2B
+
+La sección **Redes Sociales** incorpora un bloque específico de LinkedIn para trabajar
+**inbound + outbound** sin crear un CRM paralelo.
+
+### 8.1 Flujo outbound
+
+1. El usuario define segmento, palabras clave, campaña e identidad de contacto
+   (**The Lab Solutions**, **Gustavo** o **Nicanor**).
+2. **Buscar en LinkedIn** abre la búsqueda normal de LinkedIn. El dashboard no
+   scrapea perfiles ni envía invitaciones/mensajes automáticamente.
+3. Los perfiles seleccionados se guardan primero en `LinkedIn_Prospects`.
+4. `LINKEDIN_AGENT` analiza el prospecto y propone:
+   - score B2B 1–10;
+   - servicio recomendado;
+   - nivel de decisor;
+   - mensaje inicial;
+   - follow-up;
+   - próxima acción;
+   - identidad recomendada.
+5. El usuario puede copiar el mensaje, abrir el perfil y registrar
+   **Contactado** / **Respondió**.
+6. Al pulsar **→ Clientes**, el dashboard deduplica por email, URL de LinkedIn y
+   nombre+empresa. Si no existe, crea el Cliente con `Origen lead = LinkedIn`;
+   si ya existe, lo vincula y completa datos útiles sin duplicarlo.
+
+Los perfiles personales funcionan en modo **asistido**: la IA prepara y el humano
+ejecuta la acción en LinkedIn. Esto separa automatización CRM de automatización
+no autorizada de una cuenta personal.
+
+### 8.2 Flujo inbound
+
+El pipeline existente `POST /webhooks/linkedin` sigue siendo la puerta de entrada
+para Lead Gen Forms / integraciones autorizadas. Esos registros terminan en
+`Clientes` + `Agent_Queue` con `LINKEDIN_AGENT`. El nuevo panel muestra también
+los Clientes recientes con `Origen lead = LinkedIn`, de modo que inbound y
+outbound quedan visibles desde Redes Sociales.
+
+### 8.3 Tabla `LinkedIn_Prospects`
+
+Es una tabla de **staging**, no la base definitiva de clientes. Evita llenar el CRM
+con resultados de búsqueda que todavía no están calificados.
+
+Campos principales:
+
+| Campo | Uso |
+|---|---|
+| Prospecto / Empresa / Cargo | Identidad comercial |
+| LinkedIn URL / Email / Teléfono | Dedupe y contacto |
+| Segmento | Agencia, Marketing, Trade, RRHH, Compras, Eventos, Retail, etc. |
+| Fuente | Outbound, Lead Gen Form, Interacción o Importado |
+| Identidad | The Lab Solutions, Gustavo o Nicanor |
+| Estado | Descubierto → Analizado → Calificado → Por contactar → Contactado → Respondió → Oportunidad → Cliente |
+| Score B2B / Decisor | Priorización |
+| Mensaje inicial / Follow-up | Copy generado por `LINKEDIN_AGENT` |
+| Próxima acción | Seguimiento operativo |
+| Cliente | Vínculo al registro definitivo en `Clientes` |
+| Convertido | Guard durable contra conversiones repetidas |
+
+### 8.4 Sales Navigator
+
+La primera versión **no depende de Sales Navigator**. Si se habilita más adelante,
+puede enriquecer el descubrimiento manual con sus filtros y señales, sin cambiar
+el modelo de datos ni el flujo de conversión al CRM.
