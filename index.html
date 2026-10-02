@@ -17807,7 +17807,8 @@ async function runAgent(id){
 function copyOut(id,btn){const el=document.getElementById(id);if(!el||el.classList.contains('empty')){toast('Sin contenido','error');return;}navigator.clipboard.writeText(el._rawText||el.textContent).then(()=>{if(btn){const o=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=o,1500);}toast('Copiado ✓','success');}).catch(()=>toast('No se pudo copiar','error'));}
 
 </script>
-<script src="js/redes.js?v=%%BUILD%%"></script>\n<script src="js/linkedin.js?v=%%BUILD%%"></script>
+<script src="js/redes.js?v=%%BUILD%%"></script>
+<script src="js/linkedin.js?v=%%BUILD%%"></script>
 <script src="js/agentes.js?v=%%BUILD%%"></script>
 <script src="js/machine-activity.js?v=%%BUILD%%"></script>
 <script src="js/oficina.js?v=%%BUILD%%"></script>
