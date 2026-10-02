@@ -211,8 +211,8 @@ Sobre la base anterior se ejecutó una auditoría y se añadió:
 ## 7. Captura server-side + notificaciones (auditoría 4)
 
 ### 7.1 Worker — `POST /webhooks/social`
-`lead-worker/src/index.js` ahora expone `/webhooks/social` (clave
-`SOCIAL_WEBHOOK_KEY`, con fallback a `PUBLIC_LEAD_KEY`). Recibe comentarios y DMs
+`lead-worker/src/index.js` ahora expone `/webhooks/social` y exige una clave
+`SOCIAL_WEBHOOK_KEY` exclusiva (nunca `PUBLIC_LEAD_KEY`). Recibe comentarios y DMs
 desde Make y:
 1. Siempre crea la fila en **`Social_Interactions`** (tolerante a campos faltantes).
 2. Detecta **queja** (sentimiento negativo, `socialIsComplaint`) y marca `Queja`.
