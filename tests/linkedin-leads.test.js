@@ -25,9 +25,10 @@ test('prospecting uses staging before CRM conversion',()=>{
 
 test('prospect conversion deduplicates before creating Clientes',()=>{
   assert.match(LI,/function findClient\(/);
-  assert.match(LI,/String\(f\.Email/);
-  assert.match(LI,/LinkedIn URL/);
-  assert.match(LI,/String\(f\.Prospecto/);
+  assert.match(LI,/normEmail\(f\.Email\)/);
+  assert.match(LI,/canonicalLinkedinUrl\(f\['LinkedIn URL'\]\)/);
+  assert.match(LI,/normPhone\(f\['Teléfono'\]\)/);
+  assert.match(LI,/normText\(f\.Prospecto\)/);
   assert.match(LI,/wr\('Clientes','POST'/);
 });
 
