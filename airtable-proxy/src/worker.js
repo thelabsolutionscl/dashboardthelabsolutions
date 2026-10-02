@@ -1984,6 +1984,45 @@ function liAnalysisInput(raw){
   Object.keys(out).forEach(k=>{if(out[k]==='')delete out[k];});
   return out;
 }
+function liParseJsonText(text){
+  const raw=String(text||'').trim();
+  if(!raw)return null;
+  try{return JSON.parse(raw);}catch(_){}
+  const a=raw.indexOf('{'),b=raw.lastIndexOf('}');
+  if(a>=0&&b>a)try{return JSON.parse(raw.slice(a,b+1));}catch(_){}
+  return null;
+}
+function liService(v){
+  const values=['Activaciones','Premiaciones','Merchandising','Impresión 3D','Volumétricos','Cartelería','Papelería','Chip The Lab','Otro'];
+  const z=liNorm(v);return values.find(x=>liNorm(x)===z)||values.find(x=>z&&z.includes(liNorm(x)))||(z?'Otro':'');
+}
+async function liRunAgentAnalysis(env,prospect){
+  if(!env.ANTHROPIC_TOKEN)throw Object.assign(new Error('Motor IA no configurado'),{status:503});
+  const f=prospect?.fields||{};
+  const system=['Eres el LINKEDIN_AGENT de The Lab Solutions, empresa B2B de fabricación digital en Santiago, Chile.',
+    'Servicios: Activaciones, Premiaciones, Merchandising, Impresión 3D, Volumétricos, Cartelería, Papelería, Chip The Lab.',
+    'Evalúa únicamente los datos entregados. No inventes tamaño de empresa, presupuesto, contactos, proyectos, actividad reciente ni señales externas.',
+    'El mensaje debe ser breve, consultivo y humano; no afirmar que viste algo que no está en los datos.',
+    'Responde SOLO JSON válido: {"score_b2b":1,"servicio_recomendado":"Otro","decisor":"Bajo","mensaje_linkedin":"","follow_up":"","proxima_accion":"","motivo_ia":"","identidad_recomendada":"The Lab Solutions"}'].join('\n');
+  const user=['Prospecto LinkedIn','Nombre: '+(f.Prospecto||'desconocido'),'Empresa: '+(f.Empresa||'desconocida'),'Cargo: '+(f.Cargo||'desconocido'),'Industria: '+(f.Industria||'desconocida'),'Segmento: '+(f.Segmento||'sin clasificar'),'Notas: '+(f.Notas||'sin notas'),'Campaña: '+(f.Campaña||'sin campaña')].join('\n');
+  const payload={model:'claude-haiku-4-5',max_tokens:650,system,messages:[{role:'user',content:user}]};
+  const reservation=await reserveAiBudget(env,payload,'linkedin-agent');
+  if(!reservation.ok)throw Object.assign(new Error(reservation.error||'Presupuesto IA agotado'),{status:reservation.status||429,code:'AI_BUDGET_LIMIT'});
+  const upstream=await fetch(ANTHROPIC_BASE+'/v1/messages',{method:'POST',headers:{'x-api-key':env.ANTHROPIC_TOKEN,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify(payload)});
+  await reconcileAiBudget(env,reservation,upstream.clone()).catch(()=>{});
+  if(!upstream.ok)throw Object.assign(new Error('Claude no pudo analizar el prospecto'),{status:upstream.status>=500?503:502});
+  const body=await upstream.json().catch(()=>null);
+  const text=Array.isArray(body?.content)?body.content.filter(x=>x?.type==='text').map(x=>x.text||'').join('\n'):'';
+  const obj=liParseJsonText(text);
+  const score=Number(obj?.score_b2b);
+  if(!Number.isInteger(score)||score<1||score>10)throw Object.assign(new Error('La IA no devolvió un score válido'),{status:502});
+  const decisor=['Alto','Medio','Bajo'].includes(obj?.decisor)?obj.decisor:undefined;
+  const identity=LINKEDIN_IDENTITIES.has(obj?.identidad_recomendada)?obj.identidad_recomendada:undefined;
+  const fields={'Score B2B':score,'Servicio interés':liService(obj?.servicio_recomendado),Decisor:decisor,'Mensaje inicial':liText(obj?.mensaje_linkedin,6000),'Follow-up':liText(obj?.follow_up,6000),'Próxima acción':liText(obj?.proxima_accion,6000),'Motivo IA':liText(obj?.motivo_ia,8000)};
+  if(!f.Identidad&&identity)fields.Identidad=identity;
+  Object.keys(fields).forEach(k=>fields[k]===undefined&&delete fields[k]);
+  return fields;
+}
 async function liWriteEvent(env,{prospect,clienteId,type,oldState,newState,actor,detail}){
   try{
     const f=prospect?.fields||{},eventId='LI-'+Date.now().toString(36)+'-'+crypto.randomUUID().slice(0,8);
@@ -2151,15 +2190,15 @@ export class CrmMutationGuard {
       return this._json({ok:true,record:liProject(updated)},200);
     }
 
-    if(action==='analysis'){
-      const fields=liAnalysisInput(data.fields);
-      if(!fields)return this._json({error:'Análisis LinkedIn inválido'},422);
+    if(action==='analyze'){
+      let fields;try{fields=await liRunAgentAnalysis(this.env,prospect);}
+      catch(e){return this._json({error:e.message||'No se pudo analizar el prospecto',code:e.code||undefined},e.status||503);}
       const score=fields['Score B2B'];
       fields.Estado=['Descubierto','Analizado','Calificado'].includes(oldState)
         ?(score>=7?'Calificado':'Analizado'):oldState;
       let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,fields);}
       catch(e){return this._json({error:e.message||'No se pudo guardar el análisis'},e.status&&e.status<500?422:503);}
-      await liWriteEvent(this.env,{prospect:updated,type:'Análisis',oldState,newState:fields.Estado,actor,detail:'LINKEDIN_AGENT · score '+score});
+      await liWriteEvent(this.env,{prospect:updated,type:'Análisis',oldState,newState:fields.Estado,actor,detail:'LINKEDIN_AGENT server-side · score '+score});
       return this._json({ok:true,record:liProject(updated)},200);
     }
 
