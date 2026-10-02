@@ -1733,12 +1733,14 @@ async function handleGoogleAds(request, env, ctx, cors) {
  * RUTA: POST /webhooks/linkedin   (vía Make / Zapier / HubSpot)
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleLinkedin(request, env, ctx, cors) {
-  const provided =
-    request.headers.get("X-Linkedin-Webhook-Key") ||
-    request.headers.get("X-Public-Lead-Key") ||
-    "";
-  const expected = env.LINKEDIN_WEBHOOK_KEY || env.PUBLIC_LEAD_KEY;
-  if (!expected || !timingSafeEqual(provided, expected)) {
+  // Este endpoint crea Clientes + tareas y puede disparar email/WhatsApp:
+  // una clave pública del formulario web NUNCA debe autorizarlo.
+  const provided = request.headers.get("X-Linkedin-Webhook-Key") || "";
+  const expected = String(env.LINKEDIN_WEBHOOK_KEY || "").trim();
+  if (!expected) {
+    return json({ ok: false, error: "Webhook LinkedIn no configurado" }, 503, cors);
+  }
+  if (!timingSafeEqual(provided, expected)) {
     return json({ ok: false, error: "No autorizado" }, 401, cors);
   }
 
@@ -1746,13 +1748,86 @@ async function handleLinkedin(request, env, ctx, cors) {
   if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
 
   const norm = normalizeLinkedin(body);
-  return await createLeadAndQueue(env, ctx, cors, {
+  if (!norm.name && !norm.company && !norm.email && !norm.phone) {
+    return json({ ok: false, error: "Faltan datos del lead" }, 400, cors);
+  }
+
+  // li_fat_id identifica atribución/clic, no necesariamente una respuesta única
+  // de formulario. Solo el ID real del lead se usa como idempotency key.
+  const eventId = norm.linkedinLeadId;
+  const idemKey = eventId ? "linkedin:webhook:" + eventId.slice(0, 180) : "";
+  if (idemKey && env.RL) {
+    try {
+      const previous = await env.RL.get(idemKey);
+      if (previous) {
+        const saved = JSON.parse(previous);
+        return json({ ok: true, duplicate: true, clienteId: saved.clienteId || null, queueId: saved.queueId || null }, 200, cors);
+      }
+    } catch (_) {}
+  }
+
+  const response = await createLeadAndQueue(env, ctx, cors, {
     norm,
     agente: "LINKEDIN_AGENT",
     evento: "linkedin.lead_received",
     source: "linkedin",
     campaign: norm.campaign || norm.utmCampaign,
   });
+
+  const result = await response.clone().json().catch(() => null);
+  if (response.ok && result?.ok && result.clienteId) {
+    if (idemKey && env.RL) {
+      try {
+        await env.RL.put(idemKey, JSON.stringify({
+          clienteId: result.clienteId,
+          queueId: result.queueId || null,
+        }), { expirationTtl: 30 * 86400 });
+      } catch (_) {}
+    }
+    ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId));
+  }
+  return response;
+}
+
+async function syncLinkedinInboundProspect(env, norm, clienteId) {
+  try {
+    const leadId = norm.linkedinLeadId;
+    const fields = stripEmpty({
+      Prospecto: norm.name,
+      Empresa: norm.company,
+      Cargo: norm.jobTitle,
+      "LinkedIn URL": norm.linkedinUrl,
+      Email: norm.email,
+      "Teléfono": norm.phone,
+      Fuente: "Lead Gen Form",
+      Estado: "Cliente",
+      Campaña: norm.campaign || norm.utmCampaign,
+      Cliente: clienteId ? [clienteId] : undefined,
+      Convertido: !!clienteId || undefined,
+      "LinkedIn Lead ID": leadId,
+      "Fecha descubrimiento": new Date().toISOString(),
+    });
+
+    let existing = null;
+    if (leadId) {
+      const safe = String(leadId).replace(/'/g, "\\'");
+      const url =
+        `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("LinkedIn_Prospects")}` +
+        `?maxRecords=1&filterByFormula=${encodeURIComponent(`{LinkedIn Lead ID}='${safe}'`)}`;
+      const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+      if (r.ok) existing = (await r.json())?.records?.[0]?.id || null;
+    }
+
+    if (existing) {
+      const patch = { ...fields };
+      delete patch["Fecha descubrimiento"];
+      await airtableUpdateTolerant(env, "LinkedIn_Prospects", existing, patch);
+    } else {
+      await airtableCreateTolerant(env, "LinkedIn_Prospects", fields);
+    }
+  } catch (e) {
+    console.error("[leads-worker] LinkedIn_Prospects:", e.message);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -1878,7 +1953,7 @@ function socialIsComplaint(mensaje, intencion) {
 
 // Etiqueta "oficial" de Origen lead en el CRM: los leads del sitio quedan como
 // "Web" (la opción curada), no como la "web" en minúscula que generaba antes.
-const ORIGEN_LABEL = { web: "Web" };
+const ORIGEN_LABEL = { web: "Web", linkedin: "LinkedIn" };
 function origenLabel(source) {
   return ORIGEN_LABEL[source] || source;
 }
@@ -1895,6 +1970,8 @@ function buildClienteFields(norm, source) {
     Teléfono: norm.phone,
     "Cargo contacto": norm.jobTitle,
     "Origen lead": origenLabel(source),
+    "Etapa venta": source === "linkedin" ? "Lead nuevo" : undefined,
+    "LinkedIn URL": source === "linkedin" ? norm.linkedinUrl : undefined,
     "Industria / Rubro": norm.industry,
     "Tipo de cliente": norm.tipoCliente,
     RUT: norm.rut,
@@ -1929,6 +2006,7 @@ async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source
     const existing = await airtableFindCliente(env, {
       email: norm.email,
       phone: norm.phone,
+      linkedinUrl: source === "linkedin" ? norm.linkedinUrl : "",
     });
     if (existing) {
       // Cliente recurrente: reutiliza el registro y refresca interés/cargo
@@ -2443,6 +2521,19 @@ function normalizeGoogleAds(b) {
   };
 }
 
+function canonicalLinkedinUrl(v) {
+  const raw = str(v);
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) return "";
+    const path = (u.pathname || "").replace(/\/{2,}/g, "/").replace(/\/$/, "");
+    return ("https://www.linkedin.com" + (path || "")).toLowerCase();
+  } catch (_) {
+    return "";
+  }
+}
+
 function normalizeLinkedin(b) {
   const name = str(b.name) || [str(b.firstName), str(b.lastName)].filter(Boolean).join(" ");
   return {
@@ -2454,12 +2545,14 @@ function normalizeLinkedin(b) {
     service: str(b.service),
     message: str(b.message),
     source: "linkedin",
-    campaign: str(b.campaign),
-    linkedinCampaignId: str(b.linkedinCampaignId),
-    linkedinLeadGenFormId: str(b.linkedinLeadGenFormId),
-    linkedinClickId: str(b.linkedinClickId),
+    campaign: str(b.campaign) || str(b.campaignName),
+    linkedinLeadId: str(b.linkedinLeadId) || str(b.leadId) || str(b.lead_id),
+    linkedinCampaignId: str(b.linkedinCampaignId) || str(b.campaignId),
+    linkedinLeadGenFormId: str(b.linkedinLeadGenFormId) || str(b.formId),
+    linkedinClickId: str(b.linkedinClickId) || str(b.li_fat_id),
+    linkedinUrl: canonicalLinkedinUrl(str(b.linkedinUrl) || str(b.profileUrl)),
     landingUrl: str(b.landingUrl),
-    utmCampaign: str(b.campaign),
+    utmCampaign: str(b.campaign) || str(b.campaignName),
   };
 }
 
@@ -2481,7 +2574,11 @@ function buildNotes(n) {
   if (n.utmContent) tracking.push(`utm_content=${n.utmContent}`);
   if (n.gclid) tracking.push(`gclid=${n.gclid}`);
   if (n.linkedinClickId) tracking.push(`li_fat_id=${n.linkedinClickId}`);
+  if (n.linkedinLeadId) tracking.push(`linkedin_lead_id=${n.linkedinLeadId}`);
+  if (n.linkedinCampaignId) tracking.push(`linkedin_campaign_id=${n.linkedinCampaignId}`);
+  if (n.linkedinLeadGenFormId) tracking.push(`linkedin_form_id=${n.linkedinLeadGenFormId}`);
   if (tracking.length) lines.push("Tracking: " + tracking.join(" "));
+  if (n.linkedinUrl) lines.push(`LinkedIn: ${n.linkedinUrl}`);
   if (n.landingUrl) lines.push(`Landing: ${n.landingUrl}`);
   return lines.join("\n");
 }
@@ -2551,13 +2648,15 @@ async function airtableUpdate(env, table, recordId, fields) {
 }
 
 // Busca un Cliente existente por email o teléfono (dedupe). Best-effort.
-async function airtableFindCliente(env, { email, phone }) {
+async function airtableFindCliente(env, { email, phone, linkedinUrl }) {
   const esc = (s) => String(s).replace(/'/g, "\\'");
   const clauses = [];
-  if (email) clauses.push(`LOWER({Email})=LOWER('${esc(email)}')`);
-  const phoneDigits = phone ? String(phone).replace(/[^0-9]/g, "") : "";
+  if (email) clauses.push(`LOWER(TRIM({Email}))=LOWER('${esc(String(email).trim())}')`);
+  const phoneDigitsRaw = phone ? String(phone).replace(/[^0-9]/g, "") : "";
+  const phoneDigits = phoneDigitsRaw.length >= 9 ? phoneDigitsRaw.slice(-9) : "";
   if (phoneDigits)
-    clauses.push(`REGEX_REPLACE({Teléfono} & "", "[^0-9]", "") = '${phoneDigits}'`);
+    clauses.push(`RIGHT(REGEX_REPLACE({Teléfono} & "", "[^0-9]", ""), ${phoneDigits.length}) = '${phoneDigits}'`);
+  if (linkedinUrl) clauses.push(`LOWER({LinkedIn URL} & "")=LOWER('${esc(String(linkedinUrl).trim())}')`);
   if (!clauses.length) return null;
   const formula = clauses.length > 1 ? `OR(${clauses.join(",")})` : clauses[0];
   const url =

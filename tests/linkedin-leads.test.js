@@ -25,9 +25,10 @@ test('prospecting uses staging before CRM conversion',()=>{
 
 test('prospect conversion deduplicates before creating Clientes',()=>{
   assert.match(LI,/function findClient\(/);
-  assert.match(LI,/String\(f\.Email/);
-  assert.match(LI,/LinkedIn URL/);
-  assert.match(LI,/String\(f\.Prospecto/);
+  assert.match(LI,/normEmail\(f\.Email\)/);
+  assert.match(LI,/canonicalLinkedinUrl\(f\['LinkedIn URL'\]\)/);
+  assert.match(LI,/normPhone\(f\['Teléfono'\]\)/);
+  assert.match(LI,/normText\(f\.Prospecto\)/);
   assert.match(LI,/wr\('Clientes','POST'/);
 });
 
@@ -49,4 +50,75 @@ test('personal outreach remains human initiated',()=>{
 test('server-side access catalog explicitly recognizes prospect staging',()=>{
   assert.equal((ACCESS.match(/'LinkedIn_Prospects'/g)||[]).length,2);
   assert.match(INDEX,/socialWriteTables:[^\n]*LinkedIn_Prospects/);
+});
+
+
+const WORKER=fs.readFileSync(path.join(ROOT,'lead-worker','src','index.js'),'utf8');
+
+test('LinkedIn webhook requires its own secret and never falls back to the public lead key',()=>{
+  const start=WORKER.indexOf('async function handleLinkedin');
+  const end=WORKER.indexOf('async function syncLinkedinInboundProspect',start);
+  const fn=WORKER.slice(start,end);
+  assert.match(fn,/X-Linkedin-Webhook-Key/);
+  assert.match(fn,/LINKEDIN_WEBHOOK_KEY/);
+  assert.doesNotMatch(fn,/X-Public-Lead-Key/);
+  assert.doesNotMatch(fn,/PUBLIC_LEAD_KEY/);
+  assert.match(fn,/Webhook LinkedIn no configurado/);
+});
+
+test('inbound LinkedIn uses canonical CRM origin and staging/idempotency metadata',()=>{
+  assert.match(WORKER,/const ORIGEN_LABEL = \{ web: "Web", linkedin: "LinkedIn" \}/);
+  assert.match(WORKER,/linkedinLeadId/);
+  assert.match(WORKER,/linkedin:webhook:/);
+  assert.match(WORKER,/syncLinkedinInboundProspect/);
+  assert.match(WORKER,/"LinkedIn_Prospects"/);
+  assert.match(WORKER,/"Etapa venta": source === "linkedin" \? "Lead nuevo"/);
+  assert.match(WORKER,/"LinkedIn URL": source === "linkedin" \? norm\.linkedinUrl/);
+});
+
+test('outbound normalizes LinkedIn URLs and deduplicates by profile, email and phone',()=>{
+  assert.match(LI,/function canonicalLinkedinUrl\(/);
+  assert.match(LI,/u\.search|new URL\(/);
+  assert.match(LI,/normPhone/);
+  assert.match(LI,/canonicalLinkedinUrl\(x\['LinkedIn URL'\]\)/);
+  assert.match(LI,/normPhone\(x\['Teléfono'\]\)/);
+});
+
+test('funnel exposes real transitions and follow-up actions',()=>{
+  for(const fn of ['linkedinQueueForContact','linkedinMarkContacted','linkedinMarkReplied','linkedinMarkOpportunity','linkedinDiscard','linkedinCopyFollowup'])
+    assert.match(LI,new RegExp('function\\s+'+fn+'\\s*\\('),fn);
+  assert.match(LI,/CONVERTIBLE_STATES/);
+  assert.match(LI,/Primero califica el prospecto antes de pasarlo a Clientes/);
+  assert.match(LI,/Próximo seguimiento/);
+  assert.match(LI,/VENCIDO/);
+});
+
+test('conversion and analysis have in-flight guards against repeated clicks',()=>{
+  assert.match(LI,/analyzeBusy=new Set\(\)/);
+  assert.match(LI,/convertBusy=new Set\(\)/);
+  assert.match(LI,/statusBusy=new Set\(\)/);
+  assert.match(LI,/convertBusy\.has\(id\)/);
+  assert.match(LI,/f\.Convertido&&Array\.isArray\(f\.Cliente\)/);
+});
+
+
+test('funnel rejects impossible transitions and re-analysis does not regress active stages',()=>{
+  assert.match(LI,/function stateAllowed\(/);
+  assert.match(LI,/stateAllowed\(id,\['Calificado'\],'pasar a Por contactar'\)/);
+  assert.match(LI,/stateAllowed\(id,\['Contactado'\],'marcar como Respondió'\)/);
+  assert.match(LI,/stateAllowed\(id,\['Respondió'\],'marcar como Oportunidad'\)/);
+  assert.match(LI,/\['Descubierto','Analizado','Calificado'\]\.indexOf\(f\.Estado\|\|'Descubierto'\)>=0/);
+});
+
+test('short phone fragments are not used as dedupe identifiers',()=>{
+  assert.match(LI,/d\.length>=9\?d\.slice\(-9\):''/);
+  assert.match(WORKER,/phoneDigitsRaw\.length >= 9 \? phoneDigitsRaw\.slice\(-9\) : ""/);
+});
+
+test('webhook idempotency uses the real LinkedIn lead id, not click attribution',()=>{
+  const start=WORKER.indexOf('async function handleLinkedin');
+  const end=WORKER.indexOf('async function syncLinkedinInboundProspect',start);
+  const fn=WORKER.slice(start,end);
+  assert.match(fn,/const eventId = norm\.linkedinLeadId;/);
+  assert.doesNotMatch(fn,/const eventId = norm\.linkedinLeadId \|\| norm\.linkedinClickId/);
 });

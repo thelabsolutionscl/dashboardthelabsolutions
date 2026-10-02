@@ -71,8 +71,9 @@ El Worker normaliza `user_column_data` y crea Cliente + Agent_Queue (`Source=goo
 LinkedIn Lead Gen Forms no manda webhook nativo simple → usa Make/Zapier:
 1. Trigger: nuevo lead en LinkedIn.
 2. Acción HTTP `POST /webhooks/linkedin` con header `X-Linkedin-Webhook-Key: <LINKEDIN_WEBHOOK_KEY>` y JSON
-   `{ name, company, jobTitle, email, phone, service, message, campaign, linkedinClickId }`.
-Crea Cliente + Agent_Queue (`Agente=LINKEDIN_AGENT`, `Source=linkedin`).
+   `{ name, company, jobTitle, email, phone, service, message, campaign, linkedinLeadId, linkedinClickId, linkedinUrl }`.
+3. `LINKEDIN_WEBHOOK_KEY` es obligatoria y exclusiva; `PUBLIC_LEAD_KEY` no autoriza esta ruta.
+Crea/deduplica Cliente + Agent_Queue (`Agente=LINKEDIN_AGENT`, `Source=linkedin`) y refleja el evento en `LinkedIn_Prospects`.
 
 ## 7. Troubleshooting
 - **401**: clave incorrecta o ausente (header).

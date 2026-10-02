@@ -80,8 +80,7 @@ Venga de donde venga, el lead se aplana a una **forma interna única**
 infiere: `gclid` → `google_ads`, `li_fat_id` → `linkedin`, si no → `web`.
 
 ### Paso 3 — Persistencia (`createLeadAndQueue`)
-1. **Dedupe**: busca un Cliente existente por email/teléfono. Si existe, lo
-   reutiliza y refresca interés/cargo sin pisar notas ni fecha de primer contacto.
+1. **Dedupe**: busca un Cliente existente por email/teléfono y, para LinkedIn, también por URL de perfil. Si existe, lo reutiliza y refresca interés/cargo sin pisar notas ni fecha de primer contacto.
 2. Crea la tarea en **Agent_Queue** (`Estado=Pendiente`, agente según canal,
    `Prioridad=Alta` para google_ads y `Media` para el resto).
 3. **Speed-to-lead**: email automático de "recibimos tu solicitud" vía Resend.
@@ -129,18 +128,20 @@ Content-Type: application/json
   "service": "Merchandising",
   "message": "Necesitamos kit de bienvenida para 200 colaboradores nuevos",
   "campaign": "linkedin-merch-b2b",
-  "linkedinClickId": "li-abc123"
+  "linkedinLeadId": "lead-987654",
+  "linkedinClickId": "li-abc123",
+  "linkedinUrl": "https://www.linkedin.com/in/maria-gonzalez"
 }
 ```
 
-**② El Worker valida y normaliza** — verifica la llave (401 si falla),
-`normalizeLinkedin` aplana el payload y marca `source: "linkedin"`.
+**② El Worker valida y normaliza** — exige `LINKEDIN_WEBHOOK_KEY` exclusiva (no acepta la clave pública de la web), rechaza payloads vacíos, normaliza la URL del perfil y marca `source: "linkedin"`. Si llega `linkedinLeadId`, el KV evita procesar dos veces el mismo reintento durante 30 días.
 
 **③ Crea Cliente + tarea**
 - Busca duplicados por `maria@retail.cl` → no existe → crea **Cliente** (Empresa,
-  Contacto, Cargo, Origen `linkedin`, Servicio interés `Merchandising`, tracking).
+  Contacto, Cargo, Origen `LinkedIn`, Etapa `Lead nuevo`, Servicio interés `Merchandising`, tracking).
 - Crea tarea en **Agent_Queue**: `Evento=linkedin.lead_received`,
   `Agente=LINKEDIN_AGENT`, `Estado=Pendiente`, `Prioridad=Media`, `Source=linkedin`.
+- Registra el mismo evento en **LinkedIn_Prospects** como `Fuente=Lead Gen Form`, vinculado al Cliente. Si Make/Zapier reintenta el mismo `linkedinLeadId`, se actualiza/reutiliza en vez de duplicarlo.
 - Email automático a María: *"¡Recibimos tu solicitud! Te contactamos en <24h hábiles"*.
 - Responde `{ ok: true, clienteId: "rec…", queueId: "rec…" }`.
 
@@ -185,7 +186,7 @@ pasas el caso al `QUOTE_AGENT` para los 200 kits, y si no responde, el
   alguien presione Procesar (salvo que actives `AUTO_PROCESS_LEADS`).
 - La `X-Public-Lead-Key` de la web **no es secreto fuerte** (viaja en el bundle);
   es solo fricción anti-bot.
-- LinkedIn **depende de Make/Zapier** como puente.
+- LinkedIn **depende de Make/Zapier** como puente para Lead Gen Forms hasta conectar una integración OAuth oficial. El webhook exige una clave dedicada.
 - Los agentes **sugieren, no ejecutan** la venta: el cierre sigue siendo humano.
 
 ---

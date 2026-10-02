@@ -113,7 +113,7 @@ curl -X POST https://thelab-leads-worker.TU-SUB.workers.dev/lead \
 curl -X POST https://thelab-leads-worker.TU-SUB.workers.dev/webhooks/linkedin \
   -H "Content-Type: application/json" \
   -H "X-Linkedin-Webhook-Key: TU_KEY" \
-  -d '{"name":"María González","company":"Retail Demo","jobTitle":"Marketing Manager","email":"maria@retail.cl","service":"Merchandising","campaign":"linkedin-merch-b2b","linkedinClickId":"TEST-LI"}'
+  -d '{"name":"María González","company":"Retail Demo","jobTitle":"Marketing Manager","email":"maria@retail.cl","service":"Merchandising","campaign":"linkedin-merch-b2b","linkedinLeadId":"lead-demo-001","linkedinClickId":"TEST-LI","linkedinUrl":"https://www.linkedin.com/in/maria-gonzalez"}'
 
 # Link del portal de un cliente (lo mismo que hace el botón del dashboard)
 curl -X POST https://thelab-leads-worker.TU-SUB.workers.dev/portal/link \
@@ -121,4 +121,4 @@ curl -X POST https://thelab-leads-worker.TU-SUB.workers.dev/portal/link \
   -H "X-Portal-Admin-Key: TU_PORTAL_ADMIN_KEY" \
   -d '{"clienteId":"recXXXXXXXXXXXXXX","dias":30}'
 ```
-Respuesta OK: `{ "ok": true, "clienteId": "rec…", "queueId": "rec…" }`.
+Respuesta OK: `{ "ok": true, "clienteId": "rec…", "queueId": "rec…" }`. El webhook de LinkedIn requiere `LINKEDIN_WEBHOOK_KEY`; no existe fallback a la clave pública de `/lead`. Los reintentos con el mismo `linkedinLeadId` se deduplican y el lead queda también trazado en `LinkedIn_Prospects`.
