@@ -3116,7 +3116,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3186,6 +3186,46 @@ export default {
         email:authorized.identity.email,role:authorized.identity.role,
         method:request.method,path:url.pathname.slice(0,180),
       }));
+    }
+
+    // LinkedIn has a dedicated projection + command endpoint. Marketing/sales
+    // never receive generic access to Clientes, event history or Airtable PAT.
+    if(url.pathname==='/linkedin/prospects'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET'||url.search)return json({error:'LinkedIn prospects request not allowed'},405,headers);
+      try{
+        const rows=await liReadAll(env,LINKEDIN_PROSPECTS_TABLE);
+        return json({ok:true,records:rows.map(liProject)},200,headers);
+      }catch(_){return json({error:'LinkedIn prospects unavailable'},503,headers);}
+    }
+    if(url.pathname==='/linkedin/metrics'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET'||url.search)return json({error:'LinkedIn metrics request not allowed'},405,headers);
+      try{return json({ok:true,...await liMetrics(env)},200,headers);}
+      catch(e){console.error('[linkedin-metrics]',e.message);return json({error:'LinkedIn metrics unavailable'},503,headers);}
+    }
+    if(url.pathname==='/linkedin/command'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'LinkedIn command method not allowed'},405,headers);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>70000)
+        return json({error:'LinkedIn command expects bounded JSON'},415,headers);
+      let body;try{const raw=await request.text();if(raw.length>70000)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid LinkedIn command JSON'},422,headers);}
+      if(!env.CRM_MUTATION_GUARD)return json({error:'LinkedIn atomic guard unavailable'},503,headers);
+      try{
+        const actor=authorized.identity
+          ?{email:authorized.identity.email,role:authorized.identity.role,seller:authorized.identity.seller}
+          :{legacy:true,role:'admin',email:'legacy-dashboard'};
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-crm-global'));
+        const guarded=await stub.fetch('https://crm-write.internal/linkedin-command',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...body,actor})
+        });
+        const outHeaders=new Headers(guarded.headers);Object.entries(CORS).forEach(([k,v])=>outHeaders.set(k,v));
+        outHeaders.set('Cache-Control','private, no-store');
+        return new Response(guarded.body,{status:guarded.status,headers:outHeaders});
+      }catch(_){return json({error:'LinkedIn atomic guard unavailable'},503,headers);}
     }
 
     // Problem reports are stored in their own Airtable table. Every signed user
