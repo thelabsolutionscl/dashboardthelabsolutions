@@ -1752,7 +1752,9 @@ async function handleLinkedin(request, env, ctx, cors) {
     return json({ ok: false, error: "Faltan datos del lead" }, 400, cors);
   }
 
-  const eventId = norm.linkedinLeadId || norm.linkedinClickId;
+  // li_fat_id identifica atribución/clic, no necesariamente una respuesta única
+  // de formulario. Solo el ID real del lead se usa como idempotency key.
+  const eventId = norm.linkedinLeadId;
   const idemKey = eventId ? "linkedin:webhook:" + eventId.slice(0, 180) : "";
   if (idemKey && env.RL) {
     try {
@@ -1789,7 +1791,7 @@ async function handleLinkedin(request, env, ctx, cors) {
 
 async function syncLinkedinInboundProspect(env, norm, clienteId) {
   try {
-    const leadId = norm.linkedinLeadId || norm.linkedinClickId;
+    const leadId = norm.linkedinLeadId;
     const fields = stripEmpty({
       Prospecto: norm.name,
       Empresa: norm.company,
@@ -2651,7 +2653,7 @@ async function airtableFindCliente(env, { email, phone, linkedinUrl }) {
   const clauses = [];
   if (email) clauses.push(`LOWER(TRIM({Email}))=LOWER('${esc(String(email).trim())}')`);
   const phoneDigitsRaw = phone ? String(phone).replace(/[^0-9]/g, "") : "";
-  const phoneDigits = phoneDigitsRaw.length >= 9 ? phoneDigitsRaw.slice(-9) : phoneDigitsRaw;
+  const phoneDigits = phoneDigitsRaw.length >= 9 ? phoneDigitsRaw.slice(-9) : "";
   if (phoneDigits)
     clauses.push(`RIGHT(REGEX_REPLACE({Teléfono} & "", "[^0-9]", ""), ${phoneDigits.length}) = '${phoneDigits}'`);
   if (linkedinUrl) clauses.push(`LOWER({LinkedIn URL} & "")=LOWER('${esc(String(linkedinUrl).trim())}')`);
