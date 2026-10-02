@@ -1787,25 +1787,40 @@ async function handleLinkedin(request, env, ctx, cors) {
 
 async function syncLinkedinInboundProspect(env, norm, clienteId) {
   try {
-    await airtableCreateTolerant(
-      env,
-      "LinkedIn_Prospects",
-      stripEmpty({
-        Prospecto: norm.name,
-        Empresa: norm.company,
-        Cargo: norm.jobTitle,
-        "LinkedIn URL": norm.linkedinUrl,
-        Email: norm.email,
-        "Teléfono": norm.phone,
-        Fuente: "Lead Gen Form",
-        Estado: "Cliente",
-        Campaña: norm.campaign || norm.utmCampaign,
-        Cliente: clienteId ? [clienteId] : undefined,
-        Convertido: !!clienteId || undefined,
-        "LinkedIn Lead ID": norm.linkedinLeadId || norm.linkedinClickId,
-        "Fecha descubrimiento": new Date().toISOString(),
-      })
-    );
+    const leadId = norm.linkedinLeadId || norm.linkedinClickId;
+    const fields = stripEmpty({
+      Prospecto: norm.name,
+      Empresa: norm.company,
+      Cargo: norm.jobTitle,
+      "LinkedIn URL": norm.linkedinUrl,
+      Email: norm.email,
+      "Teléfono": norm.phone,
+      Fuente: "Lead Gen Form",
+      Estado: "Cliente",
+      Campaña: norm.campaign || norm.utmCampaign,
+      Cliente: clienteId ? [clienteId] : undefined,
+      Convertido: !!clienteId || undefined,
+      "LinkedIn Lead ID": leadId,
+      "Fecha descubrimiento": new Date().toISOString(),
+    });
+
+    let existing = null;
+    if (leadId) {
+      const safe = String(leadId).replace(/'/g, "\\'");
+      const url =
+        `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("LinkedIn_Prospects")}` +
+        `?maxRecords=1&filterByFormula=${encodeURIComponent(`{LinkedIn Lead ID}='${safe}'`)}`;
+      const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+      if (r.ok) existing = (await r.json())?.records?.[0]?.id || null;
+    }
+
+    if (existing) {
+      const patch = { ...fields };
+      delete patch["Fecha descubrimiento"];
+      await airtableUpdateTolerant(env, "LinkedIn_Prospects", existing, patch);
+    } else {
+      await airtableCreateTolerant(env, "LinkedIn_Prospects", fields);
+    }
   } catch (e) {
     console.error("[leads-worker] LinkedIn_Prospects:", e.message);
   }
