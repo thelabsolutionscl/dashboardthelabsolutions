@@ -1948,6 +1948,27 @@ function liProspectInput(raw){
   Object.keys(out).forEach(k=>{if(out[k]==='')delete out[k];});
   return out;
 }
+function liProspectEdit(raw,current){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const allowed=['Prospecto','Empresa','Cargo','LinkedIn URL','Sitio web','Email','Teléfono','Industria','Segmento','Fuente','Identidad','Campaña','Notas'];
+  if(Object.keys(raw).some(k=>!allowed.includes(k)))return null;
+  const patch={},merged={...(current||{})};
+  for(const key of allowed){
+    if(!Object.hasOwn(raw,key))continue;
+    const value=key==='LinkedIn URL'?liUrl(raw[key]):
+      key==='Email'?liEmail(raw[key]):
+      liText(raw[key],key==='Notas'?8000:key==='Sitio web'?2000:key==='Teléfono'?100:key==='Campaña'?500:500);
+    if(key==='LinkedIn URL'&&raw[key]&&!value)return null;
+    if(key==='Email'&&value&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))return null;
+    if(key==='Segmento'&&value&&!LINKEDIN_SEGMENTS.has(value))return null;
+    if(key==='Fuente'&&value&&!LINKEDIN_SOURCES.has(value))return null;
+    if(key==='Identidad'&&value&&!LINKEDIN_IDENTITIES.has(value))return null;
+    patch[key]=value||null;
+    if(value)merged[key]=value;else delete merged[key];
+  }
+  if(!liText(merged.Prospecto,500)&&!liText(merged.Empresa,500))return null;
+  return{patch,merged};
+}
 function liAnalysisInput(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
   const score=Number(raw['Score B2B']);
@@ -2119,13 +2140,13 @@ export class CrmMutationGuard {
     const current=prospect.fields||{},oldState=current.Estado||'Descubierto';
 
     if(action==='update'){
-      const next=liProspectInput(data.fields);
-      if(!next)return this._json({error:'Datos del prospecto inválidos'},422);
+      const edit=liProspectEdit(data.fields,current);
+      if(!edit||!Object.keys(edit.patch).length)return this._json({error:'Datos del prospecto inválidos'},422);
       let all;try{all=await liReadAll(this.env,LINKEDIN_PROSPECTS_TABLE);}
       catch(_){return this._json({error:'No se pudo verificar duplicados de LinkedIn'},503);}
-      if(all.some(r=>r.id!==id&&liDuplicate(next,r.fields||{})))
+      if(all.some(r=>r.id!==id&&liDuplicate(edit.merged,r.fields||{})))
         return this._json({error:'Ese prospecto ya existe en LinkedIn'},409);
-      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,next);}
+      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,edit.patch);}
       catch(e){return this._json({error:e.message||'No se pudo editar el prospecto'},e.status&&e.status<500?422:503);}
       return this._json({ok:true,record:liProject(updated)},200);
     }
