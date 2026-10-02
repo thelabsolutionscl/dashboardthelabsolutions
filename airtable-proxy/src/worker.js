@@ -2207,7 +2207,7 @@ export class CrmMutationGuard {
           'Fecha primer contacto':liChileDate(),
           'Notas internas':['Prospección LinkedIn',current.Identidad?'Identidad: '+current.Identidad:'',current.Campaña?'Campaña: '+current.Campaña:'',current['LinkedIn URL']||''].filter(Boolean).join(' · ')
         };
-        if(actor.role==='sales'&&['florencia','nicanor','gustavo'].includes(actor.seller))cf.Vendedor=actor.seller;
+        if(actor.role==='sales'&&SELLER_SCOPE_NAMES.has(actor.seller))cf.Vendedor=actor.seller;
         else if(['admin','operator'].includes(actor.role)||legacy){
           if(current.Identidad==='Gustavo')cf.Vendedor='gustavo';
           if(current.Identidad==='Nicanor')cf.Vendedor='nicanor';
