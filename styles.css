@@ -722,7 +722,7 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .topbar{padding:0 18px;gap:10px}
   .topbar-nav,.global-search,.icon-dock{display:none}
   .topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:auto}
-  .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai,.user-chip{display:none!important}
+  .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none!important}
   .mobile-menu-btn:not(#mobilePlusBtn){display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin-left:4px}
   #nuevoDropdown{display:none!important}
   .main{padding:18px}
