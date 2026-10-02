@@ -13,7 +13,7 @@
 #   BASE_URL          URL del Worker            (default: http://localhost:8787)
 #   LEAD_KEY          X-Public-Lead-Key        (requerido para /lead)
 #   GOOGLE_ADS_KEY    X-Google-Ads-Webhook-Key (opcional, salta el test si falta)
-#   LINKEDIN_KEY      X-Linkedin-Webhook-Key   (default: $LEAD_KEY — el Worker acepta el fallback)
+#   LINKEDIN_KEY      X-Linkedin-Webhook-Key   (obligatoria para /webhooks/linkedin)
 #
 # Levanta el Worker primero:  cd lead-worker && npx wrangler dev
 #
@@ -22,7 +22,7 @@ set -uo pipefail
 BASE_URL="${BASE_URL:-http://localhost:8787}"
 LEAD_KEY="${LEAD_KEY:-}"
 GOOGLE_ADS_KEY="${GOOGLE_ADS_KEY:-}"
-LINKEDIN_KEY="${LINKEDIN_KEY:-$LEAD_KEY}"
+LINKEDIN_KEY="${LINKEDIN_KEY:-}"
 
 GREEN=$'\033[0;32m'; RED=$'\033[0;31m'; YEL=$'\033[0;33m'; DIM=$'\033[0;90m'; NC=$'\033[0m'
 PASS=0; FAIL=0; SKIP=0
@@ -113,9 +113,9 @@ if [ -n "$LINKEDIN_KEY" ]; then
     "name":"María González","company":"Retail Demo","jobTitle":"Marketing Manager",
     "email":"maria@retail.cl","service":"Merchandising",
     "message":"Necesitamos kit de bienvenida para 200 colaboradores nuevos",
-    "campaign":"linkedin-merch-b2b","linkedinClickId":"li-abc123"}'
+    "campaign":"linkedin-merch-b2b","linkedinLeadId":"lead-demo-001","linkedinClickId":"li-abc123","linkedinUrl":"https://www.linkedin.com/in/maria-gonzalez-demo"}'
 else
-  echo; echo "${YEL}↷ LinkedIn: SKIP (define LINKEDIN_KEY o LEAD_KEY)${NC}"; SKIP=$((SKIP+1))
+  echo; echo "${YEL}↷ LinkedIn: SKIP (define LINKEDIN_KEY)${NC}"; SKIP=$((SKIP+1))
 fi
 
 # ── 4) Auth negativa: llave incorrecta debe dar 401 ──────────────────────
