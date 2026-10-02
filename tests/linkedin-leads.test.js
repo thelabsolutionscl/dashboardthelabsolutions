@@ -36,12 +36,15 @@ test('prospect conversion deduplicates server-side before creating Clientes',()=
   assert.match(PROXY,/liMutate\(this\.env,'Clientes','POST'/);
 });
 
-test('LINKEDIN_AGENT scores and drafts outreach',()=>{
-  assert.match(LI,/callAgentClaude\('LINKEDIN'/);
-  assert.match(LI,/SCORE_B2B/);
-  assert.match(LI,/MENSAJE_LINKEDIN/);
-  assert.match(LI,/FOLLOW_UP/);
-  assert.match(LI,/IDENTIDAD_RECOMENDADA/);
+test('LINKEDIN_AGENT scores and drafts outreach server-side',()=>{
+  assert.doesNotMatch(LI,/callAgentClaude\('LINKEDIN'/);
+  assert.match(LI,/action:'analyze'/);
+  assert.match(PROXY,/function liRunAgentAnalysis\(/);
+  assert.match(PROXY,/score_b2b/);
+  assert.match(PROXY,/mensaje_linkedin/);
+  assert.match(PROXY,/follow_up/);
+  assert.match(PROXY,/identidad_recomendada/);
+  assert.match(PROXY,/reserveAiBudget\(env,payload,'linkedin-agent'\)/);
 });
 
 test('personal outreach remains human initiated',()=>{
@@ -108,6 +111,7 @@ test('conversion and analysis have in-flight guards against repeated clicks',()=
   assert.match(LI,/statusBusy=new Set\(\)/);
   assert.match(LI,/convertBusy\.has\(id\)/);
   assert.match(LI,/f\.Convertido&&Array\.isArray\(f\.Cliente\)/);
+  assert.match(PROXY,/linkedin:convert:/);
 });
 
 
@@ -116,7 +120,8 @@ test('funnel rejects impossible transitions and re-analysis does not regress act
   assert.match(LI,/stateAllowed\(id,\['Calificado'\],'pasar a Por contactar'\)/);
   assert.match(LI,/stateAllowed\(id,\['Contactado'\],'marcar como Respondió'\)/);
   assert.match(LI,/stateAllowed\(id,\['Respondió'\],'marcar como Oportunidad'\)/);
-  assert.match(LI,/\['Descubierto','Analizado','Calificado'\]\.indexOf\(f\.Estado\|\|'Descubierto'\)>=0/);
+  assert.match(PROXY,/fields\.Estado=\['Descubierto','Analizado','Calificado'\]\.includes\(oldState\)/);
+  assert.match(PROXY,/allowedFrom=\{/);
 });
 
 test('short phone fragments are not used as dedupe identifiers',()=>{
