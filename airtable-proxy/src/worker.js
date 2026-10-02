@@ -1850,6 +1850,269 @@ export class AiBudgetGuard {
   }
 }
 
+
+/* ── LinkedIn B2B: staging, event log and server-side metrics ─────────── */
+const LINKEDIN_PROSPECTS_TABLE='LinkedIn_Prospects';
+const LINKEDIN_EVENTS_TABLE='LinkedIn_Events';
+const LINKEDIN_STATES=['Descubierto','Analizado','Calificado','Por contactar','Contactado','Respondió','Oportunidad','Cliente','Descartado'];
+const LINKEDIN_CONVERTIBLE=new Set(['Calificado','Por contactar','Contactado','Respondió','Oportunidad']);
+const LINKEDIN_IDENTITIES=new Set(['The Lab Solutions','Gustavo','Nicanor']);
+const LINKEDIN_SEGMENTS=new Set(['Agencia marketing / BTL','Marketing / Brand','Trade Marketing','RRHH / People','Compras','Eventos / Productora','Retail / Locales','Merchandising','Otro']);
+const LINKEDIN_SOURCES=new Set(['Outbound','Lead Gen Form','Interacción','Importado']);
+function liText(v,max=4000){return String(v??'').trim().replace(/[\u0000-\u0008\u000b\u000e-\u001f]/g,'').slice(0,max);}
+function liNorm(v){return liText(v,1000).replace(/\s+/g,' ').toLowerCase();}
+function liEmail(v){return liText(v,320).toLowerCase();}
+function liPhone(v){const d=String(v||'').replace(/\D/g,'');return d.length>=9?d.slice(-9):'';}
+function liUrl(v){
+  const raw=liText(v,2000);if(!raw)return '';
+  try{const u=new URL(raw);if(!/(^|\.)linkedin\.com$/i.test(u.hostname))return '';
+    const path=(u.pathname||'').replace(/\/{2,}/g,'/').replace(/\/$/,'');
+    return ('https://www.linkedin.com'+(path||'')).toLowerCase();
+  }catch(_){return '';}
+}
+function liChileDate(){
+  try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+  catch(_){return new Date().toISOString().slice(0,10);}
+}
+async function liReadAll(env,table){
+  if(!env.AIRTABLE_TOKEN)throw new Error('Airtable unavailable');
+  const rows=[],seen=new Set();let offset='';
+  for(let page=0;page<100;page++){
+    const u=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+'?pageSize=100'+(offset?'&offset='+encodeURIComponent(offset):'');
+    const r=await fetch(u,{method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+    if(!r.ok||r.status>=300&&r.status<400)throw new Error('Airtable '+table+' read '+r.status);
+    const j=await r.json();
+    if(!Array.isArray(j?.records))throw new Error('Airtable malformed '+table);
+    rows.push(...j.records);
+    if(!j.offset)return rows;
+    if(typeof j.offset!=='string'||seen.has(j.offset))throw new Error('Airtable invalid pagination');
+    seen.add(j.offset);offset=j.offset;
+  }
+  throw new Error('Airtable pagination limit');
+}
+async function liReadOne(env,table,id){
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(id||'')))return null;
+  const r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+'/'+id,{
+    method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+  if(r.status===404)return null;
+  if(!r.ok||r.status>=300&&r.status<400)throw new Error('Airtable '+table+' record read '+r.status);
+  const row=await r.json();
+  return row&&row.id?row:null;
+}
+async function liMutate(env,table,method,id,fields){
+  const url=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+(id?'/'+id:'');
+  const r=await fetch(url,{method,redirect:'manual',
+    headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,'Content-Type':'application/json',Accept:'application/json'},
+    body:JSON.stringify({fields,typecast:true})});
+  if(!r.ok||r.status>=300&&r.status<400){
+    const err=await r.clone().json().catch(()=>null);
+    const e=new Error(err?.error?.message||('Airtable '+table+' '+method+' '+r.status));e.status=r.status;throw e;
+  }
+  return await r.json();
+}
+function liProject(row){
+  const f=row?.fields||{};
+  const names=['Prospecto','Empresa','Cargo','LinkedIn URL','Sitio web','Email','Teléfono','Industria','Segmento','Fuente','Identidad','Estado','Score B2B','Servicio interés','Decisor','Motivo IA','Mensaje inicial','Follow-up','Próxima acción','Campaña','Notas','Cliente','Fecha descubrimiento','Fecha último contacto','Próximo seguimiento','Convertido','LinkedIn Lead ID'];
+  const fields={};for(const k of names)if(Object.hasOwn(f,k))fields[k]=f[k];
+  return{id:row.id,createdTime:row.createdTime,fields};
+}
+function liDuplicate(a,b){
+  const af=a||{},bf=b||{},ae=liEmail(af.Email),be=liEmail(bf.Email),
+    au=liUrl(af['LinkedIn URL']),bu=liUrl(bf['LinkedIn URL']),
+    ap=liPhone(af['Teléfono']),bp=liPhone(bf['Teléfono']),
+    an=liNorm(af.Prospecto),bn=liNorm(bf.Prospecto),ac=liNorm(af.Empresa),bc=liNorm(bf.Empresa);
+  return !!((ae&&be&&ae===be)||(au&&bu&&au===bu)||(ap&&bp&&ap===bp)||(an&&bn&&ac&&bc&&an===bn&&ac===bc));
+}
+function liClientMatches(prospect,client){
+  const p=prospect||{},c=client||{},pe=liEmail(p.Email),ce=liEmail(c.Email),
+    pu=liUrl(p['LinkedIn URL']),cu=liUrl(c['LinkedIn URL']),
+    pp=liPhone(p['Teléfono']),cp=liPhone(c['Teléfono']),
+    pn=liNorm(p.Prospecto),cn=liNorm(c.Contacto),pc=liNorm(p.Empresa),cc=liNorm(c.Empresa);
+  return !!((pe&&ce&&pe===ce)||(pu&&cu&&pu===cu)||(pp&&cp&&pp===cp)||(pn&&cn&&pc&&cc&&pn===cn&&pc===cc));
+}
+function liProspectInput(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const out={
+    Prospecto:liText(raw.Prospecto,500),Empresa:liText(raw.Empresa,500),Cargo:liText(raw.Cargo,500),
+    'LinkedIn URL':liUrl(raw['LinkedIn URL']),'Sitio web':liText(raw['Sitio web'],2000),
+    Email:liEmail(raw.Email),'Teléfono':liText(raw['Teléfono'],100),Industria:liText(raw.Industria,500),
+    Segmento:liText(raw.Segmento,100),Fuente:liText(raw.Fuente,100),Identidad:liText(raw.Identidad,100),
+    Campaña:liText(raw.Campaña,500),Notas:liText(raw.Notas,8000)
+  };
+  if(!out.Prospecto&&!out.Empresa)return null;
+  if(raw['LinkedIn URL']&&!out['LinkedIn URL'])return null;
+  if(out.Email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(out.Email))return null;
+  if(out.Segmento&&!LINKEDIN_SEGMENTS.has(out.Segmento))return null;
+  if(out.Fuente&&!LINKEDIN_SOURCES.has(out.Fuente))return null;
+  if(out.Identidad&&!LINKEDIN_IDENTITIES.has(out.Identidad))return null;
+  Object.keys(out).forEach(k=>{if(out[k]==='')delete out[k];});
+  return out;
+}
+function liProspectEdit(raw,current){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const allowed=['Prospecto','Empresa','Cargo','LinkedIn URL','Sitio web','Email','Teléfono','Industria','Segmento','Fuente','Identidad','Campaña','Notas'];
+  if(Object.keys(raw).some(k=>!allowed.includes(k)))return null;
+  const patch={},merged={...(current||{})};
+  for(const key of allowed){
+    if(!Object.hasOwn(raw,key))continue;
+    const value=key==='LinkedIn URL'?liUrl(raw[key]):
+      key==='Email'?liEmail(raw[key]):
+      liText(raw[key],key==='Notas'?8000:key==='Sitio web'?2000:key==='Teléfono'?100:key==='Campaña'?500:500);
+    if(key==='LinkedIn URL'&&raw[key]&&!value)return null;
+    if(key==='Email'&&value&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))return null;
+    if(key==='Segmento'&&value&&!LINKEDIN_SEGMENTS.has(value))return null;
+    if(key==='Fuente'&&value&&!LINKEDIN_SOURCES.has(value))return null;
+    if(key==='Identidad'&&value&&!LINKEDIN_IDENTITIES.has(value))return null;
+    patch[key]=value||null;
+    if(value)merged[key]=value;else delete merged[key];
+  }
+  if(!liText(merged.Prospecto,500)&&!liText(merged.Empresa,500))return null;
+  return{patch,merged};
+}
+function liAnalysisInput(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const score=Number(raw['Score B2B']);
+  if(!Number.isInteger(score)||score<1||score>10)return null;
+  const out={
+    'Score B2B':score,'Servicio interés':liText(raw['Servicio interés'],200),
+    Decisor:liText(raw.Decisor,20),'Mensaje inicial':liText(raw['Mensaje inicial'],6000),
+    'Follow-up':liText(raw['Follow-up'],6000),'Próxima acción':liText(raw['Próxima acción'],6000),
+    'Motivo IA':liText(raw['Motivo IA'],8000),Identidad:liText(raw.Identidad,100)
+  };
+  if(out.Decisor&&!['Alto','Medio','Bajo'].includes(out.Decisor))delete out.Decisor;
+  if(out.Identidad&&!LINKEDIN_IDENTITIES.has(out.Identidad))delete out.Identidad;
+  Object.keys(out).forEach(k=>{if(out[k]==='')delete out[k];});
+  return out;
+}
+function liParseJsonText(text){
+  const raw=String(text||'').trim();
+  if(!raw)return null;
+  try{return JSON.parse(raw);}catch(_){}
+  const a=raw.indexOf('{'),b=raw.lastIndexOf('}');
+  if(a>=0&&b>a)try{return JSON.parse(raw.slice(a,b+1));}catch(_){}
+  return null;
+}
+function liService(v){
+  const values=['Activaciones','Premiaciones','Merchandising','Impresión 3D','Volumétricos','Cartelería','Papelería','Chip The Lab','Otro'];
+  const z=liNorm(v);return values.find(x=>liNorm(x)===z)||values.find(x=>z&&z.includes(liNorm(x)))||(z?'Otro':'');
+}
+async function liRunAgentAnalysis(env,prospect){
+  if(!env.ANTHROPIC_TOKEN)throw Object.assign(new Error('Motor IA no configurado'),{status:503});
+  const f=prospect?.fields||{};
+  const system=['Eres el LINKEDIN_AGENT de The Lab Solutions, empresa B2B de fabricación digital en Santiago, Chile.',
+    'Servicios: Activaciones, Premiaciones, Merchandising, Impresión 3D, Volumétricos, Cartelería, Papelería, Chip The Lab.',
+    'Evalúa únicamente los datos entregados. No inventes tamaño de empresa, presupuesto, contactos, proyectos, actividad reciente ni señales externas.',
+    'El mensaje debe ser breve, consultivo y humano; no afirmar que viste algo que no está en los datos.',
+    'Responde SOLO JSON válido: {"score_b2b":1,"servicio_recomendado":"Otro","decisor":"Bajo","mensaje_linkedin":"","follow_up":"","proxima_accion":"","motivo_ia":"","identidad_recomendada":"The Lab Solutions"}'].join('\n');
+  const user=['Prospecto LinkedIn','Nombre: '+(f.Prospecto||'desconocido'),'Empresa: '+(f.Empresa||'desconocida'),'Cargo: '+(f.Cargo||'desconocido'),'Industria: '+(f.Industria||'desconocida'),'Segmento: '+(f.Segmento||'sin clasificar'),'Notas: '+(f.Notas||'sin notas'),'Campaña: '+(f.Campaña||'sin campaña')].join('\n');
+  const payload={model:'claude-haiku-4-5',max_tokens:650,system,messages:[{role:'user',content:user}]};
+  const reservation=await reserveAiBudget(env,payload,'linkedin-agent');
+  if(!reservation.ok)throw Object.assign(new Error(reservation.error||'Presupuesto IA agotado'),{status:reservation.status||429,code:'AI_BUDGET_LIMIT'});
+  const upstream=await fetch(ANTHROPIC_BASE+'/v1/messages',{method:'POST',headers:{'x-api-key':env.ANTHROPIC_TOKEN,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify(payload)});
+  await reconcileAiBudget(env,reservation,upstream.clone()).catch(()=>{});
+  if(!upstream.ok)throw Object.assign(new Error('Claude no pudo analizar el prospecto'),{status:upstream.status>=500?503:502});
+  const body=await upstream.json().catch(()=>null);
+  const text=Array.isArray(body?.content)?body.content.filter(x=>x?.type==='text').map(x=>x.text||'').join('\n'):'';
+  const obj=liParseJsonText(text);
+  const score=Number(obj?.score_b2b);
+  if(!Number.isInteger(score)||score<1||score>10)throw Object.assign(new Error('La IA no devolvió un score válido'),{status:502});
+  const decisor=['Alto','Medio','Bajo'].includes(obj?.decisor)?obj.decisor:undefined;
+  const identity=LINKEDIN_IDENTITIES.has(obj?.identidad_recomendada)?obj.identidad_recomendada:undefined;
+  const fields={'Score B2B':score,'Servicio interés':liService(obj?.servicio_recomendado),Decisor:decisor,'Mensaje inicial':liText(obj?.mensaje_linkedin,6000),'Follow-up':liText(obj?.follow_up,6000),'Próxima acción':liText(obj?.proxima_accion,6000),'Motivo IA':liText(obj?.motivo_ia,8000)};
+  if(!f.Identidad&&identity)fields.Identidad=identity;
+  Object.keys(fields).forEach(k=>fields[k]===undefined&&delete fields[k]);
+  return fields;
+}
+async function liWriteEvent(env,{prospect,clienteId,type,oldState,newState,actor,detail}){
+  try{
+    const f=prospect?.fields||{},eventId='LI-'+Date.now().toString(36)+'-'+crypto.randomUUID().slice(0,8);
+    await liMutate(env,LINKEDIN_EVENTS_TABLE,'POST','',{
+      'Evento ID':eventId,'Prospecto':prospect?.id?[prospect.id]:undefined,
+      'Cliente':clienteId?[clienteId]:undefined,'Tipo':type,
+      'Estado anterior':oldState||undefined,'Estado nuevo':newState||undefined,
+      'Fecha':new Date().toISOString(),'Campaña':f.Campaña||undefined,
+      'Identidad':f.Identidad||undefined,'Segmento':f.Segmento||undefined,
+      'Fuente':f.Fuente||undefined,'Actor':liText(actor?.email||actor?.role||'dashboard',300),
+      'Score B2B':Number(f['Score B2B'])||undefined,'Detalle':liText(detail,8000)||undefined
+    });
+  }catch(e){console.error('[linkedin-event]',e.message);}
+}
+async function liMetrics(env){
+  const [prospects,events,orders]=await Promise.all([
+    liReadAll(env,LINKEDIN_PROSPECTS_TABLE),liReadAll(env,LINKEDIN_EVENTS_TABLE),liReadAll(env,'Pedidos')
+  ]);
+  const stateRank={Descubierto:0,Analizado:1,Calificado:2,'Por contactar':3,Contactado:4,'Respondió':5,Oportunidad:6,Cliente:7,Descartado:-1};
+  const active=prospects.filter(r=>!['Cliente','Descartado'].includes(r.fields?.Estado||'Descubierto'));
+  const atLeast=(n)=>prospects.filter(r=>(stateRank[r.fields?.Estado||'Descubierto']??0)>=n).length;
+  const contacted=atLeast(4),responded=atLeast(5),opportunities=atLeast(6),clients=prospects.filter(r=>r.fields?.Estado==='Cliente'||r.fields?.Convertido).length;
+  const overdue=prospects.filter(r=>{
+    const f=r.fields||{};if(!f['Próximo seguimiento']||['Cliente','Descartado'].includes(f.Estado))return false;
+    const t=Date.parse(f['Próximo seguimiento']);return Number.isFinite(t)&&t<=Date.now();
+  }).length;
+  const byProspect=new Map();
+  for(const e of events){
+    const p=Array.isArray(e.fields?.Prospecto)&&e.fields.Prospecto[0];
+    if(!p)continue;const arr=byProspect.get(p)||[];arr.push(e);byProspect.set(p,arr);
+  }
+  const responseHours=[];
+  for(const [pid,arr] of byProspect){
+    const sorted=arr.slice().sort((a,b)=>Date.parse(a.fields?.Fecha||a.createdTime)-Date.parse(b.fields?.Fecha||b.createdTime));
+    const contact=sorted.find(e=>e.fields?.['Estado nuevo']==='Contactado');
+    const reply=contact&&sorted.find(e=>e.fields?.['Estado nuevo']==='Respondió'&&Date.parse(e.fields?.Fecha||e.createdTime)>=Date.parse(contact.fields?.Fecha||contact.createdTime));
+    if(contact&&reply){
+      const h=(Date.parse(reply.fields?.Fecha||reply.createdTime)-Date.parse(contact.fields?.Fecha||contact.createdTime))/36e5;
+      if(Number.isFinite(h)&&h>=0&&h<24*365)responseHours.push(h);
+    }
+  }
+  const orderAttribution=new Map();
+  const linkedByClient=new Map();
+  for(const p of prospects){
+    const cid=Array.isArray(p.fields?.Cliente)&&p.fields.Cliente[0];if(!cid)continue;
+    const arr=linkedByClient.get(cid)||[];arr.push(p);linkedByClient.set(cid,arr);
+  }
+  for(const arr of linkedByClient.values())arr.sort((a,b)=>Date.parse(a.fields?.['Fecha descubrimiento']||a.createdTime)-Date.parse(b.fields?.['Fecha descubrimiento']||b.createdTime));
+  for(const o of orders){
+    const f=o.fields||{};if(String(f['Estado pedido']||'')==='Cancelado')continue;
+    const cid=Array.isArray(f.Cliente)&&f.Cliente[0],date=Date.parse(String(f['Fecha ingreso']||'').slice(0,10)+'T12:00:00Z');
+    if(!cid||!Number.isFinite(date))continue;
+    const arr=(linkedByClient.get(cid)||[]).filter(p=>Date.parse(p.fields?.['Fecha descubrimiento']||p.createdTime)<=date);
+    if(!arr.length)continue;const p=arr[arr.length-1];
+    const net=Math.max(0,Number(f['Monto total (CLP)'])||0)/1.19;
+    orderAttribution.set(o.id,{prospectId:p.id,net});
+  }
+  const dims=['Campaña','Identidad','Segmento'];
+  const groups={};
+  for(const dim of dims){
+    const map=new Map();
+    for(const p of prospects){
+      const f=p.fields||{},key=liText(f[dim]||'Sin '+dim.toLowerCase(),500),st=f.Estado||'Descubierto';
+      const g=map.get(key)||{name:key,prospects:0,contacted:0,responded:0,opportunities:0,clients:0,revenue_net_after_linkedin:0,orders:0};
+      g.prospects++;if((stateRank[st]??0)>=4)g.contacted++;if((stateRank[st]??0)>=5)g.responded++;if((stateRank[st]??0)>=6)g.opportunities++;if(st==='Cliente'||f.Convertido)g.clients++;
+      map.set(key,g);
+    }
+    for(const a of orderAttribution.values()){
+      const p=prospects.find(x=>x.id===a.prospectId);if(!p)continue;
+      const key=liText(p.fields?.[dim]||'Sin '+dim.toLowerCase(),500),g=map.get(key);if(g){g.revenue_net_after_linkedin+=a.net;g.orders++;}
+    }
+    groups[dim.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')]=[...map.values()].map(g=>({
+      ...g,response_rate:g.contacted?g.responded/g.contacted:0,
+      opportunity_rate:g.responded?g.opportunities/g.responded:0,
+      client_rate:g.prospects?g.clients/g.prospects:0,
+      revenue_net_after_linkedin:Math.round(g.revenue_net_after_linkedin)
+    })).sort((a,b)=>b.revenue_net_after_linkedin-a.revenue_net_after_linkedin||b.clients-a.clients||b.prospects-a.prospects);
+  }
+  const avg=responseHours.length?responseHours.reduce((a,b)=>a+b,0)/responseHours.length:null;
+  const median=responseHours.length?responseHours.slice().sort((a,b)=>a-b)[Math.floor(responseHours.length/2)]:null;
+  return{
+    generated_at:new Date().toISOString(),
+    summary:{prospects:prospects.length,active:active.length,contacted,responded,opportunities,clients,overdue,
+      response_rate:contacted?responded/contacted:0,opportunity_rate:responded?opportunities/responded:0,
+      client_rate:prospects.length?clients/prospects.length:0,avg_response_hours:avg,median_response_hours:median,
+      revenue_net_after_linkedin:Math.round([...orderAttribution.values()].reduce((s,x)=>s+x.net,0)),attributed_orders:orderAttribution.size},
+    groups
+  };
+}
+
 /**
  * Serializa TODAS las altas de Pedidos/Cotizaciones recibidas por este proxy.
  * El GET y el POST se ejecutan dentro de la misma cola del mismo Durable
@@ -1874,7 +2137,8 @@ export class CrmMutationGuard {
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
-                ?this._handleSharedSimulation(request):path==='/scoped-patch'
+                ?this._handleSharedSimulation(request):path==='/linkedin-command'
+                ?this._handleLinkedinCommand(request):path==='/scoped-patch'
                   ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
@@ -1884,6 +2148,157 @@ export class CrmMutationGuard {
       status, headers: { 'Content-Type': 'application/json' },
     });
   }
+  async _handleLinkedinCommand(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'LinkedIn command unavailable'},503);
+    let data;try{data=await request.json();}catch(_){return this._json({error:'Invalid LinkedIn command'},422);}
+    const actor=data?.actor||{},legacy=actor.legacy===true;
+    const allowed=legacy||['sales','operator','admin'].includes(actor.role)||actor.email==='marketing@thelab.solutions';
+    if(!allowed)return this._json({error:'LinkedIn command denied'},403);
+    const action=String(data?.action||''),id=String(data?.id||'');
+    const validId=/^rec[A-Za-z0-9]{14}$/.test(id);
+    const read=async()=>validId?await liReadOne(this.env,LINKEDIN_PROSPECTS_TABLE,id):null;
+
+    if(action==='create'){
+      const fields=liProspectInput(data.fields);
+      if(!fields)return this._json({error:'Datos del prospecto inválidos'},422);
+      let all;try{all=await liReadAll(this.env,LINKEDIN_PROSPECTS_TABLE);}
+      catch(_){return this._json({error:'No se pudo verificar duplicados de LinkedIn'},503);}
+      const dup=all.find(r=>liDuplicate(fields,r.fields||{}));
+      if(dup)return this._json({ok:true,duplicate:true,record:liProject(dup)},200);
+      fields.Estado='Descubierto';fields['Fecha descubrimiento']=new Date().toISOString();
+      let created;try{created=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'POST','',fields);}
+      catch(e){return this._json({error:e.message||'No se pudo crear el prospecto'},e.status&&e.status<500?422:503);}
+      await liWriteEvent(this.env,{prospect:created,type:'Creación',oldState:'',newState:'Descubierto',actor,detail:'Prospecto creado en staging'});
+      return this._json({ok:true,record:liProject(created)},201);
+    }
+
+    if(!validId)return this._json({error:'Prospecto inválido'},422);
+    let prospect;try{prospect=await read();}catch(_){return this._json({error:'No se pudo leer el prospecto'},503);}
+    if(!prospect)return this._json({error:'Prospecto no encontrado'},404);
+    const current=prospect.fields||{},oldState=current.Estado||'Descubierto';
+
+    if(action==='update'){
+      const edit=liProspectEdit(data.fields,current);
+      if(!edit||!Object.keys(edit.patch).length)return this._json({error:'Datos del prospecto inválidos'},422);
+      let all;try{all=await liReadAll(this.env,LINKEDIN_PROSPECTS_TABLE);}
+      catch(_){return this._json({error:'No se pudo verificar duplicados de LinkedIn'},503);}
+      if(all.some(r=>r.id!==id&&liDuplicate(edit.merged,r.fields||{})))
+        return this._json({error:'Ese prospecto ya existe en LinkedIn'},409);
+      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,edit.patch);}
+      catch(e){return this._json({error:e.message||'No se pudo editar el prospecto'},e.status&&e.status<500?422:503);}
+      return this._json({ok:true,record:liProject(updated)},200);
+    }
+
+    if(action==='analyze'){
+      let fields;try{fields=await liRunAgentAnalysis(this.env,prospect);}
+      catch(e){return this._json({error:e.message||'No se pudo analizar el prospecto',code:e.code||undefined},e.status||503);}
+      const score=fields['Score B2B'];
+      fields.Estado=['Descubierto','Analizado','Calificado'].includes(oldState)
+        ?(score>=7?'Calificado':'Analizado'):oldState;
+      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,fields);}
+      catch(e){return this._json({error:e.message||'No se pudo guardar el análisis'},e.status&&e.status<500?422:503);}
+      await liWriteEvent(this.env,{prospect:updated,type:'Análisis',oldState,newState:fields.Estado,actor,detail:'LINKEDIN_AGENT server-side · score '+score});
+      return this._json({ok:true,record:liProject(updated)},200);
+    }
+
+    if(action==='transition'){
+      const target=String(data.target||'');
+      const allowedFrom={
+        'Por contactar':['Calificado'],
+        'Contactado':['Calificado','Por contactar'],
+        'Respondió':['Contactado'],
+        'Oportunidad':['Respondió'],
+        'Descartado':['Descubierto','Analizado','Calificado','Por contactar','Contactado','Respondió','Oportunidad']
+      };
+      if(!LINKEDIN_STATES.includes(target)||!allowedFrom[target]?.includes(oldState))
+        return this._json({error:'Transición LinkedIn inválida',from:oldState,to:target},409);
+      const patch={Estado:target},now=new Date();
+      if(target==='Contactado'){
+        patch['Fecha último contacto']=now.toISOString();
+        patch['Próximo seguimiento']=new Date(now.getTime()+3*86400000).toISOString();
+      }
+      if(target==='Respondió'){patch['Fecha último contacto']=now.toISOString();patch['Próximo seguimiento']=null;}
+      if(target==='Descartado')patch['Próximo seguimiento']=null;
+      let updated;try{updated=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,patch);}
+      catch(e){return this._json({error:e.message||'No se pudo cambiar el estado'},e.status&&e.status<500?422:503);}
+      await liWriteEvent(this.env,{prospect:updated,type:'Estado',oldState,newState:target,actor,detail:'Cambio de etapa comercial'});
+      return this._json({ok:true,record:liProject(updated)},200);
+    }
+
+    if(action==='convert'){
+      if(current.Convertido&&Array.isArray(current.Cliente)&&current.Cliente[0]){
+        const client=await liReadOne(this.env,'Clientes',current.Cliente[0]).catch(()=>null);
+        return this._json({ok:true,already_converted:true,record:liProject(prospect),client:client?{id:client.id,fields:client.fields||{}}:{id:current.Cliente[0]}},200);
+      }
+      if(!LINKEDIN_CONVERTIBLE.has(oldState))
+        return this._json({error:'Primero califica el prospecto antes de pasarlo a Clientes'},409);
+
+      const key='linkedin:convert:'+id;
+      let marker=null;try{marker=await this.state.storage.get(key);}catch(_){}
+      if(marker?.clientId){
+        const client=await liReadOne(this.env,'Clientes',marker.clientId).catch(()=>null);
+        if(client){
+          let linked;try{linked=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,{Cliente:[client.id],Convertido:true,Estado:'Cliente','Próximo seguimiento':null});}
+          catch(_){return this._json({error:'Cliente creado; falta reconciliar el vínculo LinkedIn',code:'LINKEDIN_CONVERSION_RECONCILE'},503);}
+          await liWriteEvent(this.env,{prospect:linked,clienteId:client.id,type:'Conversión',oldState,newState:'Cliente',actor,detail:'Conversión reconciliada'});
+          return this._json({ok:true,reconciled:true,record:liProject(linked),client:{id:client.id,fields:client.fields||{}}},200);
+        }
+      }
+
+      let clients;try{clients=await liReadAll(this.env,'Clientes');}
+      catch(_){return this._json({error:'No se pudo verificar Clientes antes de convertir'},503);}
+      let client=clients.find(r=>liClientMatches(current,r.fields||{}))||null,created=false;
+      if(!client&&marker){
+        return this._json({error:'Una conversión anterior tiene resultado incierto; no se creará un duplicado',code:'LINKEDIN_CONVERSION_PENDING_RECONCILIATION'},503);
+      }
+
+      if(!client){
+        try{await this.state.storage.put(key,{pending:true,at:new Date().toISOString()});}
+        catch(_){return this._json({error:'No se pudo reservar la conversión'},503);}
+        const cf={
+          Empresa:current.Empresa||current.Prospecto||'Lead LinkedIn',Contacto:current.Prospecto||undefined,
+          'Cargo contacto':current.Cargo||undefined,'Teléfono':current['Teléfono']||undefined,Email:current.Email||undefined,
+          'Sitio web':current['Sitio web']||undefined,'LinkedIn URL':current['LinkedIn URL']||undefined,
+          'Etapa venta':'Lead nuevo','Origen lead':'LinkedIn',Validado:false,
+          'Lead Score IA':Number(current['Score B2B'])||undefined,'Servicio interés':current['Servicio interés']||undefined,
+          'Próxima acción IA':current['Próxima acción']||undefined,'Resumen IA':current['Motivo IA']||undefined,
+          'Último agente ejecutado':Number(current['Score B2B'])?'LINKEDIN_AGENT':undefined,
+          'Fecha primer contacto':liChileDate(),
+          'Notas internas':['Prospección LinkedIn',current.Identidad?'Identidad: '+current.Identidad:'',current.Campaña?'Campaña: '+current.Campaña:'',current['LinkedIn URL']||''].filter(Boolean).join(' · ')
+        };
+        if(actor.role==='sales'&&SELLER_SCOPE_NAMES.has(actor.seller))cf.Vendedor=actor.seller;
+        else if(['admin','operator'].includes(actor.role)||legacy){
+          if(current.Identidad==='Gustavo')cf.Vendedor='gustavo';
+          if(current.Identidad==='Nicanor')cf.Vendedor='nicanor';
+        }
+        Object.keys(cf).forEach(k=>cf[k]===undefined&&delete cf[k]);
+        try{
+          client=await liMutate(this.env,'Clientes','POST','',cf);created=true;
+          await this.state.storage.put(key,{clientId:client.id,committed:true,at:new Date().toISOString()});
+        }catch(e){
+          if([400,401,403,422].includes(e.status||0)){try{await this.state.storage.delete(key);}catch(_){}
+            return this._json({error:e.message||'Airtable rechazó el Cliente'},422);}
+          return this._json({error:'La creación del Cliente tiene resultado incierto; no se repetirá automáticamente',code:'LINKEDIN_CONVERSION_PENDING_RECONCILIATION'},503);
+        }
+      }else{
+        const patch={};
+        if(!client.fields?.['LinkedIn URL']&&current['LinkedIn URL'])patch['LinkedIn URL']=current['LinkedIn URL'];
+        if(!client.fields?.['Lead Score IA']&&current['Score B2B'])patch['Lead Score IA']=Number(current['Score B2B']);
+        if(!client.fields?.['Servicio interés']&&current['Servicio interés'])patch['Servicio interés']=current['Servicio interés'];
+        if(Object.keys(patch).length)try{client=await liMutate(this.env,'Clientes','PATCH',client.id,patch);}catch(_){}
+      }
+
+      let linked;try{linked=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,{Cliente:[client.id],Convertido:true,Estado:'Cliente','Próximo seguimiento':null});}
+      catch(_){return this._json({error:'Cliente identificado, pero falta reconciliar el vínculo LinkedIn',code:'LINKEDIN_CONVERSION_RECONCILE',clientId:client.id},503);}
+      if(created)try{await this.state.storage.put(key,{clientId:client.id,committed:true,at:new Date().toISOString()});}catch(_){}
+      await liWriteEvent(this.env,{prospect:linked,clienteId:client.id,type:'Conversión',oldState,newState:'Cliente',actor,detail:created?'Cliente creado desde LinkedIn':'Vinculado a Cliente existente'});
+      return this._json({ok:true,created,record:liProject(linked),client:{id:client.id,fields:client.fields||{}}},200);
+    }
+
+    return this._json({error:'Acción LinkedIn no soportada'},422);
+  }
+
   async _handleSharedCalendar(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
       return this._json({error:'Shared calendar guard unavailable'},503);
@@ -2761,7 +3176,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -2831,6 +3246,46 @@ export default {
         email:authorized.identity.email,role:authorized.identity.role,
         method:request.method,path:url.pathname.slice(0,180),
       }));
+    }
+
+    // LinkedIn has a dedicated projection + command endpoint. Marketing/sales
+    // never receive generic access to Clientes, event history or Airtable PAT.
+    if(url.pathname==='/linkedin/prospects'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET'||url.search)return json({error:'LinkedIn prospects request not allowed'},405,headers);
+      try{
+        const rows=await liReadAll(env,LINKEDIN_PROSPECTS_TABLE);
+        return json({ok:true,records:rows.map(liProject)},200,headers);
+      }catch(_){return json({error:'LinkedIn prospects unavailable'},503,headers);}
+    }
+    if(url.pathname==='/linkedin/metrics'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET'||url.search)return json({error:'LinkedIn metrics request not allowed'},405,headers);
+      try{return json({ok:true,...await liMetrics(env)},200,headers);}
+      catch(e){console.error('[linkedin-metrics]',e.message);return json({error:'LinkedIn metrics unavailable'},503,headers);}
+    }
+    if(url.pathname==='/linkedin/command'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'LinkedIn command method not allowed'},405,headers);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>70000)
+        return json({error:'LinkedIn command expects bounded JSON'},415,headers);
+      let body;try{const raw=await request.text();if(raw.length>70000)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid LinkedIn command JSON'},422,headers);}
+      if(!env.CRM_MUTATION_GUARD)return json({error:'LinkedIn atomic guard unavailable'},503,headers);
+      try{
+        const actor=authorized.identity
+          ?{email:authorized.identity.email,role:authorized.identity.role,seller:authorized.identity.seller}
+          :{legacy:true,role:'admin',email:'legacy-dashboard'};
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-crm-global'));
+        const guarded=await stub.fetch('https://crm-write.internal/linkedin-command',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...body,actor})
+        });
+        const outHeaders=new Headers(guarded.headers);Object.entries(CORS).forEach(([k,v])=>outHeaders.set(k,v));
+        outHeaders.set('Cache-Control','private, no-store');
+        return new Response(guarded.body,{status:guarded.status,headers:outHeaders});
+      }catch(_){return json({error:'LinkedIn atomic guard unavailable'},503,headers);}
     }
 
     // Problem reports are stored in their own Airtable table. Every signed user
