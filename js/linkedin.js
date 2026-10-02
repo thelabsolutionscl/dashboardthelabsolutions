@@ -53,7 +53,7 @@ async function linkedinApi(path,method,body){
 function replaceProspect(record){if(!record||!record.id)return;var a=state.linkedinProspects||(state.linkedinProspects=[]),i=a.findIndex(function(x){return x.id===record.id;});if(i>=0)a[i]=record;else a.push(record);}
 function pct(v){return Number.isFinite(Number(v))?Math.round(Number(v)*100)+'%':'—';}
 function money(v){try{return new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(Number(v)||0);}catch(_){return '$'+Math.round(Number(v)||0).toLocaleString('es-CL');}}
-function opts(a,blank){function opts(a,blank){return (blank?'<option value="">'+e(blank)+'</option>':'')+a.map(function(x){return '<option value="'+e(x)+'">'+e(x)+'</option>';}).join('');}
+function opts(a,blank){return (blank?'<option value="">'+e(blank)+'</option>':'')+a.map(function(x){return '<option value="'+e(x)+'">'+e(x)+'</option>';}).join('');}
 function css(){
  if(document.getElementById('linkedinLeadsStyle'))return;
  var s=document.createElement('style');s.id='linkedinLeadsStyle';
@@ -86,7 +86,7 @@ async function linkedinLoad(force){
  try{var all=await Promise.all([linkedinApi('/linkedin/prospects','GET'),linkedinApi('/linkedin/metrics','GET')]);state.linkedinProspects=all[0].records||[];linkedinMetrics=all[1]||null;loaded=true;linkedinRender();}
  catch(err){var x=document.getElementById('linkedinProspectList');if(x)x.innerHTML='<div class="empty">⚠ '+e(err.message)+'</div>';}finally{busy=false;}
 }
-function crmLeads(){function crmLeads(){return (state.clientes||[]).filter(function(c){return String((c.fields||{})['Origen lead']||'').toLowerCase()==='linkedin';});}
+function crmLeads(){return (state.clientes||[]).filter(function(c){return String((c.fields||{})['Origen lead']||'').toLowerCase()==='linkedin';});}
 function filtered(){
  var q=(document.getElementById('liQ')||{}).value||'',st=(document.getElementById('liState')||{}).value||'',idn=(document.getElementById('liFIdentity')||{}).value||'',seg=(document.getElementById('liFSeg')||{}).value||'';q=q.toLowerCase();
  return (state.linkedinProspects||[]).filter(function(r){var f=r.fields||{},txt=[f.Prospecto,f.Empresa,f.Cargo,f.Industria,f['Servicio interés'],f.Campaña].join(' ').toLowerCase();return (!q||txt.indexOf(q)>=0)&&(!st||(f.Estado||'Descubierto')===st)&&(!idn||f.Identidad===idn)&&(!seg||f.Segmento===seg);}).sort(function(a,b){
@@ -114,7 +114,7 @@ function linkedinRender(){
  var l=document.getElementById('linkedinProspectList'),rows=filtered();if(l)l.innerHTML=rows.length?rows.map(card).join(''):'<div class="empty">Sin prospectos con estos filtros. Busca en LinkedIn y guarda los perfiles que quieras trabajar.</div>';
  var ib=document.getElementById('linkedinInboundList');if(ib){var rec=p.filter(function(r){return (r.fields||{}).Fuente==='Lead Gen Form';}).slice().sort(function(a,b){return new Date((b.fields||{})['Fecha descubrimiento']||b.createdTime||0)-new Date((a.fields||{})['Fecha descubrimiento']||a.createdTime||0);}).slice(0,9);ib.innerHTML=rec.length?rec.map(function(r){var f=r.fields||{},cl=Array.isArray(f.Cliente)&&f.Cliente[0]?f.Cliente[0]:'';return '<div class="in-card"><div class="name">'+e(f.Empresa||f.Prospecto||'Lead LinkedIn')+'</div><div class="company">'+e(f.Prospecto||'')+(f.Cargo?' · '+e(f.Cargo):'')+'</div><div class="meta">'+(f['Score B2B']?'Score '+e(f['Score B2B'])+'/10 · ':'')+e(f.Campaña||'Lead Gen Form')+'</div>'+(cl?'<div class="li-actions"><button class="btn btn-ghost btn-sm" onclick="linkedinOpenClient(\''+cl+'\')">Ver en Clientes</button></div>':'')+'</div>';}).join(''):'<div class="empty" style="grid-column:1/-1">Aún no hay Lead Gen Forms de LinkedIn.</div>';}
 }
-function card(r){function card(r){
+function card(r){
  var f=r.fields||{},st=f.Estado||'Descubierto',sc=Number(f['Score B2B']||0),url=f['LinkedIn URL']||'',cl=Array.isArray(f.Cliente)&&f.Cliente[0]?f.Cliente[0]:'',msg=f['Mensaje inicial']||'',fu=f['Follow-up']||'',due=prospectDue(f);
  var b1=url?'<button class="btn btn-ghost btn-sm" onclick="linkedinOpenProfile(\''+r.id+'\')">LinkedIn ↗</button>':'';
  var bc=CONVERTIBLE_STATES.indexOf(st)>=0?'<button class="btn btn-primary btn-sm" onclick="linkedinConvertToClient(\''+r.id+'\')">→ Clientes</button>':'';
@@ -178,7 +178,7 @@ async function linkedinConvertToClient(id){
    say(d.created?'Lead creado en Clientes ✓':d.already_converted?'Ya estaba convertido ✓':'Vinculado al Cliente existente ✓','success');
  }catch(err){say('No se pudo convertir: '+err.message,'error');}finally{convertBusy.delete(id);}
 }
-function linkedinOpenClient(id){function linkedinOpenClient(id){try{switchTab('clientes');setTimeout(function(){if(typeof openClienteDetalle==='function')openClienteDetalle(id);},40);}catch(_){}}
+function linkedinOpenClient(id){try{switchTab('clientes');setTimeout(function(){if(typeof openClienteDetalle==='function')openClienteDetalle(id);},40);}catch(_){}}
 async function initLinkedinLeads(){if(!mount())return;if(!loaded)await linkedinLoad(false);else linkedinRender();}
 var baseInit=window.initRedes;if(typeof baseInit==='function')window.initRedes=function(){var r=baseInit.apply(this,arguments);Promise.resolve(r).finally(initLinkedinLeads);return r;};
 var baseLoad=window.redesLoad;if(typeof baseLoad==='function')window.redesLoad=async function(){var r=await baseLoad.apply(this,arguments);await linkedinLoad(arguments[0]);return r;};
