@@ -1872,6 +1872,21 @@ function toggleMobileNuevo(){
   if(body)body.style.display=isOpen?'none':'block';
   if(chevron)chevron.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
 }
+function openMobileUserMenu(e){
+  if(e&&e.stopPropagation)e.stopPropagation();
+  // El menú de cuenta de escritorio vive dentro de #userChip, que se oculta
+  // deliberadamente en móvil. Antes la ruedita cerraba el drawer y llamaba
+  // openUserMenu(), dejando el panel atrapado en ese padre oculto.
+  const menu=document.getElementById('userMenu');
+  if(!menu)return;
+  if(menu.parentElement!==document.body)document.body.appendChild(menu);
+  closeMobileMenu();
+  requestAnimationFrame(()=>{
+    menu.classList.add('open');
+    menu.setAttribute('data-mobile-user-menu','true');
+    if(typeof populateUserMenu==='function')populateUserMenu();
+  });
+}
 function toggleMobileConfig(){
   const body=document.getElementById('mobileConfigBody');
   const chevron=document.getElementById('mobileConfigChevron');
