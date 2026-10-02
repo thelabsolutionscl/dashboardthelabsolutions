@@ -192,3 +192,37 @@ Estas métricas deberían construirse sobre fechas/eventos reales, no inferirse 
 ### Principio de diseño
 
 `LinkedIn_Prospects` es una **zona de pre-CRM y trazabilidad**. No debe convertirse en un segundo CRM. `Clientes` sigue siendo la fuente definitiva una vez que existe una oportunidad comercial real.
+
+
+---
+
+## Cierre de pendientes — LinkedIn v2 (2026-10-02)
+
+### A. Conversión atómica entre dispositivos — CERRADO
+
+`linkedinConvertToClient` dejó de crear Clientes desde el browser. Las conversiones pasan por
+el Durable Object global `tls-crm-global`, compartiendo la misma serialización que las demás
+mutaciones comerciales. Existe además una reserva durable por prospecto para no repetir una
+creación cuyo resultado en Airtable sea ambiguo.
+
+**Límite explícito:** un proceso externo que escriba directamente en Airtable y evite el proxy
+no participa del lock. Dentro del dashboard/proxy la conversión sí queda serializada.
+
+### B. RBAC marketing/comercial — CERRADO
+
+Se implementaron rutas LinkedIn dedicadas. Marketing y ventas no reciben acceso genérico a
+`Clientes`, `LinkedIn_Prospects` ni `LinkedIn_Events`; el servidor proyecta y ejecuta
+solo las operaciones del módulo. Finanzas puede consultar métricas sin operar prospectos.
+
+### C. Integración oficial — IMPLEMENTADA / PENDIENTE SOLO DE APROBACIÓN Y CREDENCIALES EXTERNAS
+
+El Worker implementa challenge, firma `X-LI-Signature`, dedupe, descarga de
+`leadFormResponses`, refresh OAuth y administración de `leadNotifications`.
+La conexión no puede activarse sin que LinkedIn apruebe la app para Lead Sync y emita/autorice
+credenciales con `r_marketing_leadgen_automation`.
+
+### D. Analítica comercial — CERRADO
+
+Se creó `LinkedIn_Events` y el panel muestra tasas de respuesta/oportunidad/cliente,
+tiempo de respuesta, vencidos y revenue neto posterior, además de cortes por campaña,
+identidad y segmento. La UI etiqueta el revenue como temporal/posterior, no como causal.
