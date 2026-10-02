@@ -38,7 +38,7 @@ const ACCESS_ALLOWED_TABLES=new Set([
   // Do not automatically widen reader/operator/finance access to campaign,
   // notification or operational logs, which can contain personal information.
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
-  'Social_Interactions','Social_Metrics',
+  'Social_Interactions','Social_Metrics','LinkedIn_Prospects','LinkedIn_Prospects',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
 ]);
 const ACCESS_ADMIN_ONLY_TABLES=new Set([
