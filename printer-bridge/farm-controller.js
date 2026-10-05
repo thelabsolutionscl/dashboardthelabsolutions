@@ -292,13 +292,17 @@ function auditResultSummary(result={}){
 }
 function auditSummaryFromReport(report){
   return{
-    id:report.id,machineId:report.machineId,createdAt:report.createdAt,
+    id:report.id,machineId:report.machineId,requestId:report.requestId||'',createdAt:report.createdAt,
     actorRole:report.actorRole,clientActor:report.clientActor||'',model:report.model||'',
     durationMs:report.durationMs||0,sourceMatrix:report.sourceMatrix||{},
     result:auditResultSummary(report.result),cost:report.cost||null,
     evidenceHash:report.evidenceHash||'',reportHash:report.reportHash||'',
-    scanId:report.scanId||'',version:2,
+    scanId:report.scanId||'',sealVersion:report.sealVersion||0,version:2,
   };
+}
+function auditSummaryForRole(row,role){
+  if(role!=='viewer')return row;
+  return{id:row.id,machineId:row.machineId,createdAt:row.createdAt,model:row.model||'',result:row.result,version:row.version||2};
 }
 function pruneAuditReports(rows){
   const sorted=(Array.isArray(rows)?rows:[]).filter(x=>x&&x.machineId&&x.id)
@@ -319,11 +323,29 @@ function sanitizeAuditCost(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
   const estimatedUsd=Math.max(0,Math.min(5,Number(raw.estimatedUsd)||0));
   return{
-    currency:'USD',estimatedUsd:Number(estimatedUsd.toFixed(6)),
+    currency:'USD',provenance:'client_estimate',estimatedUsd:Number(estimatedUsd.toFixed(6)),
     textModel:String(raw.textModel||'').slice(0,80),visionModel:String(raw.visionModel||'').slice(0,80),
     textInputTokens:Math.max(0,Math.floor(Number(raw.textInputTokens)||0)),
     textOutputTokens:Math.max(0,Math.floor(Number(raw.textOutputTokens)||0)),
     visionUsed:raw.visionUsed===true,
+  };
+}
+function deriveAuditSourceMatrix(evidence={}){
+  const scan=evidence.scan||{},src=scan.sources||{},dash=evidence.dashboard||{},stability=scan.stability||{};
+  return{
+    moonraker:!!src.moonraker?.available,
+    sshLogs:!!src.ssh?.logsCaptured,
+    camera:!!src.camera?.available,
+    cameraVision:!!evidence.vision?.available,
+    dashboardTelemetry:!!dash.live&&typeof dash.live==='object'&&Object.keys(dash.live).length>0,
+    centralHistory:!!dash.history?.durable,
+    farmHealth:!!dash.central?.central,
+    bedMesh:!!evidence.bed&&evidence.bed.code!=='unavailable',
+    maintenance:Array.isArray(dash.maintenance),
+    incidents:Array.isArray(dash.incidents),
+    configDrift:!!dash.drift,
+    networkStability:Number(stability.network?.total||0)>0,
+    thermalStability:!!(stability.thermal?.hotend||stability.thermal?.bed)
   };
 }
 function purgeAuditScanSessions(now=Date.now()){
@@ -343,22 +365,23 @@ function sanitizeAuditReport(machineId,body={},role='operator'){
   const scan=auditScanSessions.get(scanId);
   if(!scan||scan.machineId!==idMachine)throw new Error('escaneo de auditoría inválido o expirado');
   const createdAt=nowIso(),id=uid('audit');
+  const requestId=/^[A-Za-z0-9_.:-]{8,180}$/.test(String(body.requestId||''))?String(body.requestId):uid('auditreq');
   const submittedEvidence=body.evidence&&typeof body.evidence==='object'&&!Array.isArray(body.evidence)?auditJsonClone(body.evidence,AUDIT_MAX_EVIDENCE):{};
   submittedEvidence.scan=scan.diagnostics;
   const evidence=auditJsonClone(submittedEvidence,AUDIT_MAX_EVIDENCE);
   const result=normalizeAuditResult(body.result,createdAt);
   const model=['claude-haiku-4-5','deterministic-fallback'].includes(String(body.model||''))?String(body.model):'unknown';
   const report={
-    version:2,id,machineId:idMachine,createdAt,actorRole:role,
+    version:2,sealVersion:2,id,requestId,machineId:idMachine,createdAt,actorRole:role,
     clientActor:String(body.actor||'').slice(0,160),model,
     durationMs:Math.max(0,Math.min(30*60*1000,Number(body.durationMs)||0)),
-    sourceMatrix:body.sourceMatrix&&typeof body.sourceMatrix==='object'?auditJsonClone(body.sourceMatrix,32*1024):{},
+    sourceMatrix:deriveAuditSourceMatrix(evidence),
     cost:sanitizeAuditCost(body.cost),scanId,
     result,evidence,
   };
   report.evidenceHash=auditHash(report.evidence);
   report.scanEvidenceHash=scan.evidenceHash;
-  report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
+  report.reportHash=auditSealHash(report);
   return report;
 }
 function migrateLegacyAudits(){
@@ -390,13 +413,24 @@ function migrateLegacyAudits(){
   return store;
 }
 async function readAuditReport(machineId,auditId){
-  try{return JSON.parse(await fs.promises.readFile(auditReportPath(machineId,auditId),'utf8'));}catch(_){return null;}
+  const primary=auditReportPath(machineId,auditId);
+  try{return JSON.parse(await fs.promises.readFile(primary,'utf8'));}catch(_){}
+  const legacy=auditLegacyReportPath(machineId,auditId);
+  if(!legacy||legacy===primary)return null;
+  try{
+    const report=JSON.parse(await fs.promises.readFile(legacy,'utf8'));
+    // Migración perezosa: una lectura válida mueve el archivo a la ruta hash-safe.
+    try{await atomicWrite(primary,report);await fs.promises.unlink(legacy);}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] lazy path migration',e.message);}
+    return report;
+  }catch(_){return null;}
 }
 function verifyAuditReport(report){
   if(!report||typeof report!=='object')return false;
   const evidenceHash=auditHash(report.evidence||{});
-  const reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash,scanEvidenceHash:report.scanEvidenceHash||'',result:report.result,cost:report.cost||null});
-  return evidenceHash===report.evidenceHash&&reportHash===report.reportHash;
+  if(evidenceHash!==report.evidenceHash)return false;
+  if(Number(report.sealVersion||0)>=2)return auditSealHash({...report,evidenceHash})===report.reportHash;
+  const legacyHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash,scanEvidenceHash:report.scanEvidenceHash||'',result:report.result,cost:report.cost||null});
+  return legacyHash===report.reportHash;
 }
 let queue = normalizeQueue(readJson(QUEUE_FILE, null));
 let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
