@@ -72,7 +72,7 @@ test('Historial de la impresora muestra auditorias IA y permite reabrir el infor
   assert.match(OPS,/runFleetAudit/);
   assert.match(OPS,/function renderPrinterAuditReport/);
   assert.match(OPS,/Ver evidencia técnica capturada/);
-  assert.match(OPS,/Guardada en historial central/);
+  assert.match(OPS,/Guardada y sellada en historial central/);
 });
 
 test('el informe conserva matriz de fuentes y evidencia, con limites de tamaño',()=>{
