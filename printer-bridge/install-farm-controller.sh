@@ -62,6 +62,12 @@ sed \
   "$TEMPLATE" > "$PLIST"
 chmod 600 "$PLIST"
 
+if ! plutil -lint "$PLIST" >/dev/null; then
+  red "✗ El LaunchAgent generado no es un plist válido"
+  plutil -lint "$PLIST" || true
+  exit 1
+fi
+
 ylw "→ Node: $NODE ($("$NODE" -v))"
 ylw "→ Datos persistentes: $DATA"
 
@@ -70,8 +76,20 @@ ylw "→ Datos persistentes: $DATA"
 launchctl bootout "$UID_GUI/$OLD_LABEL" 2>/dev/null || true
 launchctl unload "$OLD_PLIST" 2>/dev/null || true
 launchctl bootout "$UID_GUI/$LABEL" 2>/dev/null || true
+launchctl remove "$LABEL" 2>/dev/null || true
+# launchctl recuerda servicios deshabilitados incluso después de borrar el plist.
+# Rehabilitar explícitamente evita "Bootstrap failed: 5: Input/output error"
+# en equipos donde una instalación/rollback anterior dejó el label disabled.
+launchctl enable "$UID_GUI/$LABEL" 2>/dev/null || true
 
-launchctl bootstrap "$UID_GUI" "$PLIST"
+if ! launchctl bootstrap "$UID_GUI" "$PLIST"; then
+  ylw "→ bootstrap inicial rechazado; limpiando estado stale de launchd y reintentando..."
+  launchctl bootout "$UID_GUI/$LABEL" 2>/dev/null || true
+  launchctl remove "$LABEL" 2>/dev/null || true
+  launchctl enable "$UID_GUI/$LABEL" 2>/dev/null || true
+  sleep 1
+  launchctl bootstrap "$UID_GUI" "$PLIST"
+fi
 launchctl kickstart -k "$UID_GUI/$LABEL"
 
 ok=""

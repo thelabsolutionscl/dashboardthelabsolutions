@@ -69,17 +69,19 @@ Una vez conocido el `id`, la IP del registry tiene prioridad frente a un `localS
 
 Para que el registry aprenda la identidad antes de que ocurra el próximo cambio DHCP, durante el piloto conviene ejecutar al menos una vez `/farm/discover` mientras las IP actuales todavía son correctas.
 
-## Piloto en el iMac actual
+## Instalación/actualización en el iMac actual
 
-No hacer merge a `main` para probar. Primero usar la rama del PR.
+La versión estable se instala desde `main`:
 
 ```bash
 cd ~/Desktop/dashboardthelabsolutions
 git fetch origin
-git switch feature/farm-robustness-1-4
-git pull --ff-only origin feature/farm-robustness-1-4
+git switch main
+git pull --ff-only origin main
 bash printer-bridge/install-farm-controller.sh
 ```
+
+El instalador valida el plist, limpia registros stale de launchd, rehabilita el label si una instalación/rollback anterior lo dejó deshabilitado y reintenta `bootstrap` una vez antes de ejecutar el rollback.
 
 El instalador:
 
