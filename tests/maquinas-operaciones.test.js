@@ -453,7 +453,8 @@ test('credenciales Moonraker quedan limitadas a la sesión',()=>{
   assert.match(MAQ,/sessionStorage\.getItem\(key\)/);
   assert.match(MAQ,/localStorage\.removeItem\(key\)/);
   assert.match(MAQ,/sessionStorage\.setItem\(key,val\)/);
-  assert.match(MAQ,/return !custom\|\|custom===defaultTunnel\?\(d\|\|local\):\(local\|\|d\)/);
+  assert.match(MAQ,/return local\|\|d/,'un token corregido por el usuario debe ganar al valor horneado del deploy');
+  assert.match(MAQ,/function setPrinterTunnelTokenOverride\(value\)/);
   assert.match(MAQ,/sessionStorage\.getItem\('printer_tunnel_token'\)/);
   // El token viaja en la URL (?bt=), no como cabecera: una cabecera propia
   // dispara un preflight OPTIONS que en redes móviles tumba la petición entera.

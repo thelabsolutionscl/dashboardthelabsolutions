@@ -183,7 +183,23 @@ function _getPrinterTunnelLongToken(){
   if(!local&&legacy){local=legacy;sessionStorage.setItem('printer_tunnel_token',legacy);localStorage.removeItem('printer_tunnel_token');}
   const custom=(localStorage.getItem('printer_tunnel')||'').replace(/\/$/,'');
   const defaultTunnel=((!_DEFAULTS.PRINTER_TUNNEL||_DEFAULTS.PRINTER_TUNNEL.startsWith('%%'))?'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL).replace(/\/$/,'');
-  return !custom||custom===defaultTunnel?(d||local):(local||d);
+  // Una credencial introducida explícitamente por el usuario debe ganar al
+  // valor horneado en Pages. Así un secret de deploy desfasado no deja toda la
+  // granja sin telemetría después de una recarga dura.
+  return local||d;
+}
+function setPrinterTunnelTokenOverride(value){
+  if(_printerAccessMode())return false;
+  const token=String(value||'').trim();
+  try{
+    if(token)sessionStorage.setItem('printer_tunnel_token',token);
+    else sessionStorage.removeItem('printer_tunnel_token');
+    // Migración/limpieza: nunca conservar dos fuentes locales distintas.
+    localStorage.removeItem('printer_tunnel_token');
+  }catch(_){}
+  _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;_printerTunnelSessionRole='';
+  _printerTunnelSessionLastTry=0;
+  return true;
 }
 function getPrinterTunnelToken(){
   if(_printerTunnelSessionToken&&Date.now()<_printerTunnelSessionExpires-15000)return _printerTunnelSessionToken;
@@ -281,7 +297,7 @@ async function testPrinterBridge(statusId){
   if(!tk){set('var(--warn)','⚠ Túnel OK, pero falta el token del bridge. Pégalo y pulsa Guardar.');return;}
   try{
     const r=await fetch(url+'/authcheck?bt='+encodeURIComponent(tk),{signal:AbortSignal.timeout(7000)});
-    if(r.status===401){set('var(--danger)','✗ Token incorrecto. Copia el token actual del bridge (lo imprime al arrancar / lo da install-launchd.sh).');return;}
+    if(r.status===401||r.status===403){set('var(--danger)','✗ Token incorrecto o vencido. Usa el token maestro actual del Farm Controller.');return;}
     if(!r.ok)throw 0;
     set('var(--accent3)','✅ Bridge OK y token válido. Pon Máquinas en 🌐 Remoto.');
   }catch(e){set('var(--warn)','⚠ Túnel alcanzable pero no pude validar el token. ¿El bridge está actualizado?');}

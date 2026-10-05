@@ -1976,22 +1976,31 @@ function saveMbPrinterTunnel(){
   const inp=document.getElementById('mbPrinterTunnel');const v=(inp?.value||'').trim();
   if(v) localStorage.setItem('printer_tunnel',v); else localStorage.removeItem('printer_tunnel');
   const tkInp=document.getElementById('mbPrinterToken');const tk=(tkInp?.value||'').trim();
-  if(tk&&!tk.startsWith('••'))localStorage.setItem('printer_tunnel_token',tk);
-  else if(!tk)localStorage.removeItem('printer_tunnel_token');
+  let changedToken=false;
+  if(tk&&!tk.startsWith('••')){
+    changedToken=typeof setPrinterTunnelTokenOverride==='function'?setPrinterTunnelTokenOverride(tk):false;
+    if(!changedToken){sessionStorage.setItem('printer_tunnel_token',tk);localStorage.removeItem('printer_tunnel_token');}
+  }else if(!tk){
+    changedToken=typeof setPrinterTunnelTokenOverride==='function'?setPrinterTunnelTokenOverride(''):false;
+    if(!changedToken){sessionStorage.removeItem('printer_tunnel_token');localStorage.removeItem('printer_tunnel_token');}
+  }
   if(tkInp&&tk&&!tk.startsWith('••'))tkInp.value='••••••••'+tk.slice(-4);
   const pts=document.getElementById('mbPrinterTunnelStatus');
-  if(pts) pts.textContent=(v?'✓ '+v:'Default: https://printers.thelab.solutions')+(localStorage.getItem('printer_tunnel_token')?' · 🔑':'');
-  toast(v?'Túnel guardado ✓':'Túnel restablecido al default','success');
-  if(typeof pollPrinters==='function')pollPrinters();
+  if(pts) pts.textContent=(v?'✓ '+v:'Default: https://printers.thelab.solutions')+(sessionStorage.getItem('printer_tunnel_token')?' · 🔑':'');
+  toast('Túnel de impresoras guardado ✓','success');
+  const refresh=typeof refreshPrinterTunnelSession==='function'?refreshPrinterTunnelSession(changedToken):Promise.resolve(false);
+  Promise.resolve(refresh).finally(()=>{try{reconnectAllPrinterWs();pollPrinters();}catch(_){}});
 }
 function clearMbPrinterTunnel(){
   if(_printerAccessMode()){toast('La conexión segura se administra desde Cloudflare Access','info');return;}
   localStorage.removeItem('printer_tunnel');
-  localStorage.removeItem('printer_tunnel_token');
+  if(typeof setPrinterTunnelTokenOverride==='function')setPrinterTunnelTokenOverride('');
+  else{sessionStorage.removeItem('printer_tunnel_token');localStorage.removeItem('printer_tunnel_token');}
   const inp=document.getElementById('mbPrinterTunnel');if(inp) inp.value='';
   const tkInp=document.getElementById('mbPrinterToken');if(tkInp) tkInp.value='';
   const pts=document.getElementById('mbPrinterTunnelStatus');if(pts) pts.textContent='Default: https://printers.thelab.solutions';
   toast('Túnel restablecido al default','info');
+  try{reconnectAllPrinterWs();pollPrinters();}catch(_){}
 }
 function saveMbElevenLabsKey(){
   const inp=document.getElementById('mbElevenLabsKey');const v=(inp?.value||'').trim();
