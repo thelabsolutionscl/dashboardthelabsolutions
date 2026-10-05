@@ -35,8 +35,14 @@ test('dashboard consume el fragmento local sin enviarlo al servidor web',()=>{
   assert.match(MAQ,/return paired\|\|local\|\|d/,'el dispositivo emparejado debe ganar a secretos legacy');
 });
 
-test('script de emparejamiento sólo abre el endpoint loopback',()=>{
+test('script de emparejamiento valida el Controller, se autorepara y abre la URL final',()=>{
   assert.match(PAIR,/http:\/\/127\.0\.0\.1:\$\{PORT\}\/farm\/local-pair/);
-  assert.match(PAIR,/curl -fsS/);
-  assert.doesNotMatch(PAIR,/\.bridge-token|cat .*token|pbcopy/);
+  assert.match(PAIR,/'"service":"farm-controller"'/,'no basta con que cualquier proceso responda healthz');
+  assert.match(PAIR,/install-farm-controller\.sh/,'debe reparar launchd si 8347 sirve el proceso equivocado o stale');
+  assert.match(PAIR,/--max-redirs 0/,'debe capturar la redirección local sin entregar la credencial a curl remoto');
+  assert.match(PAIR,/Location:\[\[:space:\]\]\*/,'debe extraer la URL de pairing emitida por el Controller');
+  assert.match(PAIR,/\$BASE\/farm\/session/,'debe validar que la credencial recién emitida sea aceptada');
+  assert.match(PAIR,/open "\$LOCATION"/,'macOS debe abrir directamente la URL final validada');
+  assert.doesNotMatch(PAIR,/open "\$PAIR_URL"/,'el navegador no debe depender de navegar primero al endpoint loopback');
+  assert.doesNotMatch(PAIR,/\.bridge-token|cat .*token|pbcopy/,'el pairing no debe leer ni copiar el master token');
 });
