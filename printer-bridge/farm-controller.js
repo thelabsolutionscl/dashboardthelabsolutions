@@ -237,8 +237,8 @@ function loadOrCreateAuditSealKey(){
   const file=path.join(DATA_DIR,'.audit-seal-key');
   try{const v=fs.readFileSync(file,'utf8').trim();if(v)return Buffer.from(v,'utf8');}catch(_){}
   const generated=crypto.randomBytes(32).toString('base64url');
-  fs.writeFileSync(file,generated+'\n',{mode:0o600});
-  return Buffer.from(generated,'utf8');
+  try{fs.writeFileSync(file,generated+'\n',{mode:0o600});return Buffer.from(generated,'utf8');}
+  catch(e){console.warn('[audits] no se pudo persistir seal key; usando derivación estable del master token:',e.message);return crypto.createHash('sha256').update('audit-seal:'+MASTER_TOKEN).digest();}
 }
 const AUDIT_SEAL_KEY=loadOrCreateAuditSealKey();
 function auditSealPayload(report){
@@ -394,7 +394,7 @@ function migrateLegacyAudits(){
   const existing=readJson(AUDIT_INDEX_FILE,null);
   if(existing)return normalizeAuditStore(existing);
   const legacy=readJson(AUDIT_LEGACY_FILE,null);
-  const rows=Array.isArray(legacy?.reports)?legacy.reports:[];
+  const rows=pruneAuditReports(Array.isArray(legacy?.reports)?legacy.reports:[]);
   if(!rows.length)return normalizeAuditStore(null);
   const summaries=[];
   for(const old of rows){
@@ -979,7 +979,7 @@ const server = http.createServer(async (req, res) => {
   if(auditHistory&&req.method==='GET'){
     const role=requireRole(req,res,'viewer');if(!role)return;
     const machineId=decodeURIComponent(auditHistory[1]),limit=Math.max(1,Math.min(80,Number(u.searchParams.get('limit')||30)));
-    const reports=audits.reports.filter(row=>row.machineId===machineId).slice(0,limit);
+    const reports=audits.reports.filter(row=>row.machineId===machineId).slice(0,limit).map(row=>auditSummaryForRole(row,role));
     return json(res,200,{ok:true,version:2,updatedAt:audits.updatedAt,reports});
   }
   if(auditHistory&&req.method==='POST'){
@@ -988,9 +988,8 @@ const server = http.createServer(async (req, res) => {
       const machineId=decodeURIComponent(auditHistory[1]),m=machineByIdentity({id:machineId});
       if(!m?.id)return json(res,404,{ok:false,error:'máquina no registrada'});
       const body=JSON.parse((await readBody(req,AUDIT_MAX_BODY)).toString('utf8')||'{}');
-      const report=sanitizeAuditReport(machineId,body,role);
-      const summary=await saveAuditReport(report);
-      return json(res,201,{ok:true,report,summary});
+      const saved=await saveAuditRequest(machineId,body,role);
+      return json(res,saved.idempotent?200:201,{ok:true,idempotent:saved.idempotent,integrityValid:true,report:saved.report,summary:saved.summary});
     }catch(e){return json(res,400,{ok:false,error:e.message});}
   }
 
@@ -1142,5 +1141,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
