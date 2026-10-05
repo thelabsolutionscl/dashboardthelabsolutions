@@ -174,7 +174,7 @@ function getPrinterTunnel(){
     'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;
   return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');
 }
-let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionRole='',_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0;
+let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionRole='',_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0,_printerTunnelAuthRecovery=null;
 function _getPrinterTunnelLongToken(){
   // Previously cached master credentials are never consulted in secure mode.
   if(_printerAccessMode())return '';
@@ -966,14 +966,20 @@ async function _recoverPrinterTunnelAuth(){
   // Los tickets del Farm Controller viven en memoria. Un restart/update del
   // Controller invalida todos aunque su expiresAt local todavía parezca válido.
   // Ante 401/403 se fuerza un canje nuevo y se reciclan los canales que llevan
-  // el ticket en la URL (WebSocket/cámara).
-  _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;_printerTunnelSessionRole='';
-  _printerTunnelSessionLastTry=0;
-  const ok=await refreshPrinterTunnelSession(true).catch(()=>false);
-  if(ok){
-    try{reconnectAllPrinterWs();_refreshSnapshotCams(true);}catch(_){}
-  }
-  return !!ok;
+  // el ticket en la URL (WebSocket/cámara). La recuperación es global para que
+  // dos polls concurrentes no generen dos canjes ni dos tormentas de reconnect.
+  if(_printerTunnelAuthRecovery)return _printerTunnelAuthRecovery;
+  _printerTunnelAuthRecovery=(async()=>{
+    _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;_printerTunnelSessionRole='';
+    _printerTunnelSessionLastTry=0;
+    const ok=await refreshPrinterTunnelSession(true).catch(()=>false);
+    if(ok){
+      try{reconnectAllPrinterWs();_refreshSnapshotCams(true);}catch(_){}
+    }
+    return !!ok;
+  })();
+  try{return await _printerTunnelAuthRecovery;}
+  finally{_printerTunnelAuthRecovery=null;}
 }
 async function fetchPrinterStatus(m,allowAuthRetry=true){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
