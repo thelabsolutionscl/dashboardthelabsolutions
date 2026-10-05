@@ -2880,8 +2880,9 @@ function _printerAuditTrendHtml(result){
   return '<div style="margin-top:9px;font-size:11px;color:var(--text3)">Anterior <b>'+Math.round(num(c.previousScore))+'/100</b> → actual <b>'+Math.round(num(result.score))+'/100</b> · <b style="color:'+color+'">'+sign+Math.round(d)+'</b> · '+Math.max(0,num(c.newFindings))+' nuevos · '+Math.max(0,num(c.clearedFindings))+' despejados</div>';
 }
 function _printerAuditCostText(saved){
-  const c=saved?.cost;if(!c)return'Costo IA no registrado';
-  const usd=num(c.estimatedUsd),origin=c.provenance==='client-attested-proxy-budget-reservation'?' · reserva estimada por proxy':' · estimación no verificable';
+  const c=saved?.cost;if(!c||c.provenance==='unavailable')return'Costo IA no disponible';
+  const usd=num(c.estimatedUsd),origin=c.provenance==='client-attested-proxy-budget-reservation'?' · reserva estimada por proxy':
+    c.provenance==='client-attested-partial-proxy-budget-reservation'?' · reserva parcial estimada por proxy':' · estimación no verificable';
   return 'Costo IA est. US$ '+usd.toFixed(4)+(c.visionUsed?' · incluye visión':'')+origin;
 }
 function _printerAuditRequestId(machineId){
@@ -3010,7 +3011,11 @@ async function runPrinterAudit(machineId,button,opts={}){
     progress(3,'Analizando evidencia','Correlacionando fuentes'+(focus?' con foco en '+focus:'')+'. Si la IA no está disponible se guardará un diagnóstico determinístico.');
     let result,cost={estimatedUsd:num(vision?._cost?.estimatedUsd),provenance:vision?._cost?.provenance||'unavailable',visionModel:vision?._cost?.model||'',visionUsed:!!vision?.available},model=PRINTER_AUDIT_MODEL,aiFallback=false;
     try{
-      const visionEstimate=num(cost.estimatedUsd),ai=await _printerAuditClaude(evidence,focus);result=ai.result;cost=Object.assign(cost,ai.cost||{});cost.estimatedUsd=Number((visionEstimate+num(ai.cost?.estimatedUsd)).toFixed(6));cost.provenance='proxy-budget-reservation';
+      const visionEstimate=num(cost.estimatedUsd),visionKnown=!vision?.available||cost.provenance==='proxy-budget-reservation';
+      const ai=await _printerAuditClaude(evidence,focus);result=ai.result;
+      const textKnown=ai.cost?.provenance==='proxy-budget-reservation';cost=Object.assign(cost,ai.cost||{});
+      cost.estimatedUsd=Number((visionEstimate+num(ai.cost?.estimatedUsd)).toFixed(6));
+      cost.provenance=visionKnown&&textKnown?'proxy-budget-reservation':(visionKnown||textKnown)?'partial-proxy-budget-reservation':'unavailable';
     }catch(aiError){
       result=_normalizePrinterAuditResult(_printerAuditDeterministicResult(evidence,aiError?.message||aiError));model='deterministic-fallback';aiFallback=true;
     }
