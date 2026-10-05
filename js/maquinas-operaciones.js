@@ -2622,14 +2622,18 @@ async function _printerAuditFarmFetch(path,options={},retry=true){
 function _printerAuditRole(){try{return typeof getPrinterTunnelRole==='function'?String(getPrinterTunnelRole()||''):'';}catch(_){return'';}}
 function _printerAuditCanRun(){return ['operator','admin'].includes(_printerAuditRole());}
 let _printerAuditBackendUpgradePromise=null;
-async function _printerAuditBackendReady(){
+const PRINTER_AUDIT_API_VERSION=3;
+async function _printerAuditBackendInfo(){
   try{
     if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(false);
-    const d=await _printerAuditFarmFetch('/authcheck',{method:'GET'},false);
-    return !!d?.capabilities?.auditRun;
-  }catch(_){return false;}
+    return await _printerAuditFarmFetch('/authcheck',{method:'GET'},false);
+  }catch(_){return null;}
 }
-async function _waitPrinterAuditBackendV2(){
+async function _printerAuditBackendReady(){
+  const d=await _printerAuditBackendInfo();
+  return !!d?.capabilities?.auditRun&&Number(d.auditApiVersion||0)>=PRINTER_AUDIT_API_VERSION;
+}
+async function _waitPrinterAuditBackendV3(){
   for(let i=0;i<24;i++){
     try{if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(true);}catch(_){}
     if(await _printerAuditBackendReady())return true;
@@ -2643,23 +2647,23 @@ async function updatePrinterAuditBackend(){
   _printerAuditBackendUpgradePromise=(async function(){
     const d=await _printerAuditFarmFetch('/update',{method:'POST',signal:AbortSignal.timeout(95000)});
     if(d?.ok===false)throw new Error(d.error||'No se pudo actualizar el Farm Controller');
-    const ready=await _waitPrinterAuditBackendV2();
-    if(!ready)throw new Error('El Controller se actualizó, pero la versión V2 todavía no responde');
+    const ready=await _waitPrinterAuditBackendV3();
+    if(!ready)throw new Error('El Controller se actualizó, pero la API de Auditoría V3 todavía no responde');
     return true;
   })().finally(function(){_printerAuditBackendUpgradePromise=null;});
   return _printerAuditBackendUpgradePromise;
 }
+async function ensurePrinterAuditBackendV3(machineId){
+  if(await _printerAuditBackendReady())return true;
+  if(_printerAuditRole()!=='admin')throw new Error('El Farm Controller requiere Auditoría V3. Un administrador debe actualizar el bridge antes de continuar.');
+  if(!confirm('El Farm Controller del taller necesita la Auditoría V3. ¿Actualizarlo ahora y continuar?'))throw new Error('Actualización de Auditoría V3 cancelada');
+  _printerAuditProgress(machineId,2,'Actualizando Farm Controller','Instalando API de Auditoría V3 y reiniciando Controller + bridge.');
+  await updatePrinterAuditBackend();
+  return true;
+}
 async function fetchPrinterAuditScan(machineId){
-  try{return await _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'});}
-  catch(e){
-    const missing=[400,404,405,501].includes(Number(e?.status))||/ruta|not found|audit-scan|method not allowed/i.test(String(e?.message||''));
-    if(!missing)throw e;
-    if(_printerAuditRole()!=='admin')throw new Error('La Auditoría V2 aún no está instalada en el Controller. Pide a un administrador actualizar el bridge.');
-    if(!confirm('El Farm Controller del taller está en una versión anterior. ¿Actualizarlo ahora y continuar con la auditoría?'))throw e;
-    _printerAuditProgress(machineId,2,'Actualizando Farm Controller','Aplicando fast-forward seguro y reiniciando Controller + bridge.');
-    await updatePrinterAuditBackend();
-    return _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'});
-  }
+  await ensurePrinterAuditBackendV3(machineId);
+  return _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'});
 }
 async function updatePrinterAuditPermission(machineId){
   const btn=input('mopsAuditBtn-'+machineId);if(!btn)return false;
