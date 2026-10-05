@@ -962,7 +962,20 @@ async function _ensureThumb(m,ip,st){
   _thumbCache[ck]=thumbUrl;
   return thumbUrl;
 }
-async function fetchPrinterStatus(m){
+async function _recoverPrinterTunnelAuth(){
+  // Los tickets del Farm Controller viven en memoria. Un restart/update del
+  // Controller invalida todos aunque su expiresAt local todavía parezca válido.
+  // Ante 401/403 se fuerza un canje nuevo y se reciclan los canales que llevan
+  // el ticket en la URL (WebSocket/cámara).
+  _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;_printerTunnelSessionRole='';
+  _printerTunnelSessionLastTry=0;
+  const ok=await refreshPrinterTunnelSession(true).catch(()=>false);
+  if(ok){
+    try{reconnectAllPrinterWs();_refreshSnapshotCams(true);}catch(_){}
+  }
+  return !!ok;
+}
+async function fetchPrinterStatus(m,allowAuthRetry=true){
   const ip=getPrinterIp(m);if(!ip)return{state:'noip'};
   const headers=getPrinterAuthHeaders(m.id),remote=_printerUsesRemoteTunnel();
   try{
@@ -972,7 +985,11 @@ async function fetchPrinterStatus(m){
     const timeout=remote?_REMOTE_STATUS_TIMEOUT_MS:_STATUS_TIMEOUT_MS;
     const r=await fetch(printerUrl(ip,path),{signal:AbortSignal.timeout(timeout),headers});
     if(!r.ok){
-      const reason=r.status===401?'Token del bridge inválido o vencido':(r.status===424||r.status===502)?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
+      if(remote&&allowAuthRetry&&(r.status===401||r.status===403)){
+        const renewed=await _recoverPrinterTunnelAuth();
+        if(renewed)return fetchPrinterStatus(m,false);
+      }
+      const reason=(r.status===401||r.status===403)?'Sesión del Farm Controller inválida o vencida':(r.status===424||r.status===502)?'La impresora no responde al bridge':r.status===404?'Moonraker no está disponible en esta IP':`La consulta respondió HTTP ${r.status}`;
       // Bridge moderno usa 424 cuando él sí está vivo pero no alcanza la
       // impresora. Un bridge antiguo usaba 502. Si aún vemos ese 502 remoto,
       // contrastamos primero con la salud central y /healthz: así mantenemos
