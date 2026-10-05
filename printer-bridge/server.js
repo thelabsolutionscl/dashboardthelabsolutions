@@ -15,6 +15,7 @@
 //   POST /recover/{IP}             → reinicia Moonraker en la impresora (SSH) — telemetría caída
 //   POST /recover-camera/{IP}      → reinicia el stack de cámara (SSH) y espera imagen
 //   GET  /sshcheck/{IP}            → ¿puede el bridge entrar por SSH a esa impresora?
+//   GET  /diagnostics/{IP}          → snapshot profundo (Moonraker + logs/sistema vía SSH)
 //   GET  /pubkey                   → llave pública del bridge (enrolar impresoras desde otro equipo)
 //   POST /update                   → git pull + reinicio (actualiza el bridge sin ir al iMac)
 //   *    /{IP}/{ruta...}           → http://{IP}:7125/{ruta...}   (Moonraker)
@@ -248,6 +249,36 @@ function cameraProbe(ip,port,pathName,timeoutMs) {
     req.end();
   });
 }
+function cameraSnapshot(ip,port,pathName,timeoutMs=6000,maxBytes=2*1024*1024) {
+  return new Promise(resolve=>{
+    const req=http.request({host:ip,port,path:pathName,method:'GET',agent:keepAliveAgent,timeout:timeoutMs},res=>{
+      const ct=String(res.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+      if((res.statusCode||500)>=300||!ct.startsWith('image/')){res.resume();return resolve({ok:false});}
+      const chunks=[];let total=0,settled=false;
+      const done=value=>{if(settled)return;settled=true;resolve(value);};
+      res.on('data',chunk=>{
+        total+=chunk.length;
+        if(total>maxBytes){res.destroy();done({ok:false,error:'snapshot demasiado grande'});return;}
+        chunks.push(chunk);
+      });
+      res.on('end',()=>{
+        if(settled)return;
+        const body=Buffer.concat(chunks);
+        if(!body.length)return done({ok:false,error:'snapshot vacío'});
+        done({ok:true,mime:ct,bytes:body.length,dataUrl:'data:'+ct+';base64,'+body.toString('base64')});
+      });
+      res.on('error',()=>done({ok:false}));
+    });
+    req.on('timeout',()=>{req.destroy();resolve({ok:false,error:'timeout'});});
+    req.on('error',()=>resolve({ok:false}));
+    req.end();
+  });
+}
+async function captureAuditCameraFrame(ip) {
+  let shot=await cameraSnapshot(ip,1984,'/api/frame.jpeg?src=k2plus',6500);
+  if(!shot.ok)shot=await cameraSnapshot(ip,8080,'/?action=snapshot',5000);
+  return shot.ok?shot:{ok:false,error:shot.error||'sin snapshot'};
+}
 async function cameraIsUp(ip,kind='auto') {
   const mode=String(kind||'auto').toLowerCase();
   if(mode!=='mjpeg'&&await cameraProbe(ip,1984,'/api/frame.jpeg?src=k2plus',25000)) return {ok:true,kind:'go2rtc',port:1984};
@@ -311,6 +342,123 @@ function sshCheck(ip) {
     });
   });
 }
+// Diagnóstico profundo de solo lectura. El navegador nunca envía comandos de shell:
+// la IP se valida y el script SSH es fijo. Se leen estados, errores y colas de
+// Moonraker más logs acotados de Klipper/Moonraker y salud básica del sistema.
+function diagnosticSshScript() {
+  return [
+    'echo "== system =="',
+    'date 2>/dev/null || true',
+    'uname -a 2>/dev/null || true',
+    'uptime 2>/dev/null || true',
+    'df -h 2>/dev/null | head -n 40 || true',
+    'free -m 2>/dev/null || cat /proc/meminfo 2>/dev/null | head -n 20 || true',
+    'echo "== processes =="',
+    'ps 2>/dev/null | grep -E "[k]lippy|[m]oonraker|[c]amera|[g]o2rtc|[m]jpg" | tail -n 80 || true',
+    'echo "== config fingerprints =="',
+    'CFGDIRS="/usr/data/printer_data/config /mnt/UDISK/printer_data/config /root/printer_data/config /home/pi/printer_data/config"',
+    'for d in $CFGDIRS; do',
+    '  [ -d "$d" ] || continue',
+    '  echo "-- $d"',
+    '  for f in "$d"/*.cfg "$d"/*.conf; do',
+    '    [ -f "$f" ] || continue',
+    '    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$f"; else ls -ln "$f"; fi',
+    '  done',
+    'done',
+    'echo "== klippy logs =="',
+    'for f in /usr/data/printer_data/logs/klippy.log /mnt/UDISK/printer_data/logs/klippy.log /root/printer_data/logs/klippy.log /home/pi/printer_data/logs/klippy.log; do',
+    '  [ -f "$f" ] || continue; echo "-- $f"; tail -n 180 "$f" 2>/dev/null || true',
+    'done',
+    'echo "== moonraker logs =="',
+    'for f in /usr/data/printer_data/logs/moonraker.log /mnt/UDISK/printer_data/logs/moonraker.log /root/printer_data/logs/moonraker.log /home/pi/printer_data/logs/moonraker.log; do',
+    '  [ -f "$f" ] || continue; echo "-- $f"; tail -n 180 "$f" 2>/dev/null || true',
+    'done',
+    'echo "== kernel tail =="',
+    'dmesg 2>/dev/null | tail -n 100 || true',
+    'exit 0',
+  ].join('\n');
+}
+function diagnosticSshCommand(ip) {
+  const base=recoverSshCommand(ip),args=base.args.slice();
+  args[args.length-1]=diagnosticSshScript();
+  return{...base,args};
+}
+function capDiagnosticText(value,max=260000) {
+  const text=String(value||'');
+  if(text.length<=max)return text;
+  const half=Math.floor((max-80)/2);
+  return text.slice(0,half)+'\n...[diagnóstico truncado por límite seguro]...\n'+text.slice(-half);
+}
+function runDiagnosticSsh(ip) {
+  return new Promise(resolve=>{
+    const {cmd,args,env}=diagnosticSshCommand(ip);
+    execFile(cmd,args,{timeout:22000,env,maxBuffer:384*1024},(err,stdout,stderr)=>{
+      const out=capDiagnosticText(stdout),errOut=capDiagnosticText(stderr,30000);
+      if(err&&err.code==='ENOENT')return resolve({ok:false,code:'sin-ssh',error:'no se encontró '+cmd,output:out});
+      if(err){
+        const detail=errOut||out||err.message;
+        return resolve({ok:false,code:err.killed?'timeout-ssh':'ssh-falló',error:String(detail).split('\n')[0],output:out});
+      }
+      resolve({ok:true,output:out});
+    });
+  });
+}
+function auditGcodeResponses(raw) {
+  const items=raw?.result?.gcode_store;
+  if(!Array.isArray(items))return[];
+  return items.filter(row=>row&&row.type==='response')
+    .map(row=>({time:Number(row.time)||0,message:String(row.message||'').slice(0,3000)}))
+    .filter(row=>/!!|error|warning|warn|shutdown|timeout|mcu|disconnect|failed|unable/i.test(row.message))
+    .slice(-80);
+}
+async function collectPrinterDiagnostics(ip) {
+  if(!isPrivateIp(ip))throw new Error('solo IPs de red privada');
+  const printer={ip};
+  const [
+    printerInfo,serverInfo,systemInfo,objects,gcode,history,deterministic,
+    camGo2rtc,camMjpeg,sshAccess
+  ]=await Promise.all([
+    moonraker(printer,'GET','/printer/info',6500),
+    moonraker(printer,'GET','/server/info',6500),
+    moonraker(printer,'GET','/machine/system_info',6500),
+    moonraker(printer,'GET','/printer/objects/query?print_stats&heater_bed&extruder&webhooks&toolhead&bed_mesh&idle_timeout&gcode_move&system_stats&display_status&virtual_sdcard',7500),
+    moonraker(printer,'GET','/server/gcode_store?count=240',6500),
+    moonraker(printer,'GET','/server/history/list?limit=25&order=desc',7500),
+    auditPrinter(printer,{console:true}).catch(e=>({state:'error',error:e.message})),
+    cameraProbe(ip,1984,'/api/frame.jpeg?src=k2plus',4500),
+    cameraProbe(ip,8080,'/?action=snapshot',3500),
+    sshCheck(ip),
+  ]);
+  const cameraFrame=(camGo2rtc||camMjpeg)?await captureAuditCameraFrame(ip):{ok:false,error:'cámara no disponible'};
+  const ssh=sshAccess?.ok?await runDiagnosticSsh(ip):{ok:false,error:sshAccess?.error||'SSH no disponible',output:''};
+  const okCount=[printerInfo,serverInfo,systemInfo,objects,gcode,history].filter(r=>r?.ok).length;
+  return{
+    ok:okCount>0,
+    collectedAt:new Date().toISOString(),
+    ip,
+    sources:{
+      moonraker:{available:okCount>0,checksOk:okCount,checksTotal:6},
+      ssh:{available:!!sshAccess?.ok,logsCaptured:!!ssh?.ok,error:ssh?.ok?'':String(ssh?.error||'')},
+      camera:{available:!!(camGo2rtc||camMjpeg),go2rtc:!!camGo2rtc,mjpeg:!!camMjpeg,snapshotCaptured:!!cameraFrame.ok},
+    },
+    cameraFrame,
+    deterministic,
+    moonraker:{
+      printerInfo:printerInfo?.ok?printerInfo.json:null,
+      serverInfo:serverInfo?.ok?serverInfo.json:null,
+      systemInfo:systemInfo?.ok?systemInfo.json:null,
+      objects:objects?.ok?objects.json:null,
+      gcodeResponses:auditGcodeResponses(gcode?.json),
+      history:history?.ok?history.json:null,
+      failures:[
+        ['printerInfo',printerInfo],['serverInfo',serverInfo],['systemInfo',systemInfo],
+        ['objects',objects],['gcode',gcode],['history',history],
+      ].filter(([,r])=>!r?.ok).map(([name,r])=>({name,status:r?.status||0,timeout:!!r?.timeout})),
+    },
+    ssh:{ok:!!ssh?.ok,error:String(ssh?.error||''),output:capDiagnosticText(ssh?.output||'')},
+  };
+}
+
 // git pull + salir: launchd lo levanta con el código nuevo. Así el bridge se
 // actualiza desde el dashboard, sin ir hasta el iMac. Solo fast-forward.
 function updateBridge() {
@@ -421,6 +569,16 @@ const server = http.createServer((req, res) => {
     sshCheck(mChk[1]).then(r => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); });
     return;
   }
+  const mDiag = rawPath.match(/^\/diagnostics\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mDiag) {
+    if(req.method!=='GET'&&req.method!=='HEAD'){res.setHeader('Allow','GET, HEAD');jsonError(res,405,'method not allowed');return;}
+    if(!isPrivateIp(mDiag[1])){jsonError(res,403,'solo IPs de red privada');return;}
+    collectPrinterDiagnostics(mDiag[1])
+      .then(r=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(r));})
+      .catch(e=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e.message,collectedAt:new Date().toISOString()}));});
+    return;
+  }
+
   if (rawPath === '/update' && req.method === 'POST') {
     if (!UPDATE_ENABLED) {
       res.writeHead(200, { 'Content-Type': 'application/json' });

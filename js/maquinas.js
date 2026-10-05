@@ -2807,12 +2807,16 @@ function openHistoryModal(id){
   document.getElementById('histModalTitle').textContent=`${m.nombre} #${m.numG}`;
   const hist=getHistoryForPrinter(id);
   const el=document.getElementById('histModalBody');
-  el.innerHTML=hist.length?hist.slice(0,50).map(h=>{const d=new Date(h.start);return`<div style="padding:8px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px">
+  const printHistory=hist.length?hist.slice(0,50).map(h=>{const d=new Date(h.start);return`<div style="padding:8px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px">
     <span style="background:${h.result==='Completado'?'rgba(0,212,170,0.15)':'rgba(255,68,68,0.12)'};color:${h.result==='Completado'?'#00d4aa':'#ff4444'};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;flex-shrink:0">${h.result}</span>
     <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(h.file||'—')}</div>
     <div style="font-size:10.5px;color:var(--text3)">${d.toLocaleDateString('es-CL')} ${d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})} · ${h.dur}m</div></div>
-  </div>`;}).join(''):'<div style="text-align:center;color:var(--text3);padding:24px;font-size:12px">Sin historial registrado aún</div>';
+  </div>`;}).join(''):'<div style="text-align:center;color:var(--text3);padding:18px 0 24px;font-size:12px">Sin trabajos de impresión registrados aún</div>';
+  el.innerHTML=`<div id="histAuditSection" style="margin-bottom:16px"><div style="font-size:11px;color:var(--text3);padding:8px 0">Cargando auditorías IA…</div></div>
+    <div style="font-size:10px;font-weight:900;letter-spacing:.9px;color:var(--text3);text-transform:uppercase;padding-top:12px;border-top:1px solid var(--border2);margin-bottom:4px">Trabajos de impresión</div>
+    ${printHistory}`;
   document.getElementById('histModal').style.display='flex';
+  if(window.MachineOps?.renderAuditHistoryInto)window.MachineOps.renderAuditHistoryInto(id,'histAuditSection');
 }
 function closeHistoryModal(){document.getElementById('histModal').style.display='none';}
 
