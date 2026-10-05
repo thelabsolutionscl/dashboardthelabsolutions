@@ -2613,11 +2613,54 @@ async function _printerAuditFarmFetch(path,options={},retry=true){
   if(retry&&(r.status===401||r.status===403)&&typeof _refreshPrinterAccessTicket==='function'){
     try{if(await _refreshPrinterAccessTicket(true))return _printerAuditFarmFetch(path,options,false);}catch(_){}
   }
-  if(!r.ok){const d=await r.json().catch(function(){return{};});throw new Error(d.error||('Farm Controller respondió HTTP '+r.status));}
+  if(!r.ok){
+    const d=await r.json().catch(function(){return{};}),err=new Error(d.error||('Farm Controller respondió HTTP '+r.status));
+    err.status=r.status;err.code=d.code||'';throw err;
+  }
   return r.json();
 }
 function _printerAuditRole(){try{return typeof getPrinterTunnelRole==='function'?String(getPrinterTunnelRole()||''):'';}catch(_){return'';}}
 function _printerAuditCanRun(){return ['operator','admin'].includes(_printerAuditRole());}
+let _printerAuditBackendUpgradePromise=null;
+async function _printerAuditBackendReady(){
+  try{
+    if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(false);
+    const d=await _printerAuditFarmFetch('/authcheck',{method:'GET'},false);
+    return !!d?.capabilities?.auditRun;
+  }catch(_){return false;}
+}
+async function _waitPrinterAuditBackendV2(){
+  for(let i=0;i<24;i++){
+    try{if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(true);}catch(_){}
+    if(await _printerAuditBackendReady())return true;
+    await new Promise(function(resolve){setTimeout(resolve,750);});
+  }
+  return false;
+}
+async function updatePrinterAuditBackend(){
+  if(_printerAuditRole()!=='admin')throw new Error('El backend de auditoría necesita actualización por un administrador');
+  if(_printerAuditBackendUpgradePromise)return _printerAuditBackendUpgradePromise;
+  _printerAuditBackendUpgradePromise=(async function(){
+    const d=await _printerAuditFarmFetch('/update',{method:'POST',signal:AbortSignal.timeout(95000)});
+    if(d?.ok===false)throw new Error(d.error||'No se pudo actualizar el Farm Controller');
+    const ready=await _waitPrinterAuditBackendV2();
+    if(!ready)throw new Error('El Controller se actualizó, pero la versión V2 todavía no responde');
+    return true;
+  })().finally(function(){_printerAuditBackendUpgradePromise=null;});
+  return _printerAuditBackendUpgradePromise;
+}
+async function fetchPrinterAuditScan(machineId){
+  try{return await _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'});}
+  catch(e){
+    const missing=[400,404,405,501].includes(Number(e?.status))||/ruta|not found|audit-scan|method not allowed/i.test(String(e?.message||''));
+    if(!missing)throw e;
+    if(_printerAuditRole()!=='admin')throw new Error('La Auditoría V2 aún no está instalada en el Controller. Pide a un administrador actualizar el bridge.');
+    if(!confirm('El Farm Controller del taller está en una versión anterior. ¿Actualizarlo ahora y continuar con la auditoría?'))throw e;
+    _printerAuditProgress(machineId,2,'Actualizando Farm Controller','Aplicando fast-forward seguro y reiniciando Controller + bridge.');
+    await updatePrinterAuditBackend();
+    return _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'});
+  }
+}
 async function updatePrinterAuditPermission(machineId){
   const btn=input('mopsAuditBtn-'+machineId);if(!btn)return false;
   btn.disabled=true;btn.title='Verificando permiso del Farm Controller…';
@@ -2917,7 +2960,7 @@ async function runPrinterAudit(machineId,button,opts={}){
     try{await window.FarmDrift?.refresh?.(true);}catch(_){}
     const dashboard=_printerAuditDashboardEvidence(machineId,machine),bed=await _printerAuditBedEvidence(machineId);
     progress(2,'Escaneando la impresora','Moonraker, Klipper, logs saneados, estabilidad térmica/red, cámara y sistema.');
-    const remote=await _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'}),scan=remote.diagnostics||{};
+    const remote=await fetchPrinterAuditScan(machineId),scan=remote.diagnostics||{};
     const vision=await _printerAuditVision(scan);
     if(scan.cameraFrame)delete scan.cameraFrame;
     const prev=previousDetail?{id:previousDetail.id,createdAt:previousDetail.createdAt,result:{score:previousDetail.result?.score,overall:previousDetail.result?.overall,summary:previousDetail.result?.summary,findings:(previousDetail.result?.findings||[]).map(function(x){return{area:x.area,finding:x.finding,severity:x.severity,status:x.status};})}}:null;
@@ -3209,7 +3252,7 @@ const api={
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
   renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,openUnlinkedAssignment,skipUnlinkedPrint,assignUnlinkedPrint,renderUnlinkedPrints,refreshUnlinkedPrintAlerts,checkBridgeHealth,saveIntelligenceConfig,
   openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
-  openTech,closeTech,runPrinterAudit,runFleetAudit,rerunPrinterAudit,closePrinterAudit,renderAuditHistoryInto,openSavedPrinterAudit,setPrinterAuditFindingStatus,createPrinterAuditIncident,updatePrinterAuditPermission,updateFleetAuditPermission,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
+  openTech,closeTech,runPrinterAudit,runFleetAudit,rerunPrinterAudit,updatePrinterAuditBackend,closePrinterAudit,renderAuditHistoryInto,openSavedPrinterAudit,setPrinterAuditFindingStatus,createPrinterAuditIncident,updatePrinterAuditPermission,updateFleetAuditPermission,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
   _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,jobCanBeDeleted,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,livePrintActive,liveProgressPct,printRun,samePrintRun,currentPrintRunMatches,ignoredPrintMatches,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},

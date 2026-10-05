@@ -825,6 +825,37 @@ server.on('upgrade', (req, clientSocket, head) => {
   clientSocket.on('close', () => { try { upstream.destroy(); } catch (e) {} });
 });
 
+
+function psField(pid,field){
+  return new Promise(resolve=>{
+    const run=bin=>execFile(bin,['-p',String(pid),'-o',field+'='],{timeout:2500},(err,stdout)=>{
+      if(err&&err.code==='ENOENT'&&bin==='ps')return run('/bin/ps');
+      resolve(err?'':String(stdout||'').trim());
+    });
+    run('ps');
+  });
+}
+async function maybeRestartStaleFarmParent(){
+  const ppid=Number(process.ppid||0);if(ppid<=1)return false;
+  try{
+    const command=await psField(ppid,'command');
+    if(!/farm-controller\.js(?:\s|$)/.test(command))return false;
+    const startedRaw=await psField(ppid,'lstart'),startedMs=Date.parse(startedRaw);
+    if(!Number.isFinite(startedMs))return false;
+    const controllerFile=path.join(REPO_DIR,'printer-bridge','farm-controller.js'),mtime=fs.statSync(controllerFile).mtimeMs;
+    // Después de un git pull disparado por un bridge hijo antiguo, el padre
+    // sigue en memoria con código viejo. El hijo nuevo ve que farm-controller.js
+    // es más reciente que el arranque del padre y le pide una salida ordenada.
+    if(mtime<=startedMs+5000)return false;
+    console.log('[bridge] Farm Controller padre quedó obsoleto tras actualización; solicitando reinicio completo.');
+    setTimeout(()=>{try{process.kill(ppid,'SIGTERM');}catch(e){console.warn('[bridge] no se pudo señalizar al Controller padre:',e.message);}},800).unref?.();
+    return true;
+  }catch(e){
+    console.warn('[bridge] no se pudo verificar antigüedad del Controller padre:',e.message);
+    return false;
+  }
+}
+
 function startServer(){
   return server.listen(PORT, () => {
     console.log('─'.repeat(60));
@@ -841,6 +872,9 @@ function startServer(){
     console.log('─'.repeat(60));
     startHeartbeat();
     startMaintScheduler();
+    // Compatibilidad de actualización desde Controllers anteriores: si este
+    // child arrancó después de un pull que cambió el padre, reinicia el padre.
+    maybeRestartStaleFarmParent();
   });
 }
 
@@ -1095,4 +1129,4 @@ function startMaintScheduler() {
 }
 
 if(require.main===module)startServer();
-module.exports={redactDiagnosticSecrets,redactDiagnosticValue,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,startServer};
+module.exports={redactDiagnosticSecrets,redactDiagnosticValue,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,maybeRestartStaleFarmParent,startServer};
