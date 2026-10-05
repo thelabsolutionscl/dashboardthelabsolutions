@@ -45,8 +45,8 @@ test('Farm Controller protege el escaneo y persiste informes completos por impre
   assert.match(FARM,/FARM_AUDIT_FILE/);
   assert.match(FARM,/printer-audits\.json/);
   assert.match(FARM,/AUDIT_MAX_PER_MACHINE=80/);
-  assert.match(FARM,/const auditScan=p\.match\(\/\^\\\/farm\\\/audit-scan/);
-  assert.match(FARM,/const auditHistory=p\.match\(\/\^\\\/farm\\\/audits/);
+  assert.ok(FARM.includes("const auditScan=p.match(/^\\/farm\\/audit-scan"),'debe existir ruta de escaneo por impresora');
+  assert.ok(FARM.includes("const auditHistory=p.match(/^\\/farm\\/audits"),'debe existir historial durable por impresora');
   assert.match(FARM,/auditScan&&req\.method==='POST'/);
   assert.match(FARM,/requireRole\(req,res,'operator'\)/);
   assert.match(FARM,/auditHistory&&req\.method==='GET'/);
@@ -57,7 +57,7 @@ test('Farm Controller protege el escaneo y persiste informes completos por impre
 
 test('Historial de la impresora muestra auditorias IA y permite reabrir el informe completo',()=>{
   assert.match(MAQ,/id="histAuditSection"/);
-  assert.match(MAQ,/Auditorías IA/);
+  assert.match(MAQ,/Cargando auditorías IA/);
   assert.match(MAQ,/MachineOps\?\.renderAuditHistoryInto/);
   assert.match(OPS,/async function fetchPrinterAuditHistory/);
   assert.match(OPS,/function renderPrinterAuditReport/);
