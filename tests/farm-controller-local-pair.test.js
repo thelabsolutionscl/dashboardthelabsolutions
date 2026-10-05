@@ -40,6 +40,10 @@ test('script de emparejamiento valida el Controller, se autorepara y abre la URL
   assert.match(PAIR,/PAIR_URL="\$\{BASE\}\/farm\/local-pair"/);
   assert.match(PAIR,/'"service":"farm-controller"'/,'no basta con que cualquier proceso responda healthz');
   assert.match(PAIR,/install-farm-controller\.sh/,'debe reparar launchd si 8347 sirve el proceso equivocado o stale');
+  assert.match(PAIR,/repo_revision\(\)/,'debe conocer la revisión del repo local');
+  assert.match(PAIR,/controller_revision\(\)/,'debe comparar la revisión realmente cargada');
+  assert.match(PAIR,/farm\/health\/probe/,'debe probar que el Controller llega realmente a Moonraker');
+  assert.match(PAIR,/printer\/objects\/query\?print_stats&extruder&webhooks/,'debe validar por el túnel la misma clase de consulta que alimenta telemetría');
   assert.match(PAIR,/--max-redirs 0/,'debe capturar la redirección local sin entregar la credencial a curl remoto');
   assert.match(PAIR,/Location:\[\[:space:\]\]\*/,'debe extraer la URL de pairing emitida por el Controller');
   assert.match(PAIR,/\$BASE\/farm\/session/,'debe validar que la credencial recién emitida sea aceptada');
