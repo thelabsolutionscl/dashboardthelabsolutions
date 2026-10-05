@@ -43,3 +43,18 @@ test('el proxy WebSocket sólo admite la ruta Moonraker esperada',()=>{
 test('authcheck anuncia soporte realtime WebSocket',()=>{
   assert.match(SRC,/realtimeWebSocket:true/);
 });
+
+
+test('proxy HTTP preserva parámetros Moonraker sin valor al retirar bt',()=>{
+  const clean=new Function(fn('cleanForwardPath')+'; return cleanForwardPath;')();
+  const raw='/192.168.100.7/printer/objects/query?print_stats&extruder&webhooks&bt=secreto&filament_switch_sensor%20filament_sensor';
+  const forwarded=clean(raw);
+  assert.equal(forwarded,'/192.168.100.7/printer/objects/query?print_stats&extruder&webhooks&filament_switch_sensor%20filament_sensor');
+  assert.doesNotMatch(forwarded,/print_stats=|extruder=|webhooks=/,'no debe convertir flags Moonraker en pares clave=valor');
+  assert.doesNotMatch(forwarded,/(?:^|[?&])bt(?:=|&|$)/,'la credencial externa no puede llegar al bridge hijo');
+});
+
+test('healthz identifica la revisión realmente cargada por el Controller',()=>{
+  assert.match(SRC,/const BUILD_REVISION=repoRevision\(\)/);
+  assert.match(SRC,/service: 'farm-controller', revision: BUILD_REVISION/);
+});
