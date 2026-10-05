@@ -104,7 +104,7 @@ test('legacy printer mode prefers an explicit session override and settings inva
   const start=m.indexOf('function _getPrinterTunnelLongToken()');
   const end=m.indexOf('function getPrinterTunnelToken()',start);
   const getLong=m.slice(start,end);
-  assert.match(getLong,/return local\|\|d;/,'el token introducido por el usuario debe ganar al secret horneado');
+  assert.match(getLong,/return local\|\|paired\|\|d;/,'el token introducido por el usuario debe ganar al pairing persistente y al secret horneado');
   assert.match(m,/function setPrinterTunnelTokenOverride\(value\)/);
   assert.match(m,/sessionStorage\.setItem\('printer_tunnel_token',token\)/);
   assert.match(m,/_printerTunnelSessionToken='';_printerTunnelSessionExpires=0/,'cambiar token invalida tickets efímeros previos');
