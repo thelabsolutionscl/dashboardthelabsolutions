@@ -715,6 +715,48 @@ function proxyLegacy(req, res, role) {
   if (bodyless || streamUpload) forward(null); else readBody(req).then(forward).catch(e => json(res, 413, { ok: false, error: e.message }));
 }
 
+
+function rejectWebSocketUpgrade(socket,status,message){
+  const text=String(message||'WebSocket rechazado').replace(/[\r\n]+/g,' ').slice(0,180);
+  try{socket.end(`HTTP/1.1 ${status} ${status===403?'Forbidden':status===404?'Not Found':'Bad Gateway'}\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(text)}\r\n\r\n${text}`);}
+  catch(_){try{socket.destroy();}catch(__){}}
+}
+function proxyLegacyUpgrade(req,clientSocket,head){
+  const origin=String(req.headers.origin||'');
+  if(origin&&DASHBOARD_ORIGIN!=='*'&&origin!==DASHBOARD_ORIGIN)return rejectWebSocketUpgrade(clientSocket,403,'origin no permitido');
+  const role=roleForToken(tokenFromReq(req));
+  if(!role||ROLE_RANK[role]<ROLE_RANK.viewer)return rejectWebSocketUpgrade(clientSocket,403,'forbidden');
+  const targetPath=cleanForwardPath(req.url);
+  if(!/^\/(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\/websocket(?:\?|$)/.test(targetPath))return rejectWebSocketUpgrade(clientSocket,404,'ruta WebSocket no permitida');
+  const headers={...req.headers,host:`127.0.0.1:${LEGACY_PORT}`,'x-bridge-token':INTERNAL_TOKEN,origin:'http://127.0.0.1'};
+  delete headers.referer;delete headers.authorization;delete headers.cookie;
+  const upstream=http.request({host:'127.0.0.1',port:LEGACY_PORT,path:targetPath,method:'GET',headers});
+  let settled=false;
+  upstream.setTimeout(15_000,()=>upstream.destroy(new Error('legacy websocket timeout')));
+  upstream.on('upgrade',(proxyRes,upstreamSocket,upstreamHead)=>{
+    settled=true;
+    upstream.setTimeout(0);upstreamSocket.setTimeout(0);
+    const raw=Array.isArray(proxyRes.rawHeaders)?proxyRes.rawHeaders:[];
+    const lines=[`HTTP/1.1 ${proxyRes.statusCode||101} ${proxyRes.statusMessage||'Switching Protocols'}`];
+    for(let i=0;i<raw.length;i+=2)lines.push(raw[i]+': '+raw[i+1]);
+    try{
+      clientSocket.write(lines.join('\r\n')+'\r\n\r\n');
+      if(upstreamHead?.length)clientSocket.write(upstreamHead);
+      if(head?.length)upstreamSocket.write(head);
+      upstreamSocket.on('error',()=>{try{clientSocket.destroy();}catch(_){}});
+      clientSocket.on('error',()=>{try{upstreamSocket.destroy();}catch(_){}});
+      upstreamSocket.pipe(clientSocket);clientSocket.pipe(upstreamSocket);
+    }catch(_){try{upstreamSocket.destroy();}catch(__){}try{clientSocket.destroy();}catch(__){}}
+  });
+  upstream.on('response',res=>{
+    if(settled)return;settled=true;
+    res.resume();
+    rejectWebSocketUpgrade(clientSocket,res.statusCode===403?403:502,'bridge interno rechazó el WebSocket');
+  });
+  upstream.on('error',e=>{if(!settled){settled=true;rejectWebSocketUpgrade(clientSocket,502,'bridge interno no disponible: '+e.message);}});
+  upstream.end();
+}
+
 function queueJobById(id) { return queue.jobs.find(j => j.id === id); }
 function cleanJobMetadata(value) {
   const v=value&&typeof value==='object'?value:{},out={};
@@ -977,7 +1019,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
-    return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
+    return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator,realtimeWebSocket:true}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
   // Actualiza y reinicia el proceso PADRE. Antes /update se delegaba al bridge
   // legado hijo: el git pull ocurría, pero Farm Controller seguía ejecutando el
@@ -1170,6 +1212,8 @@ const server = http.createServer(async (req, res) => {
   proxyLegacy(req, res, role);
 });
 
+server.on('upgrade',(req,clientSocket,head)=>proxyLegacyUpgrade(req,clientSocket,head));
+
 function start(){
   startLegacy();
   setInterval(queueWorker, 10_000).unref();
@@ -1208,5 +1252,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, auditScanSeal, recoverAuditScanEnvelope, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, auditScanSeal, recoverAuditScanEnvelope, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, proxyLegacyUpgrade, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
