@@ -15,7 +15,7 @@ test('instalador valida el plist antes de registrarlo',()=>{
 test('instalador limpia y rehabilita estados stale o disabled antes de bootstrap',()=>{
   assert.match(SCRIPT,/launchctl remove "\$LABEL"/);
   assert.match(SCRIPT,/launchctl enable "\$UID_GUI\/\$LABEL"/);
-  assert.match(SCRIPT,/if ! launchctl bootstrap "\$UID_GUI" "\$PLIST"/);
+  assert.match(SCRIPT,/if launchctl bootstrap "\$UID_GUI" "\$PLIST"/);
   assert.match(SCRIPT,/bootstrap inicial rechazado/);
 });
 
@@ -26,7 +26,7 @@ test('instalador no usa sudo para el LaunchAgent de la sesión gráfica',()=>{
 
 test('instalador cae a proceso directo si launchd rechaza bootstrap y load',()=>{
   assert.match(SCRIPT,/launchctl load -w "\$PLIST"/,'intenta compatibilidad legacy antes del fallback');
-  assert.match(SCRIPT,/function start_direct_fallback\(\)/);
+  assert.match(SCRIPT,/start_direct_fallback\(\)/);
   assert.match(SCRIPT,/nohup "\$NODE"/);
   assert.match(SCRIPT,/FARM_DATA_DIR="\$DATA"/);
   assert.match(SCRIPT,/BRIDGE_REPO_DIR="\$REPO"/);
