@@ -23,13 +23,15 @@ El dashboard tiene **dos modos** (botón `📡 Local / 🌐 Remoto` en la secci�
 
 ## Emparejar el dashboard con este iMac
 
-Con Farm Controller ya no es necesario copiar el token maestro al dashboard. Desde el iMac del taller:
+Con Farm Controller ya no es necesario copiar el token maestro al dashboard ni entrar a “Túnel Impresoras”. Desde el iMac del taller:
 
 ```bash
 bash printer-bridge/pair-dashboard.sh
 ```
 
-El Controller sólo permite crear la credencial desde `127.0.0.1`/`localhost`. Guarda en disco únicamente el hash de una credencial de dispositivo con vencimiento y redirige el navegador a `dashboard.thelab.solutions` usando un fragmento `#printer_pair=...`, que no se envía al servidor de GitHub Pages. El dashboard consume el fragmento, lo elimina inmediatamente de la barra de direcciones y desde entonces renueva sus tickets del Farm Controller sin depender del token maestro horneado en Pages.
+El helper valida primero que el puerto `8347` esté servido por el **Farm Controller** y no por el bridge legado. Si detecta un LaunchAgent viejo o un proceso stale en macOS, ejecuta el instalador del Controller y vuelve a comprobarlo. Después solicita el emparejamiento por loopback, valida la credencial recién emitida contra `/farm/session` y abre directamente el dashboard; el navegador ya no depende de navegar primero por `127.0.0.1`.
+
+El Controller sólo permite crear la credencial desde `127.0.0.1`/`localhost`. Guarda en disco únicamente su hash y entrega la credencial al dashboard mediante el fragmento `#printer_pair=...`, que no se envía al servidor de GitHub Pages. El dashboard consume ese fragmento, lo elimina inmediatamente de la barra de direcciones y desde entonces renueva tickets sin depender del token maestro.
 
 ## Requisitos
 
@@ -144,21 +146,28 @@ launchctl list | grep printer-bridge             # el bridge
 
 ---
 
-## Paso 3 — Configurar el dashboard
+## Paso 3 — Abrir el dashboard emparejado
 
-1. Abre el dashboard → chip de usuario (arriba a la derecha) → **Mi cuenta**
-2. En **Túnel Impresoras**:
-   - URL: déjala vacía (usa el default `https://printers.thelab.solutions`) o pega tu URL
-   - **Token del bridge**: pega el token del Paso 1
-   - Pulsa **Guardar**.
-3. Pulsa **Probar**: te dice al instante si el túnel responde y si el token es válido
-   (✅ / ✗). Si algo falla, el mensaje indica qué arreglar. El botón **Reiniciar bridge**
-   lo reinicia en remoto sin tocar el iMac (launchd lo levanta de nuevo).
-4. En la sección **Máquinas**, con el botón en `🌐 Remoto`, las impresoras
-   encendidas deben pasar de "Offline" a su estado real en ~15 segundos.
+La ruta normal ya no usa configuración manual. En el iMac del taller ejecuta:
 
-> El token y la URL se guardan **por equipo** (en el navegador). Repite el Paso 3
-> en cada dispositivo desde el que uses el dashboard (iMac, MacBook, etc.).
+```bash
+bash printer-bridge/pair-dashboard.sh
+```
+
+El script debe terminar mostrando, como mínimo:
+
+```text
+✓ Farm Controller correcto en 127.0.0.1:8347
+✓ Credencial local validada por el Farm Controller
+✓ Emparejamiento iniciado
+```
+
+Luego abre **Máquinas** en el dashboard. Con el modo remoto activo, la telemetría debería empezar a poblarse en pocos segundos.
+
+Si el script muestra una advertencia indicando que el túnel público no confirmó la sesión, el emparejamiento local sí quedó creado pero el camino `printers.thelab.solutions → Cloudflare Tunnel → Farm Controller` requiere revisión. El helper deja el mensaje visible en Terminal en vez de ocultar el error.
+
+> La sección **Mi cuenta → Túnel Impresoras** queda sólo como compatibilidad/diagnóstico legado. No copies el token maestro allí durante el flujo normal.
+
 
 ---
 
