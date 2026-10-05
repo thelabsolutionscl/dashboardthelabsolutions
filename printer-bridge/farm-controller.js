@@ -41,7 +41,7 @@ fs.mkdirSync(PAYLOAD_DIR, { recursive: true, mode: 0o700 });
 fs.mkdirSync(AUDIT_DIR, { recursive: true, mode: 0o700 });
 
 async function atomicWrite(file, value) {
-  const tmp = file + '.tmp-' + process.pid + '-' + Date.now();
+  const tmp = file + '.tmp-' + process.pid + '-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
   await fs.promises.writeFile(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
   await fs.promises.rename(tmp, file);
 }
@@ -50,7 +50,7 @@ function payloadPath(jobOrId) {
   return id?path.join(PAYLOAD_DIR,id+'.gcode'):'';
 }
 async function writePayload(id,base64) {
-  const file=payloadPath(id),tmp=file+'.tmp-'+process.pid+'-'+Date.now();
+  const file=payloadPath(id),tmp=file+'.tmp-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(4).toString('hex');
   if(!file)throw new Error('id de payload inválido');
   const bytes=Buffer.from(String(base64||''),'base64');
   if(!bytes.length)throw new Error('payload G-code vacío');
@@ -195,16 +195,58 @@ function auditJsonClone(value,maxBytes=AUDIT_MAX_EVIDENCE){
   if(Buffer.byteLength(raw,'utf8')>maxBytes)throw new Error('reporte de auditoría demasiado grande');
   return JSON.parse(raw);
 }
-function auditSafeName(value){
-  return String(value||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180);
+function auditLegacySafeName(value){
+  const out=String(value||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180);
+  return !out||out==='.'||out==='..'?'':out;
+}
+function auditPathSegment(value){
+  const raw=String(value||'').trim();if(!raw)return'';
+  const base=(raw.replace(/[^A-Za-z0-9_.-]/g,'_').replace(/^\.+$/,'id').slice(0,120)||'id');
+  const suffix=crypto.createHash('sha256').update(raw).digest('hex').slice(0,16);
+  return base+'-'+suffix;
+}
+function auditPathInsideRoot(dir){
+  const root=path.resolve(AUDIT_DIR)+path.sep,resolved=path.resolve(dir)+path.sep;
+  return resolved.startsWith(root);
 }
 function auditReportPath(machineId,auditId){
-  const machine=auditSafeName(machineId),id=auditSafeName(auditId);
+  const machine=auditPathSegment(machineId),id=auditPathSegment(auditId);
   if(!machine||!id)throw new Error('identificador de auditoría inválido');
-  const dir=path.join(AUDIT_DIR,machine);fs.mkdirSync(dir,{recursive:true,mode:0o700});
+  const dir=path.resolve(AUDIT_DIR,machine);
+  if(!auditPathInsideRoot(dir))throw new Error('ruta de auditoría inválida');
+  fs.mkdirSync(dir,{recursive:true,mode:0o700});
+  return path.join(dir,id+'.json');
+}
+function auditLegacyReportPath(machineId,auditId){
+  const machine=auditLegacySafeName(machineId),id=auditLegacySafeName(auditId);
+  if(!machine||!id)return'';
+  const dir=path.resolve(AUDIT_DIR,machine);
+  if(!auditPathInsideRoot(dir))return'';
   return path.join(dir,id+'.json');
 }
 function auditHash(value){return crypto.createHash('sha256').update(JSON.stringify(value??null)).digest('hex');}
+function loadOrCreateAuditSealKey(){
+  const env=String(process.env.FARM_AUDIT_SEAL_KEY||'').trim();
+  if(env)return Buffer.from(env,'utf8');
+  const file=path.join(DATA_DIR,'.audit-seal-key');
+  try{const v=fs.readFileSync(file,'utf8').trim();if(v)return Buffer.from(v,'utf8');}catch(_){}
+  const generated=crypto.randomBytes(32).toString('base64url');
+  fs.writeFileSync(file,generated+'\n',{mode:0o600});
+  return Buffer.from(generated,'utf8');
+}
+const AUDIT_SEAL_KEY=loadOrCreateAuditSealKey();
+function auditSealPayload(report){
+  return{
+    version:report.version,sealVersion:report.sealVersion||0,id:report.id,machineId:report.machineId,
+    requestId:report.requestId||'',createdAt:report.createdAt,actorRole:report.actorRole,clientActor:report.clientActor||'',
+    model:report.model,durationMs:report.durationMs||0,sourceMatrix:report.sourceMatrix||{},cost:report.cost||null,
+    scanId:report.scanId||'',evidenceHash:report.evidenceHash||'',scanEvidenceHash:report.scanEvidenceHash||'',
+    result:report.result||{}
+  };
+}
+function auditSealHash(report){
+  return crypto.createHmac('sha256',AUDIT_SEAL_KEY).update(JSON.stringify(auditSealPayload(report))).digest('hex');
+}
 function auditByteLength(value){return Buffer.byteLength(JSON.stringify(value??null),'utf8');}
 function compactAuditScanCore(value){
   const c=auditJsonClone(value,2*1024*1024);
