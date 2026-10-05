@@ -3009,15 +3009,14 @@ async function runPrinterAudit(machineId,button,opts={}){
     const saved=d.report||report;
     audit('Auditoría integral',machineId,result.overall+' · '+Math.round(result.score)+'/100 · '+result.findings.length+' hallazgo(s)'+(aiFallback?' · fallback determinístico':''),result.overall==='critical'?'warn':'info');writeLocal();scheduleRemote();
     progress(5,'Auditoría terminada','Informe guardado en historial central'+(aiFallback?' sin interpretación Claude.':'.'));
-    if(!background)renderPrinterAuditReport(saved,{savedOk:true});
-    toast((aiFallback?'Auditoría técnica':'Auditoría IA')+' completada · '+Math.round(result.score)+'/100','success');
+    if(!background){renderPrinterAuditReport(saved,{savedOk:true});toast((aiFallback?'Auditoría técnica':'Auditoría IA')+' completada · '+Math.round(result.score)+'/100','success');}
     return saved;
   }catch(e){
     if(!background){
       const modal=_printerAuditModal(),body=input('mopsPrinterAuditBody');modal.style.display='flex';
       if(body)body.innerHTML='<div style="padding:8px"><div style="font-size:17px;font-weight:900;color:var(--danger);margin-bottom:7px">No se pudo completar la auditoría</div><div style="font-size:12px;color:var(--text2);line-height:1.55">'+esc(e.message||'Error desconocido')+'</div><div style="font-size:11px;color:var(--text3);margin-top:9px">No se ejecutó ninguna reparación automática.</div></div>';
     }
-    audit('Auditoría fallida',machineId,String(e.message||e).slice(0,300),'warn');writeLocal();scheduleRemote();toast('Auditoría fallida: '+(e.message||e),'error');return false;
+    audit('Auditoría fallida',machineId,String(e.message||e).slice(0,300),'warn');writeLocal();scheduleRemote();if(!background)toast('Auditoría fallida: '+(e.message||e),'error');return false;
   }finally{delete _printerAuditBusy[machineId];if(button){button.disabled=false;button.textContent=oldText;}}
 }
 async function runFleetAudit(button){
@@ -3026,15 +3025,20 @@ async function runFleetAudit(button){
   const machines=(MAQUINAS||[]).filter(function(m){return m&&m.id;});
   if(!machines.length)return false;
   if(!confirm('Se auditarán '+machines.length+' impresoras de forma secuencial para no saturar red ni presupuesto IA. ¿Continuar?'))return false;
-  const old=button?.textContent||'✦ AUDITAR GRANJA';if(button)button.disabled=true;
-  const results=[];
-  for(let i=0;i<machines.length;i++){
-    if(button)button.textContent='AUDITANDO '+(i+1)+'/'+machines.length;
-    const r=await runPrinterAudit(machines[i].id,null,{background:true});results.push({machine:machines[i],report:r||null});
-  }
-  if(button){button.disabled=false;button.textContent=old;}
+  const old=button?.textContent||'✦ AUDITAR GRANJA',results=[];if(button)button.disabled=true;
+  let consecutiveFailures=0,stoppedEarly=false;
+  try{
+    for(let i=0;i<machines.length;i++){
+      if(button)button.textContent='AUDITANDO '+(i+1)+'/'+machines.length;
+      const r=await runPrinterAudit(machines[i].id,null,{background:true});
+      results.push({machine:machines[i],report:r||null});
+      consecutiveFailures=r?0:consecutiveFailures+1;
+      if(consecutiveFailures>=3&&i<machines.length-1){stoppedEarly=true;break;}
+    }
+  }finally{if(button){button.disabled=false;button.textContent=old;}}
   const modal=_printerAuditModal(),body=input('mopsPrinterAuditBody');modal.style.display='flex';setText('mopsPrinterAuditTitle','AUDITORÍA DE GRANJA');
-  body.innerHTML='<div style="font-size:12px;color:var(--text3);margin-bottom:12px">'+results.filter(function(x){return x.report;}).length+'/'+results.length+' auditorías guardadas.</div>'+results.map(function(x){const r=x.report?.result,meta=_printerAuditStatusMeta(r?.overall);return '<div style="display:flex;gap:10px;align-items:center;padding:9px;border-bottom:1px solid var(--border2)"><b style="flex:1">'+esc(machineLabel(x.machine.id))+'</b><span style="color:'+meta.color+'">'+(r?Math.round(num(r.score))+'/100':'FALLÓ')+'</span></div>';}).join('');
+  const pending=Math.max(0,machines.length-results.length);
+  body.innerHTML='<div style="font-size:12px;color:var(--text3);margin-bottom:12px">'+results.filter(function(x){return x.report;}).length+'/'+results.length+' auditorías guardadas.'+(stoppedEarly?' Se detuvo tras 3 fallos consecutivos para no repetir timeouts'+(pending?' · '+pending+' pendientes':'')+'.':'')+'</div>'+results.map(function(x){const r=x.report?.result,meta=_printerAuditStatusMeta(r?.overall);return '<div style="display:flex;gap:10px;align-items:center;padding:9px;border-bottom:1px solid var(--border2)"><b style="flex:1">'+esc(machineLabel(x.machine.id))+'</b><span style="color:'+meta.color+'">'+(r?Math.round(num(r.score))+'/100':'FALLÓ')+'</span></div>';}).join('');
   return results;
 }
 
