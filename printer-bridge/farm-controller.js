@@ -14,7 +14,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const SafetyPolicy = require('../js/machineops-unattended-safety.js');
 
 const ROOT = __dirname;
@@ -33,6 +33,8 @@ const DASHBOARD_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || 'https://dashboard.t
 const DISCOVERY_PREFIX = process.env.FARM_LAN_PREFIX || '192.168.100.';
 const DISCOVERY_INTERVAL_MS = Math.max(60_000, Number(process.env.FARM_DISCOVERY_INTERVAL_MS || 10 * 60_000));
 const MAX_BODY = 64 * 1024 * 1024;
+const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
+const REPO_DIR = process.env.BRIDGE_REPO_DIR || path.resolve(ROOT, '..');
 
 fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 fs.mkdirSync(PAYLOAD_DIR, { recursive: true, mode: 0o700 });
@@ -489,6 +491,22 @@ function startLegacy() {
   });
 }
 
+let _controllerUpdating=false;
+function updateFarmController(){
+  if(_controllerUpdating)return Promise.resolve({ok:false,error:'actualización ya en curso'});
+  _controllerUpdating=true;
+  return new Promise(resolve=>{
+    const finish=value=>{if(!value?.ok)_controllerUpdating=false;resolve(value);};
+    const run=git=>execFile(git,['-C',REPO_DIR,'pull','--ff-only','origin','main'],{timeout:90000},(err,stdout,stderr)=>{
+      if(err&&err.code==='ENOENT'&&git==='git')return run('/usr/bin/git');
+      const out=String(stdout||'').trim(),errOut=String(stderr||'').trim();
+      if(err)return finish({ok:false,error:errOut||out||err.message});
+      finish({ok:true,out});
+    });
+    run('git');
+  });
+}
+
 function routeMinimumRole(req, pathname) {
   if (pathname === '/healthz') return null;
   if (pathname === '/authcheck') return 'viewer';
@@ -783,6 +801,22 @@ const server = http.createServer(async (req, res) => {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
+  // Actualiza y reinicia el proceso PADRE. Antes /update se delegaba al bridge
+  // legado hijo: el git pull ocurría, pero Farm Controller seguía ejecutando el
+  // código viejo en memoria. Este endpoint hace el mismo fast-forward seguro y
+  // luego sale completo para que launchd levante controller + bridge nuevos.
+  if(p==='/update'){
+    if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'admin');if(!role)return;
+    if(!UPDATE_ENABLED)return json(res,200,{ok:false,error:'actualización desactivada (BRIDGE_UPDATE=0)'},{'X-Farm-Role':role});
+    const result=await updateFarmController();
+    json(res,200,{...result,restarting:!!result.ok,scope:'farm-controller'},{'X-Farm-Role':role});
+    if(result.ok){
+      console.log('[farm] actualizado vía /update — reiniciando controller completo.');
+      setTimeout(shutdown,500).unref?.();
+    }
+    return;
+  }
   if (p === '/farm/session' && req.method === 'POST') {
     const role=requireRole(req,res,'viewer');if(!role)return;
     const session=issueSession(role);
@@ -991,5 +1025,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, updateAuditFinding, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };

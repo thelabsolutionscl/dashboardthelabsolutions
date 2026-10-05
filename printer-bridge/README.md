@@ -318,10 +318,13 @@ recuperación en curso.
 curl -X POST "https://printers.thelab.solutions/update?bt=TU_TOKEN"
 ```
 
-Hace `git pull --ff-only origin main` y sale; launchd lo levanta con el código
-nuevo en un par de segundos. Responde `{"ok":true,...}` con la salida de git, o
-`{"ok":false,"error":...}` si el clon del iMac tiene cambios locales o está en
-otra rama. Se apaga con `BRIDGE_UPDATE=0`.
+Hace `git pull --ff-only origin main` desde el **Farm Controller** y reinicia
+el proceso completo; launchd vuelve a levantar tanto el Controller como el bridge
+legado usando el código nuevo. Esto es importante cuando una versión modifica
+rutas `/farm/*`: reiniciar solamente el bridge hijo dejaría el Controller viejo
+en memoria. Responde `{"ok":true,...,"scope":"farm-controller"}` con la salida de
+git, o `{"ok":false,"error":...}` si el clon del iMac tiene cambios locales o
+está en otra rama. Se apaga con `BRIDGE_UPDATE=0`.
 
 > Solo fast-forward desde `origin/main`: nunca reescribe el árbol de trabajo
 > del iMac ni cambia de rama.
