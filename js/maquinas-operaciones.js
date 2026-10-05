@@ -2647,6 +2647,19 @@ async function _printerAuditBedEvidence(machineId){
     return bedLevelPreflightFact(machineId,'');
   }catch(e){return{code:'unavailable',level:'warn',detail:'No se pudo consultar la malla activa: '+(e?.message||'error')};}
 }
+async function _printerAuditVision(scan){
+  const frame=scan?.cameraFrame;
+  if(!frame?.ok||!frame.dataUrl)return{available:false,reason:scan?.sources?.camera?.available?'snapshot no capturado':'cámara no disponible'};
+  if(typeof _openaiFetch!=='function'||(typeof _openaiAvailable==='function'&&!_openaiAvailable()))return{available:false,reason:'analizador visual IA no disponible'};
+  try{
+    const prompt='Eres inspector técnico de una impresora 3D FDM. Analiza SOLO lo visible en este fotograma. Detecta spaghetti, warping, pieza desprendida, mala primera capa, acumulación en nozzle, obstrucciones, humo o una impresión aparentemente normal. No inventes. Devuelve exclusivamente JSON: {"risk":"low|medium|high|unknown","finding":"máximo 35 palabras","confidence":0-100,"recommendation":"máximo 35 palabras"}.';
+    const r=await _openaiFetch('/v1/chat/completions',{method:'POST',body:JSON.stringify({model:'gpt-4o-mini',temperature:0,max_tokens:220,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:frame.dataUrl,detail:'low'}}]}]})});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error?.message||('OpenAI '+r.status));
+    const d=await r.json();let raw=String(d.choices?.[0]?.message?.content||'{}').replace(/^\x60\x60\x60(?:json)?\s*/i,'').replace(/\s*\x60\x60\x60$/,'').trim();
+    const result=JSON.parse(raw),risk=['low','medium','high','unknown'].includes(result.risk)?result.risk:'unknown';
+    return{available:true,risk,finding:String(result.finding||'').slice(0,500),confidence:clamp(num(result.confidence),0,100),recommendation:String(result.recommendation||'').slice(0,500),captured:true};
+  }catch(e){return{available:false,reason:'análisis visual falló: '+String(e?.message||e).slice(0,300)};}
+}
 function _compactPrinterAuditEvidence(evidence){
   const c=_auditClone(evidence,{});
   if(c?.scan?.ssh?.output)c.scan.ssh.output=_auditCapText(c.scan.ssh.output,80000);
@@ -2701,7 +2714,7 @@ async function _printerAuditClaude(evidence){
 }
 function _printerAuditSourceMatrix(evidence){
   const scan=evidence?.scan||{},src=scan.sources||{},dash=evidence?.dashboard||{};
-  return{moonraker:!!src.moonraker?.available,sshLogs:!!src.ssh?.logsCaptured,camera:!!src.camera?.available,dashboardTelemetry:!!dash.live&&Object.keys(dash.live).length>0,centralHistory:!!dash.history?.durable,farmHealth:!!dash.central?.central,bedMesh:!!evidence?.bed&&evidence.bed.code!=='unavailable',maintenance:Array.isArray(dash.maintenance),incidents:Array.isArray(dash.incidents)};
+  return{moonraker:!!src.moonraker?.available,sshLogs:!!src.ssh?.logsCaptured,camera:!!src.camera?.available,cameraVision:!!evidence?.vision?.available,dashboardTelemetry:!!dash.live&&Object.keys(dash.live).length>0,centralHistory:!!dash.history?.durable,farmHealth:!!dash.central?.central,bedMesh:!!evidence?.bed&&evidence.bed.code!=='unavailable',maintenance:Array.isArray(dash.maintenance),incidents:Array.isArray(dash.incidents)};
 }
 function _printerAuditStatusMeta(overall){
   if(overall==='critical')return{label:'CRÍTICA',color:'var(--danger)',bg:'rgba(255,68,68,.10)'};
@@ -2712,7 +2725,7 @@ function _printerAuditStatusMeta(overall){
 function renderPrinterAuditReport(saved,opts={}){
   const savedOk=opts.savedOk!==false,modal=_printerAuditModal(),body=input('mopsPrinterAuditBody'),result=saved?.result||{},evidence=saved?.evidence||{},meta=_printerAuditStatusMeta(result.overall);
   modal.style.display='flex';setText('mopsPrinterAuditTitle','AUDITORÍA IA · '+(machineLabel(saved.machineId)||saved.machineId));
-  const matrix=saved.sourceMatrix||_printerAuditSourceMatrix(evidence),labels={moonraker:'Moonraker',sshLogs:'Logs SSH',camera:'Cámara',dashboardTelemetry:'Telemetría',centralHistory:'Historial central',farmHealth:'Farm Health',bedMesh:'Malla cama',maintenance:'Mantención',incidents:'Incidentes'};
+  const matrix=saved.sourceMatrix||_printerAuditSourceMatrix(evidence),labels={moonraker:'Moonraker',sshLogs:'Logs SSH',camera:'Cámara',cameraVision:'Visión IA',dashboardTelemetry:'Telemetría',centralHistory:'Historial central',farmHealth:'Farm Health',bedMesh:'Malla cama',maintenance:'Mantención',incidents:'Incidentes'};
   const sources=Object.entries(matrix).map(function(pair){const k=pair[0],v=pair[1];return '<span style="font-size:10px;font-weight:800;padding:4px 7px;border-radius:999px;border:1px solid '+(v?'rgba(0,212,170,.35)':'var(--border2)')+';color:'+(v?'var(--accent3)':'var(--text3)')+'">'+(v?'✓':'—')+' '+esc(labels[k]||k)+'</span>';}).join('');
   function sevColor(sev){return sev==='critical'||sev==='high'?'var(--danger)':sev==='medium'?'var(--warn)':sev==='low'?'#38bdf8':'var(--text3)';}
   const findings=(result.findings||[]).map(function(row){return '<div style="border:1px solid var(--border2);border-left:3px solid '+sevColor(row.severity)+';border-radius:10px;padding:11px 12px;background:var(--surface2);margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:5px"><b style="font-size:11px;color:'+sevColor(row.severity)+'">'+esc(String(row.severity||'info').toUpperCase())+'</b><span style="font-size:11px;font-weight:800;color:var(--text)">'+esc(row.area||'General')+'</span></div><div style="font-size:12px;line-height:1.5;color:var(--text2)">'+esc(row.finding||'')+'</div>'+((row.evidence||[]).length?'<div style="font-size:10.5px;color:var(--text3);margin-top:6px">'+row.evidence.map(function(x){return '• '+esc(x);}).join('<br>')+'</div>':'')+(row.action?'<div style="font-size:11px;color:var(--accent);margin-top:7px"><b>Acción:</b> '+esc(row.action)+'</div>':'')+'</div>';}).join('');
@@ -2748,8 +2761,11 @@ async function runPrinterAudit(machineId,button){
     try{await refreshTechStatus(machineId,null,true);}catch(_){}
     const dashboard=_printerAuditDashboardEvidence(machineId,machine),bed=await _printerAuditBedEvidence(machineId);
     _printerAuditProgress(machineId,2,'Escaneando la impresora','Consultando Moonraker, Klipper, historial técnico, cámara y diagnóstico del sistema.');
-    const remote=await _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'}),scan=remote.diagnostics||{},evidence={dashboard,bed,scan};
-    _printerAuditProgress(machineId,3,'Analizando evidencia con IA','La IA correlaciona síntomas, logs y antecedentes; no ejecuta reparaciones ni comandos.');
+    const remote=await _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'}),scan=remote.diagnostics||{};
+    const vision=await _printerAuditVision(scan);
+    if(scan.cameraFrame)delete scan.cameraFrame;
+    const evidence={dashboard,bed,scan,vision};
+    _printerAuditProgress(machineId,3,'Analizando evidencia con IA','La IA correlaciona telemetría, visión, logs y antecedentes; no ejecuta reparaciones ni comandos.');
     const result=await _printerAuditClaude(evidence);
     const report={id:'audit-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9),machineId,createdAt:nowIso(),actor:actor(),model:PRINTER_AUDIT_MODEL,durationMs:Date.now()-started,sourceMatrix:_printerAuditSourceMatrix(evidence),result,evidence:_storagePrinterAuditEvidence(evidence)};
     _printerAuditProgress(machineId,4,'Guardando informe completo','Persistiendo resultado y evidencia en el historial central de la impresora.');
