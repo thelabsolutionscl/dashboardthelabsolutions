@@ -249,6 +249,36 @@ function cameraProbe(ip,port,pathName,timeoutMs) {
     req.end();
   });
 }
+function cameraSnapshot(ip,port,pathName,timeoutMs=6000,maxBytes=2*1024*1024) {
+  return new Promise(resolve=>{
+    const req=http.request({host:ip,port,path:pathName,method:'GET',agent:keepAliveAgent,timeout:timeoutMs},res=>{
+      const ct=String(res.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+      if((res.statusCode||500)>=300||!ct.startsWith('image/')){res.resume();return resolve({ok:false});}
+      const chunks=[];let total=0,settled=false;
+      const done=value=>{if(settled)return;settled=true;resolve(value);};
+      res.on('data',chunk=>{
+        total+=chunk.length;
+        if(total>maxBytes){res.destroy();done({ok:false,error:'snapshot demasiado grande'});return;}
+        chunks.push(chunk);
+      });
+      res.on('end',()=>{
+        if(settled)return;
+        const body=Buffer.concat(chunks);
+        if(!body.length)return done({ok:false,error:'snapshot vacío'});
+        done({ok:true,mime:ct,bytes:body.length,dataUrl:'data:'+ct+';base64,'+body.toString('base64')});
+      });
+      res.on('error',()=>done({ok:false}));
+    });
+    req.on('timeout',()=>{req.destroy();resolve({ok:false,error:'timeout'});});
+    req.on('error',()=>resolve({ok:false}));
+    req.end();
+  });
+}
+async function captureAuditCameraFrame(ip) {
+  let shot=await cameraSnapshot(ip,1984,'/api/frame.jpeg?src=k2plus',6500);
+  if(!shot.ok)shot=await cameraSnapshot(ip,8080,'/?action=snapshot',5000);
+  return shot.ok?shot:{ok:false,error:shot.error||'sin snapshot'};
+}
 async function cameraIsUp(ip,kind='auto') {
   const mode=String(kind||'auto').toLowerCase();
   if(mode!=='mjpeg'&&await cameraProbe(ip,1984,'/api/frame.jpeg?src=k2plus',25000)) return {ok:true,kind:'go2rtc',port:1984};
@@ -399,6 +429,7 @@ async function collectPrinterDiagnostics(ip) {
     cameraProbe(ip,8080,'/?action=snapshot',3500),
     sshCheck(ip),
   ]);
+  const cameraFrame=(camGo2rtc||camMjpeg)?await captureAuditCameraFrame(ip):{ok:false,error:'cámara no disponible'};
   const ssh=sshAccess?.ok?await runDiagnosticSsh(ip):{ok:false,error:sshAccess?.error||'SSH no disponible',output:''};
   const okCount=[printerInfo,serverInfo,systemInfo,objects,gcode,history].filter(r=>r?.ok).length;
   return{
@@ -408,8 +439,9 @@ async function collectPrinterDiagnostics(ip) {
     sources:{
       moonraker:{available:okCount>0,checksOk:okCount,checksTotal:6},
       ssh:{available:!!sshAccess?.ok,logsCaptured:!!ssh?.ok,error:ssh?.ok?'':String(ssh?.error||'')},
-      camera:{available:!!(camGo2rtc||camMjpeg),go2rtc:!!camGo2rtc,mjpeg:!!camMjpeg},
+      camera:{available:!!(camGo2rtc||camMjpeg),go2rtc:!!camGo2rtc,mjpeg:!!camMjpeg,snapshotCaptured:!!cameraFrame.ok},
     },
+    cameraFrame,
     deterministic,
     moonraker:{
       printerInfo:printerInfo?.ok?printerInfo.json:null,
