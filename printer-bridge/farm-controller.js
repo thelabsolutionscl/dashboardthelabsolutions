@@ -23,7 +23,9 @@ const QUEUE_FILE = process.env.FARM_QUEUE_FILE || path.join(DATA_DIR, 'queue.jso
 const REGISTRY_FILE = process.env.FARM_REGISTRY_FILE || path.join(DATA_DIR, 'registry.json');
 const SAFETY_FILE = process.env.FARM_SAFETY_FILE || path.join(DATA_DIR, 'safety.json');
 const OPERATIONS_FILE = process.env.FARM_OPERATIONS_FILE || path.join(DATA_DIR, 'operations.json');
-const AUDIT_FILE = process.env.FARM_AUDIT_FILE || path.join(DATA_DIR, 'printer-audits.json');
+const AUDIT_LEGACY_FILE = process.env.FARM_AUDIT_FILE || path.join(DATA_DIR, 'printer-audits.json');
+const AUDIT_DIR = process.env.FARM_AUDIT_DIR || path.join(DATA_DIR, 'printer-audits');
+const AUDIT_INDEX_FILE = path.join(AUDIT_DIR, 'index.json');
 const PAYLOAD_DIR = process.env.FARM_PAYLOAD_DIR || path.join(DATA_DIR, 'payloads');
 const PUBLIC_PORT = Number(process.env.BRIDGE_PORT || 8347);
 const LEGACY_PORT = Number(process.env.LEGACY_BRIDGE_PORT || 8348);
@@ -34,6 +36,7 @@ const MAX_BODY = 64 * 1024 * 1024;
 
 fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 fs.mkdirSync(PAYLOAD_DIR, { recursive: true, mode: 0o700 });
+fs.mkdirSync(AUDIT_DIR, { recursive: true, mode: 0o700 });
 
 async function atomicWrite(file, value) {
   const tmp = file + '.tmp-' + process.pid + '-' + Date.now();
@@ -180,11 +183,62 @@ function sanitizeOperation(machineId,body={},now=Date.now()){
   const startedAt=Number(body.startedAt||now),expiresAt=Math.min(now+24*60*60*1000,Math.max(now+5000,Number(body.expiresAt||now+30*60*1000)));
   return{machineId:id,type,label:String(body.label||'').slice(0,120),phase:String(body.phase||'').slice(0,240),source:String(body.source||'').slice(0,80),sessionId:String(body.sessionId||'').slice(0,120),startedAt,expiresAt,updatedAt:now};
 }
-const AUDIT_MAX_TOTAL=800,AUDIT_MAX_PER_MACHINE=80,AUDIT_MAX_BODY=512*1024,AUDIT_MAX_EVIDENCE=380*1024;
+
+const AUDIT_MAX_PER_MACHINE=80,AUDIT_MAX_BODY=512*1024,AUDIT_MAX_EVIDENCE=380*1024,AUDIT_MAX_RESULT=96*1024;
+const AUDIT_FINDING_STATES=new Set(['new','reviewing','resolved','ignored']);
+const AUDIT_SCAN_TTL_MS=15*60*1000;
+const auditScanSessions=new Map();
 function auditJsonClone(value,maxBytes=AUDIT_MAX_EVIDENCE){
   const raw=JSON.stringify(value==null?null:value);
   if(Buffer.byteLength(raw,'utf8')>maxBytes)throw new Error('reporte de auditoría demasiado grande');
   return JSON.parse(raw);
+}
+function auditSafeName(value){
+  return String(value||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180);
+}
+function auditReportPath(machineId,auditId){
+  const machine=auditSafeName(machineId),id=auditSafeName(auditId);
+  if(!machine||!id)throw new Error('identificador de auditoría inválido');
+  const dir=path.join(AUDIT_DIR,machine);fs.mkdirSync(dir,{recursive:true,mode:0o700});
+  return path.join(dir,id+'.json');
+}
+function auditHash(value){return crypto.createHash('sha256').update(JSON.stringify(value??null)).digest('hex');}
+function findingIdFor(row,index){
+  const raw=[row?.area||'',row?.finding||'',row?.action||'',index].join('|');
+  return 'finding-'+crypto.createHash('sha256').update(raw).digest('hex').slice(0,18);
+}
+function normalizeAuditResult(raw={},createdAt=nowIso()){
+  const result=raw&&typeof raw==='object'&&!Array.isArray(raw)?auditJsonClone(raw,AUDIT_MAX_RESULT):{};
+  const findings=Array.isArray(result.findings)?result.findings.slice(0,40):[];
+  result.findings=findings.map((row,index)=>{
+    const r=row&&typeof row==='object'&&!Array.isArray(row)?row:{};
+    const existing=/^finding-[a-f0-9]{12,40}$/i.test(String(r.findingId||''))?String(r.findingId):findingIdFor(r,index);
+    const state=AUDIT_FINDING_STATES.has(String(r.status||''))?String(r.status):'new';
+    return{...r,findingId:existing,status:state,statusUpdatedAt:String(r.statusUpdatedAt||createdAt).slice(0,40),statusNote:String(r.statusNote||'').slice(0,1200)};
+  });
+  return result;
+}
+function auditResultSummary(result={}){
+  const findings=Array.isArray(result.findings)?result.findings:[],counts={new:0,reviewing:0,resolved:0,ignored:0};
+  for(const f of findings)counts[AUDIT_FINDING_STATES.has(f?.status)?f.status:'new']++;
+  return{
+    overall:String(result.overall||'unknown').slice(0,24),
+    score:Math.max(0,Math.min(100,Number(result.score)||0)),
+    confidence:Math.max(0,Math.min(100,Number(result.confidence)||0)),
+    summary:String(result.summary||'').slice(0,1800),
+    findingCount:findings.length,
+    findingStates:counts,
+  };
+}
+function auditSummaryFromReport(report){
+  return{
+    id:report.id,machineId:report.machineId,createdAt:report.createdAt,
+    actorRole:report.actorRole,clientActor:report.clientActor||'',model:report.model||'',
+    durationMs:report.durationMs||0,sourceMatrix:report.sourceMatrix||{},
+    result:auditResultSummary(report.result),cost:report.cost||null,
+    evidenceHash:report.evidenceHash||'',reportHash:report.reportHash||'',
+    scanId:report.scanId||'',version:2,
+  };
 }
 function pruneAuditReports(rows){
   const sorted=(Array.isArray(rows)?rows:[]).filter(x=>x&&x.machineId&&x.id)
@@ -194,36 +248,96 @@ function pruneAuditReports(rows){
     const id=String(row.machineId),n=counts.get(id)||0;
     if(n>=AUDIT_MAX_PER_MACHINE)continue;
     counts.set(id,n+1);out.push(row);
-    if(out.length>=AUDIT_MAX_TOTAL)break;
   }
   return out;
 }
 function normalizeAuditStore(raw){
   const source=raw&&typeof raw==='object'?raw:{},reports=pruneAuditReports(source.reports);
-  return{version:1,updatedAt:Number(source.updatedAt||0),reports};
+  return{version:2,updatedAt:Number(source.updatedAt||0),reports};
 }
-function sanitizeAuditReport(machineId,body={}){
+function sanitizeAuditCost(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const estimatedUsd=Math.max(0,Math.min(5,Number(raw.estimatedUsd)||0));
+  return{
+    currency:'USD',estimatedUsd:Number(estimatedUsd.toFixed(6)),
+    textModel:String(raw.textModel||'').slice(0,80),visionModel:String(raw.visionModel||'').slice(0,80),
+    textInputTokens:Math.max(0,Math.floor(Number(raw.textInputTokens)||0)),
+    textOutputTokens:Math.max(0,Math.floor(Number(raw.textOutputTokens)||0)),
+    visionUsed:raw.visionUsed===true,
+  };
+}
+function purgeAuditScanSessions(now=Date.now()){
+  for(const [id,row] of auditScanSessions)if(!row||row.expiresAt<=now)auditScanSessions.delete(id);
+}
+function issueAuditScan(machineId,diagnostics,role){
+  purgeAuditScanSessions();
+  const scanId=uid('scan'),core=auditJsonClone(diagnostics,AUDIT_MAX_EVIDENCE);
+  const row={scanId,machineId,role,diagnostics:core,evidenceHash:auditHash(core),createdAt:nowIso(),expiresAt:Date.now()+AUDIT_SCAN_TTL_MS};
+  auditScanSessions.set(scanId,row);return row;
+}
+function sanitizeAuditReport(machineId,body={},role='operator'){
   const idMachine=String(machineId||'').trim();
   if(!idMachine||idMachine.length>120)throw new Error('machineId inválido');
-  const supplied=String(body.id||'').trim();
-  const id=/^[A-Za-z0-9_.:-]{8,160}$/.test(supplied)?supplied:uid('audit');
-  const createdRaw=Date.parse(body.createdAt||''),createdAt=Number.isFinite(createdRaw)?new Date(createdRaw).toISOString():nowIso();
-  const result=body.result&&typeof body.result==='object'?auditJsonClone(body.result,96*1024):{};
-  const evidence=body.evidence&&typeof body.evidence==='object'?auditJsonClone(body.evidence,AUDIT_MAX_EVIDENCE):{};
-  return{
-    id,machineId:idMachine,createdAt,
-    actor:String(body.actor||'Sistema').slice(0,160),
-    model:String(body.model||'').slice(0,120),
+  purgeAuditScanSessions();
+  const scanId=String(body.scanId||'');
+  const scan=auditScanSessions.get(scanId);
+  if(!scan||scan.machineId!==idMachine)throw new Error('escaneo de auditoría inválido o expirado');
+  const createdAt=nowIso(),id=uid('audit');
+  const submittedEvidence=body.evidence&&typeof body.evidence==='object'&&!Array.isArray(body.evidence)?auditJsonClone(body.evidence,AUDIT_MAX_EVIDENCE):{};
+  submittedEvidence.scan=scan.diagnostics;
+  const evidence=auditJsonClone(submittedEvidence,AUDIT_MAX_EVIDENCE);
+  const result=normalizeAuditResult(body.result,createdAt);
+  const model=['claude-haiku-4-5','deterministic-fallback'].includes(String(body.model||''))?String(body.model):'unknown';
+  const report={
+    version:2,id,machineId:idMachine,createdAt,actorRole:role,
+    clientActor:String(body.actor||'').slice(0,160),model,
     durationMs:Math.max(0,Math.min(30*60*1000,Number(body.durationMs)||0)),
     sourceMatrix:body.sourceMatrix&&typeof body.sourceMatrix==='object'?auditJsonClone(body.sourceMatrix,32*1024):{},
+    cost:sanitizeAuditCost(body.cost),scanId,
     result,evidence,
   };
+  report.evidenceHash=auditHash(report.evidence);
+  report.scanEvidenceHash=scan.evidenceHash;
+  report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
+  auditScanSessions.delete(scanId);
+  return report;
+}
+function migrateLegacyAudits(){
+  const existing=readJson(AUDIT_INDEX_FILE,null);
+  if(existing)return normalizeAuditStore(existing);
+  const legacy=readJson(AUDIT_LEGACY_FILE,null);
+  const rows=Array.isArray(legacy?.reports)?legacy.reports:[];
+  if(!rows.length)return normalizeAuditStore(null);
+  const summaries=[];
+  for(const old of rows){
+    try{
+      const createdAt=Number.isFinite(Date.parse(old.createdAt||''))?new Date(old.createdAt).toISOString():nowIso();
+      const report={
+        version:2,id:/^[A-Za-z0-9_.:-]{8,160}$/.test(String(old.id||''))?String(old.id):uid('audit'),
+        machineId:String(old.machineId||'').slice(0,120),createdAt,actorRole:'legacy',
+        clientActor:String(old.actor||'').slice(0,160),model:String(old.model||'legacy').slice(0,120),
+        durationMs:Math.max(0,Number(old.durationMs)||0),sourceMatrix:old.sourceMatrix||{},cost:null,scanId:'',
+        result:normalizeAuditResult(old.result,createdAt),evidence:auditJsonClone(old.evidence||{},AUDIT_MAX_EVIDENCE),
+      };
+      if(!report.machineId)continue;
+      report.evidenceHash=auditHash(report.evidence);report.scanEvidenceHash='';
+      report.reportHash=auditHash({version:2,id:report.id,machineId:report.machineId,createdAt:report.createdAt,evidenceHash:report.evidenceHash,result:report.result});
+      fs.writeFileSync(auditReportPath(report.machineId,report.id),JSON.stringify(report,null,2)+'\n',{mode:0o600});
+      summaries.push(auditSummaryFromReport(report));
+    }catch(e){console.warn('[audits] migración omitida:',e.message);}
+  }
+  const store={version:2,updatedAt:Date.now(),reports:pruneAuditReports(summaries)};
+  try{fs.writeFileSync(AUDIT_INDEX_FILE,JSON.stringify(store,null,2)+'\n',{mode:0o600});}catch(e){console.warn('[audits] índice migrado no persistió:',e.message);}
+  return store;
+}
+async function readAuditReport(machineId,auditId){
+  try{return JSON.parse(await fs.promises.readFile(auditReportPath(machineId,auditId),'utf8'));}catch(_){return null;}
 }
 let queue = normalizeQueue(readJson(QUEUE_FILE, null));
 let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
 let safety = SafetyPolicy.normalizeSnapshot(readJson(SAFETY_FILE, null));
 let operations = normalizeOperations(readJson(OPERATIONS_FILE, null));
-let audits = normalizeAuditStore(readJson(AUDIT_FILE, null));
+let audits = migrateLegacyAudits();
 let queueWrite = Promise.resolve(), registryWrite = Promise.resolve(), safetyWrite = Promise.resolve(), operationsWrite=Promise.resolve(), auditWrite=Promise.resolve();
 function persistQueue() {
   queue.updatedAt=Date.now();
@@ -250,10 +364,35 @@ function persistOperations(){
   return operationsWrite;
 }
 function persistAudits(){
-  audits={...audits,updatedAt:Date.now(),reports:pruneAuditReports(audits.reports)};
+  audits={...audits,version:2,updatedAt:Date.now(),reports:pruneAuditReports(audits.reports)};
   const snapshot=JSON.parse(JSON.stringify(audits));
-  auditWrite=auditWrite.then(()=>atomicWrite(AUDIT_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[audits] persist',e);return false;});
+  auditWrite=auditWrite.then(()=>atomicWrite(AUDIT_INDEX_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[audits] persist',e);return false;});
   return auditWrite;
+}
+async function saveAuditReport(report){
+  const previous=audits.reports.slice(),summary=auditSummaryFromReport(report);
+  await atomicWrite(auditReportPath(report.machineId,report.id),report);
+  audits.reports=pruneAuditReports([summary,...audits.reports.filter(row=>row.id!==report.id)]);
+  const keep=new Set(audits.reports.map(row=>row.id));
+  const removed=previous.filter(row=>row.machineId===report.machineId&&!keep.has(row.id));
+  const durable=await persistAudits();
+  if(!durable)throw new Error('no se pudo persistir el índice de auditorías');
+  for(const row of removed)try{await fs.promises.unlink(auditReportPath(row.machineId,row.id));}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] cleanup',e.message);}
+  return summary;
+}
+async function updateAuditFinding(machineId,auditId,findingId,patch,role){
+  const report=await readAuditReport(machineId,auditId);if(!report)return null;
+  const findings=Array.isArray(report.result?.findings)?report.result.findings:[];
+  const row=findings.find(f=>f.findingId===findingId);if(!row)throw new Error('hallazgo no encontrado');
+  const status=String(patch.status||'');if(!AUDIT_FINDING_STATES.has(status))throw new Error('estado de hallazgo inválido');
+  row.status=status;row.statusUpdatedAt=nowIso();row.statusUpdatedByRole=role;row.statusNote=String(patch.note||'').slice(0,1200);
+  report.result=normalizeAuditResult(report.result,report.createdAt);
+  report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
+  await atomicWrite(auditReportPath(machineId,auditId),report);
+  const summary=auditSummaryFromReport(report),idx=audits.reports.findIndex(r=>r.id===auditId&&r.machineId===machineId);
+  if(idx>=0)audits.reports[idx]=summary;else audits.reports.unshift(summary);
+  if(!await persistAudits())throw new Error('no se pudo persistir estado del hallazgo');
+  return{report,summary};
 }
 const recoveredAtBoot = recoverQueueJobs(queue);
 if (recoveredAtBoot) {
@@ -792,7 +931,7 @@ function start(){
     console.log(`  Registry        : ${REGISTRY_FILE}`);
     console.log(`  Safety          : ${SAFETY_FILE}`);
     console.log(`  Operations      : ${OPERATIONS_FILE}`);
-    console.log(`  Auditorías IA   : ${AUDIT_FILE}`);
+    console.log(`  Auditorías IA   : ${AUDIT_DIR}`);
     console.log(`  Payloads        : ${PAYLOAD_DIR}`);
     console.log(`  Roles           : viewer=${TOKENS.viewer ? 'sí' : 'fallback'} operator=${TOKENS.operator ? 'sí' : 'fallback'} admin=sí`);
     console.log('─'.repeat(64));
