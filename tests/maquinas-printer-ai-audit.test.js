@@ -16,7 +16,8 @@ test('la ficha operacional expone AUDITAR y usa el flujo IA con presupuesto traz
   assert.match(OPS,/MachineOps\.runPrinterAudit\('\$\{id\}',this\)/);
   assert.match(OPS,/>✦ AUDITAR<\/button>/);
   assert.match(OPS,/const PRINTER_AUDIT_MODEL='claude-haiku-4-5'/);
-  assert.match(OPS,/X-AI-Agent':'printer-audit'/);
+  assert.match(OPS,/X-AI-Agent':'printer-audit-text'/);
+  assert.match(OPS,/X-AI-Agent':'printer-audit-vision'/);
   assert.match(OPS,/\/anthropic\/v1\/messages/);
   assert.match(OPS,/max_tokens:2600/);
 });
@@ -54,7 +55,11 @@ test('Farm Controller protege el escaneo y persiste informes completos por impre
   assert.match(FARM,/auditHistory&&req\.method==='GET'/);
   assert.match(FARM,/requireRole\(req,res,'viewer'\)/);
   assert.match(FARM,/persistAudits\(\)/);
-  assert.match(FARM,/sanitizeAuditReport\(machineId,body\)/);
+  assert.match(FARM,/AUDIT_INDEX_FILE/);
+  assert.match(FARM,/auditReportPath/);
+  assert.match(FARM,/sanitizeAuditReport\(machineId,body,role\)/);
+  assert.match(FARM,/issueAuditScan/);
+  assert.match(FARM,/verifyAuditReport/);
 });
 
 test('Historial de la impresora muestra auditorias IA y permite reabrir el informe completo',()=>{
@@ -62,6 +67,9 @@ test('Historial de la impresora muestra auditorias IA y permite reabrir el infor
   assert.match(MAQ,/Cargando auditorías IA/);
   assert.match(MAQ,/MachineOps\?\.renderAuditHistoryInto/);
   assert.match(OPS,/async function fetchPrinterAuditHistory/);
+  assert.match(OPS,/async function fetchPrinterAuditDetail/);
+  assert.match(OPS,/setPrinterAuditFindingStatus/);
+  assert.match(OPS,/runFleetAudit/);
   assert.match(OPS,/function renderPrinterAuditReport/);
   assert.match(OPS,/Ver evidencia técnica capturada/);
   assert.match(OPS,/Guardada en historial central/);
@@ -79,6 +87,10 @@ test('el informe conserva matriz de fuentes y evidencia, con limites de tamaño'
   assert.match(OPS,/bedMesh:/);
   assert.match(OPS,/maintenance:/);
   assert.match(OPS,/incidents:/);
+  assert.match(OPS,/configDrift:/);
+  assert.match(OPS,/networkStability:/);
+  assert.match(OPS,/thermalStability:/);
+  assert.match(OPS,/deterministic-fallback/);
   assert.match(FARM,/AUDIT_MAX_EVIDENCE=380\*1024/);
   assert.match(FARM,/AUDIT_MAX_BODY=512\*1024/);
 });
