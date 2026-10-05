@@ -299,7 +299,6 @@ function sanitizeAuditReport(machineId,body={},role='operator'){
   report.evidenceHash=auditHash(report.evidence);
   report.scanEvidenceHash=scan.evidenceHash;
   report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
-  auditScanSessions.delete(scanId);
   return report;
 }
 function migrateLegacyAudits(){
@@ -332,6 +331,12 @@ function migrateLegacyAudits(){
 }
 async function readAuditReport(machineId,auditId){
   try{return JSON.parse(await fs.promises.readFile(auditReportPath(machineId,auditId),'utf8'));}catch(_){return null;}
+}
+function verifyAuditReport(report){
+  if(!report||typeof report!=='object')return false;
+  const evidenceHash=auditHash(report.evidence||{});
+  const reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash,scanEvidenceHash:report.scanEvidenceHash||'',result:report.result,cost:report.cost||null});
+  return evidenceHash===report.evidenceHash&&reportHash===report.reportHash;
 }
 let queue = normalizeQueue(readJson(QUEUE_FILE, null));
 let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
@@ -372,6 +377,7 @@ function persistAudits(){
 async function saveAuditReport(report){
   const previous=audits.reports.slice(),summary=auditSummaryFromReport(report);
   await atomicWrite(auditReportPath(report.machineId,report.id),report);
+  auditScanSessions.delete(report.scanId);
   audits.reports=pruneAuditReports([summary,...audits.reports.filter(row=>row.id!==report.id)]);
   const keep=new Set(audits.reports.map(row=>row.id));
   const removed=previous.filter(row=>row.machineId===report.machineId&&!keep.has(row.id));
@@ -798,7 +804,7 @@ const server = http.createServer(async (req, res) => {
     const machineId=decodeURIComponent(auditDetail[1]),auditId=decodeURIComponent(auditDetail[2]);
     const report=await readAuditReport(machineId,auditId);
     if(!report||report.machineId!==machineId||report.id!==auditId)return json(res,404,{ok:false,error:'auditoría no encontrada'});
-    return json(res,200,{ok:true,report});
+    return json(res,200,{ok:true,integrityValid:verifyAuditReport(report),report});
   }
 
   const auditHistory=p.match(/^\/farm\/audits\/([^/]+)$/);
@@ -968,5 +974,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, issueAuditScan, purgeAuditScanSessions, readAuditReport, updateAuditFinding, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, updateAuditFinding, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
