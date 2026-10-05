@@ -38,3 +38,13 @@ test('instalador conserva sintaxis bash válida',()=>{
   const result=spawnSync('bash',['-n',path.join(ROOT,'printer-bridge','install-farm-controller.sh')],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr||result.stdout||'bash -n falló');
 });
+
+
+test('instalador elimina sólo un bridge interno huérfano antes de levantar el Controller',()=>{
+  assert.match(SCRIPT,/INTERNAL_PORT="\$\{LEGACY_BRIDGE_PORT:-8348\}"/);
+  assert.match(SCRIPT,/cleanup_stale_internal_bridge\(\)/);
+  assert.match(SCRIPT,/lsof[^\n]*-tiTCP:"\$INTERNAL_PORT"[^\n]*-sTCP:LISTEN/);
+  assert.match(SCRIPT,/\$HERE\/server\.js/,'sólo puede matar el server.js conocido');
+  assert.match(SCRIPT,/kill -9 "\$pid"/,'si el bridge huérfano no termina, fuerza sólo ese PID validado');
+  assert.match(SCRIPT,/legacyReady":true/,'la instalación no debe declarar salud si el bridge hijo no acepta el token actual');
+});
