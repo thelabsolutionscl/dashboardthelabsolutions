@@ -26,6 +26,7 @@ const OPERATIONS_FILE = process.env.FARM_OPERATIONS_FILE || path.join(DATA_DIR, 
 const AUDIT_LEGACY_FILE = process.env.FARM_AUDIT_FILE || path.join(DATA_DIR, 'printer-audits.json');
 const AUDIT_DIR = process.env.FARM_AUDIT_DIR || path.join(DATA_DIR, 'printer-audits');
 const AUDIT_INDEX_FILE = path.join(AUDIT_DIR, 'index.json');
+const PAIR_FILE = process.env.FARM_PAIR_FILE || path.join(DATA_DIR, 'browser-pairs.json');
 const PAYLOAD_DIR = process.env.FARM_PAYLOAD_DIR || path.join(DATA_DIR, 'payloads');
 const PUBLIC_PORT = Number(process.env.BRIDGE_PORT || 8347);
 const LEGACY_PORT = Number(process.env.LEGACY_BRIDGE_PORT || 8348);
@@ -99,6 +100,46 @@ function bedSignatureFromPrintStats(ps={}) {
 const QUEUE_ACTIVE_STATES=new Set(['queued','retry','checking','uploading','uploaded','started','printing','paused']);
 const QUEUE_TERMINAL_STATES=new Set(['completed','cancelled','failed']);
 
+const BROWSER_PAIR_TTL_MS=Math.max(60*60*1000,Math.min(180*24*60*60*1000,Number(process.env.FARM_BROWSER_PAIR_TTL_MS||90*24*60*60*1000)));
+function pairTokenHash(token){return crypto.createHash('sha256').update(String(token||'')).digest('hex');}
+function normalizeBrowserPairs(raw,now=Date.now()){
+  const rows=Array.isArray(raw?.pairs)?raw.pairs:[];
+  const pairs=rows.filter(row=>row&&/^[a-f0-9]{64}$/i.test(String(row.tokenHash||''))&&
+      ['viewer','operator','admin'].includes(String(row.role||''))&&Number(row.expiresAt)>now)
+    .slice(-12).map(row=>({id:String(row.id||'').slice(0,80),tokenHash:String(row.tokenHash).toLowerCase(),
+      role:String(row.role),createdAt:Number(row.createdAt||now),expiresAt:Number(row.expiresAt)}));
+  return{version:1,updatedAt:Number(raw?.updatedAt||0),pairs};
+}
+let browserPairs=normalizeBrowserPairs(readJson(PAIR_FILE,{version:1,pairs:[]}));
+async function persistBrowserPairs(){
+  browserPairs=normalizeBrowserPairs({...browserPairs,updatedAt:Date.now()});
+  await atomicWrite(PAIR_FILE,browserPairs);
+  return true;
+}
+function roleForBrowserPair(token,now=Date.now()){
+  const value=String(token||'');if(!value||value.length<24||value.length>200)return'';
+  const hash=pairTokenHash(value);
+  const row=browserPairs.pairs.find(item=>item.expiresAt>now&&safeEq(item.tokenHash,hash));
+  return row?.role||'';
+}
+async function issueBrowserPair(role='admin',now=Date.now()){
+  const safeRole=['viewer','operator','admin'].includes(role)?role:'admin';
+  const token=crypto.randomBytes(32).toString('base64url');
+  browserPairs=normalizeBrowserPairs(browserPairs,now);
+  browserPairs.pairs.push({id:uid('pair'),tokenHash:pairTokenHash(token),role:safeRole,createdAt:now,expiresAt:now+BROWSER_PAIR_TTL_MS});
+  browserPairs.pairs=browserPairs.pairs.slice(-8);
+  browserPairs.updatedAt=now;
+  await persistBrowserPairs();
+  return{token,role:safeRole,expiresAt:now+BROWSER_PAIR_TTL_MS};
+}
+function isLoopbackRequest(req){
+  const remote=String(req?.socket?.remoteAddress||'').toLowerCase();
+  const host=String(req?.headers?.host||'').toLowerCase().split(':')[0].replace(/^\[|\]$/g,'');
+  const remoteOk=remote==='127.0.0.1'||remote==='::1'||remote==='::ffff:127.0.0.1';
+  const hostOk=host==='127.0.0.1'||host==='localhost'||host==='::1';
+  return remoteOk&&hostOk;
+}
+
 function loadOrCreateMasterToken() {
   if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN.trim();
   const file = path.join(ROOT, '.bridge-token');
@@ -134,6 +175,7 @@ function roleForToken(token) {
   if (TOKENS.admin && safeEq(token, TOKENS.admin)) return 'admin';
   if (TOKENS.operator && safeEq(token, TOKENS.operator)) return 'operator';
   if (TOKENS.viewer && safeEq(token, TOKENS.viewer)) return 'viewer';
+  const pairedRole=roleForBrowserPair(token);if(pairedRole)return pairedRole;
   purgeSessions();
   const session=sessionTokens.get(String(token||''));
   return session&&session.expiresAt>Date.now()?session.role:'';
@@ -1010,13 +1052,26 @@ async function discoverLan() {
 
 function decodeAuditPathPart(value){try{return decodeURIComponent(String(value||''));}catch(_){return'';}}
 const server = http.createServer(async (req, res) => {
+  const u = new URL(req.url, 'http://farm.local'), p = u.pathname;
+  // Emparejamiento deliberadamente LOCAL: la credencial nunca se entrega a
+  // través del túnel público. El fragmento #printer_pair tampoco viaja al
+  // servidor de GitHub Pages.
+  if(p==='/farm/local-pair'){
+    if(req.method!=='GET'){res.setHeader('Allow','GET');return json(res,405,{ok:false,error:'method not allowed'});}
+    if(!isLoopbackRequest(req))return json(res,403,{ok:false,error:'local pairing only'});
+    try{
+      const pair=await issueBrowserPair('admin');
+      const target='https://dashboard.thelab.solutions/#printer_pair='+encodeURIComponent(pair.token);
+      res.writeHead(302,{'Location':target,'Cache-Control':'no-store','Pragma':'no-cache','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});
+      return res.end();
+    }catch(e){return json(res,503,{ok:false,error:'no se pudo crear el emparejamiento local'});}
+  }
   setCors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-  const u = new URL(req.url, 'http://farm.local'), p = u.pathname;
   // El bridge legado ejecutaba /restart sin validar método. Desde el controller
   // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
   if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, safetyUpdatedAt: safety.updatedAt || 0 });
+  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, browserPairs:browserPairs.pairs.length, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator,realtimeWebSocket:true}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
@@ -1237,6 +1292,7 @@ function start(){
     console.log(`  Safety          : ${SAFETY_FILE}`);
     console.log(`  Operations      : ${OPERATIONS_FILE}`);
     console.log(`  Auditorías IA   : ${AUDIT_DIR}`);
+    console.log(`  Emparejamientos : ${PAIR_FILE}`);
     console.log(`  Payloads        : ${PAYLOAD_DIR}`);
     console.log(`  Roles           : viewer=${TOKENS.viewer ? 'sí' : 'fallback'} operator=${TOKENS.operator ? 'sí' : 'fallback'} admin=sí`);
     console.log('─'.repeat(64));
@@ -1252,5 +1308,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, auditScanSeal, recoverAuditScanEnvelope, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, proxyLegacyUpgrade, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, auditScanSeal, recoverAuditScanEnvelope, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, roleForBrowserPair, issueBrowserPair, normalizeBrowserPairs, isLoopbackRequest, routeMinimumRole, proxyLegacyUpgrade, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
