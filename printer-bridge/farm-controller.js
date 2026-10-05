@@ -187,7 +187,7 @@ function sanitizeOperation(machineId,body={},now=Date.now()){
   return{machineId:id,type,label:String(body.label||'').slice(0,120),phase:String(body.phase||'').slice(0,240),source:String(body.source||'').slice(0,80),sessionId:String(body.sessionId||'').slice(0,120),startedAt,expiresAt,updatedAt:now};
 }
 
-const AUDIT_MAX_PER_MACHINE=80,AUDIT_MAX_BODY=512*1024,AUDIT_MAX_EVIDENCE=380*1024,AUDIT_MAX_RESULT=96*1024;
+const AUDIT_MAX_PER_MACHINE=80,AUDIT_MAX_BODY=512*1024,AUDIT_MAX_EVIDENCE=380*1024,AUDIT_MAX_SCAN=250*1024,AUDIT_MAX_RESULT=96*1024;
 const AUDIT_FINDING_STATES=new Set(['new','reviewing','resolved','ignored']);
 const AUDIT_SCAN_TTL_MS=15*60*1000;
 const auditScanSessions=new Map();
@@ -276,16 +276,16 @@ function auditByteLength(value){return Buffer.byteLength(JSON.stringify(value??n
 function compactAuditScanCore(value){
   const c=auditJsonClone(value,2*1024*1024);
   if(c&&typeof c==='object')delete c.cameraFrame;
-  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
   if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-120000);
-  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
   if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-60000);
   if(c?.moonraker?.history?.result?.jobs)c.moonraker.history.result.jobs=c.moonraker.history.result.jobs.slice(0,10);
   if(c?.moonraker?.gcodeResponses)c.moonraker.gcodeResponses=c.moonraker.gcodeResponses.slice(-30);
-  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
   if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-24000);
   if(c?.moonraker?.history)c.moonraker.history={result:{jobs:(c.moonraker.history.result?.jobs||[]).slice(0,5)}};
-  if(auditByteLength(c)>AUDIT_MAX_EVIDENCE)throw new Error('escaneo técnico excede el presupuesto seguro');
+  if(auditByteLength(c)>AUDIT_MAX_SCAN)throw new Error('escaneo técnico excede el presupuesto seguro');
   return c;
 }
 function findingIdFor(row,index){
