@@ -172,3 +172,11 @@ test('auditar granja no genera un toast por máquina y activa circuit breaker de
   assert.match(OPS,/if\(!background\)\{renderPrinterAuditReport/);
   assert.match(OPS,/if\(!background\)toast\('Auditoría fallida/);
 });
+
+
+test('Farm Controller publica versión explícita de la API de auditoría',()=>{
+  const src=fs.readFileSync(path.join(__dirname,'..','printer-bridge','farm-controller.js'),'utf8');
+  assert.match(src,/const AUDIT_API_VERSION = 3/);
+  assert.match(src,/auditApiVersion:AUDIT_API_VERSION/);
+  assert.match(OPS,/Number\(d\.auditApiVersion\|\|0\)>=PRINTER_AUDIT_API_VERSION/);
+});
