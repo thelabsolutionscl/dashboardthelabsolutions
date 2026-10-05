@@ -39,11 +39,12 @@ function issue(machine,extra={}){
 function bodyFor(machine,requestId,opts={}){
   const scan=issue(machine,opts.scan||{});
   return{
-    requestId,scanId:scan.scanId,actor:'browser@example.test',model:'claude-haiku-4-5',durationMs:1500,
+    requestId,scanId:scan.scanId,scanEvidenceHash:scan.evidenceHash,scanExpiresAt:scan.expiresAt,scanSeal:scan.scanSeal,
+    actor:'browser@example.test',model:'claude-haiku-4-5',durationMs:1500,
     sourceMatrix:{moonraker:false,camera:true,injected:true},
     cost:{estimatedUsd:.123,provenance:'proxy-budget-reservation',textModel:'claude-haiku-4-5'},
     result:auditResult(opts.score||80,opts.two===true),
-    evidence:{dashboard:{live:{state:'standby'},maintenance:[],incidents:[]},vision:{available:false},bed:{code:'ok'}}
+    evidence:{scan:scan.diagnostics,dashboard:{live:{state:'standby'},maintenance:[],incidents:[]},vision:{available:false},bed:{code:'ok'}}
   };
 }
 
@@ -179,4 +180,32 @@ test('Farm Controller publica versión explícita de la API de auditoría',()=>{
   assert.match(src,/const AUDIT_API_VERSION = 3/);
   assert.match(src,/auditApiVersion:AUDIT_API_VERSION/);
   assert.match(OPS,/Number\(d\.auditApiVersion\|\|0\)>=PRINTER_AUDIT_API_VERSION/);
+});
+
+
+test('el sobre HMAC del scan permite verificar evidencia tras perder la sesión en memoria',()=>{
+  const machine='restart-machine',body=bodyFor(machine,'auditreq-restart-123456');
+  const recovered=farm.recoverAuditScanEnvelope(machine,body,body.evidence);
+  assert.ok(recovered);
+  assert.equal(recovered.scanId,body.scanId);
+  const altered=JSON.parse(JSON.stringify(body.evidence));altered.scan.deterministic.state='error';
+  assert.equal(farm.recoverAuditScanEnvelope(machine,body,altered),null);
+  assert.equal(farm.recoverAuditScanEnvelope('otra-maquina',body,body.evidence),null);
+});
+
+test('un requestId repetido con un scan distinto se trata como conflicto, no como éxito idempotente',async()=>{
+  const machine='idem-conflict',requestId='auditreq-conflict-123456';
+  await farm.saveAuditRequest(machine,bodyFor(machine,requestId),'operator');
+  await assert.rejects(
+    farm.saveAuditRequest(machine,bodyFor(machine,requestId),'operator'),
+    /otro escaneo/
+  );
+});
+
+test('el frontend conserva el scan firmado intacto al compactar evidencia para historial',()=>{
+  assert.match(OPS,/const scan=_auditClone\(evidence\?\.scan\|\|\{\},\{\}\),scanBytes=_auditBytes\(scan\)/);
+  assert.match(OPS,/delete rest\.scan/);
+  assert.match(OPS,/combined=\{\.\.\.compactRest,scan\}/);
+  assert.match(OPS,/scanEvidenceHash:remote\.scanEvidenceHash/);
+  assert.match(OPS,/scanSeal:remote\.scanSeal/);
 });
