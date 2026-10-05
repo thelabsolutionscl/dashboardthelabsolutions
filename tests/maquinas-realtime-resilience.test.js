@@ -111,6 +111,21 @@ test('modo remoto aligera polling y distingue bridge de impresora',()=>{
   assert.match(apply,/_centralFarmMachineEvidence/,'usa evidencia del controller dentro de la oficina');
 });
 
+test('reinicio del Farm Controller renueva ticket y recupera HTTP + WebSocket al primer 401/403',()=>{
+  const fetchStatus=fn(MAQ,'fetchPrinterStatus');
+  const recover=fn(MAQ,'_recoverPrinterTunnelAuth');
+  assert.match(fetchStatus,/allowAuthRetry=true/,'la lectura debe permitir exactamente un retry de autenticación');
+  assert.match(fetchStatus,/r\.status===401\|\|r\.status===403/,'401 y 403 deben tratarse como sesión inválida');
+  assert.match(fetchStatus,/_recoverPrinterTunnelAuth\(\)/,'la primera denegación debe forzar un ticket nuevo');
+  assert.match(fetchStatus,/fetchPrinterStatus\(m,false\)/,'el retry no puede entrar en un bucle infinito');
+  assert.match(recover,/_printerTunnelSessionToken=''/,'invalida el ticket viejo aunque expiresAt todavía sea futuro');
+  assert.match(recover,/_printerTunnelAuthRecovery/,'la flota debe compartir una sola recuperación de sesión');
+  assert.match(recover,/_printerTunnelSessionLastTry=0/,'un restart debe saltarse el throttle normal de renovación');
+  assert.match(recover,/refreshPrinterTunnelSession\(true\)/,'la renovación debe ser forzada');
+  assert.match(recover,/reconnectAllPrinterWs\(\)/,'los sockets deben reconstruirse con el ticket nuevo');
+  assert.match(recover,/_refreshSnapshotCams\(true\)/,'las cámaras también deben dejar de usar la URL firmada vieja');
+});
+
 test('grid remoto convierte MJPEG continuo en snapshots finitos',()=>{
   const raw=fn(MAQ,'_printerGridCamRaw');
   const sync=fn(MAQ,'_syncPrinterCam');
