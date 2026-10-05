@@ -175,6 +175,30 @@ function getPrinterTunnel(){
   return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');
 }
 let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionRole='',_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0,_printerTunnelAuthRecovery=null;
+function _getPrinterDeviceToken(){
+  if(_printerAccessMode())return '';
+  try{
+    const token=String(localStorage.getItem('printer_device_token')||'').trim();
+    return /^[A-Za-z0-9_-]{32,200}$/.test(token)?token:'';
+  }catch(_){return'';}
+}
+function _consumePrinterPairingFragment(){
+  if(typeof window==='undefined'||_printerAccessMode())return false;
+  let params;try{params=new URLSearchParams(String(location.hash||'').replace(/^#/,''));}catch(_){return false;}
+  const token=String(params.get('printer_pair')||'').trim();
+  if(!/^[A-Za-z0-9_-]{32,200}$/.test(token))return false;
+  try{
+    localStorage.setItem('printer_device_token',token);
+    sessionStorage.removeItem('printer_tunnel_token');
+    localStorage.removeItem('printer_tunnel_token');
+  }catch(_){}
+  _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;_printerTunnelSessionRole='';_printerTunnelSessionLastTry=0;
+  params.delete('printer_pair');
+  const rest=params.toString(),clean=location.pathname+location.search+(rest?'#'+rest:'');
+  try{history.replaceState(null,'',clean);}catch(_){}
+  window.__TLS_PRINTER_PAIR_CONSUMED__=true;
+  return true;
+}
 function _getPrinterTunnelLongToken(){
   // Previously cached master credentials are never consulted in secure mode.
   if(_printerAccessMode())return '';
@@ -186,7 +210,8 @@ function _getPrinterTunnelLongToken(){
   // Una credencial introducida explícitamente por el usuario debe ganar al
   // valor horneado en Pages. Así un secret de deploy desfasado no deja toda la
   // granja sin telemetría después de una recarga dura.
-  return local||d;
+  const paired=_getPrinterDeviceToken();
+  return paired||local||d;
 }
 function setPrinterTunnelTokenOverride(value){
   if(_printerAccessMode())return false;
@@ -207,6 +232,7 @@ function getPrinterTunnelToken(){
 }
 function getPrinterTunnelLongToken(){return _getPrinterTunnelLongToken();}
 function getPrinterTunnelRole(){return _printerTunnelSessionToken&&Date.now()<_printerTunnelSessionExpires-15000?_printerTunnelSessionRole:'';}
+_consumePrinterPairingFragment();
 function getPrinterFleetForDrift(){
   try{
     return (MAQUINAS||[]).filter(m=>m&&m.id).map(m=>{

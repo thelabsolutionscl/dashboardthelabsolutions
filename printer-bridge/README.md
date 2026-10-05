@@ -21,6 +21,16 @@ El dashboard tiene **dos modos** (botón `📡 Local / 🌐 Remoto` en la secci�
 
 ---
 
+## Emparejar el dashboard con este iMac
+
+Con Farm Controller ya no es necesario copiar el token maestro al dashboard. Desde el iMac del taller:
+
+```bash
+bash printer-bridge/pair-dashboard.sh
+```
+
+El Controller sólo permite crear la credencial desde `127.0.0.1`/`localhost`. Guarda en disco únicamente el hash de una credencial de dispositivo con vencimiento y redirige el navegador a `dashboard.thelab.solutions` usando un fragmento `#printer_pair=...`, que no se envía al servidor de GitHub Pages. El dashboard consume el fragmento, lo elimina inmediatamente de la barra de direcciones y desde entonces renueva sus tickets del Farm Controller sin depender del token maestro horneado en Pages.
+
 ## Requisitos
 
 - **Node.js ≥ 18** en el iMac → `brew install node` (o desde nodejs.org)
