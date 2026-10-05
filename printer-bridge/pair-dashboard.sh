@@ -21,10 +21,24 @@ health_json(){
   curl -q -fsS -m 4 "$HEALTH_URL" 2>/dev/null || true
 }
 
+repo_revision(){
+  git -C "$HERE/.." rev-parse --short=12 HEAD 2>/dev/null || true
+}
+
+controller_revision(){
+  printf '%s' "$1" | sed -n 's/.*"revision":"\([^"]*\)".*/\1/p'
+}
+
 controller_is_current(){
-  local h
+  local h want got
   h="$(health_json)"
-  [[ "$h" == *'"ok":true'* && "$h" == *'"service":"farm-controller"'* ]]
+  [[ "$h" == *'"ok":true'* && "$h" == *'"service":"farm-controller"'* ]] || return 1
+  want="$(repo_revision)"
+  got="$(controller_revision "$h")"
+  # Si tenemos un repo Git local, exigir que el proceso cargado corresponda al
+  # mismo commit. Un Controller anterior a esta comprobación no anuncia revision
+  # y por eso se reinstala/reinicia una sola vez.
+  [[ -z "$want" || "$got" == "$want" ]]
 }
 
 repair_controller(){
@@ -60,7 +74,8 @@ if ! controller_is_current; then
   exit 1
 fi
 
-grn "✓ Farm Controller correcto en 127.0.0.1:${PORT}"
+RUNNING_REV="$(controller_revision "$(health_json)")"
+grn "✓ Farm Controller correcto en 127.0.0.1:${PORT}${RUNNING_REV:+ · revisión $RUNNING_REV}"
 
 PAIR_STATUS=""
 LOCATION=""
@@ -96,12 +111,49 @@ if [[ "$SESSION_JSON" != *'"ok":true'* || "$SESSION_JSON" != *'"role":"admin"'* 
 fi
 grn "✓ Credencial local validada por el Farm Controller"
 
+# Probar la cadena que realmente alimenta “Telemetría reciente”: Controller →
+# registry → Moonraker. /farm/session por sí solo sólo prueba autenticación.
+FLEET_JSON="$(curl -q --config "$AUTH_CFG" -fsS -m 20 -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/farm/health/probe" 2>/dev/null || true)"
+FLEET_INFO="$(printf '%s' "$FLEET_JSON" | node -e '
+let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{
+  try{
+    const d=JSON.parse(s),h=d.health||{},m=Array.isArray(h.machines)?h.machines:[],sum=h.summary||{};
+    const first=m.find(x=>x&&x.online&&x.ip)||m.find(x=>x&&x.ip)||{};
+    process.stdout.write([Number(sum.online||0),Number(sum.total||m.length||0),String(first.ip||"")].join("|"));
+  }catch(_){}
+});' 2>/dev/null || true)"
+IFS='|' read -r FLEET_ONLINE FLEET_TOTAL FIRST_IP <<<"$FLEET_INFO"
+if [[ -n "${FLEET_TOTAL:-}" ]]; then
+  if [[ "${FLEET_ONLINE:-0}" -gt 0 ]]; then
+    grn "✓ Controller llega a Moonraker: ${FLEET_ONLINE}/${FLEET_TOTAL} impresoras responden desde el iMac"
+  else
+    ylw "⚠ Controller llega a 0/${FLEET_TOTAL} impresoras por Moonraker."
+    ylw "  El problema está en IPs/red local/Moonraker, no en el navegador ni en Cloudflare."
+  fi
+else
+  ylw "⚠ No se pudo obtener el diagnóstico central de la granja."
+fi
+
 PUBLIC_STATUS="$(curl -q --config "$AUTH_CFG" -sS -m 8 -X POST -o "$TMP/public-body" -w '%{http_code}' "$PUBLIC_BASE/farm/session" 2>/dev/null || true)"
 if [[ "$PUBLIC_STATUS" == "200" || "$PUBLIC_STATUS" == "201" ]]; then
   grn "✓ Túnel público acepta la credencial"
 else
   ylw "⚠ El túnel público no confirmó la sesión (HTTP ${PUBLIC_STATUS:-sin respuesta})."
   ylw "  El navegador se abrirá igual; si Máquinas sigue 0/14, el problema ya está entre Cloudflare Tunnel y el Controller."
+fi
+
+# Probar además la MISMA query Moonraker que usa el dashboard. Esto detecta
+# regresiones donde /farm/session funciona pero /IP/printer/objects/query no.
+if [[ -n "${FIRST_IP:-}" ]]; then
+  PUBLIC_TELEMETRY_STATUS="$(curl -q --config "$AUTH_CFG" -sS -m 10 -o "$TMP/public-telemetry" -w '%{http_code}' "$PUBLIC_BASE/$FIRST_IP/printer/objects/query?print_stats&extruder&webhooks" 2>/dev/null || true)"
+  if [[ "$PUBLIC_TELEMETRY_STATUS" == "200" ]] && grep -q '"result"' "$TMP/public-telemetry" 2>/dev/null; then
+    grn "✓ Telemetría extremo a extremo confirmada por el túnel (${FIRST_IP})"
+  else
+    ylw "⚠ La sesión funciona, pero la consulta Moonraker real falló por el túnel (HTTP ${PUBLIC_TELEMETRY_STATUS:-sin respuesta})."
+    if [[ -s "$TMP/public-telemetry" ]]; then
+      ylw "  Respuesta: $(tr '\\n' ' ' <"$TMP/public-telemetry" | cut -c1-240)"
+    fi
+  fi
 fi
 
 case "$(uname -s)" in

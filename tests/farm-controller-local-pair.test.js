@@ -4,6 +4,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const {spawnSync}=require('node:child_process');
 
 const ROOT=path.join(__dirname,'..');
 const CTRL=fs.readFileSync(path.join(ROOT,'printer-bridge','farm-controller.js'),'utf8');
@@ -40,10 +41,20 @@ test('script de emparejamiento valida el Controller, se autorepara y abre la URL
   assert.match(PAIR,/PAIR_URL="\$\{BASE\}\/farm\/local-pair"/);
   assert.match(PAIR,/'"service":"farm-controller"'/,'no basta con que cualquier proceso responda healthz');
   assert.match(PAIR,/install-farm-controller\.sh/,'debe reparar launchd si 8347 sirve el proceso equivocado o stale');
+  assert.match(PAIR,/repo_revision\(\)/,'debe conocer la revisión del repo local');
+  assert.match(PAIR,/controller_revision\(\)/,'debe comparar la revisión realmente cargada');
+  assert.match(PAIR,/farm\/health\/probe/,'debe probar que el Controller llega realmente a Moonraker');
+  assert.match(PAIR,/printer\/objects\/query\?print_stats&extruder&webhooks/,'debe validar por el túnel la misma clase de consulta que alimenta telemetría');
   assert.match(PAIR,/--max-redirs 0/,'debe capturar la redirección local sin entregar la credencial a curl remoto');
   assert.match(PAIR,/Location:\[\[:space:\]\]\*/,'debe extraer la URL de pairing emitida por el Controller');
   assert.match(PAIR,/\$BASE\/farm\/session/,'debe validar que la credencial recién emitida sea aceptada');
   assert.match(PAIR,/open "\$LOCATION"/,'macOS debe abrir directamente la URL final validada');
   assert.doesNotMatch(PAIR,/open "\$PAIR_URL"/,'el navegador no debe depender de navegar primero al endpoint loopback');
   assert.doesNotMatch(PAIR,/\.bridge-token|cat .*token|pbcopy/,'el pairing no debe leer ni copiar el master token');
+});
+
+
+test('script de emparejamiento conserva sintaxis bash válida',()=>{
+  const result=spawnSync('bash',['-n',path.join(ROOT,'printer-bridge','pair-dashboard.sh')],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr||result.stdout||'bash -n falló');
 });
