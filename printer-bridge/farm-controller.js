@@ -759,7 +759,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
-    return json(res, 200, { ok: true, role, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
+    return json(res, 200, { ok: true, role, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
   if (p === '/farm/session' && req.method === 'POST') {
     const role=requireRole(req,res,'viewer');if(!role)return;
@@ -771,19 +771,42 @@ const server = http.createServer(async (req, res) => {
     const role=requireRole(req,res,'operator');if(!role)return;
     const machineId=decodeURIComponent(auditScan[1]),m=machineByIdentity({id:machineId});
     if(!m?.id||!isPrivateIp(m.ip))return json(res,404,{ok:false,error:'máquina no registrada o sin IP válida'});
-    const scan=await requestLegacy('GET','/diagnostics/'+m.ip,null,{},38_000);
+    const scan=await requestLegacy('GET','/diagnostics/'+m.ip,null,{},45_000);
     if(!scan.ok)return json(res,502,{ok:false,error:'diagnóstico profundo no disponible',status:scan.status});
     try{
       const diagnostics=JSON.parse(scan.body.toString('utf8')||'{}');
-      return json(res,200,{ok:true,machine:{id:m.id,ip:m.ip,name:m.name||m.nombre||'',model:m.model||m.modelo||''},diagnostics});
+      const issued=issueAuditScan(machineId,diagnostics,role);
+      return json(res,200,{ok:true,scanId:issued.scanId,scanEvidenceHash:issued.evidenceHash,expiresAt:issued.expiresAt,machine:{id:m.id,ip:m.ip,name:m.name||m.nombre||'',model:m.model||m.modelo||''},diagnostics});
     }catch(e){return json(res,502,{ok:false,error:'respuesta de diagnóstico inválida'});}
   }
+
+  const auditFinding=p.match(/^\/farm\/audits\/([^/]+)\/([^/]+)\/findings\/([^/]+)$/);
+  if(auditFinding&&req.method==='PATCH'){
+    const role=requireRole(req,res,'operator');if(!role)return;
+    try{
+      const machineId=decodeURIComponent(auditFinding[1]),auditId=decodeURIComponent(auditFinding[2]),findingId=decodeURIComponent(auditFinding[3]);
+      const body=JSON.parse((await readBody(req,32*1024)).toString('utf8')||'{}');
+      const updated=await updateAuditFinding(machineId,auditId,findingId,body,role);
+      if(!updated)return json(res,404,{ok:false,error:'auditoría no encontrada'});
+      return json(res,200,{ok:true,report:updated.report,summary:updated.summary});
+    }catch(e){return json(res,400,{ok:false,error:e.message});}
+  }
+
+  const auditDetail=p.match(/^\/farm\/audits\/([^/]+)\/([^/]+)$/);
+  if(auditDetail&&req.method==='GET'){
+    const role=requireRole(req,res,'operator');if(!role)return;
+    const machineId=decodeURIComponent(auditDetail[1]),auditId=decodeURIComponent(auditDetail[2]);
+    const report=await readAuditReport(machineId,auditId);
+    if(!report||report.machineId!==machineId||report.id!==auditId)return json(res,404,{ok:false,error:'auditoría no encontrada'});
+    return json(res,200,{ok:true,report});
+  }
+
   const auditHistory=p.match(/^\/farm\/audits\/([^/]+)$/);
   if(auditHistory&&req.method==='GET'){
     const role=requireRole(req,res,'viewer');if(!role)return;
     const machineId=decodeURIComponent(auditHistory[1]),limit=Math.max(1,Math.min(80,Number(u.searchParams.get('limit')||30)));
     const reports=audits.reports.filter(row=>row.machineId===machineId).slice(0,limit);
-    return json(res,200,{ok:true,updatedAt:audits.updatedAt,reports});
+    return json(res,200,{ok:true,version:2,updatedAt:audits.updatedAt,reports});
   }
   if(auditHistory&&req.method==='POST'){
     const role=requireRole(req,res,'operator');if(!role)return;
@@ -791,11 +814,9 @@ const server = http.createServer(async (req, res) => {
       const machineId=decodeURIComponent(auditHistory[1]),m=machineByIdentity({id:machineId});
       if(!m?.id)return json(res,404,{ok:false,error:'máquina no registrada'});
       const body=JSON.parse((await readBody(req,AUDIT_MAX_BODY)).toString('utf8')||'{}');
-      const report=sanitizeAuditReport(machineId,body);
-      audits.reports=pruneAuditReports([report,...audits.reports.filter(row=>row.id!==report.id)]);
-      const durable=await persistAudits();
-      if(!durable)return json(res,503,{ok:false,error:'no se pudo persistir la auditoría'});
-      return json(res,201,{ok:true,report});
+      const report=sanitizeAuditReport(machineId,body,role);
+      const summary=await saveAuditReport(report);
+      return json(res,201,{ok:true,report,summary});
     }catch(e){return json(res,400,{ok:false,error:e.message});}
   }
 
@@ -947,5 +968,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, issueAuditScan, purgeAuditScanSessions, readAuditReport, updateAuditFinding, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
