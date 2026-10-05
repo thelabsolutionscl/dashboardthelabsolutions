@@ -1004,7 +1004,7 @@ function renderIntelligence(){
   const services=_serviceTrustSnapshot();
 
   el.innerHTML=`<section class="mops-service-trust op-expert-only">
-      <div class="mops-service-trust-head"><div><b>Estado de servicios</b><small>Antes de actuar, confirma qué fuentes están realmente disponibles.</small></div><button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">↻ Sincronizar todo</button></div>
+      <div class="mops-service-trust-head"><div><b>Estado de servicios</b><small>Antes de actuar, confirma qué fuentes están realmente disponibles.</small></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button id="mopsFleetAuditBtn" class="btn btn-primary btn-sm" onclick="MachineOps.runFleetAudit(this)" disabled>✦ AUDITAR GRANJA</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.syncNow()">↻ Sincronizar todo</button></div></div>
       <div class="mops-service-trust-grid">${services.map(s=>`<article class="${s.state}"><span class="mops-service-dot"></span><div><b>${esc(s.label)}</b><small>${esc(s.detail)}</small></div>${s.stamp?`<time>${esc(fmtStamp(s.stamp))}</time>`:''}</article>`).join('')}</div>
     </section>
     <div class="mops-kpis mops-diagnostic-kpis op-expert-only">${kpi('Alertas activas',alerts.length,`${critical} críticas`,critical?'var(--danger)':alerts.length?'var(--warn)':'var(--accent3)')}${kpi('Impresiones sin ficha',unlinked,'requieren vinculación',unlinked?'var(--warn)':'var(--accent3)')}${kpi('Costo últimos 30 días',fmtMoney(monthCost),`${costRows.length} trabajos medidos`)}${kpi('Bridge',bridgeLabel,_bridgeHealth.latencyMs!=null?`${_bridgeHealth.latencyMs} ms`:'última revisión '+(_bridgeHealth.checkedAt?fmtStamp(_bridgeHealth.checkedAt):'pendiente'),bridgeColor)}</div>
@@ -1047,6 +1047,7 @@ function renderIntelligence(){
     </details>`;
 
   _mountIntelligenceEmbeddedNodes(el,embedded);
+  setTimeout(updateFleetAuditPermission,0);
 }
 
 // La configuración de automatización y costos se ajusta cada varios meses, no
@@ -3101,7 +3102,7 @@ function openTech(id,{autoRefresh=true}={}){
     </section>
     <div class="mops-tech-meta">${lastAction?`Última actividad: <b>${esc(lastAction.action)}</b> · ${esc(fmtStamp(lastAction.at))} · ${esc(lastAction.actor)}`:'Sin actividad registrada todavía.'}</div>
     <div class="mops-tech-actions">
-      <button class="btn btn-primary btn-sm" onclick="MachineOps.runPrinterAudit('${id}',this)" style="font-weight:900;letter-spacing:.5px">✦ AUDITAR</button>
+      <button id="mopsAuditBtn-${id}" class="btn btn-primary btn-sm" onclick="MachineOps.runPrinterAudit('${id}',this)" style="font-weight:900;letter-spacing:.5px" disabled>✦ AUDITAR</button>
       <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();MachineOps.openScanner()">▦ Escanear trabajo/rollo</button>
       ${typeof togglePrinterLight==='function'?`<button class="btn btn-ghost btn-sm" onclick="MachineOps.toggleTechLight('${id}',this)">💡 Luz LED</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="MachineOps.closeTech();openWebcamModal('${id}')">📷 Cámara</button>
@@ -3113,6 +3114,7 @@ function openTech(id,{autoRefresh=true}={}){
     </div>`;
   input('mopsTechModal').style.display='flex';
   bindTechStatusListener();
+  setTimeout(function(){updatePrinterAuditPermission(id);},0);
   if(autoRefresh&&!_techRefreshPending[id])refreshTechStatus(id,null,true);
 }
 function closeTech(){input('mopsTechModal').style.display='none';}
@@ -3195,7 +3197,7 @@ const api={
   updateMaintProfile,maintenanceThreshold,syncNow,analyzeCamera,pauseFromVision,
   renderIntelligence,machineAlertsFor,acknowledgeAlert,handleAlertAction,applyRecommendation,createJobFromLive,openUnlinkedAssignment,skipUnlinkedPrint,assignUnlinkedPrint,renderUnlinkedPrints,refreshUnlinkedPrintAlerts,checkBridgeHealth,saveIntelligenceConfig,
   openIncident,refreshIncidentJobs,closeIncident,loadIncidentPhoto,saveIncident,resolveIncident,confirmIncident,dismissIncident,
-  openTech,closeTech,runPrinterAudit,closePrinterAudit,renderAuditHistoryInto,openSavedPrinterAudit,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
+  openTech,closeTech,runPrinterAudit,runFleetAudit,rerunPrinterAudit,closePrinterAudit,renderAuditHistoryInto,openSavedPrinterAudit,setPrinterAuditFindingStatus,createPrinterAuditIncident,updatePrinterAuditPermission,updateFleetAuditPermission,refreshTechStatus,setMachineStatus,confirmBedCleared,bedIsCleared,machineActivity,machineAvailable,copyTechLink,copyTechLinkFor,toggleTechLight,printTechLabel,
   directRoute,
   handlePrinterTransition,reconcileFarmQueueJobs,onLegacyQueueAdd,startUploadedSlicerJob,persistLegacyQueue,restoreLegacyQueues,
   _test:{_remoteSnapshot,_localNeedsRemotePush,REMOTE_ROW_LIMITS,defaultData,normalizeData,mergeData,mergeIgnoredPrints,ignoredPrintStamp,mergeAlertAcks,mergeBedClearAcks,bedClearStamp,jobCanBeDeleted,modelCanRun,jobModels,jobMinutes,simulateCapacity,capacityLoadMinutes,safetyDecision,optionalMeasure,profileProductionCheck,workshopHistoryEvidence,parseScan,directRoute,opsLink,techLiveFacts,techFilamentSummary,fileKey,filenameMatchScore,livePrintActive,liveProgressPct,printRun,samePrintRun,currentPrintRunMatches,ignoredPrintMatches,linkedLiveJob,unlinkedPrints,preflightFromFacts,incidentIsConfirmed,printerHistoryEvidence,centralHealthEvidence,machineReliability,_incidentRowsForUi,machineHasCfs,_filamentPhysicalSummary,liveEvidence,machineActivity,machineOperational,machineAvailable,machineScore,farmQueueEvidence,farmQueueMatch,stalePrintingDecision,reconcileStalePrintingJobs,planningJobState,jobGcodeReady,_localNeedsRemotePush,bedClearSignature,bedIsCleared,installedNozzle,_serviceTrustSnapshot,connectivityAlertDecision},
