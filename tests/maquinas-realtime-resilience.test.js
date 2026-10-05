@@ -119,6 +119,7 @@ test('reinicio del Farm Controller renueva ticket y recupera HTTP + WebSocket al
   assert.match(fetchStatus,/_recoverPrinterTunnelAuth\(\)/,'la primera denegación debe forzar un ticket nuevo');
   assert.match(fetchStatus,/fetchPrinterStatus\(m,false\)/,'el retry no puede entrar en un bucle infinito');
   assert.match(recover,/_printerTunnelSessionToken=''/,'invalida el ticket viejo aunque expiresAt todavía sea futuro');
+  assert.match(recover,/_printerTunnelAuthRecovery/,'la flota debe compartir una sola recuperación de sesión');
   assert.match(recover,/_printerTunnelSessionLastTry=0/,'un restart debe saltarse el throttle normal de renovación');
   assert.match(recover,/refreshPrinterTunnelSession\(true\)/,'la renovación debe ser forzada');
   assert.match(recover,/reconnectAllPrinterWs\(\)/,'los sockets deben reconstruirse con el ticket nuevo');
