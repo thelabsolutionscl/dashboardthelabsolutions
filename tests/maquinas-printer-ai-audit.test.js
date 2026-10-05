@@ -57,7 +57,8 @@ test('Farm Controller protege el escaneo y persiste informes completos por impre
   assert.match(FARM,/persistAudits\(\)/);
   assert.match(FARM,/AUDIT_INDEX_FILE/);
   assert.match(FARM,/auditReportPath/);
-  assert.match(FARM,/sanitizeAuditReport\(machineId,body,role\)/);
+  assert.match(FARM,/saveAuditRequest\(machineId,body,role\)/);
+  assert.match(FARM,/sanitizeAuditReport\(machineId,\{\.\.\.body,requestId\},role\)/);
   assert.match(FARM,/issueAuditScan/);
   assert.match(FARM,/verifyAuditReport/);
 });
