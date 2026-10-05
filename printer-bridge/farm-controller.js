@@ -34,6 +34,7 @@ const DISCOVERY_PREFIX = process.env.FARM_LAN_PREFIX || '192.168.100.';
 const DISCOVERY_INTERVAL_MS = Math.max(60_000, Number(process.env.FARM_DISCOVERY_INTERVAL_MS || 10 * 60_000));
 const MAX_BODY = 64 * 1024 * 1024;
 const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
+const AUDIT_API_VERSION = 3;
 const REPO_DIR = process.env.BRIDGE_REPO_DIR || path.resolve(ROOT, '..');
 
 fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
@@ -41,7 +42,7 @@ fs.mkdirSync(PAYLOAD_DIR, { recursive: true, mode: 0o700 });
 fs.mkdirSync(AUDIT_DIR, { recursive: true, mode: 0o700 });
 
 async function atomicWrite(file, value) {
-  const tmp = file + '.tmp-' + process.pid + '-' + Date.now();
+  const tmp = file + '.tmp-' + process.pid + '-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
   await fs.promises.writeFile(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
   await fs.promises.rename(tmp, file);
 }
@@ -50,7 +51,7 @@ function payloadPath(jobOrId) {
   return id?path.join(PAYLOAD_DIR,id+'.gcode'):'';
 }
 async function writePayload(id,base64) {
-  const file=payloadPath(id),tmp=file+'.tmp-'+process.pid+'-'+Date.now();
+  const file=payloadPath(id),tmp=file+'.tmp-'+process.pid+'-'+Date.now()+'-'+crypto.randomBytes(4).toString('hex');
   if(!file)throw new Error('id de payload inválido');
   const bytes=Buffer.from(String(base64||''),'base64');
   if(!bytes.length)throw new Error('payload G-code vacío');
@@ -186,39 +187,105 @@ function sanitizeOperation(machineId,body={},now=Date.now()){
   return{machineId:id,type,label:String(body.label||'').slice(0,120),phase:String(body.phase||'').slice(0,240),source:String(body.source||'').slice(0,80),sessionId:String(body.sessionId||'').slice(0,120),startedAt,expiresAt,updatedAt:now};
 }
 
-const AUDIT_MAX_PER_MACHINE=80,AUDIT_MAX_BODY=512*1024,AUDIT_MAX_EVIDENCE=380*1024,AUDIT_MAX_RESULT=96*1024;
+const AUDIT_MAX_PER_MACHINE=80,AUDIT_MAX_BODY=512*1024,AUDIT_MAX_EVIDENCE=380*1024,AUDIT_MAX_SCAN=250*1024,AUDIT_MAX_RESULT=96*1024;
 const AUDIT_FINDING_STATES=new Set(['new','reviewing','resolved','ignored']);
 const AUDIT_SCAN_TTL_MS=15*60*1000;
 const auditScanSessions=new Map();
+const auditLocks=new Map();
+function withAuditLock(key,fn){
+  const k=String(key||'audit'),previous=auditLocks.get(k)||Promise.resolve();
+  const run=previous.catch(()=>{}).then(fn);auditLocks.set(k,run);
+  return run.finally(()=>{if(auditLocks.get(k)===run)auditLocks.delete(k);});
+}
 function auditJsonClone(value,maxBytes=AUDIT_MAX_EVIDENCE){
   const raw=JSON.stringify(value==null?null:value);
   if(Buffer.byteLength(raw,'utf8')>maxBytes)throw new Error('reporte de auditoría demasiado grande');
   return JSON.parse(raw);
 }
-function auditSafeName(value){
-  return String(value||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180);
+function auditLegacySafeName(value){
+  const out=String(value||'').replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,180);
+  return !out||out==='.'||out==='..'?'':out;
+}
+function auditPathSegment(value){
+  const raw=String(value||'').trim();if(!raw)return'';
+  const base=(raw.replace(/[^A-Za-z0-9_.-]/g,'_').replace(/^\.+$/,'id').slice(0,120)||'id');
+  const suffix=crypto.createHash('sha256').update(raw).digest('hex').slice(0,16);
+  return base+'-'+suffix;
+}
+function auditPathInsideRoot(dir){
+  const root=path.resolve(AUDIT_DIR)+path.sep,resolved=path.resolve(dir)+path.sep;
+  return resolved.startsWith(root);
 }
 function auditReportPath(machineId,auditId){
-  const machine=auditSafeName(machineId),id=auditSafeName(auditId);
+  const machine=auditPathSegment(machineId),id=auditPathSegment(auditId);
   if(!machine||!id)throw new Error('identificador de auditoría inválido');
-  const dir=path.join(AUDIT_DIR,machine);fs.mkdirSync(dir,{recursive:true,mode:0o700});
+  const dir=path.resolve(AUDIT_DIR,machine);
+  if(!auditPathInsideRoot(dir))throw new Error('ruta de auditoría inválida');
+  fs.mkdirSync(dir,{recursive:true,mode:0o700});
+  return path.join(dir,id+'.json');
+}
+function auditLegacyReportPath(machineId,auditId){
+  const machine=auditLegacySafeName(machineId),id=auditLegacySafeName(auditId);
+  if(!machine||!id)return'';
+  const dir=path.resolve(AUDIT_DIR,machine);
+  if(!auditPathInsideRoot(dir))return'';
   return path.join(dir,id+'.json');
 }
 function auditHash(value){return crypto.createHash('sha256').update(JSON.stringify(value??null)).digest('hex');}
+function loadOrCreateAuditSealKey(){
+  const env=String(process.env.FARM_AUDIT_SEAL_KEY||'').trim();
+  if(env)return Buffer.from(env,'utf8');
+  const file=path.join(DATA_DIR,'.audit-seal-key');
+  try{const v=fs.readFileSync(file,'utf8').trim();if(v)return Buffer.from(v,'utf8');}catch(_){}
+  const generated=crypto.createHash('sha256').update('audit-seal:'+MASTER_TOKEN).digest('base64url');
+  try{fs.writeFileSync(file,generated+'\n',{mode:0o600});}
+  catch(e){console.warn('[audits] no se pudo persistir seal key; usando derivación estable del master token:',e.message);}
+  return Buffer.from(generated,'utf8');
+}
+const AUDIT_SEAL_KEY=loadOrCreateAuditSealKey();
+function auditSealPayload(report){
+  return{
+    version:report.version,sealVersion:report.sealVersion||0,id:report.id,machineId:report.machineId,
+    requestId:report.requestId||'',createdAt:report.createdAt,actorRole:report.actorRole,clientActor:report.clientActor||'',
+    model:report.model,durationMs:report.durationMs||0,sourceMatrix:report.sourceMatrix||{},cost:report.cost||null,
+    scanId:report.scanId||'',evidenceHash:report.evidenceHash||'',scanEvidenceHash:report.scanEvidenceHash||'',
+    result:report.result||{}
+  };
+}
+function auditSealHash(report){
+  return crypto.createHmac('sha256',AUDIT_SEAL_KEY).update(JSON.stringify(auditSealPayload(report))).digest('hex');
+}
+function auditScanSealPayload(row){
+  return{scanId:row.scanId,machineId:row.machineId,evidenceHash:row.evidenceHash,expiresAt:Number(row.expiresAt||0)};
+}
+function auditScanSeal(row){
+  return crypto.createHmac('sha256',AUDIT_SEAL_KEY).update(JSON.stringify(auditScanSealPayload(row))).digest('hex');
+}
+function recoverAuditScanEnvelope(machineId,body,submittedEvidence){
+  const scanId=String(body?.scanId||''),evidenceHash=String(body?.scanEvidenceHash||''),expiresAt=Number(body?.scanExpiresAt||0),seal=String(body?.scanSeal||'');
+  if(!scanId||!evidenceHash||!expiresAt||expiresAt<=Date.now()||!/^[a-f0-9]{64}$/i.test(seal))return null;
+  const diagnostics=compactAuditScanCore(submittedEvidence?.scan||{});
+  if(auditHash(diagnostics)!==evidenceHash)return null;
+  const row={scanId,machineId,role:'recovered',diagnostics,evidenceHash,createdAt:'',expiresAt};
+  const expected=auditScanSeal(row);
+  const aa=Buffer.from(seal),bb=Buffer.from(expected);
+  if(aa.length!==bb.length||!crypto.timingSafeEqual(aa,bb))return null;
+  return row;
+}
 function auditByteLength(value){return Buffer.byteLength(JSON.stringify(value??null),'utf8');}
 function compactAuditScanCore(value){
   const c=auditJsonClone(value,2*1024*1024);
   if(c&&typeof c==='object')delete c.cameraFrame;
-  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
   if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-120000);
-  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
   if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-60000);
   if(c?.moonraker?.history?.result?.jobs)c.moonraker.history.result.jobs=c.moonraker.history.result.jobs.slice(0,10);
   if(c?.moonraker?.gcodeResponses)c.moonraker.gcodeResponses=c.moonraker.gcodeResponses.slice(-30);
-  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
   if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-24000);
   if(c?.moonraker?.history)c.moonraker.history={result:{jobs:(c.moonraker.history.result?.jobs||[]).slice(0,5)}};
-  if(auditByteLength(c)>AUDIT_MAX_EVIDENCE)throw new Error('escaneo técnico excede el presupuesto seguro');
+  if(auditByteLength(c)>AUDIT_MAX_SCAN)throw new Error('escaneo técnico excede el presupuesto seguro');
   return c;
 }
 function findingIdFor(row,index){
@@ -250,13 +317,17 @@ function auditResultSummary(result={}){
 }
 function auditSummaryFromReport(report){
   return{
-    id:report.id,machineId:report.machineId,createdAt:report.createdAt,
+    id:report.id,machineId:report.machineId,requestId:report.requestId||'',createdAt:report.createdAt,
     actorRole:report.actorRole,clientActor:report.clientActor||'',model:report.model||'',
     durationMs:report.durationMs||0,sourceMatrix:report.sourceMatrix||{},
     result:auditResultSummary(report.result),cost:report.cost||null,
     evidenceHash:report.evidenceHash||'',reportHash:report.reportHash||'',
-    scanId:report.scanId||'',version:2,
+    scanId:report.scanId||'',sealVersion:report.sealVersion||0,version:2,
   };
+}
+function auditSummaryForRole(row,role){
+  if(role!=='viewer')return row;
+  return{id:row.id,machineId:row.machineId,createdAt:row.createdAt,model:row.model||'',result:row.result,version:row.version||2};
 }
 function pruneAuditReports(rows){
   const sorted=(Array.isArray(rows)?rows:[]).filter(x=>x&&x.machineId&&x.id)
@@ -275,13 +346,34 @@ function normalizeAuditStore(raw){
 }
 function sanitizeAuditCost(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
-  const estimatedUsd=Math.max(0,Math.min(5,Number(raw.estimatedUsd)||0));
+  const finite=(v,max)=>Number.isFinite(Number(v))?Math.max(0,Math.min(max,Number(v))):0;
+  const estimatedUsd=finite(raw.estimatedUsd,5);
+  const provenance=raw.provenance==='proxy-budget-reservation'?'client-attested-proxy-budget-reservation':
+    raw.provenance==='partial-proxy-budget-reservation'?'client-attested-partial-proxy-budget-reservation':'unavailable';
   return{
-    currency:'USD',estimatedUsd:Number(estimatedUsd.toFixed(6)),
+    currency:'USD',provenance,estimatedUsd:Number(estimatedUsd.toFixed(6)),
     textModel:String(raw.textModel||'').slice(0,80),visionModel:String(raw.visionModel||'').slice(0,80),
-    textInputTokens:Math.max(0,Math.floor(Number(raw.textInputTokens)||0)),
-    textOutputTokens:Math.max(0,Math.floor(Number(raw.textOutputTokens)||0)),
+    textInputTokens:Math.floor(finite(raw.textInputTokens,5_000_000)),
+    textOutputTokens:Math.floor(finite(raw.textOutputTokens,1_000_000)),
     visionUsed:raw.visionUsed===true,
+  };
+}
+function deriveAuditSourceMatrix(evidence={}){
+  const scan=evidence.scan||{},src=scan.sources||{},dash=evidence.dashboard||{},stability=scan.stability||{};
+  return{
+    moonraker:!!src.moonraker?.available,
+    sshLogs:!!src.ssh?.logsCaptured,
+    camera:!!src.camera?.available,
+    cameraVision:!!evidence.vision?.available,
+    dashboardTelemetry:!!dash.live&&typeof dash.live==='object'&&Object.keys(dash.live).length>0,
+    centralHistory:!!dash.history?.durable,
+    farmHealth:!!dash.central?.central,
+    bedMesh:!!evidence.bed&&evidence.bed.code!=='unavailable',
+    maintenance:Array.isArray(dash.maintenance),
+    incidents:Array.isArray(dash.incidents),
+    configDrift:!!dash.drift,
+    networkStability:Number(stability.network?.total||0)>0,
+    thermalStability:!!(stability.thermal?.hotend||stability.thermal?.bed)
   };
 }
 function purgeAuditScanSessions(now=Date.now()){
@@ -291,6 +383,7 @@ function issueAuditScan(machineId,diagnostics,role){
   purgeAuditScanSessions();
   const scanId=uid('scan'),core=compactAuditScanCore(diagnostics);
   const row={scanId,machineId,role,diagnostics:core,evidenceHash:auditHash(core),createdAt:nowIso(),expiresAt:Date.now()+AUDIT_SCAN_TTL_MS};
+  row.scanSeal=auditScanSeal(row);
   auditScanSessions.set(scanId,row);return row;
 }
 function sanitizeAuditReport(machineId,body={},role='operator'){
@@ -298,47 +391,50 @@ function sanitizeAuditReport(machineId,body={},role='operator'){
   if(!idMachine||idMachine.length>120)throw new Error('machineId inválido');
   purgeAuditScanSessions();
   const scanId=String(body.scanId||'');
-  const scan=auditScanSessions.get(scanId);
-  if(!scan||scan.machineId!==idMachine)throw new Error('escaneo de auditoría inválido o expirado');
-  const createdAt=nowIso(),id=uid('audit');
   const submittedEvidence=body.evidence&&typeof body.evidence==='object'&&!Array.isArray(body.evidence)?auditJsonClone(body.evidence,AUDIT_MAX_EVIDENCE):{};
+  const scan=auditScanSessions.get(scanId)||recoverAuditScanEnvelope(idMachine,body,submittedEvidence);
+  if(!scan||scan.machineId!==idMachine)throw new Error('escaneo de auditoría inválido, expirado o no verificable');
+  const createdAt=nowIso(),id=uid('audit');
+  const requestId=/^[A-Za-z0-9_.:-]{8,180}$/.test(String(body.requestId||''))?String(body.requestId):('req-'+scanId);
   submittedEvidence.scan=scan.diagnostics;
   const evidence=auditJsonClone(submittedEvidence,AUDIT_MAX_EVIDENCE);
   const result=normalizeAuditResult(body.result,createdAt);
   const model=['claude-haiku-4-5','deterministic-fallback'].includes(String(body.model||''))?String(body.model):'unknown';
   const report={
-    version:2,id,machineId:idMachine,createdAt,actorRole:role,
+    version:2,sealVersion:2,id,requestId,machineId:idMachine,createdAt,actorRole:role,
     clientActor:String(body.actor||'').slice(0,160),model,
     durationMs:Math.max(0,Math.min(30*60*1000,Number(body.durationMs)||0)),
-    sourceMatrix:body.sourceMatrix&&typeof body.sourceMatrix==='object'?auditJsonClone(body.sourceMatrix,32*1024):{},
+    sourceMatrix:deriveAuditSourceMatrix(evidence),
     cost:sanitizeAuditCost(body.cost),scanId,
     result,evidence,
   };
   report.evidenceHash=auditHash(report.evidence);
   report.scanEvidenceHash=scan.evidenceHash;
-  report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
+  report.reportHash=auditSealHash(report);
   return report;
 }
 function migrateLegacyAudits(){
   const existing=readJson(AUDIT_INDEX_FILE,null);
   if(existing)return normalizeAuditStore(existing);
   const legacy=readJson(AUDIT_LEGACY_FILE,null);
-  const rows=Array.isArray(legacy?.reports)?legacy.reports:[];
+  const rows=pruneAuditReports(Array.isArray(legacy?.reports)?legacy.reports:[]);
   if(!rows.length)return normalizeAuditStore(null);
   const summaries=[];
   for(const old of rows){
     try{
       const createdAt=Number.isFinite(Date.parse(old.createdAt||''))?new Date(old.createdAt).toISOString():nowIso();
       const report={
-        version:2,id:/^[A-Za-z0-9_.:-]{8,160}$/.test(String(old.id||''))?String(old.id):uid('audit'),
+        version:2,sealVersion:2,id:/^[A-Za-z0-9_.:-]{8,160}$/.test(String(old.id||''))?String(old.id):uid('audit'),
+        requestId:'legacy-'+crypto.randomBytes(8).toString('hex'),
         machineId:String(old.machineId||'').slice(0,120),createdAt,actorRole:'legacy',
         clientActor:String(old.actor||'').slice(0,160),model:String(old.model||'legacy').slice(0,120),
-        durationMs:Math.max(0,Number(old.durationMs)||0),sourceMatrix:old.sourceMatrix||{},cost:null,scanId:'',
+        durationMs:Math.max(0,Number(old.durationMs)||0),cost:null,scanId:'',
         result:normalizeAuditResult(old.result,createdAt),evidence:auditJsonClone(old.evidence||{},AUDIT_MAX_EVIDENCE),
       };
       if(!report.machineId)continue;
+      report.sourceMatrix=deriveAuditSourceMatrix(report.evidence);
       report.evidenceHash=auditHash(report.evidence);report.scanEvidenceHash='';
-      report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
+      report.reportHash=auditSealHash(report);
       fs.writeFileSync(auditReportPath(report.machineId,report.id),JSON.stringify(report,null,2)+'\n',{mode:0o600});
       summaries.push(auditSummaryFromReport(report));
     }catch(e){console.warn('[audits] migración omitida:',e.message);}
@@ -348,13 +444,24 @@ function migrateLegacyAudits(){
   return store;
 }
 async function readAuditReport(machineId,auditId){
-  try{return JSON.parse(await fs.promises.readFile(auditReportPath(machineId,auditId),'utf8'));}catch(_){return null;}
+  const primary=auditReportPath(machineId,auditId);
+  try{return JSON.parse(await fs.promises.readFile(primary,'utf8'));}catch(_){}
+  const legacy=auditLegacyReportPath(machineId,auditId);
+  if(!legacy||legacy===primary)return null;
+  try{
+    const report=JSON.parse(await fs.promises.readFile(legacy,'utf8'));
+    // Migración perezosa: una lectura válida mueve el archivo a la ruta hash-safe.
+    try{await atomicWrite(primary,report);await fs.promises.unlink(legacy);}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] lazy path migration',e.message);}
+    return report;
+  }catch(_){return null;}
 }
 function verifyAuditReport(report){
   if(!report||typeof report!=='object')return false;
   const evidenceHash=auditHash(report.evidence||{});
-  const reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash,scanEvidenceHash:report.scanEvidenceHash||'',result:report.result,cost:report.cost||null});
-  return evidenceHash===report.evidenceHash&&reportHash===report.reportHash;
+  if(evidenceHash!==report.evidenceHash)return false;
+  if(Number(report.sealVersion||0)>=2)return auditSealHash({...report,evidenceHash})===report.reportHash;
+  const legacyHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash,scanEvidenceHash:report.scanEvidenceHash||'',result:report.result,cost:report.cost||null});
+  return legacyHash===report.reportHash;
 }
 let queue = normalizeQueue(readJson(QUEUE_FILE, null));
 let registry = normalizeRegistry(readJson(REGISTRY_FILE, null));
@@ -392,31 +499,101 @@ function persistAudits(){
   auditWrite=auditWrite.then(()=>atomicWrite(AUDIT_INDEX_FILE,snapshot).then(()=>true)).catch(e=>{console.error('[audits] persist',e);return false;});
   return auditWrite;
 }
+async function deleteAuditReportFiles(machineId,auditId){
+  const paths=[auditReportPath(machineId,auditId),auditLegacyReportPath(machineId,auditId)].filter(Boolean);
+  for(const file of new Set(paths))try{await fs.promises.unlink(file);}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] cleanup',e.message);}
+}
+async function cleanupAuditOrphans(graceMs=24*60*60*1000){
+  const keep=new Set();
+  for(const row of audits.reports){
+    try{keep.add(path.resolve(auditReportPath(row.machineId,row.id)));}catch(_){}
+    const legacy=auditLegacyReportPath(row.machineId,row.id);if(legacy)keep.add(path.resolve(legacy));
+  }
+  let removed=0,now=Date.now(),dirs=[];
+  try{dirs=await fs.promises.readdir(AUDIT_DIR,{withFileTypes:true});}catch(_){return 0;}
+  for(const dirent of dirs){
+    if(!dirent.isDirectory())continue;
+    const dir=path.resolve(AUDIT_DIR,dirent.name);
+    if(!auditPathInsideRoot(dir))continue;
+    let files=[];try{files=await fs.promises.readdir(dir,{withFileTypes:true});}catch(_){continue;}
+    for(const fileent of files){
+      if(!fileent.isFile()||!fileent.name.endsWith('.json'))continue;
+      const file=path.resolve(dir,fileent.name);if(keep.has(file))continue;
+      try{
+        const st=await fs.promises.stat(file);if(now-st.mtimeMs<graceMs)continue;
+        await fs.promises.unlink(file);removed++;
+      }catch(e){if(e?.code!=='ENOENT')console.warn('[audits] orphan cleanup',e.message);}
+    }
+    try{if(!(await fs.promises.readdir(dir)).length)await fs.promises.rmdir(dir);}catch(_){}
+  }
+  if(removed)console.warn('[audits] '+removed+' archivo(s) huérfano(s) eliminado(s)');
+  return removed;
+}
+function auditSummaryByRequestId(machineId,requestId){
+  return audits.reports.find(row=>row.machineId===machineId&&row.requestId===requestId)||null;
+}
 async function saveAuditReport(report){
-  const previous=audits.reports.slice(),summary=auditSummaryFromReport(report);
-  await atomicWrite(auditReportPath(report.machineId,report.id),report);
-  auditScanSessions.delete(report.scanId);
-  audits.reports=pruneAuditReports([summary,...audits.reports.filter(row=>row.id!==report.id)]);
-  const keep=new Set(audits.reports.map(row=>row.id));
-  const removed=previous.filter(row=>row.machineId===report.machineId&&!keep.has(row.id));
-  const durable=await persistAudits();
-  if(!durable)throw new Error('no se pudo persistir el índice de auditorías');
-  for(const row of removed)try{await fs.promises.unlink(auditReportPath(row.machineId,row.id));}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] cleanup',e.message);}
-  return summary;
+  return withAuditLock('audit-index',async()=>{
+    const previous=audits.reports.slice(),summary=auditSummaryFromReport(report),file=auditReportPath(report.machineId,report.id);
+    await atomicWrite(file,report);
+    audits.reports=pruneAuditReports([summary,...audits.reports.filter(row=>row.id!==report.id)]);
+    const keep=new Set(audits.reports.map(row=>row.id));
+    const removed=previous.filter(row=>row.machineId===report.machineId&&!keep.has(row.id));
+    const durable=await persistAudits();
+    if(!durable){
+      audits.reports=previous;
+      try{await fs.promises.unlink(file);}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] rollback detail',e.message);}
+      const error=new Error('no se pudo persistir el índice de auditorías');error.statusCode=503;throw error;
+    }
+    auditScanSessions.delete(report.scanId);
+    for(const row of removed)await deleteAuditReportFiles(row.machineId,row.id);
+    return summary;
+  });
+}
+async function saveAuditRequest(machineId,body,role){
+  const rawScan=String(body?.scanId||''),requestId=/^[A-Za-z0-9_.:-]{8,180}$/.test(String(body?.requestId||''))?String(body.requestId):('req-'+rawScan);
+  if(!requestId||requestId==='req-')throw new Error('requestId/scanId requerido');
+  return withAuditLock('save:'+machineId+':'+requestId,async()=>{
+    const existing=auditSummaryByRequestId(machineId,requestId);
+    if(existing){
+      const report=await readAuditReport(machineId,existing.id);
+      if(!report||!verifyAuditReport(report)){const error=new Error('auditoría idempotente existente sin detalle íntegro');error.statusCode=409;throw error;}
+      if(rawScan&&report.scanId!==rawScan){const error=new Error('requestId ya utilizado por otro escaneo');error.statusCode=409;throw error;}
+      return{report,summary:existing,idempotent:true};
+    }
+    const existingScan=rawScan?audits.reports.find(row=>row.machineId===machineId&&row.scanId===rawScan):null;
+    if(existingScan){const error=new Error('escaneo ya utilizado por otra auditoría');error.statusCode=409;throw error;}
+    const report=sanitizeAuditReport(machineId,{...body,requestId},role);
+    const summary=await saveAuditReport(report);
+    return{report,summary,idempotent:false};
+  });
 }
 async function updateAuditFinding(machineId,auditId,findingId,patch,role){
-  const report=await readAuditReport(machineId,auditId);if(!report)return null;
-  const findings=Array.isArray(report.result?.findings)?report.result.findings:[];
-  const row=findings.find(f=>f.findingId===findingId);if(!row)throw new Error('hallazgo no encontrado');
-  const status=String(patch.status||'');if(!AUDIT_FINDING_STATES.has(status))throw new Error('estado de hallazgo inválido');
-  row.status=status;row.statusUpdatedAt=nowIso();row.statusUpdatedByRole=role;row.statusNote=String(patch.note||'').slice(0,1200);
-  report.result=normalizeAuditResult(report.result,report.createdAt);
-  report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
-  await atomicWrite(auditReportPath(machineId,auditId),report);
-  const summary=auditSummaryFromReport(report),idx=audits.reports.findIndex(r=>r.id===auditId&&r.machineId===machineId);
-  if(idx>=0)audits.reports[idx]=summary;else audits.reports.unshift(summary);
-  if(!await persistAudits())throw new Error('no se pudo persistir estado del hallazgo');
-  return{report,summary};
+  return withAuditLock('finding:'+machineId+':'+auditId,async()=>withAuditLock('audit-index',async()=>{
+    const report=await readAuditReport(machineId,auditId);if(!report)return null;
+    if(!verifyAuditReport(report)){const error=new Error('la auditoría no supera verificación de integridad');error.statusCode=409;throw error;}
+    const originalReport=auditJsonClone(report,AUDIT_MAX_BODY),previousIndex=audits.reports.slice();
+    const findings=Array.isArray(report.result?.findings)?report.result.findings:[];
+    const row=findings.find(f=>f.findingId===findingId);if(!row)throw new Error('hallazgo no encontrado');
+    const status=String(patch.status||'');if(!AUDIT_FINDING_STATES.has(status))throw new Error('estado de hallazgo inválido');
+    row.status=status;row.statusUpdatedAt=nowIso();row.statusUpdatedByRole=role;row.statusNote=String(patch.note||'').slice(0,1200);
+    report.result=normalizeAuditResult(report.result,report.createdAt);
+    report.sealVersion=2;
+    report.requestId=report.requestId||('legacy-'+crypto.randomBytes(8).toString('hex'));
+    report.sourceMatrix=deriveAuditSourceMatrix(report.evidence||{});
+    report.evidenceHash=auditHash(report.evidence||{});
+    report.reportHash=auditSealHash(report);
+    const file=auditReportPath(machineId,auditId);
+    await atomicWrite(file,report);
+    const summary=auditSummaryFromReport(report),idx=audits.reports.findIndex(r=>r.id===auditId&&r.machineId===machineId);
+    if(idx>=0)audits.reports[idx]=summary;else audits.reports.unshift(summary);
+    if(!await persistAudits()){
+      audits.reports=previousIndex;
+      try{await atomicWrite(file,originalReport);}catch(e){console.error('[audits] rollback finding detail',e);}
+      const error=new Error('no se pudo persistir estado del hallazgo');error.statusCode=503;throw error;
+    }
+    return{report,summary};
+  }));
 }
 const recoveredAtBoot = recoverQueueJobs(queue);
 if (recoveredAtBoot) {
@@ -789,6 +966,7 @@ async function discoverLan() {
   await Promise.all(workers);
 }
 
+function decodeAuditPathPart(value){try{return decodeURIComponent(String(value||''));}catch(_){return'';}}
 const server = http.createServer(async (req, res) => {
   setCors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -796,10 +974,10 @@ const server = http.createServer(async (req, res) => {
   // El bridge legado ejecutaba /restart sin validar método. Desde el controller
   // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
   if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, safetyUpdatedAt: safety.updatedAt || 0 });
+  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
-    return json(res, 200, { ok: true, role, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
+    return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
   // Actualiza y reinicia el proceso PADRE. Antes /update se delegaba al bridge
   // legado hijo: el git pull ocurría, pero Farm Controller seguía ejecutando el
@@ -825,7 +1003,8 @@ const server = http.createServer(async (req, res) => {
   const auditScan=p.match(/^\/farm\/audit-scan\/([^/]+)$/);
   if(auditScan&&req.method==='POST'){
     const role=requireRole(req,res,'operator');if(!role)return;
-    const machineId=decodeURIComponent(auditScan[1]),m=machineByIdentity({id:machineId});
+    const machineId=decodeAuditPathPart(auditScan[1]);if(!machineId)return json(res,400,{ok:false,error:'machineId inválido'});
+    const m=machineByIdentity({id:machineId});
     if(!m?.id||!isPrivateIp(m.ip))return json(res,404,{ok:false,error:'máquina no registrada o sin IP válida'});
     const scan=await requestLegacy('GET','/diagnostics/'+m.ip,null,{},45_000);
     if(!scan.ok)return json(res,502,{ok:false,error:'diagnóstico profundo no disponible',status:scan.status});
@@ -833,7 +1012,7 @@ const server = http.createServer(async (req, res) => {
       const diagnostics=JSON.parse(scan.body.toString('utf8')||'{}');
       const sessionDiagnostics={...diagnostics};delete sessionDiagnostics.cameraFrame;
       const issued=issueAuditScan(machineId,sessionDiagnostics,role);
-      return json(res,200,{ok:true,scanId:issued.scanId,scanEvidenceHash:issued.evidenceHash,expiresAt:issued.expiresAt,machine:{id:m.id,ip:m.ip,name:m.name||m.nombre||'',model:m.model||m.modelo||''},diagnostics});
+      return json(res,200,{ok:true,scanId:issued.scanId,scanEvidenceHash:issued.evidenceHash,scanExpiresAt:issued.expiresAt,scanSeal:issued.scanSeal,machine:{id:m.id,ip:m.ip,name:m.name||m.nombre||'',model:m.model||m.modelo||''},diagnostics});
     }catch(e){return json(res,502,{ok:false,error:'respuesta de diagnóstico inválida'});}
   }
 
@@ -845,14 +1024,15 @@ const server = http.createServer(async (req, res) => {
       const body=JSON.parse((await readBody(req,32*1024)).toString('utf8')||'{}');
       const updated=await updateAuditFinding(machineId,auditId,findingId,body,role);
       if(!updated)return json(res,404,{ok:false,error:'auditoría no encontrada'});
-      return json(res,200,{ok:true,report:updated.report,summary:updated.summary});
-    }catch(e){return json(res,400,{ok:false,error:e.message});}
+      return json(res,200,{ok:true,integrityValid:true,report:updated.report,summary:updated.summary});
+    }catch(e){return json(res,Number(e.statusCode)||400,{ok:false,error:e.message});}
   }
 
   const auditDetail=p.match(/^\/farm\/audits\/([^/]+)\/([^/]+)$/);
   if(auditDetail&&req.method==='GET'){
     const role=requireRole(req,res,'operator');if(!role)return;
-    const machineId=decodeURIComponent(auditDetail[1]),auditId=decodeURIComponent(auditDetail[2]);
+    const machineId=decodeAuditPathPart(auditDetail[1]),auditId=decodeAuditPathPart(auditDetail[2]);
+    if(!machineId||!auditId)return json(res,400,{ok:false,error:'identificador de auditoría inválido'});
     const report=await readAuditReport(machineId,auditId);
     if(!report||report.machineId!==machineId||report.id!==auditId)return json(res,404,{ok:false,error:'auditoría no encontrada'});
     return json(res,200,{ok:true,integrityValid:verifyAuditReport(report),report});
@@ -861,20 +1041,21 @@ const server = http.createServer(async (req, res) => {
   const auditHistory=p.match(/^\/farm\/audits\/([^/]+)$/);
   if(auditHistory&&req.method==='GET'){
     const role=requireRole(req,res,'viewer');if(!role)return;
-    const machineId=decodeURIComponent(auditHistory[1]),limit=Math.max(1,Math.min(80,Number(u.searchParams.get('limit')||30)));
-    const reports=audits.reports.filter(row=>row.machineId===machineId).slice(0,limit);
+    const machineId=decodeAuditPathPart(auditHistory[1]);if(!machineId)return json(res,400,{ok:false,error:'machineId inválido'});
+    const rawLimit=Number(u.searchParams.get('limit')||30),limit=Number.isFinite(rawLimit)?Math.max(1,Math.min(80,Math.floor(rawLimit))):30;
+    const reports=audits.reports.filter(row=>row.machineId===machineId).slice(0,limit).map(row=>auditSummaryForRole(row,role));
     return json(res,200,{ok:true,version:2,updatedAt:audits.updatedAt,reports});
   }
   if(auditHistory&&req.method==='POST'){
     const role=requireRole(req,res,'operator');if(!role)return;
     try{
-      const machineId=decodeURIComponent(auditHistory[1]),m=machineByIdentity({id:machineId});
+      const machineId=decodeAuditPathPart(auditHistory[1]);if(!machineId)return json(res,400,{ok:false,error:'machineId inválido'});
+      const m=machineByIdentity({id:machineId});
       if(!m?.id)return json(res,404,{ok:false,error:'máquina no registrada'});
       const body=JSON.parse((await readBody(req,AUDIT_MAX_BODY)).toString('utf8')||'{}');
-      const report=sanitizeAuditReport(machineId,body,role);
-      const summary=await saveAuditReport(report);
-      return json(res,201,{ok:true,report,summary});
-    }catch(e){return json(res,400,{ok:false,error:e.message});}
+      const saved=await saveAuditRequest(machineId,body,role);
+      return json(res,saved.idempotent?200:201,{ok:true,idempotent:saved.idempotent,integrityValid:true,report:saved.report,summary:saved.summary});
+    }catch(e){return json(res,Number(e.statusCode)||400,{ok:false,error:e.message});}
   }
 
   if (p === '/farm/queue' && req.method === 'GET') {
@@ -993,6 +1174,8 @@ function start(){
   startLegacy();
   setInterval(queueWorker, 10_000).unref();
   setTimeout(queueWorker, 1500).unref();
+  setInterval(()=>purgeAuditScanSessions(),5*60_000).unref();
+  setTimeout(()=>cleanupAuditOrphans().catch(e=>console.warn('[audits] cleanup inicial',e.message)),3000).unref();
   if (process.env.FARM_DISCOVERY_ENABLED !== '0') {
     setTimeout(() => discoverLan().catch(e => console.warn('[registry] discovery', e.message)), 5000).unref();
     setInterval(() => discoverLan().catch(e => console.warn('[registry] discovery', e.message)), DISCOVERY_INTERVAL_MS).unref();
@@ -1025,5 +1208,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, auditScanSeal, recoverAuditScanEnvelope, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };

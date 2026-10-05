@@ -336,8 +336,8 @@ está en otra rama. Se apaga con `BRIDGE_UPDATE=0`.
   privada y como argumento suelto, nunca concatenada a una shell. Se apaga con
   `BRIDGE_RECOVER=0` si prefieres que el bridge no toque nada.
 - Solo hace proxy hacia **IPs privadas** (RFC 1918) y **puertos permitidos** — nunca a internet.
-- El token vive en `.bridge-token` (no se sube a git) y en el `localStorage` del navegador.
-- Si el token se filtra: borra `.bridge-token`, reinicia el bridge (genera uno nuevo) y actualiza el dashboard.
+- El token maestro vive en `.bridge-token`/variables del iMac y **no debe persistirse en `localStorage`**. El dashboard moderno usa tickets efímeros del Farm Controller; sólo el modo legado conserva compatibilidad temporal con un token largo de sesión.
+- Si el token maestro se filtra: rótalo en el iMac, reinicia el Controller y actualiza la configuración de acceso correspondiente.
 
 ## Variables de entorno
 
@@ -351,6 +351,13 @@ está en otra rama. Se apaga con `BRIDGE_UPDATE=0`.
 | `PRINTER_SSH_USER` | `root` | Usuario SSH de las impresoras |
 | `PRINTER_SSH_KEY` | (la de por defecto) | Llave privada para entrar a las impresoras |
 | `PRINTER_SSH_PASS` | (vacío) | Contraseña SSH; necesita `sshpass`. Mejor usa llave. |
+| `FARM_AUDIT_SEAL_KEY` | derivada de forma estable del token maestro y persistida en `data/.audit-seal-key` | Clave HMAC para verificar integridad local de informes de Auditoría V3. Define una clave dedicada para desacoplarla de futuras rotaciones del token maestro. |
+
+### Integridad del historial de Auditoría V3
+
+Los informes nuevos se sellan con HMAC-SHA256. El sello prueba que el archivo no cambió después de ser guardado por el Controller; **no es una firma del proveedor de IA**. Para restauraciones/backups, conserva todo `printer-bridge/data/`, incluida `.audit-seal-key`, o configura una `FARM_AUDIT_SEAL_KEY` estable. Perder o cambiar esa clave hará que los informes V3 restaurados fallen su verificación de integridad.
+
+El scan técnico usa además un sobre HMAC con vencimiento, de modo que un reinicio del Controller entre el escaneo y el guardado no obliga a repetir la llamada de IA mientras ese sobre siga vigente.
 
 ---
 
