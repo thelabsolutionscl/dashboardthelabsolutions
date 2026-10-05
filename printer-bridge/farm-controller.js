@@ -329,7 +329,7 @@ function sanitizeAuditCost(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
   const estimatedUsd=Math.max(0,Math.min(5,Number(raw.estimatedUsd)||0));
   return{
-    currency:'USD',provenance:'client_estimate',estimatedUsd:Number(estimatedUsd.toFixed(6)),
+    currency:'USD',provenance:raw.provenance==='proxy-budget-reservation'?'client-attested-proxy-budget-reservation':'client-estimate',estimatedUsd:Number(estimatedUsd.toFixed(6)),
     textModel:String(raw.textModel||'').slice(0,80),visionModel:String(raw.visionModel||'').slice(0,80),
     textInputTokens:Math.max(0,Math.floor(Number(raw.textInputTokens)||0)),
     textOutputTokens:Math.max(0,Math.floor(Number(raw.textOutputTokens)||0)),
