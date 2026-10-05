@@ -223,3 +223,17 @@ test('un operator no queda habilitado contra un backend anterior a V3',()=>{
   assert.match(OPS,/versionOk\|\|role==='admin'/);
   assert.match(OPS,/Auditoría V3 requiere actualización por un administrador/);
 });
+
+
+test('las rutas de auditoría validan percent-encoding y normalizan limit inválido',()=>{
+  const src=fs.readFileSync(path.join(__dirname,'..','printer-bridge','farm-controller.js'),'utf8');
+  assert.match(src,/function decodeAuditPathPart/);
+  assert.match(src,/if\(!machineId\)return json\(res,400/);
+  assert.match(src,/Number\.isFinite\(rawLimit\).*:30/);
+});
+
+test('costo IA distingue ausencia y reserva parcial del proxy',()=>{
+  assert.match(OPS,/Costo IA no disponible/);
+  assert.match(OPS,/partial-proxy-budget-reservation/);
+  assert.match(OPS,/client-attested-partial-proxy-budget-reservation/);
+});
