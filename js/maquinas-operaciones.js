@@ -2773,8 +2773,15 @@ async function _printerAuditClaude(evidence,focus=''){
   return{result,cost:{estimatedUsd:Number((inputTokens/1000000*1+outputTokens/1000000*5).toFixed(6)),textModel:PRINTER_AUDIT_MODEL,textInputTokens:inputTokens,textOutputTokens:outputTokens}};
 }
 function _printerAuditSourceMatrix(evidence){
-  const scan=evidence?.scan||{},src=scan.sources||{},dash=evidence?.dashboard||{};
-  return{moonraker:!!src.moonraker?.available,sshLogs:!!src.ssh?.logsCaptured,camera:!!src.camera?.available,cameraVision:!!evidence?.vision?.available,dashboardTelemetry:!!dash.live&&Object.keys(dash.live).length>0,centralHistory:!!dash.history?.durable,farmHealth:!!dash.central?.central,bedMesh:!!evidence?.bed&&evidence.bed.code!=='unavailable',maintenance:Array.isArray(dash.maintenance),incidents:Array.isArray(dash.incidents)};
+  const scan=evidence?.scan||{},src=scan.sources||{},dash=evidence?.dashboard||{},stability=scan.stability||{};
+  return{
+    moonraker:!!src.moonraker?.available,sshLogs:!!src.ssh?.logsCaptured,camera:!!src.camera?.available,
+    cameraVision:!!evidence?.vision?.available,dashboardTelemetry:!!dash.live&&Object.keys(dash.live).length>0,
+    centralHistory:!!dash.history?.durable,farmHealth:!!dash.central?.central,
+    bedMesh:!!evidence?.bed&&evidence.bed.code!=='unavailable',maintenance:Array.isArray(dash.maintenance),
+    incidents:Array.isArray(dash.incidents),configDrift:!!dash.drift,
+    networkStability:Number(stability.network?.total||0)>0,thermalStability:!!(stability.thermal?.hotend||stability.thermal?.bed)
+  };
 }
 function _printerAuditStatusMeta(overall){
   if(overall==='critical')return{label:'CRÍTICA',color:'var(--danger)',bg:'rgba(255,68,68,.10)'};
@@ -2782,68 +2789,158 @@ function _printerAuditStatusMeta(overall){
   if(overall==='ok')return{label:'SALUDABLE',color:'var(--accent3)',bg:'rgba(0,212,170,.10)'};
   return{label:'INDETERMINADA',color:'var(--text3)',bg:'var(--surface2)'};
 }
-function renderPrinterAuditReport(saved,opts={}){
-  const savedOk=opts.savedOk!==false,modal=_printerAuditModal(),body=input('mopsPrinterAuditBody'),result=saved?.result||{},evidence=saved?.evidence||{},meta=_printerAuditStatusMeta(result.overall);
-  modal.style.display='flex';setText('mopsPrinterAuditTitle','AUDITORÍA IA · '+(machineLabel(saved.machineId)||saved.machineId));
-  const matrix=saved.sourceMatrix||_printerAuditSourceMatrix(evidence),labels={moonraker:'Moonraker',sshLogs:'Logs SSH',camera:'Cámara',cameraVision:'Visión IA',dashboardTelemetry:'Telemetría',centralHistory:'Historial central',farmHealth:'Farm Health',bedMesh:'Malla cama',maintenance:'Mantención',incidents:'Incidentes'};
-  const sources=Object.entries(matrix).map(function(pair){const k=pair[0],v=pair[1];return '<span style="font-size:10px;font-weight:800;padding:4px 7px;border-radius:999px;border:1px solid '+(v?'rgba(0,212,170,.35)':'var(--border2)')+';color:'+(v?'var(--accent3)':'var(--text3)')+'">'+(v?'✓':'—')+' '+esc(labels[k]||k)+'</span>';}).join('');
-  function sevColor(sev){return sev==='critical'||sev==='high'?'var(--danger)':sev==='medium'?'var(--warn)':sev==='low'?'#38bdf8':'var(--text3)';}
-  const findings=(result.findings||[]).map(function(row){return '<div style="border:1px solid var(--border2);border-left:3px solid '+sevColor(row.severity)+';border-radius:10px;padding:11px 12px;background:var(--surface2);margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:5px"><b style="font-size:11px;color:'+sevColor(row.severity)+'">'+esc(String(row.severity||'info').toUpperCase())+'</b><span style="font-size:11px;font-weight:800;color:var(--text)">'+esc(row.area||'General')+'</span></div><div style="font-size:12px;line-height:1.5;color:var(--text2)">'+esc(row.finding||'')+'</div>'+((row.evidence||[]).length?'<div style="font-size:10.5px;color:var(--text3);margin-top:6px">'+row.evidence.map(function(x){return '• '+esc(x);}).join('<br>')+'</div>':'')+(row.action?'<div style="font-size:11px;color:var(--accent);margin-top:7px"><b>Acción:</b> '+esc(row.action)+'</div>':'')+'</div>';}).join('');
-  const actions=(result.recommendedActions||[]).map(function(x,i){return '<div style="display:flex;gap:8px;padding:6px 0;font-size:12px;color:var(--text2)"><b style="color:var(--accent)">'+(i+1)+'.</b><span>'+esc(x)+'</span></div>';}).join('');
-  const limitations=(result.limitations||[]).map(function(x){return '<div style="font-size:11px;color:var(--text3);padding:3px 0">• '+esc(x)+'</div>';}).join('');
-  const rawEvidence=esc(JSON.stringify(evidence,null,2));
-  body.innerHTML='<div style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;margin-bottom:14px"><div style="flex:1;min-width:260px;padding:14px;border-radius:12px;border:1px solid '+meta.color+';background:'+meta.bg+'"><div style="font-size:10px;letter-spacing:1px;color:'+meta.color+';font-weight:900">'+meta.label+'</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:4px"><span style="font-size:32px;font-weight:900;color:var(--text)">'+Math.round(num(result.score))+'</span><span style="font-size:12px;color:var(--text3)">/100 · confianza '+Math.round(num(result.confidence))+'%</span></div><div style="font-size:12px;line-height:1.55;color:var(--text2);margin-top:7px">'+esc(result.summary||'Sin resumen')+'</div></div><div style="min-width:220px;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--surface2)"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Trazabilidad</div><div style="font-size:11px;color:var(--text2);margin-top:7px">'+new Date(saved.createdAt||Date.now()).toLocaleString('es-CL')+'<br>'+esc(saved.model||PRINTER_AUDIT_MODEL)+'<br>'+Math.round(num(saved.durationMs)/1000)+' s</div><div style="font-size:10px;margin-top:7px;color:'+(savedOk?'var(--accent3)':'var(--warn)')+'">'+(savedOk?'✓ Guardada en historial central':'⚠ No se confirmó guardado central')+'</div></div></div><div style="font-size:10px;font-weight:900;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin:14px 0 7px">Fuentes verificadas</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px">'+sources+'</div><div style="font-size:11px;font-weight:900;color:var(--text);margin-bottom:8px">HALLAZGOS ('+(result.findings||[]).length+')</div>'+(findings||'<div style="font-size:12px;color:var(--accent3);padding:10px 0">Sin hallazgos relevantes con la evidencia disponible.</div>')+'<div style="font-size:11px;font-weight:900;color:var(--text);margin:16px 0 6px">ACCIONES RECOMENDADAS</div>'+(actions||'<div style="font-size:12px;color:var(--text3)">Sin acciones adicionales.</div>')+(limitations?'<div style="font-size:11px;font-weight:900;color:var(--text);margin:16px 0 6px">LIMITACIONES</div>'+limitations:'')+'<details style="margin-top:18px;border-top:1px solid var(--border);padding-top:12px"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text3)">Ver evidencia técnica capturada</summary><pre style="white-space:pre-wrap;word-break:break-word;max-height:380px;overflow:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:10px;font-size:9.5px;line-height:1.45;color:var(--text3);margin-top:8px">'+rawEvidence+'</pre></details>';
+function _printerFindingStatusMeta(status){
+  if(status==='resolved')return{label:'RESUELTO',color:'var(--accent3)'};
+  if(status==='ignored')return{label:'IGNORADO',color:'var(--text3)'};
+  if(status==='reviewing')return{label:'REVISANDO',color:'var(--warn)'};
+  return{label:'NUEVO',color:'var(--danger)'};
+}
+function _printerAuditTrendHtml(result){
+  const c=result?.comparison||{};if(!c.previousAuditId)return'';
+  const d=num(c.scoreDelta),sign=d>0?'+':'',color=d>0?'var(--accent3)':d<0?'var(--danger)':'var(--text3)';
+  return '<div style="margin-top:9px;font-size:11px;color:var(--text3)">Anterior <b>'+Math.round(num(c.previousScore))+'/100</b> → actual <b>'+Math.round(num(result.score))+'/100</b> · <b style="color:'+color+'">'+sign+Math.round(d)+'</b> · '+Math.max(0,num(c.newFindings))+' nuevos · '+Math.max(0,num(c.clearedFindings))+' despejados</div>';
+}
+function _printerAuditCostText(saved){
+  const c=saved?.cost;if(!c)return'Costo IA no registrado';
+  const usd=num(c.estimatedUsd);return 'Costo IA est. US$ '+usd.toFixed(4)+(c.visionUsed?' · incluye visión':'');
 }
 async function fetchPrinterAuditHistory(machineId,limit=30){
   const d=await _printerAuditFarmFetch('/farm/audits/'+encodeURIComponent(machineId)+'?limit='+Math.max(1,Math.min(80,limit)),{method:'GET'});
   return Array.isArray(d.reports)?d.reports:[];
 }
+async function fetchPrinterAuditDetail(machineId,auditId){
+  const d=await _printerAuditFarmFetch('/farm/audits/'+encodeURIComponent(machineId)+'/'+encodeURIComponent(auditId),{method:'GET'});
+  return d.report||null;
+}
+async function setPrinterAuditFindingStatus(machineId,auditId,findingId,status){
+  try{
+    const d=await _printerAuditFarmFetch('/farm/audits/'+encodeURIComponent(machineId)+'/'+encodeURIComponent(auditId)+'/findings/'+encodeURIComponent(findingId),{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})
+    });
+    if(d.report)renderPrinterAuditReport(d.report,{savedOk:true});
+    toast('Hallazgo actualizado · '+_printerFindingStatusMeta(status).label,'success');return true;
+  }catch(e){toast('No se pudo actualizar el hallazgo: '+e.message,'error');return false;}
+}
+async function createPrinterAuditIncident(machineId,auditId,findingId){
+  try{
+    const report=await fetchPrinterAuditDetail(machineId,auditId),row=(report?.result?.findings||[]).find(function(x){return x.findingId===findingId;});
+    if(!row)throw new Error('hallazgo no encontrado');
+    addIncident({machineId,type:'other',note:'Auditoría '+auditId+' · '+String(row.area||'General')+': '+String(row.finding||'')+(row.action?' · Acción: '+row.action:''),source:'manual'});
+    persist('Incidente creado desde auditoría IA');
+    await setPrinterAuditFindingStatus(machineId,auditId,findingId,'reviewing');
+    toast('Incidente creado desde el hallazgo','success');return true;
+  }catch(e){toast('No se pudo crear el incidente: '+e.message,'error');return false;}
+}
+async function rerunPrinterAudit(machineId,area){
+  closePrinterAudit();
+  return runPrinterAudit(machineId,null,{focus:String(area||'').slice(0,100)});
+}
+function renderPrinterAuditReport(saved,opts={}){
+  const savedOk=opts.savedOk!==false,modal=_printerAuditModal(),body=input('mopsPrinterAuditBody'),result=saved?.result||{},evidence=saved?.evidence||{},meta=_printerAuditStatusMeta(result.overall);
+  modal.style.display='flex';setText('mopsPrinterAuditTitle','AUDITORÍA IA · '+(machineLabel(saved.machineId)||saved.machineId));
+  const matrix=saved.sourceMatrix||_printerAuditSourceMatrix(evidence),labels={moonraker:'Moonraker',sshLogs:'Logs SSH',camera:'Cámara',cameraVision:'Visión IA',dashboardTelemetry:'Telemetría',centralHistory:'Historial central',farmHealth:'Farm Health',bedMesh:'Malla cama',maintenance:'Mantención',incidents:'Incidentes',configDrift:'Config Drift',networkStability:'Estabilidad red',thermalStability:'Estabilidad térmica'};
+  const sources=Object.entries(matrix).map(function(pair){const k=pair[0],v=pair[1];return '<span style="font-size:10px;font-weight:800;padding:4px 7px;border-radius:999px;border:1px solid '+(v?'rgba(0,212,170,.35)':'var(--border2)')+';color:'+(v?'var(--accent3)':'var(--text3)')+'">'+(v?'✓':'—')+' '+esc(labels[k]||k)+'</span>';}).join('');
+  function sevColor(sev){return sev==='critical'||sev==='high'?'var(--danger)':sev==='medium'?'var(--warn)':sev==='low'?'#38bdf8':'var(--text3)';}
+  const canAct=_printerAuditCanRun()&&!!saved.id;
+  const findings=(result.findings||[]).map(function(row){
+    const status=_printerFindingStatusMeta(row.status),fid=String(row.findingId||''),buttons=canAct&&fid?
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px"><button class="btn btn-ghost btn-sm" onclick="MachineOps.setPrinterAuditFindingStatus(\''+esc(saved.machineId)+'\',\''+esc(saved.id)+'\',\''+esc(fid)+'\',\'reviewing\')">Revisando</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.setPrinterAuditFindingStatus(\''+esc(saved.machineId)+'\',\''+esc(saved.id)+'\',\''+esc(fid)+'\',\'resolved\')">✓ Resuelto</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.setPrinterAuditFindingStatus(\''+esc(saved.machineId)+'\',\''+esc(saved.id)+'\',\''+esc(fid)+'\',\'ignored\')">Ignorar</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.createPrinterAuditIncident(\''+esc(saved.machineId)+'\',\''+esc(saved.id)+'\',\''+esc(fid)+'\')">+ Incidente</button><button class="btn btn-ghost btn-sm" onclick="MachineOps.rerunPrinterAudit(\''+esc(saved.machineId)+'\',\''+esc(row.area||'General')+'\')">↻ Reauditar área</button></div>':'';
+    return '<div style="border:1px solid var(--border2);border-left:3px solid '+sevColor(row.severity)+';border-radius:10px;padding:11px 12px;background:var(--surface2);margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:5px"><b style="font-size:11px;color:'+sevColor(row.severity)+'">'+esc(String(row.severity||'info').toUpperCase())+'</b><span style="font-size:11px;font-weight:800;color:var(--text);flex:1">'+esc(row.area||'General')+'</span><span style="font-size:9px;font-weight:900;color:'+status.color+'">'+status.label+'</span></div><div style="font-size:12px;line-height:1.5;color:var(--text2)">'+esc(row.finding||'')+'</div>'+((row.evidence||[]).length?'<div style="font-size:10.5px;color:var(--text3);margin-top:6px">'+row.evidence.map(function(x){return '• '+esc(x);}).join('<br>')+'</div>':'')+(row.action?'<div style="font-size:11px;color:var(--accent);margin-top:7px"><b>Acción:</b> '+esc(row.action)+'</div>':'')+buttons+'</div>';
+  }).join('');
+  const actions=(result.recommendedActions||[]).map(function(x,i){return '<div style="display:flex;gap:8px;padding:6px 0;font-size:12px;color:var(--text2)"><b style="color:var(--accent)">'+(i+1)+'.</b><span>'+esc(x)+'</span></div>';}).join('');
+  const limitations=(result.limitations||[]).map(function(x){return '<div style="font-size:11px;color:var(--text3);padding:3px 0">• '+esc(x)+'</div>';}).join('');
+  const rawEvidence=esc(JSON.stringify(evidence,null,2)),hash=saved.reportHash?String(saved.reportHash).slice(0,16)+'…':'sin sello';
+  body.innerHTML='<div style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;margin-bottom:14px"><div style="flex:1;min-width:260px;padding:14px;border-radius:12px;border:1px solid '+meta.color+';background:'+meta.bg+'"><div style="font-size:10px;letter-spacing:1px;color:'+meta.color+';font-weight:900">'+meta.label+'</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:4px"><span style="font-size:32px;font-weight:900;color:var(--text)">'+Math.round(num(result.score))+'</span><span style="font-size:12px;color:var(--text3)">/100 · confianza '+Math.round(num(result.confidence))+'%</span></div><div style="font-size:12px;line-height:1.55;color:var(--text2);margin-top:7px">'+esc(result.summary||'Sin resumen')+'</div>'+_printerAuditTrendHtml(result)+'</div><div style="min-width:240px;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--surface2)"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Trazabilidad</div><div style="font-size:11px;color:var(--text2);margin-top:7px">'+new Date(saved.createdAt||Date.now()).toLocaleString('es-CL')+'<br>'+esc(saved.model||PRINTER_AUDIT_MODEL)+' · '+Math.round(num(saved.durationMs)/1000)+' s<br>'+esc(_printerAuditCostText(saved))+'<br>Hash '+esc(hash)+'</div><div style="font-size:10px;margin-top:7px;color:'+(savedOk?'var(--accent3)':'var(--warn)')+'">'+(savedOk?'✓ Guardada y sellada en historial central':'⚠ No se confirmó guardado central')+'</div></div></div><div style="font-size:10px;font-weight:900;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin:14px 0 7px">Fuentes verificadas</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px">'+sources+'</div><div style="font-size:11px;font-weight:900;color:var(--text);margin-bottom:8px">HALLAZGOS ('+(result.findings||[]).length+')</div>'+(findings||'<div style="font-size:12px;color:var(--accent3);padding:10px 0">Sin hallazgos relevantes con la evidencia disponible.</div>')+'<div style="font-size:11px;font-weight:900;color:var(--text);margin:16px 0 6px">ACCIONES RECOMENDADAS</div>'+(actions||'<div style="font-size:12px;color:var(--text3)">Sin acciones adicionales.</div>')+(limitations?'<div style="font-size:11px;font-weight:900;color:var(--text);margin:16px 0 6px">LIMITACIONES</div>'+limitations:'')+'<details style="margin-top:18px;border-top:1px solid var(--border);padding-top:12px"><summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--text3)">Ver evidencia técnica capturada</summary><pre style="white-space:pre-wrap;word-break:break-word;max-height:380px;overflow:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:10px;font-size:9.5px;line-height:1.45;color:var(--text3);margin-top:8px">'+rawEvidence+'</pre></details>';
+}
 async function renderAuditHistoryInto(machineId,targetId='histAuditSection'){
   const el=input(targetId);if(!el)return;el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:8px 0">Cargando auditorías IA…</div>';
   try{
     const rows=await fetchPrinterAuditHistory(machineId,12);
-    const cards=rows.map(function(row){const meta=_printerAuditStatusMeta(row.result?.overall);return '<button data-audit-id="'+esc(row.id)+'" onclick="MachineOps.openSavedPrinterAudit(\''+String(machineId).replace(/'/g,'')+'\',this.dataset.auditId)" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);padding:9px 10px;margin-bottom:6px;cursor:pointer;color:var(--text)"><span style="font-size:9px;font-weight:900;color:'+meta.color+';min-width:68px">'+meta.label+'</span><span style="font-size:11px;font-weight:800">'+Math.round(num(row.result?.score))+'/100</span><span style="font-size:10.5px;color:var(--text3);flex:1">'+new Date(row.createdAt).toLocaleString('es-CL')+'</span><span style="font-size:10px;color:var(--accent)">VER INFORME →</span></button>';}).join('');
-    el.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="font-size:10px;letter-spacing:.9px;color:var(--accent);text-transform:uppercase">Auditorías IA</b><span style="font-size:10px;color:var(--text3)">'+rows.length+' guardada(s)</span></div>'+(cards||'<div style="font-size:11px;color:var(--text3);padding:6px 0 10px">Aún no hay auditorías IA guardadas.</div>');
+    const cards=rows.map(function(row,index){
+      const meta=_printerAuditStatusMeta(row.result?.overall),prev=rows[index+1],delta=prev?num(row.result?.score)-num(prev.result?.score):null,states=row.result?.findingStates||{},open=num(states.new)+num(states.reviewing);
+      const trend=delta===null?'':(' · '+(delta>0?'+':'')+Math.round(delta));
+      return '<button data-audit-id="'+esc(row.id)+'" onclick="MachineOps.openSavedPrinterAudit(\''+String(machineId).replace(/'/g,'')+'\',this.dataset.auditId)" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);padding:9px 10px;margin-bottom:6px;cursor:pointer;color:var(--text)"><span style="font-size:9px;font-weight:900;color:'+meta.color+';min-width:68px">'+meta.label+'</span><span style="font-size:11px;font-weight:800">'+Math.round(num(row.result?.score))+'/100'+esc(trend)+'</span><span style="font-size:10px;color:'+(open?'var(--warn)':'var(--accent3)')+'">'+open+' abiertos</span><span style="font-size:10.5px;color:var(--text3);flex:1">'+new Date(row.createdAt).toLocaleString('es-CL')+'</span><span style="font-size:10px;color:var(--accent)">'+(_printerAuditCanRun()?'VER INFORME →':'RESUMEN')+'</span></button>';
+    }).join('');
+    el.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="font-size:10px;letter-spacing:.9px;color:var(--accent);text-transform:uppercase">Auditorías IA</b><span style="font-size:10px;color:var(--text3)">'+rows.length+' reciente(s) · índice liviano</span></div>'+(cards||'<div style="font-size:11px;color:var(--text3);padding:6px 0 10px">Aún no hay auditorías IA guardadas.</div>');
   }catch(e){el.innerHTML='<div style="font-size:11px;color:var(--warn);padding:8px 0">No se pudo leer el historial de auditorías: '+esc(e.message)+'</div>';}
 }
 async function openSavedPrinterAudit(machineId,auditId){
   try{
-    _printerAuditProgress(machineId,1,'Cargando informe guardado','Recuperando la auditoría desde el historial central.');
-    const rows=await fetchPrinterAuditHistory(machineId,80),row=rows.find(function(x){return x.id===auditId;});
-    if(!row)throw new Error('Auditoría no encontrada');renderPrinterAuditReport(row,{savedOk:true});
+    if(!_printerAuditCanRun()){
+      const rows=await fetchPrinterAuditHistory(machineId,80),row=rows.find(function(x){return x.id===auditId;});
+      if(!row)throw new Error('Auditoría no encontrada');
+      const modal=_printerAuditModal(),body=input('mopsPrinterAuditBody'),meta=_printerAuditStatusMeta(row.result?.overall);modal.style.display='flex';
+      setText('mopsPrinterAuditTitle','RESUMEN AUDITORÍA · '+(machineLabel(machineId)||machineId));
+      body.innerHTML='<div style="padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)"><b style="color:'+meta.color+'">'+meta.label+' · '+Math.round(num(row.result?.score))+'/100</b><p style="font-size:12px;line-height:1.5;color:var(--text2)">'+esc(row.result?.summary||'Sin resumen')+'</p><small style="color:var(--text3)">Tu rol puede consultar el resumen, pero la evidencia técnica detallada requiere rol operator/admin.</small></div>';return;
+    }
+    _printerAuditProgress(machineId,1,'Cargando informe guardado','Recuperando sólo el informe seleccionado.');
+    const row=await fetchPrinterAuditDetail(machineId,auditId);if(!row)throw new Error('Auditoría no encontrada');
+    renderPrinterAuditReport(row,{savedOk:true});
   }catch(e){toast('No se pudo abrir la auditoría: '+e.message,'error');closePrinterAudit();}
 }
-async function runPrinterAudit(machineId,button){
+async function runPrinterAudit(machineId,button,opts={}){
   const machine=getMachine(machineId);if(!machine||_printerAuditBusy[machineId])return false;
-  _printerAuditBusy[machineId]=true;const started=Date.now(),oldText=button?.textContent||'✦ AUDITAR';if(button){button.disabled=true;button.textContent='AUDITANDO…';}
+  if(typeof _refreshPrinterAccessTicket==='function')try{await _refreshPrinterAccessTicket(false);}catch(_){}
+  if(!_printerAuditCanRun()){toast('Tu rol del Farm Controller no permite ejecutar auditorías','error');return false;}
+  _printerAuditBusy[machineId]=true;
+  const started=Date.now(),oldText=button?.textContent||'✦ AUDITAR',background=opts.background===true,focus=String(opts.focus||'').slice(0,100);
+  const progress=function(step,title,detail){if(!background)_printerAuditProgress(machineId,step,title,detail);};
+  if(button){button.disabled=true;button.textContent='AUDITANDO…';}
   try{
-    _printerAuditProgress(machineId,1,'Actualizando estado operativo','Telemetría, historial, mantención, incidentes y estado central.');
+    let previousSummary=null,previousDetail=null;
+    try{previousSummary=(await fetchPrinterAuditHistory(machineId,1))[0]||null;if(previousSummary?.id)previousDetail=await fetchPrinterAuditDetail(machineId,previousSummary.id);}catch(_){}
+    progress(1,'Actualizando estado operativo','Telemetría, historial, mantención, Config Drift, incidentes y estado central.');
     try{await refreshTechStatus(machineId,null,true);}catch(_){}
+    try{await window.FarmDrift?.refresh?.(true);}catch(_){}
     const dashboard=_printerAuditDashboardEvidence(machineId,machine),bed=await _printerAuditBedEvidence(machineId);
-    _printerAuditProgress(machineId,2,'Escaneando la impresora','Consultando Moonraker, Klipper, historial técnico, cámara y diagnóstico del sistema.');
+    progress(2,'Escaneando la impresora','Moonraker, Klipper, logs saneados, estabilidad térmica/red, cámara y sistema.');
     const remote=await _printerAuditFarmFetch('/farm/audit-scan/'+encodeURIComponent(machineId),{method:'POST'}),scan=remote.diagnostics||{};
     const vision=await _printerAuditVision(scan);
     if(scan.cameraFrame)delete scan.cameraFrame;
-    const evidence={dashboard,bed,scan,vision};
-    _printerAuditProgress(machineId,3,'Analizando evidencia con IA','La IA correlaciona telemetría, visión, logs y antecedentes; no ejecuta reparaciones ni comandos.');
-    const result=await _printerAuditClaude(evidence);
-    const report={id:'audit-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9),machineId,createdAt:nowIso(),actor:actor(),model:PRINTER_AUDIT_MODEL,durationMs:Date.now()-started,sourceMatrix:_printerAuditSourceMatrix(evidence),result,evidence:_storagePrinterAuditEvidence(evidence)};
-    _printerAuditProgress(machineId,4,'Guardando informe completo','Persistiendo resultado y evidencia en el historial central de la impresora.');
-    let saved=report,savedOk=false;
+    const prev=previousDetail?{id:previousDetail.id,createdAt:previousDetail.createdAt,result:{score:previousDetail.result?.score,overall:previousDetail.result?.overall,summary:previousDetail.result?.summary,findings:(previousDetail.result?.findings||[]).map(function(x){return{area:x.area,finding:x.finding,severity:x.severity,status:x.status};})}}:null;
+    const evidence={dashboard,bed,scan,vision,previousAudit:prev};
+    progress(3,'Analizando evidencia','Correlacionando fuentes'+(focus?' con foco en '+focus:'')+'. Si la IA no está disponible se guardará un diagnóstico determinístico.');
+    let result,cost={estimatedUsd:num(vision?._cost?.estimatedUsd),visionModel:vision?._cost?.model||'',visionUsed:!!vision?.available},model=PRINTER_AUDIT_MODEL,aiFallback=false;
     try{
-      const d=await _printerAuditFarmFetch('/farm/audits/'+encodeURIComponent(machineId),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(report),signal:AbortSignal.timeout(45000)});
-      saved=d.report||report;savedOk=true;
-    }catch(saveErr){console.warn('[PrinterAudit] persist',saveErr);}
-    audit('Auditoría IA integral',machineId,result.overall+' · '+Math.round(result.score)+'/100 · '+result.findings.length+' hallazgo(s)',result.overall==='critical'?'warn':'info');writeLocal();scheduleRemote();
-    _printerAuditProgress(machineId,5,'Auditoría terminada',savedOk?'Informe y evidencia guardados en el historial central.':'Informe generado, pero no se confirmó el guardado central.');
-    renderPrinterAuditReport(saved,{savedOk});
-    toast(savedOk?('Auditoría completada · '+Math.round(result.score)+'/100'):'Auditoría completada, pero el historial no confirmó el guardado',savedOk?'success':'error');
-    return savedOk;
+      const ai=await _printerAuditClaude(evidence,focus);result=ai.result;cost=Object.assign(cost,ai.cost||{});cost.estimatedUsd=Number((num(cost.estimatedUsd)+num(ai.cost?.estimatedUsd)).toFixed(6));
+    }catch(aiError){
+      result=_normalizePrinterAuditResult(_printerAuditDeterministicResult(evidence,aiError?.message||aiError));model='deterministic-fallback';aiFallback=true;
+    }
+    result.comparison=_printerAuditComparison(result,previousDetail||previousSummary);
+    const storedEvidence=_storagePrinterAuditEvidence(evidence);
+    const report={scanId:remote.scanId,machineId,actor:actor(),model,durationMs:Date.now()-started,sourceMatrix:_printerAuditSourceMatrix(evidence),cost,result,evidence:storedEvidence};
+    progress(4,'Guardando informe sellado','El Controller fijará ID/fecha/rol, restaurará el scan original y calculará hashes.');
+    const d=await _printerAuditFarmFetch('/farm/audits/'+encodeURIComponent(machineId),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(report),signal:AbortSignal.timeout(45000)});
+    const saved=d.report||report;
+    audit('Auditoría integral',machineId,result.overall+' · '+Math.round(result.score)+'/100 · '+result.findings.length+' hallazgo(s)'+(aiFallback?' · fallback determinístico':''),result.overall==='critical'?'warn':'info');writeLocal();scheduleRemote();
+    progress(5,'Auditoría terminada','Informe guardado en historial central'+(aiFallback?' sin interpretación Claude.':'.'));
+    if(!background)renderPrinterAuditReport(saved,{savedOk:true});
+    toast((aiFallback?'Auditoría técnica':'Auditoría IA')+' completada · '+Math.round(result.score)+'/100','success');
+    return saved;
   }catch(e){
-    const modal=_printerAuditModal(),body=input('mopsPrinterAuditBody');modal.style.display='flex';
-    if(body)body.innerHTML='<div style="padding:8px"><div style="font-size:17px;font-weight:900;color:var(--danger);margin-bottom:7px">No se pudo completar la auditoría</div><div style="font-size:12px;color:var(--text2);line-height:1.55">'+esc(e.message||'Error desconocido')+'</div><div style="font-size:11px;color:var(--text3);margin-top:9px">No se ejecutó ninguna reparación automática.</div></div>';
-    audit('Auditoría IA fallida',machineId,String(e.message||e).slice(0,300),'warn');writeLocal();scheduleRemote();toast('Auditoría IA fallida: '+(e.message||e),'error');return false;
+    if(!background){
+      const modal=_printerAuditModal(),body=input('mopsPrinterAuditBody');modal.style.display='flex';
+      if(body)body.innerHTML='<div style="padding:8px"><div style="font-size:17px;font-weight:900;color:var(--danger);margin-bottom:7px">No se pudo completar la auditoría</div><div style="font-size:12px;color:var(--text2);line-height:1.55">'+esc(e.message||'Error desconocido')+'</div><div style="font-size:11px;color:var(--text3);margin-top:9px">No se ejecutó ninguna reparación automática.</div></div>';
+    }
+    audit('Auditoría fallida',machineId,String(e.message||e).slice(0,300),'warn');writeLocal();scheduleRemote();toast('Auditoría fallida: '+(e.message||e),'error');return false;
   }finally{delete _printerAuditBusy[machineId];if(button){button.disabled=false;button.textContent=oldText;}}
+}
+async function runFleetAudit(button){
+  if(typeof _refreshPrinterAccessTicket==='function')try{await _refreshPrinterAccessTicket(false);}catch(_){}
+  if(!_printerAuditCanRun()){toast('Tu rol no permite auditar la granja','error');return false;}
+  const machines=(MAQUINAS||[]).filter(function(m){return m&&m.id;});
+  if(!machines.length)return false;
+  if(!confirm('Se auditarán '+machines.length+' impresoras de forma secuencial para no saturar red ni presupuesto IA. ¿Continuar?'))return false;
+  const old=button?.textContent||'✦ AUDITAR GRANJA';if(button)button.disabled=true;
+  const results=[];
+  for(let i=0;i<machines.length;i++){
+    if(button)button.textContent='AUDITANDO '+(i+1)+'/'+machines.length;
+    const r=await runPrinterAudit(machines[i].id,null,{background:true});results.push({machine:machines[i],report:r||null});
+  }
+  if(button){button.disabled=false;button.textContent=old;}
+  const modal=_printerAuditModal(),body=input('mopsPrinterAuditBody');modal.style.display='flex';setText('mopsPrinterAuditTitle','AUDITORÍA DE GRANJA');
+  body.innerHTML='<div style="font-size:12px;color:var(--text3);margin-bottom:12px">'+results.filter(function(x){return x.report;}).length+'/'+results.length+' auditorías guardadas.</div>'+results.map(function(x){const r=x.report?.result,meta=_printerAuditStatusMeta(r?.overall);return '<div style="display:flex;gap:10px;align-items:center;padding:9px;border-bottom:1px solid var(--border2)"><b style="flex:1">'+esc(machineLabel(x.machine.id))+'</b><span style="color:'+meta.color+'">'+(r?Math.round(num(r.score))+'/100':'FALLÓ')+'</span></div>';}).join('');
+  return results;
 }
 
 function techLiveFacts(live,now=Date.now()){
