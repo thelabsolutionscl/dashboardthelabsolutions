@@ -484,20 +484,22 @@ function auditSummaryByRequestId(machineId,requestId){
   return audits.reports.find(row=>row.machineId===machineId&&row.requestId===requestId)||null;
 }
 async function saveAuditReport(report){
-  const previous=audits.reports.slice(),summary=auditSummaryFromReport(report),file=auditReportPath(report.machineId,report.id);
-  await atomicWrite(file,report);
-  audits.reports=pruneAuditReports([summary,...audits.reports.filter(row=>row.id!==report.id)]);
-  const keep=new Set(audits.reports.map(row=>row.id));
-  const removed=previous.filter(row=>row.machineId===report.machineId&&!keep.has(row.id));
-  const durable=await persistAudits();
-  if(!durable){
-    audits.reports=previous;
-    try{await fs.promises.unlink(file);}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] rollback detail',e.message);}
-    throw new Error('no se pudo persistir el índice de auditorías');
-  }
-  auditScanSessions.delete(report.scanId);
-  for(const row of removed)await deleteAuditReportFiles(row.machineId,row.id);
-  return summary;
+  return withAuditLock('audit-index',async()=>{
+    const previous=audits.reports.slice(),summary=auditSummaryFromReport(report),file=auditReportPath(report.machineId,report.id);
+    await atomicWrite(file,report);
+    audits.reports=pruneAuditReports([summary,...audits.reports.filter(row=>row.id!==report.id)]);
+    const keep=new Set(audits.reports.map(row=>row.id));
+    const removed=previous.filter(row=>row.machineId===report.machineId&&!keep.has(row.id));
+    const durable=await persistAudits();
+    if(!durable){
+      audits.reports=previous;
+      try{await fs.promises.unlink(file);}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] rollback detail',e.message);}
+      const error=new Error('no se pudo persistir el índice de auditorías');error.statusCode=503;throw error;
+    }
+    auditScanSessions.delete(report.scanId);
+    for(const row of removed)await deleteAuditReportFiles(row.machineId,row.id);
+    return summary;
+  });
 }
 async function saveAuditRequest(machineId,body,role){
   const rawScan=String(body?.scanId||''),requestId=/^[A-Za-z0-9_.:-]{8,180}$/.test(String(body?.requestId||''))?String(body.requestId):('req-'+rawScan);
@@ -506,7 +508,7 @@ async function saveAuditRequest(machineId,body,role){
     const existing=auditSummaryByRequestId(machineId,requestId);
     if(existing){
       const report=await readAuditReport(machineId,existing.id);
-      if(!report||!verifyAuditReport(report))throw new Error('auditoría idempotente existente sin detalle íntegro');
+      if(!report||!verifyAuditReport(report)){const error=new Error('auditoría idempotente existente sin detalle íntegro');error.statusCode=409;throw error;}
       return{report,summary:existing,idempotent:true};
     }
     const report=sanitizeAuditReport(machineId,{...body,requestId},role);
@@ -515,9 +517,9 @@ async function saveAuditRequest(machineId,body,role){
   });
 }
 async function updateAuditFinding(machineId,auditId,findingId,patch,role){
-  return withAuditLock('finding:'+machineId+':'+auditId,async()=>{
+  return withAuditLock('finding:'+machineId+':'+auditId,async()=>withAuditLock('audit-index',async()=>{
     const report=await readAuditReport(machineId,auditId);if(!report)return null;
-    if(!verifyAuditReport(report))throw new Error('la auditoría no supera verificación de integridad');
+    if(!verifyAuditReport(report)){const error=new Error('la auditoría no supera verificación de integridad');error.statusCode=409;throw error;}
     const findings=Array.isArray(report.result?.findings)?report.result.findings:[];
     const row=findings.find(f=>f.findingId===findingId);if(!row)throw new Error('hallazgo no encontrado');
     const status=String(patch.status||'');if(!AUDIT_FINDING_STATES.has(status))throw new Error('estado de hallazgo inválido');
@@ -531,9 +533,9 @@ async function updateAuditFinding(machineId,auditId,findingId,patch,role){
     await atomicWrite(auditReportPath(machineId,auditId),report);
     const summary=auditSummaryFromReport(report),idx=audits.reports.findIndex(r=>r.id===auditId&&r.machineId===machineId);
     if(idx>=0)audits.reports[idx]=summary;else audits.reports.unshift(summary);
-    if(!await persistAudits())throw new Error('no se pudo persistir estado del hallazgo');
+    if(!await persistAudits()){const error=new Error('no se pudo persistir estado del hallazgo');error.statusCode=503;throw error;}
     return{report,summary};
-  });
+  }));
 }
 const recoveredAtBoot = recoverQueueJobs(queue);
 if (recoveredAtBoot) {
@@ -963,7 +965,7 @@ const server = http.createServer(async (req, res) => {
       const updated=await updateAuditFinding(machineId,auditId,findingId,body,role);
       if(!updated)return json(res,404,{ok:false,error:'auditoría no encontrada'});
       return json(res,200,{ok:true,report:updated.report,summary:updated.summary});
-    }catch(e){return json(res,400,{ok:false,error:e.message});}
+    }catch(e){return json(res,Number(e.statusCode)||400,{ok:false,error:e.message});}
   }
 
   const auditDetail=p.match(/^\/farm\/audits\/([^/]+)\/([^/]+)$/);
@@ -990,7 +992,7 @@ const server = http.createServer(async (req, res) => {
       const body=JSON.parse((await readBody(req,AUDIT_MAX_BODY)).toString('utf8')||'{}');
       const saved=await saveAuditRequest(machineId,body,role);
       return json(res,saved.idempotent?200:201,{ok:true,idempotent:saved.idempotent,integrityValid:true,report:saved.report,summary:saved.summary});
-    }catch(e){return json(res,400,{ok:false,error:e.message});}
+    }catch(e){return json(res,Number(e.statusCode)||400,{ok:false,error:e.message});}
   }
 
   if (p === '/farm/queue' && req.method === 'GET') {
