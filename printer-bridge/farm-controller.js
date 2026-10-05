@@ -520,6 +520,7 @@ async function updateAuditFinding(machineId,auditId,findingId,patch,role){
   return withAuditLock('finding:'+machineId+':'+auditId,async()=>withAuditLock('audit-index',async()=>{
     const report=await readAuditReport(machineId,auditId);if(!report)return null;
     if(!verifyAuditReport(report)){const error=new Error('la auditoría no supera verificación de integridad');error.statusCode=409;throw error;}
+    const originalReport=auditJsonClone(report,AUDIT_MAX_BODY),previousIndex=audits.reports.slice();
     const findings=Array.isArray(report.result?.findings)?report.result.findings:[];
     const row=findings.find(f=>f.findingId===findingId);if(!row)throw new Error('hallazgo no encontrado');
     const status=String(patch.status||'');if(!AUDIT_FINDING_STATES.has(status))throw new Error('estado de hallazgo inválido');
@@ -530,10 +531,15 @@ async function updateAuditFinding(machineId,auditId,findingId,patch,role){
     report.sourceMatrix=deriveAuditSourceMatrix(report.evidence||{});
     report.evidenceHash=auditHash(report.evidence||{});
     report.reportHash=auditSealHash(report);
-    await atomicWrite(auditReportPath(machineId,auditId),report);
+    const file=auditReportPath(machineId,auditId);
+    await atomicWrite(file,report);
     const summary=auditSummaryFromReport(report),idx=audits.reports.findIndex(r=>r.id===auditId&&r.machineId===machineId);
     if(idx>=0)audits.reports[idx]=summary;else audits.reports.unshift(summary);
-    if(!await persistAudits()){const error=new Error('no se pudo persistir estado del hallazgo');error.statusCode=503;throw error;}
+    if(!await persistAudits()){
+      audits.reports=previousIndex;
+      try{await atomicWrite(file,originalReport);}catch(e){console.error('[audits] rollback finding detail',e);}
+      const error=new Error('no se pudo persistir estado del hallazgo');error.statusCode=503;throw error;
+    }
     return{report,summary};
   }));
 }
