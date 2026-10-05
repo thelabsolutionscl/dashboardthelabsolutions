@@ -211,7 +211,10 @@ function _getPrinterTunnelLongToken(){
   // valor horneado en Pages. Así un secret de deploy desfasado no deja toda la
   // granja sin telemetría después de una recarga dura.
   const paired=_getPrinterDeviceToken();
-  return paired||local||d;
+  // Un override manual de sesión es deliberado y temporal: debe poder reemplazar
+  // también la credencial emparejada para diagnóstico. Un pairing nuevo limpia
+  // ese override antes de persistir su propia credencial.
+  return local||paired||d;
 }
 function setPrinterTunnelTokenOverride(value){
   if(_printerAccessMode())return false;
