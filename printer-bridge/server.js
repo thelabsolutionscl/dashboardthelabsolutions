@@ -403,6 +403,10 @@ function redactDiagnosticSecrets(value) {
   for(const [re,repl] of rules)text=text.replace(re,repl);
   return text;
 }
+function sensitiveDiagnosticKey(key){
+  const normalized=String(key||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  return new Set(['authorization','cookie','setcookie','apikey','token','authtoken','bridgetoken','sessiontoken','secret','clientsecret','password','passwd','pwd','accesstoken','refreshtoken','privatekey']).has(normalized);
+}
 function redactDiagnosticValue(value,depth=0) {
   if(depth>12)return '[TRUNCATED_DEPTH]';
   if(typeof value==='string')return redactDiagnosticSecrets(value);
@@ -410,7 +414,7 @@ function redactDiagnosticValue(value,depth=0) {
   if(value&&typeof value==='object'){
     const out={};
     for(const [k,v] of Object.entries(value)){
-      if(/^(authorization|cookie|set-cookie|api[_-]?key|token|secret|password|passwd|pwd|access[_-]?token|refresh[_-]?token)$/i.test(k)){out[k]='[REDACTED]';continue;}
+      if(sensitiveDiagnosticKey(k)){out[k]='[REDACTED]';continue;}
       out[k]=redactDiagnosticValue(v,depth+1);
     }
     return out;
@@ -1129,4 +1133,4 @@ function startMaintScheduler() {
 }
 
 if(require.main===module)startServer();
-module.exports={redactDiagnosticSecrets,redactDiagnosticValue,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,maybeRestartStaleFarmParent,startServer};
+module.exports={redactDiagnosticSecrets,redactDiagnosticValue,sensitiveDiagnosticKey,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,maybeRestartStaleFarmParent,startServer};
