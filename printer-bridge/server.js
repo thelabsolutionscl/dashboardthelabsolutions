@@ -825,22 +825,24 @@ server.on('upgrade', (req, clientSocket, head) => {
   clientSocket.on('close', () => { try { upstream.destroy(); } catch (e) {} });
 });
 
-server.listen(PORT, () => {
-  console.log('─'.repeat(60));
-  console.log('  The Lab Solutions — Printer Bridge');
-  console.log(`  Escuchando en  : http://0.0.0.0:${PORT}`);
-  // launchd/systemd persisten stdout: no dejar el secreto maestro en logs.
-  // En ejecución manual interactiva sí se muestra para el onboarding inicial.
-  console.log(`  Token          : ${process.stdout.isTTY ? TOKEN : '[oculto en logs; usa .bridge-token]'}`);
-  console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
-  console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
-  console.log(`  Recuperación   : ${RECOVER_ENABLED ? `activa por SSH como ${SSH_USER} (${SSH_PASS ? 'contraseña' : SSH_KEY ? 'llave ' + SSH_KEY : 'llave por defecto'})` : 'APAGADA (BRIDGE_RECOVER=0)'}`);
-  console.log(`  CORS origins   : ${ALLOW_ORIGINS.join(', ')}`);
-  console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
-  console.log('─'.repeat(60));
-  startHeartbeat();
-  startMaintScheduler();
-});
+function startServer(){
+  return server.listen(PORT, () => {
+    console.log('─'.repeat(60));
+    console.log('  The Lab Solutions — Printer Bridge');
+    console.log(`  Escuchando en  : http://0.0.0.0:${PORT}`);
+    // launchd/systemd persisten stdout: no dejar el secreto maestro en logs.
+    // En ejecución manual interactiva sí se muestra para el onboarding inicial.
+    console.log(`  Token          : ${process.stdout.isTTY ? TOKEN : '[oculto en logs; usa .bridge-token]'}`);
+    console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
+    console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
+    console.log(`  Recuperación   : ${RECOVER_ENABLED ? `activa por SSH como ${SSH_USER} (${SSH_PASS ? 'contraseña' : SSH_KEY ? 'llave ' + SSH_KEY : 'llave por defecto'})` : 'APAGADA (BRIDGE_RECOVER=0)'}`);
+    console.log(`  CORS origins   : ${ALLOW_ORIGINS.join(', ')}`);
+    console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
+    console.log('─'.repeat(60));
+    startHeartbeat();
+    startMaintScheduler();
+  });
+}
 
 // ── Latido a la tabla Automations (Oficina Virtual del dashboard) ─────────
 // Como el bridge es un proceso persistente, reporta "Activo" cada 5 min.
@@ -1091,3 +1093,6 @@ function startMaintScheduler() {
   };
   const t = setInterval(tick, 30 * 1000); if (t.unref) t.unref();
 }
+
+if(require.main===module)startServer();
+module.exports={redactDiagnosticSecrets,redactDiagnosticValue,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,startServer};
