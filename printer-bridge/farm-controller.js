@@ -1018,7 +1018,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
-    return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
+    return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator,realtimeWebSocket:true}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
   // Actualiza y reinicia el proceso PADRE. Antes /update se delegaba al bridge
   // legado hijo: el git pull ocurría, pero Farm Controller seguía ejecutando el
