@@ -119,49 +119,10 @@ let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{
   try{
     const d=JSON.parse(s),h=d.health||{},m=Array.isArray(h.machines)?h.machines:[],sum=h.summary||{};
     const first=m.find(x=>x&&x.online&&x.ip)||m.find(x=>x&&x.ip)||{};
-    process.stdout.write([Number(sum.online||0),Number(sum.total||m.length||0),String(first.ip||"")].join("\t"));
+    process.stdout.write([Number(sum.online||0),Number(sum.total||m.length||0),String(first.ip||"")].join("|"));
   }catch(_){}
 });' 2>/dev/null || true)"
-IFS="$(curl -q --config "$AUTH_CFG" -sS -m 8 -X POST -o "$TMP/public-body" -w '%{http_code}' "$PUBLIC_BASE/farm/session" 2>/dev/null || true)"
-if [[ "$PUBLIC_STATUS" == "200" || "$PUBLIC_STATUS" == "201" ]]; then
-  grn "✓ Túnel público acepta la credencial"
-else
-  ylw "⚠ El túnel público no confirmó la sesión (HTTP ${PUBLIC_STATUS:-sin respuesta})."
-  ylw "  El navegador se abrirá igual; si Máquinas sigue 0/14, el problema ya está entre Cloudflare Tunnel y el Controller."
-fi
-
-# Probar además la MISMA query Moonraker que usa el dashboard. Esto detecta
-# regresiones donde /farm/session funciona pero /IP/printer/objects/query no.
-if [[ -n "${FIRST_IP:-}" ]]; then
-  PUBLIC_TELEMETRY_STATUS="$(curl -q --config "$AUTH_CFG" -sS -m 10 -o "$TMP/public-telemetry" -w '%{http_code}' "$PUBLIC_BASE/$FIRST_IP/printer/objects/query?print_stats&extruder&webhooks" 2>/dev/null || true)"
-  if [[ "$PUBLIC_TELEMETRY_STATUS" == "200" ]] && grep -q '"result"' "$TMP/public-telemetry" 2>/dev/null; then
-    grn "✓ Telemetría extremo a extremo confirmada por el túnel (${FIRST_IP})"
-  else
-    ylw "⚠ La sesión funciona, pero la consulta Moonraker real falló por el túnel (HTTP ${PUBLIC_TELEMETRY_STATUS:-sin respuesta})."
-    if [[ -s "$TMP/public-telemetry" ]]; then
-      ylw "  Respuesta: $(tr '\n' ' ' <"$TMP/public-telemetry" | cut -c1-240)"
-    fi
-  fi
-fi
-
-case "$(uname -s)" in
-  Darwin)
-    open "$LOCATION"
-    ;;
-  Linux)
-    if command -v xdg-open >/dev/null 2>&1; then
-      xdg-open "$LOCATION"
-    else
-      echo "Abre en este equipo: $LOCATION"
-    fi
-    ;;
-  *)
-    echo "Abre en este equipo: $LOCATION"
-    ;;
-esac
-
-grn "✓ Emparejamiento iniciado. El dashboard recibió la credencial por fragmento local y la URL se limpiará al cargar."
-\t' read -r FLEET_ONLINE FLEET_TOTAL FIRST_IP <<<"$FLEET_INFO"
+IFS='|' read -r FLEET_ONLINE FLEET_TOTAL FIRST_IP <<<"$FLEET_INFO"
 if [[ -n "${FLEET_TOTAL:-}" ]]; then
   if [[ "${FLEET_ONLINE:-0}" -gt 0 ]]; then
     grn "✓ Controller llega a Moonraker: ${FLEET_ONLINE}/${FLEET_TOTAL} impresoras responden desde el iMac"
@@ -179,6 +140,20 @@ if [[ "$PUBLIC_STATUS" == "200" || "$PUBLIC_STATUS" == "201" ]]; then
 else
   ylw "⚠ El túnel público no confirmó la sesión (HTTP ${PUBLIC_STATUS:-sin respuesta})."
   ylw "  El navegador se abrirá igual; si Máquinas sigue 0/14, el problema ya está entre Cloudflare Tunnel y el Controller."
+fi
+
+# Probar además la MISMA query Moonraker que usa el dashboard. Esto detecta
+# regresiones donde /farm/session funciona pero /IP/printer/objects/query no.
+if [[ -n "${FIRST_IP:-}" ]]; then
+  PUBLIC_TELEMETRY_STATUS="$(curl -q --config "$AUTH_CFG" -sS -m 10 -o "$TMP/public-telemetry" -w '%{http_code}' "$PUBLIC_BASE/$FIRST_IP/printer/objects/query?print_stats&extruder&webhooks" 2>/dev/null || true)"
+  if [[ "$PUBLIC_TELEMETRY_STATUS" == "200" ]] && grep -q '"result"' "$TMP/public-telemetry" 2>/dev/null; then
+    grn "✓ Telemetría extremo a extremo confirmada por el túnel (${FIRST_IP})"
+  else
+    ylw "⚠ La sesión funciona, pero la consulta Moonraker real falló por el túnel (HTTP ${PUBLIC_TELEMETRY_STATUS:-sin respuesta})."
+    if [[ -s "$TMP/public-telemetry" ]]; then
+      ylw "  Respuesta: $(tr '\\n' ' ' <"$TMP/public-telemetry" | cut -c1-240)"
+    fi
+  fi
 fi
 
 case "$(uname -s)" in
