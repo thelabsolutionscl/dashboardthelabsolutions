@@ -480,6 +480,32 @@ async function deleteAuditReportFiles(machineId,auditId){
   const paths=[auditReportPath(machineId,auditId),auditLegacyReportPath(machineId,auditId)].filter(Boolean);
   for(const file of new Set(paths))try{await fs.promises.unlink(file);}catch(e){if(e?.code!=='ENOENT')console.warn('[audits] cleanup',e.message);}
 }
+async function cleanupAuditOrphans(graceMs=24*60*60*1000){
+  const keep=new Set();
+  for(const row of audits.reports){
+    try{keep.add(path.resolve(auditReportPath(row.machineId,row.id)));}catch(_){}
+    const legacy=auditLegacyReportPath(row.machineId,row.id);if(legacy)keep.add(path.resolve(legacy));
+  }
+  let removed=0,now=Date.now(),dirs=[];
+  try{dirs=await fs.promises.readdir(AUDIT_DIR,{withFileTypes:true});}catch(_){return 0;}
+  for(const dirent of dirs){
+    if(!dirent.isDirectory())continue;
+    const dir=path.resolve(AUDIT_DIR,dirent.name);
+    if(!auditPathInsideRoot(dir))continue;
+    let files=[];try{files=await fs.promises.readdir(dir,{withFileTypes:true});}catch(_){continue;}
+    for(const fileent of files){
+      if(!fileent.isFile()||!fileent.name.endsWith('.json'))continue;
+      const file=path.resolve(dir,fileent.name);if(keep.has(file))continue;
+      try{
+        const st=await fs.promises.stat(file);if(now-st.mtimeMs<graceMs)continue;
+        await fs.promises.unlink(file);removed++;
+      }catch(e){if(e?.code!=='ENOENT')console.warn('[audits] orphan cleanup',e.message);}
+    }
+    try{if(!(await fs.promises.readdir(dir)).length)await fs.promises.rmdir(dir);}catch(_){}
+  }
+  if(removed)console.warn('[audits] '+removed+' archivo(s) huérfano(s) eliminado(s)');
+  return removed;
+}
 function auditSummaryByRequestId(machineId,requestId){
   return audits.reports.find(row=>row.machineId===machineId&&row.requestId===requestId)||null;
 }
@@ -921,7 +947,7 @@ const server = http.createServer(async (req, res) => {
   // El bridge legado ejecutaba /restart sin validar método. Desde el controller
   // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
   if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, safetyUpdatedAt: safety.updatedAt || 0 });
+  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
@@ -1117,6 +1143,8 @@ function start(){
   startLegacy();
   setInterval(queueWorker, 10_000).unref();
   setTimeout(queueWorker, 1500).unref();
+  setInterval(()=>purgeAuditScanSessions(),5*60_000).unref();
+  setTimeout(()=>cleanupAuditOrphans().catch(e=>console.warn('[audits] cleanup inicial',e.message)),3000).unref();
   if (process.env.FARM_DISCOVERY_ENABLED !== '0') {
     setTimeout(() => discoverLan().catch(e => console.warn('[registry] discovery', e.message)), 5000).unref();
     setInterval(() => discoverLan().catch(e => console.warn('[registry] discovery', e.message)), DISCOVERY_INTERVAL_MS).unref();
@@ -1149,5 +1177,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
