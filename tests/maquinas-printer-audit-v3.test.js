@@ -68,7 +68,7 @@ test('el sello HMAC cubre metadatos y matriz de fuentes, no sólo result/evidenc
     r=>{r.sourceMatrix.moonraker=false;},
     r=>{r.requestId='auditreq-altered-123';}
   ]){
-    const copy=structuredClone(report);mutate(copy);
+    const copy=JSON.parse(JSON.stringify(report));mutate(copy);
     assert.equal(farm.verifyAuditReport(copy),false);
   }
 });
@@ -151,4 +151,24 @@ test('la UI no permite acciones desde un detalle cuyo sello sea inválido y rein
   assert.match(OPS,/function _printerAuditRequestId/);
   assert.match(OPS,/async function savePrinterAuditReport/);
   assert.match(OPS,/for\(let attempt=0;attempt<2;attempt\+\+\)/);
+});
+
+
+test('limpieza de arranque elimina únicamente detalles huérfanos',async()=>{
+  const dir=path.join(TMP,'printer-audits','orphan-dir');fs.mkdirSync(dir,{recursive:true});
+  const ghost=path.join(dir,'ghost.json');fs.writeFileSync(ghost,'{}');
+  const old=new Date(Date.now()-48*60*60*1000);fs.utimesSync(ghost,old,old);
+  const removed=await farm.cleanupAuditOrphans(1000);
+  assert.ok(removed>=1);
+  assert.equal(fs.existsSync(ghost),false);
+});
+
+test('auditar granja no genera un toast por máquina y activa circuit breaker de tres fallos',()=>{
+  const start=OPS.indexOf('async function runFleetAudit');
+  const end=OPS.indexOf('function techLiveFacts',start);
+  const block=OPS.slice(start,end);
+  assert.match(block,/consecutiveFailures>=3/);
+  assert.match(block,/stoppedEarly=true/);
+  assert.match(OPS,/if\(!background\)\{renderPrinterAuditReport/);
+  assert.match(OPS,/if\(!background\)toast\('Auditoría fallida/);
 });
