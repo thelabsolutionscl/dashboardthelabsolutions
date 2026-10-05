@@ -203,6 +203,22 @@ function auditReportPath(machineId,auditId){
   return path.join(dir,id+'.json');
 }
 function auditHash(value){return crypto.createHash('sha256').update(JSON.stringify(value??null)).digest('hex');}
+function auditByteLength(value){return Buffer.byteLength(JSON.stringify(value??null),'utf8');}
+function compactAuditScanCore(value){
+  const c=auditJsonClone(value,2*1024*1024);
+  if(c&&typeof c==='object')delete c.cameraFrame;
+  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-120000);
+  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-60000);
+  if(c?.moonraker?.history?.result?.jobs)c.moonraker.history.result.jobs=c.moonraker.history.result.jobs.slice(0,10);
+  if(c?.moonraker?.gcodeResponses)c.moonraker.gcodeResponses=c.moonraker.gcodeResponses.slice(-30);
+  if(auditByteLength(c)<=AUDIT_MAX_EVIDENCE)return c;
+  if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-24000);
+  if(c?.moonraker?.history)c.moonraker.history={result:{jobs:(c.moonraker.history.result?.jobs||[]).slice(0,5)}};
+  if(auditByteLength(c)>AUDIT_MAX_EVIDENCE)throw new Error('escaneo técnico excede el presupuesto seguro');
+  return c;
+}
 function findingIdFor(row,index){
   const raw=[row?.area||'',row?.finding||'',row?.action||'',index].join('|');
   return 'finding-'+crypto.createHash('sha256').update(raw).digest('hex').slice(0,18);
@@ -271,7 +287,7 @@ function purgeAuditScanSessions(now=Date.now()){
 }
 function issueAuditScan(machineId,diagnostics,role){
   purgeAuditScanSessions();
-  const scanId=uid('scan'),core=auditJsonClone(diagnostics,AUDIT_MAX_EVIDENCE);
+  const scanId=uid('scan'),core=compactAuditScanCore(diagnostics);
   const row={scanId,machineId,role,diagnostics:core,evidenceHash:auditHash(core),createdAt:nowIso(),expiresAt:Date.now()+AUDIT_SCAN_TTL_MS};
   auditScanSessions.set(scanId,row);return row;
 }
@@ -320,7 +336,7 @@ function migrateLegacyAudits(){
       };
       if(!report.machineId)continue;
       report.evidenceHash=auditHash(report.evidence);report.scanEvidenceHash='';
-      report.reportHash=auditHash({version:2,id:report.id,machineId:report.machineId,createdAt:report.createdAt,evidenceHash:report.evidenceHash,result:report.result});
+      report.reportHash=auditHash({version:report.version,id:report.id,machineId:report.machineId,createdAt:report.createdAt,actorRole:report.actorRole,model:report.model,evidenceHash:report.evidenceHash,scanEvidenceHash:report.scanEvidenceHash,result:report.result,cost:report.cost});
       fs.writeFileSync(auditReportPath(report.machineId,report.id),JSON.stringify(report,null,2)+'\n',{mode:0o600});
       summaries.push(auditSummaryFromReport(report));
     }catch(e){console.warn('[audits] migración omitida:',e.message);}
@@ -781,7 +797,8 @@ const server = http.createServer(async (req, res) => {
     if(!scan.ok)return json(res,502,{ok:false,error:'diagnóstico profundo no disponible',status:scan.status});
     try{
       const diagnostics=JSON.parse(scan.body.toString('utf8')||'{}');
-      const issued=issueAuditScan(machineId,diagnostics,role);
+      const sessionDiagnostics={...diagnostics};delete sessionDiagnostics.cameraFrame;
+      const issued=issueAuditScan(machineId,sessionDiagnostics,role);
       return json(res,200,{ok:true,scanId:issued.scanId,scanEvidenceHash:issued.evidenceHash,expiresAt:issued.expiresAt,machine:{id:m.id,ip:m.ip,name:m.name||m.nombre||'',model:m.model||m.modelo||''},diagnostics});
     }catch(e){return json(res,502,{ok:false,error:'respuesta de diagnóstico inválida'});}
   }
@@ -974,5 +991,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, updateAuditFinding, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditResultSummary, auditReportPath, auditHash, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, updateAuditFinding, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
