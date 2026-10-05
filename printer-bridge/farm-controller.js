@@ -14,7 +14,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { spawn, execFile } = require('child_process');
+const { spawn, execFile, execFileSync } = require('child_process');
 const SafetyPolicy = require('../js/machineops-unattended-safety.js');
 
 const ROOT = __dirname;
@@ -37,6 +37,14 @@ const MAX_BODY = 64 * 1024 * 1024;
 const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
 const AUDIT_API_VERSION = 3;
 const REPO_DIR = process.env.BRIDGE_REPO_DIR || path.resolve(ROOT, '..');
+function repoRevision(){
+  try{
+    return String(execFileSync('git',['rev-parse','--short=12','HEAD'],{
+      cwd:REPO_DIR,encoding:'utf8',stdio:['ignore','pipe','ignore']
+    })||'').trim().slice(0,40);
+  }catch(_){return String(process.env.FARM_BUILD_REVISION||'').trim().slice(0,40);}
+}
+const BUILD_REVISION=repoRevision();
 
 fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 fs.mkdirSync(PAYLOAD_DIR, { recursive: true, mode: 0o700 });
@@ -693,9 +701,16 @@ function readBody(req, limit = MAX_BODY) {
   });
 }
 function cleanForwardPath(rawUrl) {
-  const u = new URL(rawUrl, 'http://farm.local');
-  u.searchParams.delete('bt');
-  return u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
+  // Moonraker usa parámetros SIN valor en /printer/objects/query:
+  //   ?print_stats&extruder&webhooks
+  // URLSearchParams.toString() los convierte en ?print_stats=&extruder=&webhooks=
+  // y cambia la semántica del endpoint. El bridge hijo ya preserva la query
+  // cruda; el Controller debe hacer exactamente lo mismo y quitar sólo bt.
+  const raw=String(rawUrl||''),qIdx=raw.indexOf('?');
+  const rawPath=qIdx===-1?raw:raw.slice(0,qIdx);
+  const rawQuery=qIdx===-1?'':raw.slice(qIdx+1);
+  const kept=rawQuery.split('&').filter(part=>part&&part!=='bt'&&!part.startsWith('bt='));
+  return rawPath+(kept.length?'?'+kept.join('&'):'');
 }
 
 let legacy = null;
@@ -1071,7 +1086,7 @@ const server = http.createServer(async (req, res) => {
   // El bridge legado ejecutaba /restart sin validar método. Desde el controller
   // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
   if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, browserPairs:browserPairs.pairs.length, safetyUpdatedAt: safety.updatedAt || 0 });
+  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', revision: BUILD_REVISION, uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, browserPairs:browserPairs.pairs.length, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator,realtimeWebSocket:true}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
