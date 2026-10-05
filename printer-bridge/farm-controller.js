@@ -1017,7 +1017,7 @@ const server = http.createServer(async (req, res) => {
       const body=JSON.parse((await readBody(req,32*1024)).toString('utf8')||'{}');
       const updated=await updateAuditFinding(machineId,auditId,findingId,body,role);
       if(!updated)return json(res,404,{ok:false,error:'auditoría no encontrada'});
-      return json(res,200,{ok:true,report:updated.report,summary:updated.summary});
+      return json(res,200,{ok:true,integrityValid:true,report:updated.report,summary:updated.summary});
     }catch(e){return json(res,Number(e.statusCode)||400,{ok:false,error:e.message});}
   }
 
