@@ -1516,6 +1516,7 @@ const CORS_BASE = {
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,X-App-Key,X-AI-Agent,anthropic-version,x-api-key',
+  'Access-Control-Expose-Headers': 'X-AI-Estimated-Cost-USD,X-AI-Cost-Provenance',
   'Vary': 'Origin',
 };
 // Solo el bootstrap de esquemas que realmente usa TLS. Una APP_KEY visible
@@ -3567,6 +3568,8 @@ export default {
       else await reconciliation;
       const respHeaders = new Headers(upstream.headers);
       Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
+      respHeaders.set('X-AI-Estimated-Cost-USD',String(Number(reservation.estimated_request_usd||reservation.estimate||0).toFixed(6)));
+      respHeaders.set('X-AI-Cost-Provenance','budget-reservation');
       return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
     }
 
@@ -3676,6 +3679,8 @@ export default {
 
       const respHeaders = new Headers(upstream.headers);
       Object.entries(CORS).forEach(([k, v]) => respHeaders.set(k, v));
+      respHeaders.set('X-AI-Estimated-Cost-USD',String(Number(reservation.estimated_request_usd||reservation.estimate||0).toFixed(6)));
+      respHeaders.set('X-AI-Cost-Provenance','budget-reservation');
       return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
     }
 
