@@ -30,6 +30,7 @@ test('Farm Controller reenvía upgrades WebSocket al bridge interno',()=>{
   assert.match(proxy,/127\.0\.0\.1/,'solo conecta al bridge interno');
   assert.match(proxy,/'x-bridge-token':INTERNAL_TOKEN/,'usa el token interno, no el del navegador');
   assert.match(proxy,/origin:'http:\/\/127\.0\.0\.1'/,'adapta Origin a la allowlist del bridge hijo');
+  assert.match(proxy,/upstream\.setTimeout\(0\);upstreamSocket\.setTimeout\(0\)/,'el timeout del handshake no debe cortar un socket ya establecido');
   assert.match(proxy,/upstreamSocket\.pipe\(clientSocket\);clientSocket\.pipe\(upstreamSocket\)/,'mantiene flujo bidireccional');
 });
 
