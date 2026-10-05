@@ -2760,9 +2760,13 @@ function _auditEvidenceBudget(evidence,maxBytes){
 }
 function _compactPrinterAuditEvidence(evidence){return _auditEvidenceBudget(evidence,145000);}
 function _storagePrinterAuditEvidence(evidence){
-  const c=_auditEvidenceBudget(evidence,340000);
-  if(_auditBytes(c)>360000)throw new Error('La evidencia técnica sigue excediendo el límite seguro después de compactarla');
-  return c;
+  const scan=_auditClone(evidence?.scan||{},{}),scanBytes=_auditBytes(scan);
+  if(scanBytes>260000)throw new Error('El scan técnico excede el espacio reservado para historial');
+  const rest=_auditClone(evidence,{});delete rest.scan;
+  const restBudget=Math.max(50000,355000-scanBytes);
+  const compactRest=_auditEvidenceBudget(rest,restBudget),combined={...compactRest,scan};
+  if(_auditBytes(combined)>365000)throw new Error('La evidencia técnica sigue excediendo el límite seguro después de compactarla');
+  return combined;
 }
 function _parsePrinterAuditJson(text){
   const clean=String(text||'').replace(/^\x60\x60\x60(?:json)?\s*/i,'').replace(/\s*\x60\x60\x60$/,'').trim();
@@ -3007,7 +3011,7 @@ async function runPrinterAudit(machineId,button,opts={}){
     if(previousIntegrityRejected)result.limitations=[...(result.limitations||[]),'La auditoría anterior no se usó para comparar porque falló su verificación de integridad.'];
     result.comparison=_printerAuditComparison(result,previousDetail);
     const storedEvidence=_storagePrinterAuditEvidence(evidence);
-    const report={requestId:_printerAuditRequestId(machineId),scanId:remote.scanId,machineId,actor:actor(),model,durationMs:Date.now()-started,sourceMatrix:_printerAuditSourceMatrix(evidence),cost,result,evidence:storedEvidence};
+    const report={requestId:_printerAuditRequestId(machineId),scanId:remote.scanId,scanEvidenceHash:remote.scanEvidenceHash,scanExpiresAt:remote.scanExpiresAt,scanSeal:remote.scanSeal,machineId,actor:actor(),model,durationMs:Date.now()-started,sourceMatrix:_printerAuditSourceMatrix(evidence),cost,result,evidence:storedEvidence};
     progress(4,'Guardando informe sellado','El Controller fijará ID/fecha/rol, restaurará el scan original y calculará un sello HMAC.');
     const d=await savePrinterAuditReport(machineId,report);
     const saved=d.report||report;
