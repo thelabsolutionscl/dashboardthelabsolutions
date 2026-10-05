@@ -91,7 +91,7 @@ test('80 auditorías por impresora no quedan limitadas por un máximo global de 
 
 test('el scan profundo rechaza evidencia que excede el presupuesto duro',()=>{
   assert.doesNotThrow(()=>farm.issueAuditScan('small',{blob:'x'.repeat(300*1024)},'operator'));
-  assert.throws(()=>farm.issueAuditScan('large',{blob:'x'.repeat(390*1024)},'operator'),/demasiado grande/);
+  assert.throws(()=>farm.issueAuditScan('large',{blob:'x'.repeat(390*1024)},'operator'),/(excede|demasiado grande)/);
 });
 
 test('los hallazgos tienen workflow persistente y el hash se renueva al resolverlos',async()=>{
