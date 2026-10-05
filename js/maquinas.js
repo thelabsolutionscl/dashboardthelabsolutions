@@ -174,7 +174,7 @@ function getPrinterTunnel(){
     'https://printers.thelab.solutions':_DEFAULTS.PRINTER_TUNNEL;
   return(localStorage.getItem('printer_tunnel')||d).replace(/\/$/,'');
 }
-let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0;
+let _printerTunnelSessionToken='',_printerTunnelSessionExpires=0,_printerTunnelSessionRole='',_printerTunnelSessionSync=null,_printerTunnelSessionLastTry=0;
 function _getPrinterTunnelLongToken(){
   // Previously cached master credentials are never consulted in secure mode.
   if(_printerAccessMode())return '';
@@ -190,6 +190,7 @@ function getPrinterTunnelToken(){
   return _printerAccessMode()?'':_getPrinterTunnelLongToken();
 }
 function getPrinterTunnelLongToken(){return _getPrinterTunnelLongToken();}
+function getPrinterTunnelRole(){return _printerTunnelSessionToken&&Date.now()<_printerTunnelSessionExpires-15000?_printerTunnelSessionRole:'';}
 function getPrinterFleetForDrift(){
   try{
     return (MAQUINAS||[]).filter(m=>m&&m.id).map(m=>{
@@ -229,9 +230,10 @@ async function _refreshPrinterAccessTicket(force=false){
         throw new Error('Ticket del taller inválido');
       _printerTunnelSessionToken=d.token;
       _printerTunnelSessionExpires=d.expiresAt;
+      _printerTunnelSessionRole=d.role;
       return true;
     }catch(_){
-      _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;
+      _printerTunnelSessionToken='';_printerTunnelSessionExpires=0;_printerTunnelSessionRole='';
       return false; // NEVER downgrade to the published master token.
     }finally{_printerTunnelSessionSync=null;}
   })();
@@ -252,7 +254,7 @@ async function refreshPrinterTunnelSession(force=false){
       if(!r.ok)throw new Error('HTTP '+r.status);
       const d=await r.json();
       if(!d?.token||!Number(d.expiresAt))throw new Error('sesión inválida');
-      _printerTunnelSessionToken=String(d.token);_printerTunnelSessionExpires=Number(d.expiresAt);
+      _printerTunnelSessionToken=String(d.token);_printerTunnelSessionExpires=Number(d.expiresAt);_printerTunnelSessionRole=['viewer','operator','admin'].includes(d.role)?d.role:'admin';
       // Los sockets existentes siguen autenticados; los nuevos y las cámaras usan desde ahora el ticket breve.
       return true;
     }catch(e){

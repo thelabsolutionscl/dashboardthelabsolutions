@@ -389,11 +389,66 @@ function capDiagnosticText(value,max=260000) {
   const half=Math.floor((max-80)/2);
   return text.slice(0,half)+'\n...[diagnóstico truncado por límite seguro]...\n'+text.slice(-half);
 }
+
+function redactDiagnosticSecrets(value) {
+  let text=String(value??'');
+  const rules=[
+    [/\b(authorization\s*:\s*(?:bearer|basic)\s+)[^\s"'<>]+/ig,'$1[REDACTED]'],
+    [/\b((?:api[_-]?key|token|secret|password|passwd|pwd|access[_-]?token|refresh[_-]?token)\s*[=:]\s*)[^\s"'<>;,]+/ig,'$1[REDACTED]'],
+    [/([?&](?:api[_-]?key|token|secret|password|passwd|pwd)=)[^&#\s]+/ig,'$1[REDACTED]'],
+    [/\b((?:https?|rtsp):\/\/[^:\s/@]+:)[^@\s/]+@/ig,'$1[REDACTED]@'],
+    [/\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,})\b/g,'[REDACTED]'],
+    [/\b([A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g,'[REDACTED_JWT]'],
+  ];
+  for(const [re,repl] of rules)text=text.replace(re,repl);
+  return text;
+}
+function redactDiagnosticValue(value,depth=0) {
+  if(depth>12)return '[TRUNCATED_DEPTH]';
+  if(typeof value==='string')return redactDiagnosticSecrets(value);
+  if(Array.isArray(value))return value.slice(0,500).map(v=>redactDiagnosticValue(v,depth+1));
+  if(value&&typeof value==='object'){
+    const out={};
+    for(const [k,v] of Object.entries(value)){
+      if(/^(authorization|cookie|set-cookie|api[_-]?key|token|secret|password|passwd|pwd|access[_-]?token|refresh[_-]?token)$/i.test(k)){out[k]='[REDACTED]';continue;}
+      out[k]=redactDiagnosticValue(v,depth+1);
+    }
+    return out;
+  }
+  return value;
+}
+async function collectStabilitySamples(printer,count=4,delayMs=750) {
+  const rows=[];
+  for(let i=0;i<count;i++){
+    const t0=Date.now();
+    const r=await moonraker(printer,'GET','/printer/objects/query?extruder&heater_bed&system_stats&webhooks',3500);
+    const elapsedMs=Date.now()-t0,s=r?.json?.result?.status||{};
+    rows.push({
+      ok:!!r?.ok,elapsedMs,
+      hotend:Number(s.extruder?.temperature),
+      hotendTarget:Number(s.extruder?.target),
+      bed:Number(s.heater_bed?.temperature),
+      bedTarget:Number(s.heater_bed?.target),
+      cpu:Number(s.system_stats?.cpu),
+      memavail:Number(s.system_stats?.memavail),
+      klipperState:String(s.webhooks?.state||''),
+    });
+    if(i<count-1)await _sleep(delayMs);
+  }
+  const nums=(key)=>rows.map(r=>Number(r[key])).filter(Number.isFinite);
+  const stat=(key)=>{const a=nums(key);if(!a.length)return null;const min=Math.min(...a),max=Math.max(...a),avg=a.reduce((x,y)=>x+y,0)/a.length;return{min,max,avg:Number(avg.toFixed(2)),span:Number((max-min).toFixed(2))};};
+  const latency=stat('elapsedMs');
+  return{
+    samples:rows,
+    network:{successes:rows.filter(r=>r.ok).length,total:rows.length,latencyMs:latency},
+    thermal:{hotend:stat('hotend'),bed:stat('bed')},
+  };
+}
 function runDiagnosticSsh(ip) {
   return new Promise(resolve=>{
     const {cmd,args,env}=diagnosticSshCommand(ip);
     execFile(cmd,args,{timeout:22000,env,maxBuffer:384*1024},(err,stdout,stderr)=>{
-      const out=capDiagnosticText(stdout),errOut=capDiagnosticText(stderr,30000);
+      const out=redactDiagnosticSecrets(capDiagnosticText(stdout)),errOut=redactDiagnosticSecrets(capDiagnosticText(stderr,30000));
       if(err&&err.code==='ENOENT')return resolve({ok:false,code:'sin-ssh',error:'no se encontró '+cmd,output:out});
       if(err){
         const detail=errOut||out||err.message;
@@ -430,7 +485,10 @@ async function collectPrinterDiagnostics(ip) {
     sshCheck(ip),
   ]);
   const cameraFrame=(camGo2rtc||camMjpeg)?await captureAuditCameraFrame(ip):{ok:false,error:'cámara no disponible'};
-  const ssh=sshAccess?.ok?await runDiagnosticSsh(ip):{ok:false,error:sshAccess?.error||'SSH no disponible',output:''};
+  const [ssh,stability]=await Promise.all([
+    sshAccess?.ok?runDiagnosticSsh(ip):Promise.resolve({ok:false,error:sshAccess?.error||'SSH no disponible',output:''}),
+    collectStabilitySamples(printer).catch(e=>({samples:[],network:{successes:0,total:0,error:redactDiagnosticSecrets(e.message)},thermal:{hotend:null,bed:null}})),
+  ]);
   const okCount=[printerInfo,serverInfo,systemInfo,objects,gcode,history].filter(r=>r?.ok).length;
   return{
     ok:okCount>0,
@@ -442,14 +500,15 @@ async function collectPrinterDiagnostics(ip) {
       camera:{available:!!(camGo2rtc||camMjpeg),go2rtc:!!camGo2rtc,mjpeg:!!camMjpeg,snapshotCaptured:!!cameraFrame.ok},
     },
     cameraFrame,
-    deterministic,
+    stability:redactDiagnosticValue(stability),
+    deterministic:redactDiagnosticValue(deterministic),
     moonraker:{
-      printerInfo:printerInfo?.ok?printerInfo.json:null,
-      serverInfo:serverInfo?.ok?serverInfo.json:null,
-      systemInfo:systemInfo?.ok?systemInfo.json:null,
-      objects:objects?.ok?objects.json:null,
-      gcodeResponses:auditGcodeResponses(gcode?.json),
-      history:history?.ok?history.json:null,
+      printerInfo:printerInfo?.ok?redactDiagnosticValue(printerInfo.json):null,
+      serverInfo:serverInfo?.ok?redactDiagnosticValue(serverInfo.json):null,
+      systemInfo:systemInfo?.ok?redactDiagnosticValue(systemInfo.json):null,
+      objects:objects?.ok?redactDiagnosticValue(objects.json):null,
+      gcodeResponses:redactDiagnosticValue(auditGcodeResponses(gcode?.json)),
+      history:history?.ok?redactDiagnosticValue(history.json):null,
       failures:[
         ['printerInfo',printerInfo],['serverInfo',serverInfo],['systemInfo',systemInfo],
         ['objects',objects],['gcode',gcode],['history',history],
@@ -766,22 +825,24 @@ server.on('upgrade', (req, clientSocket, head) => {
   clientSocket.on('close', () => { try { upstream.destroy(); } catch (e) {} });
 });
 
-server.listen(PORT, () => {
-  console.log('─'.repeat(60));
-  console.log('  The Lab Solutions — Printer Bridge');
-  console.log(`  Escuchando en  : http://0.0.0.0:${PORT}`);
-  // launchd/systemd persisten stdout: no dejar el secreto maestro en logs.
-  // En ejecución manual interactiva sí se muestra para el onboarding inicial.
-  console.log(`  Token          : ${process.stdout.isTTY ? TOKEN : '[oculto en logs; usa .bridge-token]'}`);
-  console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
-  console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
-  console.log(`  Recuperación   : ${RECOVER_ENABLED ? `activa por SSH como ${SSH_USER} (${SSH_PASS ? 'contraseña' : SSH_KEY ? 'llave ' + SSH_KEY : 'llave por defecto'})` : 'APAGADA (BRIDGE_RECOVER=0)'}`);
-  console.log(`  CORS origins   : ${ALLOW_ORIGINS.join(', ')}`);
-  console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
-  console.log('─'.repeat(60));
-  startHeartbeat();
-  startMaintScheduler();
-});
+function startServer(){
+  return server.listen(PORT, () => {
+    console.log('─'.repeat(60));
+    console.log('  The Lab Solutions — Printer Bridge');
+    console.log(`  Escuchando en  : http://0.0.0.0:${PORT}`);
+    // launchd/systemd persisten stdout: no dejar el secreto maestro en logs.
+    // En ejecución manual interactiva sí se muestra para el onboarding inicial.
+    console.log(`  Token          : ${process.stdout.isTTY ? TOKEN : '[oculto en logs; usa .bridge-token]'}`);
+    console.log(`  Puertos        : ${ALLOWED_PORTS.join(', ')}`);
+    console.log(`  WebSocket      : proxy activo (/{IP}/websocket → tiempo real)`);
+    console.log(`  Recuperación   : ${RECOVER_ENABLED ? `activa por SSH como ${SSH_USER} (${SSH_PASS ? 'contraseña' : SSH_KEY ? 'llave ' + SSH_KEY : 'llave por defecto'})` : 'APAGADA (BRIDGE_RECOVER=0)'}`);
+    console.log(`  CORS origins   : ${ALLOW_ORIGINS.join(', ')}`);
+    console.log('  Pega el token en el dashboard: Mi cuenta → Túnel Impresoras');
+    console.log('─'.repeat(60));
+    startHeartbeat();
+    startMaintScheduler();
+  });
+}
 
 // ── Latido a la tabla Automations (Oficina Virtual del dashboard) ─────────
 // Como el bridge es un proceso persistente, reporta "Activo" cada 5 min.
@@ -1032,3 +1093,6 @@ function startMaintScheduler() {
   };
   const t = setInterval(tick, 30 * 1000); if (t.unref) t.unref();
 }
+
+if(require.main===module)startServer();
+module.exports={redactDiagnosticSecrets,redactDiagnosticValue,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,startServer};
