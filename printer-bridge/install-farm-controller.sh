@@ -8,6 +8,7 @@ OLD_LABEL="com.thelab.printer-bridge"
 UID_GUI="gui/$(id -u)"
 NODE="$(command -v node || true)"
 PORT="${BRIDGE_PORT:-8347}"
+INTERNAL_PORT="${LEGACY_BRIDGE_PORT:-8348}"
 FALLBACK_PID="$HOME/Library/Application Support/TheLabFarm/farm-controller.pid"
 FALLBACK_STARTED=0
 
@@ -50,6 +51,34 @@ stop_direct_fallback() {
     done
   fi
   rm -f "$FALLBACK_PID"
+}
+
+
+cleanup_stale_internal_bridge() {
+  local lsof_bin="" pids="" pid="" cmd=""
+  for candidate in /usr/sbin/lsof /usr/bin/lsof "$(command -v lsof 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then lsof_bin="$candidate"; break; fi
+  done
+  [[ -n "$lsof_bin" ]] || return 0
+  pids="$("$lsof_bin" -nP -tiTCP:"$INTERNAL_PORT" -sTCP:LISTEN 2>/dev/null || true)"
+  [[ -n "$pids" ]] || return 0
+  for pid in $pids; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$cmd" == *"$HERE/server.js"* ]]; then
+      ylw "→ Eliminando bridge interno huérfano en :$INTERNAL_PORT (PID $pid)…"
+      kill "$pid" 2>/dev/null || true
+      for _ in $(seq 1 15); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.2
+      done
+      if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid" 2>/dev/null || true; fi
+    else
+      red "✗ El puerto interno $INTERNAL_PORT está ocupado por otro proceso: $cmd"
+      red "  No lo cerraré automáticamente porque no corresponde a printer-bridge/server.js."
+      return 1
+    fi
+  done
 }
 
 start_direct_fallback() {
@@ -107,6 +136,8 @@ launchctl bootout "$UID_GUI/$OLD_LABEL" 2>/dev/null || true
 launchctl unload "$OLD_PLIST" 2>/dev/null || true
 launchctl bootout "$UID_GUI/$LABEL" 2>/dev/null || true
 launchctl remove "$LABEL" 2>/dev/null || true
+stop_direct_fallback
+cleanup_stale_internal_bridge
 # launchctl recuerda servicios deshabilitados incluso después de borrar el plist.
 # Rehabilitar explícitamente evita "Bootstrap failed: 5: Input/output error"
 # en equipos donde una instalación/rollback anterior dejó el label disabled.
@@ -139,7 +170,7 @@ fi
 
 ok=""
 for _ in $(seq 1 15); do
-  if curl -fsS -m 2 "http://127.0.0.1:$PORT/healthz" | grep -q '"service":"farm-controller"'; then
+  if curl -fsS -m 2 "http://127.0.0.1:$PORT/healthz" | grep -q '"legacyReady":true'; then
     ok=1
     break
   fi
