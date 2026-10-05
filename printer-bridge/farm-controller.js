@@ -34,6 +34,7 @@ const DISCOVERY_PREFIX = process.env.FARM_LAN_PREFIX || '192.168.100.';
 const DISCOVERY_INTERVAL_MS = Math.max(60_000, Number(process.env.FARM_DISCOVERY_INTERVAL_MS || 10 * 60_000));
 const MAX_BODY = 64 * 1024 * 1024;
 const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
+const AUDIT_API_VERSION = 3;
 const REPO_DIR = process.env.BRIDGE_REPO_DIR || path.resolve(ROOT, '..');
 
 fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
@@ -950,7 +951,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, safetyUpdatedAt: safety.updatedAt || 0 });
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
-    return json(res, 200, { ok: true, role, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
+    return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });
   }
   // Actualiza y reinicia el proceso PADRE. Antes /update se delegaba al bridge
   // legado hijo: el git pull ocurría, pero Farm Controller seguía ejecutando el
