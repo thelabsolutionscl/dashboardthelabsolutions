@@ -4,6 +4,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const {spawnSync}=require('node:child_process');
 
 const ROOT=path.join(__dirname,'..');
 const CTRL=fs.readFileSync(path.join(ROOT,'printer-bridge','farm-controller.js'),'utf8');
@@ -50,4 +51,10 @@ test('script de emparejamiento valida el Controller, se autorepara y abre la URL
   assert.match(PAIR,/open "\$LOCATION"/,'macOS debe abrir directamente la URL final validada');
   assert.doesNotMatch(PAIR,/open "\$PAIR_URL"/,'el navegador no debe depender de navegar primero al endpoint loopback');
   assert.doesNotMatch(PAIR,/\.bridge-token|cat .*token|pbcopy/,'el pairing no debe leer ni copiar el master token');
+});
+
+
+test('script de emparejamiento conserva sintaxis bash válida',()=>{
+  const result=spawnSync('bash',['-n',path.join(ROOT,'printer-bridge','pair-dashboard.sh')],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr||result.stdout||'bash -n falló');
 });
