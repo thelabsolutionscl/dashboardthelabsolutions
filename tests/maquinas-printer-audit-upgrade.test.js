@@ -16,21 +16,23 @@ test('un bridge nuevo detecta un Farm Controller padre obsoleto y solicita reini
   assert.match(BRIDGE,/maybeRestartStaleFarmParent\(\)/);
 });
 
-test('AUDITAR puede actualizar una versión legacy sólo con rol admin y esperar capacidades V2',()=>{
+test('AUDITAR puede actualizar un backend antiguo sólo con rol admin y esperar API V3',()=>{
   assert.match(OPS,/async function updatePrinterAuditBackend/);
   assert.match(OPS,/_printerAuditRole\(\)!=='admin'/);
   assert.match(OPS,/\/update/);
-  assert.match(OPS,/async function _waitPrinterAuditBackendV2/);
+  assert.match(OPS,/async function _waitPrinterAuditBackendV3/);
   assert.match(OPS,/capabilities\?\.auditRun/);
+  assert.match(OPS,/auditApiVersion/);
+  assert.match(OPS,/PRINTER_AUDIT_API_VERSION=3/);
   assert.match(OPS,/async function fetchPrinterAuditScan/);
-  assert.match(OPS,/La Auditoría V2 aún no está instalada/);
+  assert.match(OPS,/requiere Auditoría V3/);
 });
 
-test('el primer uso reintenta audit-scan únicamente después de completar el auto-upgrade',()=>{
+test('el primer uso comprueba API V3 antes de ejecutar audit-scan',()=>{
   const start=OPS.indexOf('async function fetchPrinterAuditScan');
   const end=OPS.indexOf('async function updatePrinterAuditPermission',start);
   const block=OPS.slice(start,end);
-  assert.match(block,/await updatePrinterAuditBackend\(\)/);
+  assert.match(block,/await ensurePrinterAuditBackendV3\(machineId\)/);
   const matches=block.match(/\/farm\/audit-scan\//g)||[];
-  assert.equal(matches.length,2);
+  assert.equal(matches.length,1);
 });
