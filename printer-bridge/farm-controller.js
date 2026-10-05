@@ -558,6 +558,8 @@ async function saveAuditRequest(machineId,body,role){
       if(rawScan&&report.scanId!==rawScan){const error=new Error('requestId ya utilizado por otro escaneo');error.statusCode=409;throw error;}
       return{report,summary:existing,idempotent:true};
     }
+    const existingScan=rawScan?audits.reports.find(row=>row.machineId===machineId&&row.scanId===rawScan):null;
+    if(existingScan){const error=new Error('escaneo ya utilizado por otra auditoría');error.statusCode=409;throw error;}
     const report=sanitizeAuditReport(machineId,{...body,requestId},role);
     const summary=await saveAuditReport(report);
     return{report,summary,idempotent:false};
