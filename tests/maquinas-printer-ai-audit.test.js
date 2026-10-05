@@ -37,6 +37,8 @@ test('el escaneo profundo usa fuentes tecnicas reales y no recibe shell arbitrar
   assert.match(BRIDGE,/\/server\/gcode_store\?count=240/);
   assert.match(BRIDGE,/\/server\/history\/list\?limit=25&order=desc/);
   assert.match(BRIDGE,/\/printer\/objects\/query\?print_stats&heater_bed&extruder&webhooks&toolhead&bed_mesh/);
+  assert.match(BRIDGE,/function captureAuditCameraFrame/);
+  assert.match(BRIDGE,/cameraFrame/);
   assert.match(BRIDGE,/if\(!isPrivateIp\(mDiag\[1\]\)\)/);
   assert.doesNotMatch(BRIDGE,/diagnosticSshCommand\(ip,\s*body/);
 });
@@ -71,6 +73,9 @@ test('el informe conserva matriz de fuentes y evidencia, con limites de tamaño'
   assert.match(OPS,/sshLogs:/);
   assert.match(OPS,/centralHistory:/);
   assert.match(OPS,/farmHealth:/);
+  assert.match(OPS,/cameraVision:/);
+  assert.match(OPS,/async function _printerAuditVision/);
+  assert.match(OPS,/gpt-4o-mini/);
   assert.match(OPS,/bedMesh:/);
   assert.match(OPS,/maintenance:/);
   assert.match(OPS,/incidents:/);
