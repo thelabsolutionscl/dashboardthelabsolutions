@@ -2721,9 +2721,10 @@ async function _printerAuditVision(scan){
     const prompt='Eres inspector técnico de una impresora 3D FDM. Analiza SOLO lo visible en este fotograma. Detecta spaghetti, warping, pieza desprendida, mala primera capa, acumulación en nozzle, obstrucciones, humo o una impresión aparentemente normal. No inventes. Devuelve exclusivamente JSON: {"risk":"low|medium|high|unknown","finding":"máximo 35 palabras","confidence":0-100,"recommendation":"máximo 35 palabras"}.';
     const r=await fetch(px.url.replace(/\/$/,'')+'/openai/v1/chat/completions',{method:'POST',credentials:'include',signal:AbortSignal.timeout(60000),headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'printer-audit-vision'},body:JSON.stringify({model:'gpt-4o-mini',temperature:0,max_tokens:220,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:frame.dataUrl,detail:'low'}}]}]})});
     if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error?.message||('OpenAI '+r.status));
+    const proxyEstimate=Math.max(0,num(r.headers?.get?.('X-AI-Estimated-Cost-USD')));
     const d=await r.json();let raw=String(d.choices?.[0]?.message?.content||'{}').replace(/^\x60\x60\x60(?:json)?\s*/i,'').replace(/\s*\x60\x60\x60$/,'').trim();
     const result=JSON.parse(raw),risk=['low','medium','high','unknown'].includes(result.risk)?result.risk:'unknown';
-    return{available:true,risk,finding:String(result.finding||'').slice(0,500),confidence:clamp(num(result.confidence),0,100),recommendation:String(result.recommendation||'').slice(0,500),captured:true,_cost:{estimatedUsd:0.01,model:'gpt-4o-mini'}};
+    return{available:true,risk,finding:String(result.finding||'').slice(0,500),confidence:clamp(num(result.confidence),0,100),recommendation:String(result.recommendation||'').slice(0,500),captured:true,_cost:{estimatedUsd:proxyEstimate,provenance:proxyEstimate?'proxy-budget-reservation':'unavailable',model:'gpt-4o-mini'}};
   }catch(e){return{available:false,reason:'análisis visual falló: '+String(e?.message||e).slice(0,300)};}
 }
 function _auditBytes(value){try{return new TextEncoder().encode(JSON.stringify(value==null?null:value)).length;}catch(_){return Number.MAX_SAFE_INTEGER;}}
@@ -2830,11 +2831,11 @@ async function _printerAuditClaude(evidence,focus=''){
   const payload={model:PRINTER_AUDIT_MODEL,max_tokens:2600,temperature:0,system:[{type:'text',text:system,cache_control:{type:'ephemeral'}}],messages:[{role:'user',content:'AUDITA ESTA IMPRESORA USANDO TODAS LAS FUENTES DISPONIBLES EN LA EVIDENCIA:\n'+JSON.stringify(_focusedPrinterAuditEvidence(evidence,focus))}]};
   const r=await fetch(px.url.replace(/\/$/,'')+'/anthropic/v1/messages',{method:'POST',credentials:'include',signal:AbortSignal.timeout(75000),headers:{'Content-Type':'application/json','X-App-Key':px.key,'X-AI-Agent':'printer-audit-text'},body:JSON.stringify(payload)});
   if(!r.ok){const e=await r.json().catch(function(){return{};});throw new Error(e.error?.message||e.error||('IA respondió HTTP '+r.status));}
+  const proxyEstimate=Math.max(0,num(r.headers?.get?.('X-AI-Estimated-Cost-USD')));
   const d=await r.json();if(typeof _recordClaudeUsage==='function')try{_recordClaudeUsage(d,'printer-audit-text');}catch(_){}
   const part=(d.content||[]).find(function(x){return x.type==='text';}),result=_normalizePrinterAuditResult(_parsePrinterAuditJson(part?.text||''));
   const directInput=num(d.usage?.input_tokens),cacheWrite=num(d.usage?.cache_creation_input_tokens),cacheRead=num(d.usage?.cache_read_input_tokens),outputTokens=num(d.usage?.output_tokens),inputTokens=directInput+cacheWrite+cacheRead;
-  const estimated=directInput/1000000*1+cacheWrite/1000000*1.25+cacheRead/1000000*.10+outputTokens/1000000*5;
-  return{result,cost:{estimatedUsd:Number(estimated.toFixed(6)),textModel:PRINTER_AUDIT_MODEL,textInputTokens:inputTokens,textOutputTokens:outputTokens}};
+  return{result,cost:{estimatedUsd:proxyEstimate,provenance:proxyEstimate?'proxy-budget-reservation':'unavailable',textModel:PRINTER_AUDIT_MODEL,textInputTokens:inputTokens,textOutputTokens:outputTokens}};
 }
 function _printerAuditSourceMatrix(evidence){
   const scan=evidence?.scan||{},src=scan.sources||{},dash=evidence?.dashboard||{},stability=scan.stability||{};
@@ -2993,9 +2994,9 @@ async function runPrinterAudit(machineId,button,opts={}){
     const prev=previousDetail?{id:previousDetail.id,createdAt:previousDetail.createdAt,result:{score:previousDetail.result?.score,overall:previousDetail.result?.overall,summary:previousDetail.result?.summary,findings:(previousDetail.result?.findings||[]).map(function(x){return{area:x.area,finding:x.finding,severity:x.severity,status:x.status};})}}:null;
     const evidence={dashboard,bed,scan,vision,previousAudit:prev};
     progress(3,'Analizando evidencia','Correlacionando fuentes'+(focus?' con foco en '+focus:'')+'. Si la IA no está disponible se guardará un diagnóstico determinístico.');
-    let result,cost={estimatedUsd:num(vision?._cost?.estimatedUsd),visionModel:vision?._cost?.model||'',visionUsed:!!vision?.available},model=PRINTER_AUDIT_MODEL,aiFallback=false;
+    let result,cost={estimatedUsd:num(vision?._cost?.estimatedUsd),provenance:vision?._cost?.provenance||'unavailable',visionModel:vision?._cost?.model||'',visionUsed:!!vision?.available},model=PRINTER_AUDIT_MODEL,aiFallback=false;
     try{
-      const ai=await _printerAuditClaude(evidence,focus);result=ai.result;cost=Object.assign(cost,ai.cost||{});cost.estimatedUsd=Number((num(cost.estimatedUsd)+num(ai.cost?.estimatedUsd)).toFixed(6));
+      const visionEstimate=num(cost.estimatedUsd),ai=await _printerAuditClaude(evidence,focus);result=ai.result;cost=Object.assign(cost,ai.cost||{});cost.estimatedUsd=Number((visionEstimate+num(ai.cost?.estimatedUsd)).toFixed(6));cost.provenance='proxy-budget-reservation';
     }catch(aiError){
       result=_normalizePrinterAuditResult(_printerAuditDeterministicResult(evidence,aiError?.message||aiError));model='deterministic-fallback';aiFallback=true;
     }
