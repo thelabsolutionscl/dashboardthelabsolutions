@@ -714,6 +714,20 @@ function cleanForwardPath(rawUrl) {
 }
 
 let legacy = null;
+function probeLegacyAuth(timeoutMs=1200) {
+  return new Promise(resolve=>{
+    const req=http.request({
+      host:'127.0.0.1',port:LEGACY_PORT,path:'/authcheck',method:'GET',
+      headers:{'x-bridge-token':INTERNAL_TOKEN,origin:'http://127.0.0.1'},timeout:timeoutMs
+    },res=>{
+      const ok=res.statusCode===200;
+      res.resume();res.on('end',()=>resolve(ok));
+    });
+    req.on('timeout',()=>{req.destroy();resolve(false);});
+    req.on('error',()=>resolve(false));
+    req.end();
+  });
+}
 function startLegacy() {
   if (legacy) return;
   const env = { ...process.env, BRIDGE_PORT: String(LEGACY_PORT), BRIDGE_TOKEN: INTERNAL_TOKEN, BRIDGE_ALLOW_ORIGIN: 'http://127.0.0.1' };
@@ -1086,7 +1100,10 @@ const server = http.createServer(async (req, res) => {
   // El bridge legado ejecutaba /restart sin validar método. Desde el controller
   // el reinicio es admin + POST-only, evitando que una navegación/GET lo dispare.
   if (p === '/restart' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); return json(res, 405, { ok: false, error: 'method not allowed' }); }
-  if (p === '/healthz') return json(res, 200, { ok: true, service: 'farm-controller', revision: BUILD_REVISION, uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, browserPairs:browserPairs.pairs.length, safetyUpdatedAt: safety.updatedAt || 0 });
+  if (p === '/healthz') {
+    const legacyReady=await probeLegacyAuth();
+    return json(res, 200, { ok: legacyReady, service: 'farm-controller', revision: BUILD_REVISION, legacyReady, legacyPid: legacy?.pid||0, uptime: Math.round(process.uptime()), queue: queue.jobs.filter(j => QUEUE_ACTIVE_STATES.has(String(j.state||''))).length, machines: registry.machines.length, operations:Object.keys(normalizeOperations(operations).machines).length, audits:audits.reports.length, auditPendingScans:auditScanSessions.size, browserPairs:browserPairs.pairs.length, safetyUpdatedAt: safety.updatedAt || 0 });
+  }
   if (p === '/authcheck') {
     const role = requireRole(req, res, 'viewer'); if (!role) return;
     return json(res, 200, { ok: true, role, auditApiVersion:AUDIT_API_VERSION, capabilities:{auditRun:ROLE_RANK[role]>=ROLE_RANK.operator,auditEvidence:ROLE_RANK[role]>=ROLE_RANK.operator,auditFindings:ROLE_RANK[role]>=ROLE_RANK.operator,realtimeWebSocket:true}, rolesEnabled: { viewer: !!TOKENS.viewer, operator: !!TOKENS.operator, admin: !!TOKENS.admin } }, { 'X-Farm-Role': role });

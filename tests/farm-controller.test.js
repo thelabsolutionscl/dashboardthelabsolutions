@@ -180,3 +180,13 @@ test('uploads grandes se streamean al bridge sin buffer completo',()=>{
   assert.match(proxy,/timeout: streamUpload \? 120_000 : 20_000/);
   assert.match(proxy,/if\(!streamUpload\)delete headers\['content-length'\]/);
 });
+
+
+test('healthz comprueba que el bridge interno acepta el token del Controller',()=>{
+  assert.match(source,/function probeLegacyAuth\(timeoutMs=1200\)/);
+  assert.match(source,/port:LEGACY_PORT,path:'\/authcheck'/);
+  assert.match(source,/'x-bridge-token':INTERNAL_TOKEN/);
+  assert.match(source,/const legacyReady=await probeLegacyAuth\(\)/);
+  assert.match(source,/ok: legacyReady/);
+  assert.match(source,/legacyReady, legacyPid: legacy\?\.pid\|\|0/);
+});
