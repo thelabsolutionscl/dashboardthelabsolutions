@@ -346,12 +346,15 @@ function normalizeAuditStore(raw){
 }
 function sanitizeAuditCost(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
-  const estimatedUsd=Math.max(0,Math.min(5,Number(raw.estimatedUsd)||0));
+  const finite=(v,max)=>Number.isFinite(Number(v))?Math.max(0,Math.min(max,Number(v))):0;
+  const estimatedUsd=finite(raw.estimatedUsd,5);
+  const provenance=raw.provenance==='proxy-budget-reservation'?'client-attested-proxy-budget-reservation':
+    raw.provenance==='partial-proxy-budget-reservation'?'client-attested-partial-proxy-budget-reservation':'unavailable';
   return{
-    currency:'USD',provenance:raw.provenance==='proxy-budget-reservation'?'client-attested-proxy-budget-reservation':'client-estimate',estimatedUsd:Number(estimatedUsd.toFixed(6)),
+    currency:'USD',provenance,estimatedUsd:Number(estimatedUsd.toFixed(6)),
     textModel:String(raw.textModel||'').slice(0,80),visionModel:String(raw.visionModel||'').slice(0,80),
-    textInputTokens:Math.max(0,Math.floor(Number(raw.textInputTokens)||0)),
-    textOutputTokens:Math.max(0,Math.floor(Number(raw.textOutputTokens)||0)),
+    textInputTokens:Math.floor(finite(raw.textInputTokens,5_000_000)),
+    textOutputTokens:Math.floor(finite(raw.textOutputTokens,1_000_000)),
     visionUsed:raw.visionUsed===true,
   };
 }
@@ -963,6 +966,7 @@ async function discoverLan() {
   await Promise.all(workers);
 }
 
+function decodeAuditPathPart(value){try{return decodeURIComponent(String(value||''));}catch(_){return'';}}
 const server = http.createServer(async (req, res) => {
   setCors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -999,7 +1003,8 @@ const server = http.createServer(async (req, res) => {
   const auditScan=p.match(/^\/farm\/audit-scan\/([^/]+)$/);
   if(auditScan&&req.method==='POST'){
     const role=requireRole(req,res,'operator');if(!role)return;
-    const machineId=decodeURIComponent(auditScan[1]),m=machineByIdentity({id:machineId});
+    const machineId=decodeAuditPathPart(auditScan[1]);if(!machineId)return json(res,400,{ok:false,error:'machineId inválido'});
+    const m=machineByIdentity({id:machineId});
     if(!m?.id||!isPrivateIp(m.ip))return json(res,404,{ok:false,error:'máquina no registrada o sin IP válida'});
     const scan=await requestLegacy('GET','/diagnostics/'+m.ip,null,{},45_000);
     if(!scan.ok)return json(res,502,{ok:false,error:'diagnóstico profundo no disponible',status:scan.status});
@@ -1026,7 +1031,8 @@ const server = http.createServer(async (req, res) => {
   const auditDetail=p.match(/^\/farm\/audits\/([^/]+)\/([^/]+)$/);
   if(auditDetail&&req.method==='GET'){
     const role=requireRole(req,res,'operator');if(!role)return;
-    const machineId=decodeURIComponent(auditDetail[1]),auditId=decodeURIComponent(auditDetail[2]);
+    const machineId=decodeAuditPathPart(auditDetail[1]),auditId=decodeAuditPathPart(auditDetail[2]);
+    if(!machineId||!auditId)return json(res,400,{ok:false,error:'identificador de auditoría inválido'});
     const report=await readAuditReport(machineId,auditId);
     if(!report||report.machineId!==machineId||report.id!==auditId)return json(res,404,{ok:false,error:'auditoría no encontrada'});
     return json(res,200,{ok:true,integrityValid:verifyAuditReport(report),report});
@@ -1035,14 +1041,16 @@ const server = http.createServer(async (req, res) => {
   const auditHistory=p.match(/^\/farm\/audits\/([^/]+)$/);
   if(auditHistory&&req.method==='GET'){
     const role=requireRole(req,res,'viewer');if(!role)return;
-    const machineId=decodeURIComponent(auditHistory[1]),limit=Math.max(1,Math.min(80,Number(u.searchParams.get('limit')||30)));
+    const machineId=decodeAuditPathPart(auditHistory[1]);if(!machineId)return json(res,400,{ok:false,error:'machineId inválido'});
+    const rawLimit=Number(u.searchParams.get('limit')||30),limit=Number.isFinite(rawLimit)?Math.max(1,Math.min(80,Math.floor(rawLimit))):30;
     const reports=audits.reports.filter(row=>row.machineId===machineId).slice(0,limit).map(row=>auditSummaryForRole(row,role));
     return json(res,200,{ok:true,version:2,updatedAt:audits.updatedAt,reports});
   }
   if(auditHistory&&req.method==='POST'){
     const role=requireRole(req,res,'operator');if(!role)return;
     try{
-      const machineId=decodeURIComponent(auditHistory[1]),m=machineByIdentity({id:machineId});
+      const machineId=decodeAuditPathPart(auditHistory[1]);if(!machineId)return json(res,400,{ok:false,error:'machineId inválido'});
+      const m=machineByIdentity({id:machineId});
       if(!m?.id)return json(res,404,{ok:false,error:'máquina no registrada'});
       const body=JSON.parse((await readBody(req,AUDIT_MAX_BODY)).toString('utf8')||'{}');
       const saved=await saveAuditRequest(machineId,body,role);
