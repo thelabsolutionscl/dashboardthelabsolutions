@@ -96,3 +96,19 @@ test('frontend secure mode always blocks fallback to public master key',()=>{
   assert.match(workflow,/vars\.PRINTER_CUTOVER_VERIFIED/);
   assert.match(workflow,/s\|%%PRINTER_TUNNEL_TOKEN%%\|\|g/);
 });
+
+
+test('legacy printer mode prefers an explicit session override and settings invalidates stale tickets',()=>{
+  const m=fs.readFileSync(path.join(root,'js/maquinas.js'),'utf8');
+  const settings=fs.readFileSync(path.join(root,'js/finanzas.js'),'utf8');
+  const start=m.indexOf('function _getPrinterTunnelLongToken()');
+  const end=m.indexOf('function getPrinterTunnelToken()',start);
+  const getLong=m.slice(start,end);
+  assert.match(getLong,/return local\|\|d;/,'el token introducido por el usuario debe ganar al secret horneado');
+  assert.match(m,/function setPrinterTunnelTokenOverride\(value\)/);
+  assert.match(m,/sessionStorage\.setItem\('printer_tunnel_token',token\)/);
+  assert.match(m,/_printerTunnelSessionToken='';_printerTunnelSessionExpires=0/,'cambiar token invalida tickets efímeros previos');
+  assert.match(settings,/setPrinterTunnelTokenOverride\(tk\)/,'Guardar debe aplicar el token a la fuente que realmente lee Máquinas');
+  assert.match(settings,/refreshPrinterTunnelSession\(changedToken\)/,'Guardar debe renovar sesión inmediatamente');
+  assert.match(m,/r\.status===401\|\|r\.status===403/,'el diagnóstico debe reconocer 403 del Farm Controller como fallo de token');
+});
