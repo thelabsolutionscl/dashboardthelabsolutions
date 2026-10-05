@@ -2667,19 +2667,25 @@ async function fetchPrinterAuditScan(machineId){
 }
 async function updatePrinterAuditPermission(machineId){
   const btn=input('mopsAuditBtn-'+machineId);if(!btn)return false;
-  btn.disabled=true;btn.title='Verificando permiso del Farm Controller…';
+  btn.disabled=true;btn.title='Verificando permiso y versión del Farm Controller…';
   try{if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(false);}catch(_){}
-  const role=_printerAuditRole(),ok=['operator','admin'].includes(role);
+  const role=_printerAuditRole(),info=await _printerAuditBackendInfo(),versionOk=Number(info?.auditApiVersion||0)>=PRINTER_AUDIT_API_VERSION;
+  const canRole=['operator','admin'].includes(role),ok=canRole&&(versionOk||role==='admin');
   btn.style.display=role==='viewer'?'none':'';
-  btn.disabled=!ok;btn.title=ok?'Escaneo integral con IA y evidencia técnica':role==='viewer'?'Tu rol puede consultar resúmenes, pero no ejecutar auditorías':'No hay sesión operativa válida con el Farm Controller';
+  btn.disabled=!ok;
+  btn.title=role==='viewer'?'Tu rol puede consultar resúmenes, pero no ejecutar auditorías':
+    !canRole?'No hay sesión operativa válida con el Farm Controller':
+    !versionOk&&role==='admin'?'El primer clic actualizará el Controller a Auditoría V3':
+    !versionOk?'Auditoría V3 requiere actualización por un administrador':'Escaneo integral con IA y evidencia técnica';
   return ok;
 }
 async function updateFleetAuditPermission(){
   const btn=input('mopsFleetAuditBtn');if(!btn)return false;
   try{if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(false);}catch(_){}
-  const role=_printerAuditRole(),ok=['operator','admin'].includes(role);
+  const role=_printerAuditRole(),info=await _printerAuditBackendInfo(),versionOk=Number(info?.auditApiVersion||0)>=PRINTER_AUDIT_API_VERSION;
+  const canRole=['operator','admin'].includes(role),ok=canRole&&(versionOk||role==='admin');
   btn.style.display=role==='viewer'?'none':'';btn.disabled=!ok;
-  btn.title=ok?'Auditar toda la granja de forma secuencial':'Se requiere rol operator/admin';
+  btn.title=!canRole?'Se requiere rol operator/admin':!versionOk&&role==='admin'?'El primer scan actualizará el Controller a Auditoría V3':!versionOk?'Auditoría V3 requiere actualización por un administrador':'Auditar toda la granja de forma secuencial';
   return ok;
 }
 function _printerAuditRegistryRow(machineId){
