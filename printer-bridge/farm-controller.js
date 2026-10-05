@@ -237,9 +237,10 @@ function loadOrCreateAuditSealKey(){
   if(env)return Buffer.from(env,'utf8');
   const file=path.join(DATA_DIR,'.audit-seal-key');
   try{const v=fs.readFileSync(file,'utf8').trim();if(v)return Buffer.from(v,'utf8');}catch(_){}
-  const generated=crypto.randomBytes(32).toString('base64url');
-  try{fs.writeFileSync(file,generated+'\n',{mode:0o600});return Buffer.from(generated,'utf8');}
-  catch(e){console.warn('[audits] no se pudo persistir seal key; usando derivación estable del master token:',e.message);return crypto.createHash('sha256').update('audit-seal:'+MASTER_TOKEN).digest();}
+  const generated=crypto.createHash('sha256').update('audit-seal:'+MASTER_TOKEN).digest('base64url');
+  try{fs.writeFileSync(file,generated+'\n',{mode:0o600});}
+  catch(e){console.warn('[audits] no se pudo persistir seal key; usando derivación estable del master token:',e.message);}
+  return Buffer.from(generated,'utf8');
 }
 const AUDIT_SEAL_KEY=loadOrCreateAuditSealKey();
 function auditSealPayload(report){
@@ -253,6 +254,23 @@ function auditSealPayload(report){
 }
 function auditSealHash(report){
   return crypto.createHmac('sha256',AUDIT_SEAL_KEY).update(JSON.stringify(auditSealPayload(report))).digest('hex');
+}
+function auditScanSealPayload(row){
+  return{scanId:row.scanId,machineId:row.machineId,evidenceHash:row.evidenceHash,expiresAt:Number(row.expiresAt||0)};
+}
+function auditScanSeal(row){
+  return crypto.createHmac('sha256',AUDIT_SEAL_KEY).update(JSON.stringify(auditScanSealPayload(row))).digest('hex');
+}
+function recoverAuditScanEnvelope(machineId,body,submittedEvidence){
+  const scanId=String(body?.scanId||''),evidenceHash=String(body?.scanEvidenceHash||''),expiresAt=Number(body?.scanExpiresAt||0),seal=String(body?.scanSeal||'');
+  if(!scanId||!evidenceHash||!expiresAt||expiresAt<=Date.now()||!/^[a-f0-9]{64}$/i.test(seal))return null;
+  const diagnostics=compactAuditScanCore(submittedEvidence?.scan||{});
+  if(auditHash(diagnostics)!==evidenceHash)return null;
+  const row={scanId,machineId,role:'recovered',diagnostics,evidenceHash,createdAt:'',expiresAt};
+  const expected=auditScanSeal(row);
+  const aa=Buffer.from(seal),bb=Buffer.from(expected);
+  if(aa.length!==bb.length||!crypto.timingSafeEqual(aa,bb))return null;
+  return row;
 }
 function auditByteLength(value){return Buffer.byteLength(JSON.stringify(value??null),'utf8');}
 function compactAuditScanCore(value){
@@ -362,6 +380,7 @@ function issueAuditScan(machineId,diagnostics,role){
   purgeAuditScanSessions();
   const scanId=uid('scan'),core=compactAuditScanCore(diagnostics);
   const row={scanId,machineId,role,diagnostics:core,evidenceHash:auditHash(core),createdAt:nowIso(),expiresAt:Date.now()+AUDIT_SCAN_TTL_MS};
+  row.scanSeal=auditScanSeal(row);
   auditScanSessions.set(scanId,row);return row;
 }
 function sanitizeAuditReport(machineId,body={},role='operator'){
@@ -369,11 +388,11 @@ function sanitizeAuditReport(machineId,body={},role='operator'){
   if(!idMachine||idMachine.length>120)throw new Error('machineId inválido');
   purgeAuditScanSessions();
   const scanId=String(body.scanId||'');
-  const scan=auditScanSessions.get(scanId);
-  if(!scan||scan.machineId!==idMachine)throw new Error('escaneo de auditoría inválido o expirado');
+  const submittedEvidence=body.evidence&&typeof body.evidence==='object'&&!Array.isArray(body.evidence)?auditJsonClone(body.evidence,AUDIT_MAX_EVIDENCE):{};
+  const scan=auditScanSessions.get(scanId)||recoverAuditScanEnvelope(idMachine,body,submittedEvidence);
+  if(!scan||scan.machineId!==idMachine)throw new Error('escaneo de auditoría inválido, expirado o no verificable');
   const createdAt=nowIso(),id=uid('audit');
   const requestId=/^[A-Za-z0-9_.:-]{8,180}$/.test(String(body.requestId||''))?String(body.requestId):('req-'+scanId);
-  const submittedEvidence=body.evidence&&typeof body.evidence==='object'&&!Array.isArray(body.evidence)?auditJsonClone(body.evidence,AUDIT_MAX_EVIDENCE):{};
   submittedEvidence.scan=scan.diagnostics;
   const evidence=auditJsonClone(submittedEvidence,AUDIT_MAX_EVIDENCE);
   const result=normalizeAuditResult(body.result,createdAt);
@@ -536,6 +555,7 @@ async function saveAuditRequest(machineId,body,role){
     if(existing){
       const report=await readAuditReport(machineId,existing.id);
       if(!report||!verifyAuditReport(report)){const error=new Error('auditoría idempotente existente sin detalle íntegro');error.statusCode=409;throw error;}
+      if(rawScan&&report.scanId!==rawScan){const error=new Error('requestId ya utilizado por otro escaneo');error.statusCode=409;throw error;}
       return{report,summary:existing,idempotent:true};
     }
     const report=sanitizeAuditReport(machineId,{...body,requestId},role);
@@ -985,7 +1005,7 @@ const server = http.createServer(async (req, res) => {
       const diagnostics=JSON.parse(scan.body.toString('utf8')||'{}');
       const sessionDiagnostics={...diagnostics};delete sessionDiagnostics.cameraFrame;
       const issued=issueAuditScan(machineId,sessionDiagnostics,role);
-      return json(res,200,{ok:true,scanId:issued.scanId,scanEvidenceHash:issued.evidenceHash,expiresAt:issued.expiresAt,machine:{id:m.id,ip:m.ip,name:m.name||m.nombre||'',model:m.model||m.modelo||''},diagnostics});
+      return json(res,200,{ok:true,scanId:issued.scanId,scanEvidenceHash:issued.evidenceHash,scanExpiresAt:issued.expiresAt,scanSeal:issued.scanSeal,machine:{id:m.id,ip:m.ip,name:m.name||m.nombre||'',model:m.model||m.modelo||''},diagnostics});
     }catch(e){return json(res,502,{ok:false,error:'respuesta de diagnóstico inválida'});}
   }
 
@@ -1178,5 +1198,5 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
   start();
 }
-module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
+module.exports = { isPrivateIp, normalizeQueue, recoverQueueJobs, samePrintFilename, bedSignatureFromPrintStats, normalizeRegistry, normalizeOperations, sanitizeOperation, normalizeAuditStore, sanitizeAuditReport, pruneAuditReports, auditSummaryFromReport, auditSummaryForRole, auditResultSummary, auditReportPath, auditLegacyReportPath, auditHash, auditSealHash, auditScanSeal, recoverAuditScanEnvelope, deriveAuditSourceMatrix, compactAuditScanCore, issueAuditScan, purgeAuditScanSessions, readAuditReport, verifyAuditReport, saveAuditReport, saveAuditRequest, cleanupAuditOrphans, updateAuditFinding, updateFarmController, roleForToken, routeMinimumRole, cleanJobMetadata, payloadPath, readPayload, writePayload, deletePayload, issueSession, purgeSessions, start,
   normalizeSafetySnapshot: SafetyPolicy.normalizeSnapshot, evaluateSafetySnapshot: SafetyPolicy.evaluateSnapshot, jobIsUnattended: SafetyPolicy.jobIsUnattended };
