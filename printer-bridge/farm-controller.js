@@ -735,6 +735,7 @@ function proxyLegacyUpgrade(req,clientSocket,head){
   upstream.setTimeout(15_000,()=>upstream.destroy(new Error('legacy websocket timeout')));
   upstream.on('upgrade',(proxyRes,upstreamSocket,upstreamHead)=>{
     settled=true;
+    upstream.setTimeout(0);upstreamSocket.setTimeout(0);
     const raw=Array.isArray(proxyRes.rawHeaders)?proxyRes.rawHeaders:[];
     const lines=[`HTTP/1.1 ${proxyRes.statusCode||101} ${proxyRes.statusMessage||'Switching Protocols'}`];
     for(let i=0;i<raw.length;i+=2)lines.push(raw[i]+': '+raw[i+1]);
