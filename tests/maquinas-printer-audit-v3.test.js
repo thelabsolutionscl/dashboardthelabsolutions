@@ -209,3 +209,17 @@ test('el frontend conserva el scan firmado intacto al compactar evidencia para h
   assert.match(OPS,/scanEvidenceHash:remote\.scanEvidenceHash/);
   assert.match(OPS,/scanSeal:remote\.scanSeal/);
 });
+
+
+test('un scan firmado sólo puede producir un informe durable',async()=>{
+  const machine='scan-replay-machine',first=bodyFor(machine,'auditreq-scan-first-123456');
+  await farm.saveAuditRequest(machine,first,'operator');
+  const replay={...first,requestId:'auditreq-scan-second-123456'};
+  await assert.rejects(farm.saveAuditRequest(machine,replay,'operator'),/escaneo ya utilizado/);
+});
+
+test('un operator no queda habilitado contra un backend anterior a V3',()=>{
+  assert.match(OPS,/versionOk=Number\(info\?\.auditApiVersion\|\|0\)>=PRINTER_AUDIT_API_VERSION/);
+  assert.match(OPS,/versionOk\|\|role==='admin'/);
+  assert.match(OPS,/Auditoría V3 requiere actualización por un administrador/);
+});
