@@ -32,11 +32,12 @@ test('dashboard consume el fragmento local sin enviarlo al servidor web',()=>{
   assert.match(MAQ,/location\.hash/);
   assert.match(MAQ,/localStorage\.setItem\('printer_device_token',token\)/);
   assert.match(MAQ,/history\.replaceState\(null,'',clean\)/);
-  assert.match(MAQ,/return paired\|\|local\|\|d/,'el dispositivo emparejado debe ganar a secretos legacy');
+  assert.match(MAQ,/return local\|\|paired\|\|d/,'el pairing debe ser persistente, pero un override temporal de sesión debe poder ganar para diagnóstico');
 });
 
 test('script de emparejamiento valida el Controller, se autorepara y abre la URL final',()=>{
-  assert.match(PAIR,/http:\/\/127\.0\.0\.1:\$\{PORT\}\/farm\/local-pair/);
+  assert.match(PAIR,/BASE="http:\/\/127\.0\.0\.1:\$\{PORT\}"/);
+  assert.match(PAIR,/PAIR_URL="\$\{BASE\}\/farm\/local-pair"/);
   assert.match(PAIR,/'"service":"farm-controller"'/,'no basta con que cualquier proceso responda healthz');
   assert.match(PAIR,/install-farm-controller\.sh/,'debe reparar launchd si 8347 sirve el proceso equivocado o stale');
   assert.match(PAIR,/--max-redirs 0/,'debe capturar la redirección local sin entregar la credencial a curl remoto');
