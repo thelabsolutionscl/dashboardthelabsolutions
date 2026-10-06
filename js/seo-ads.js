@@ -911,14 +911,8 @@ function saveCampaignMutation(){
       return;
     }
   }
-  // Cascarón automático vía Make: crea la campaña real en Google Ads (pausada,
-  // con la declaración UE); el Script 2 la completará al procesar esta orden.
-  if(op==='create'&&ADS_MAKE_SHELL.url&&!window._DEMO_MODE){
-    const qs='?clave='+encodeURIComponent(ADS_MAKE_SHELL.clave)+'&nombre='+encodeURIComponent(data.nombre)+'&presupuesto='+(data.presupuesto||1000);
-    fetch(ADS_MAKE_SHELL.url+qs,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({clave:ADS_MAKE_SHELL.clave,nombre:data.nombre,presupuesto:data.presupuesto||1000})})
-      .then(r=>{if(r.ok)toast('✓ Cascarón pedido a Make — el Script 2 completará la campaña en su próxima corrida','success');else toast('Make respondió '+r.status+' al pedir el cascarón — si la campaña no aparece, créala a mano','info');})
-      .catch(()=>toast('No se pudo contactar el webhook de Make — crea el cascarón a mano si no existe','info'));
-  }
+  // Para CREATE, el Proxy confirma primero la cola de mutaciones y solo
+  // después solicita el cascarón a Make con credenciales server-side.
   const mutation={op,id,data,timestamp:new Date().toISOString(),status:'pending'};
   closeAdsCampaignModal();
   _adsQueueMutation(mutation);
@@ -1045,25 +1039,19 @@ function confirmDeleteCampaign(){
 // Purga del servidor (Script 1) las mutaciones ya resueltas; conserva las pendientes.
 // El almacén crece para siempre (errores viejos, duplicados) y ensucia el diagnóstico.
 async function adsLimpiarHistorialMutaciones(){
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint){toast('No hay endpoint configurado','error');return;}
-  if(!cfg.secret){toast('Configura el secreto de mutaciones de Google Ads','error');return;}
   try{
-    const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
-    const d=await r.json();
-    const todas=(d&&d.mutations)||[];
+    const d=await _adsProxyFetch('/ads/mutations',{method:'GET'});
+    const todas=Array.isArray(d.mutations)?d.mutations:[];
     const pendientes=todas.filter(m=>m.status==='pending');
     const resueltas=todas.length-pendientes.length;
     if(!resueltas){toast('No hay mutaciones resueltas que limpiar','info');return;}
-    if(!confirm(`Se eliminarán ${resueltas} mutaciones ya resueltas (aplicadas o con error) del historial del servidor. Se conservan las ${pendientes.length} pendientes. ¿Continuar?`)) return;
-    const res=await fetch(cfg.endpoint,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({secret:cfg.secret,type:'update_mutations',mutations:pendientes})});
-    const dr=await res.json().catch(()=>({}));
-    if(dr&&dr.ok){
-      _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='pending'||m.status==='enviado');
-      savePendingToStorage();renderPendingMutations();
-      toast('✓ Historial limpio — '+resueltas+' eliminadas, '+pendientes.length+' pendientes conservadas','success');
-    } else toast('No se pudo limpiar: '+((dr&&dr.error)||'el servidor no respondió ok'),'error');
-  }catch(e){toast('Error limpiando historial: '+e.message,'error');}
+    if(!confirm(`Se eliminarán ${resueltas} mutaciones ya resueltas del historial del servidor. Se conservan ${pendientes.length} pendientes. ¿Continuar?`))return;
+    await _adsProxyFetch('/ads/mutations',{method:'PUT',
+      body:JSON.stringify({mutations:pendientes})});
+    _adsPendingMutations=_adsPendingMutations.filter(m=>m.status==='pending'||m.status==='enviado');
+    savePendingToStorage();renderPendingMutations();
+    toast('✓ Historial limpio — '+resueltas+' eliminadas','success');
+  }catch(e){toast('No se pudo limpiar el historial: '+e.message,'error');}
 }
 
 // ─── Piloto automático (propuestas semanales del Worker) ────
@@ -1244,57 +1232,54 @@ async function adsDiagnostico(){
   out.innerHTML=lines.map(l=>`<div style="margin-bottom:4px;font-size:11px">${l}</div>`).join('');
 }
 
-function sendAdsMutation(mutation){
+async function sendAdsMutation(mutation){
   if(_adsIsReadOnly()){
     mutation.status='demo';mutation.error='';savePendingToStorage();renderPendingMutations();
     toast('Cambio simulado: no se envió nada a Google Ads','success');return;
   }
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint){mutation.status='error';mutation.error='No hay endpoint configurado';savePendingToStorage();renderPendingMutations();return;}
-  if(!cfg.secret){mutation.status='error';mutation.error='Configura el secreto de mutaciones';savePendingToStorage();renderPendingMutations();return;}
-  // text/plain evita el CORS preflight que bloquea los POSTs a Google Apps Script
-  fetch(cfg.endpoint,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify({secret:cfg.secret,type:'mutation',...mutation})
-  }).then(r=>r.json()).then(d=>{
-    if(d&&d.ok){mutation.status='enviado';mutation.error='';}
-    else{mutation.status='error';mutation.error=(d&&d.error)||'El servidor rechazó la mutación';}
-    savePendingToStorage();
-    renderPendingMutations();
-  }).catch(()=>{
-    mutation.status='error';mutation.error='Sin conexión con el endpoint (se reintentará al guardar de nuevo)';
-    savePendingToStorage();
-    renderPendingMutations();
-  });
+  try{
+    const d=await _adsProxyFetch('/ads/mutation',{method:'POST',
+      body:JSON.stringify({mutation:{...mutation,status:'pending'}})});
+    mutation.status='enviado';mutation.error='';
+    if(mutation.op==='create'&&d.shell==='created')
+      toast('✓ Cambio en cola y cascarón solicitado a Make','success');
+  }catch(e){
+    mutation.status='error';
+    mutation.error=e.code==='ADS_MUTATION_PENDING_RECONCILIATION'
+      ?'Resultado incierto: no reintentes a ciegas; verifica el historial'
+      :e.code==='ADS_SHELL_PENDING_RECONCILIATION'
+        ?'La mutación quedó en cola, pero Make tiene resultado incierto'
+        :(e.message||'No se pudo enviar la mutación');
+  }
+  savePendingToStorage();
+  renderPendingMutations();
 }
 
 // Sincroniza el estado de las mutaciones desde el servidor (Script 1) — refleja lo que el Script 2 aplicó
 async function syncMutationStatuses(){
-  if(window._DEMO_MODE)return;
-  const cfg=getAdsConfig();
-  if(!cfg.endpoint||!_adsPendingMutations.length) return;
+  if(window._DEMO_MODE||!_adsPendingMutations.length)return;
   try{
-    const r=await fetch(cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now());
-    const d=await r.json();
-    if(!d.ok||!Array.isArray(d.mutations)) return;
+    const d=await _adsProxyFetch('/ads/mutations',{method:'GET'});
+    if(!d.ok||!Array.isArray(d.mutations))return;
     let aplicadas=0,errores=0,changed=false;
     _adsPendingMutations.forEach(m=>{
-      const srv=d.mutations.find(s=>s.timestamp===m.timestamp);
+      const srv=d.mutations.find(x=>x.timestamp===m.timestamp);
       if(srv&&srv.status&&srv.status!=='pending'&&m.status!==srv.status){
         m.status=srv.status;m.error=srv.error||'';changed=true;
-        if(srv.status==='aplicado') aplicadas++;
-        if(srv.status==='error') errores++;
+        if(srv.status==='aplicado')aplicadas++;
+        if(srv.status==='error')errores++;
       }
     });
     if(changed){
       _adsPendingMutations=_adsPendingMutations.filter(m=>m.status!=='aplicado');
-      savePendingToStorage();
-      renderPendingMutations();
-      if(aplicadas) toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
-      if(errores) toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa el detalle en Cambios pendientes','error');
+      savePendingToStorage();renderPendingMutations();
+      if(aplicadas)toast('✓ '+aplicadas+' cambio'+(aplicadas>1?'s':'')+' aplicado'+(aplicadas>1?'s':'')+' en Google Ads','success');
+      if(errores)toast('⚠ '+errores+' mutación'+(errores>1?'es':'')+' con error — revisa el detalle','error');
     }
-  }catch(e){}
+  }catch(e){
+    if(e.status===401||e.status===403||e.code==='ACCESS_REQUIRED')
+      console.warn('[Ads] historial de mutaciones requiere sesión admin de Access');
+  }
 }
 
 function renderPendingMutations(){
