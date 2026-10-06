@@ -1147,7 +1147,10 @@ async function adsAutopilotDecide(i,aprobar){
     const cfg=_airtableConfig();
     const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue/${p.id}`,{headers:cfg.headers});
     if(r.ok){const rec=await r.json();if((rec.fields?.Estado||'')!=='Pendiente'){toast('Esta propuesta ya fue procesada ('+(rec.fields?.Estado||'—')+')','info');renderAdsAutopilot();return;}}
-  }catch(e){}
+  }catch(e){
+    toast('No se pudo revalidar la propuesta; no se aplicó ningún cambio','error');
+    return;
+  }
   if(aprobar){
     if(!confirm(`¿Aprobar ${p.mutaciones.length} cambio(s) del piloto? Se aplicarán en Google Ads en la próxima corrida del Script 2.`)) return;
     // Reserva primero. Si el cierre posterior falla queda Procesando y una
