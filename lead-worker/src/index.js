@@ -3189,9 +3189,23 @@ async function apGatherSignals(env) {
   eventos.forEach((e) => { if (e.fields?.tipo === "uso" && ids3d.includes(e.fields?.maquina_id)) enUso3d++; });
   const occ3d = ids3d.length ? Math.min(Math.round((enUso3d / slots) * 100), 100) : null;
 
-  // Ocupación general: pedidos activos (proxy, igual que el dashboard)
-  const activos = pedidos.filter((p) => !["Despachado", "Cancelado"].includes(p.fields?.["Estado pedido"] || "")).length;
+  // Ocupación no-3D por línea real: usa el servicio del cliente vinculado,
+  // nunca el backlog global de otra categoría. El total queda solo como contexto.
+  const activosRows = pedidos.filter((p) => !["Despachado", "Completado", "Cancelado"].includes(p.fields?.["Estado pedido"] || ""));
+  const activos = activosRows.length;
+  const activosPorServicio = Object.create(null);
+  for (const p of activosRows) {
+    const cid = Array.isArray(p.fields?.Cliente) ? p.fields.Cliente[0] : null;
+    const svc = cid ? servicioDeCliente[cid] : "";
+    if (svc) activosPorServicio[svc] = (activosPorServicio[svc] || 0) + 1;
+  }
   const occGeneral = Math.min(Math.round((activos / 20) * 100), 100);
+  const ocupacionLinea = (l) => {
+    if (l.slug === "impresion-3d" && occ3d != null) return occ3d;
+    const n = activosPorServicio[apNorm(l.nombre)] || 0;
+    const capacidad = ["carteleria","premiaciones","merchandising","papeleria"].includes(l.slug) ? 8 : 10;
+    return Math.min(Math.round((n / capacidad) * 100), 100);
+  };
 
   const porLinea = apMatchCampaigns(ads.campanas);
   const lineas = AP_LINEAS.map((l) => {
@@ -3215,7 +3229,7 @@ async function apGatherSignals(env) {
     const camp = porLinea[l.slug] || null;
     return {
       slug: l.slug, nombre: l.nombre,
-      ocupacion: l.slug === "impresion-3d" && occ3d != null ? occ3d : occGeneral,
+      ocupacion: ocupacionLinea(l),
       leads28, revenue28, pedidos28,
       camp: camp ? {
         id: String(camp.id), nombre: camp.nombre, estado: camp.estado,
