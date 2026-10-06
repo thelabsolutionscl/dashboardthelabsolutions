@@ -2733,7 +2733,14 @@ export class CrmMutationGuard {
   async _handleVisualAiGuard(request){
     if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
     let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid visual job'},422);}
-    if(!visualAiActorAllowed(p?.actor)||typeof p.jobId!=='string'||!/^[A-Za-z0-9_-]{10,100}$/.test(p.jobId))
+    if(!visualAiActorAllowed(p?.actor))
+      return this._json({error:'Visual job denied'},403);
+    const max=Math.max(1,Math.min(200,Number(this.env.VISUAL_AI_DAILY_LIMIT)||VISUAL_AI_MAX_GENERATIONS_PER_DAY));
+    if(p.op==='quota'){
+      const day=aiChileDate(),count=Math.max(0,Number(await this.state.storage.get('visual-count:'+day))||0);
+      return this._json({ok:true,used:count,limit:max,remaining:Math.max(0,max-count)},200);
+    }
+    if(typeof p.jobId!=='string'||!/^[A-Za-z0-9_-]{10,100}$/.test(p.jobId))
       return this._json({error:'Visual job denied'},403);
     const key='visual-job:'+p.jobId;
     if(p.op==='reserve'){
@@ -2743,7 +2750,6 @@ export class CrmMutationGuard {
       if(existing)return this._json({error:'Visual job result uncertain; do not duplicate',code:'VISUAL_JOB_PENDING'},409);
       const day=aiChileDate(),counterKey='visual-count:'+day;
       const count=Math.max(0,Number(await this.state.storage.get(counterKey))||0);
-      const max=Math.max(1,Math.min(200,Number(this.env.VISUAL_AI_DAILY_LIMIT)||VISUAL_AI_MAX_GENERATIONS_PER_DAY));
       if(count>=max)return this._json({error:'Visual AI daily quota reached',code:'VISUAL_AI_QUOTA',used:count,limit:max},429);
       await this.state.storage.put(key,{endpoint:p.endpoint,actor:p.actor.email,createdAt:Date.now(),committed:false});
       await this.state.storage.put(counterKey,count+1);
@@ -3436,9 +3442,15 @@ export default {
 
       if(body.action==='quota'){
         if(!env.CRM_MUTATION_GUARD)return json({error:'Visual AI quota guard unavailable'},503,headers);
-        // Only report configured daily cap; exact used count is returned on reserve.
-        const limit=Math.max(1,Math.min(200,Number(env.VISUAL_AI_DAILY_LIMIT)||VISUAL_AI_MAX_GENERATIONS_PER_DAY));
-        return json({ok:true,provider:'MuAPI via TLS secure proxy',daily_limit:limit},200,headers);
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-visual-ai-global'));
+        let gate;
+        try{gate=await stub.fetch('https://crm-write.internal/visual-ai-guard',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({op:'quota',actor:{email:authorized.identity.email,role:authorized.identity.role}})});}
+        catch(_){return json({error:'Visual AI quota guard unavailable'},503,headers);}
+        const q=await gate.json().catch(()=>({}));
+        if(!gate.ok)return json({error:'Visual AI quota unavailable'},503,headers);
+        return json({ok:true,provider:'MuAPI via TLS secure proxy',
+          daily_limit:q.limit,used:q.used,remaining:q.remaining,estimated_cost_usd:null},200,headers);
       }
 
       if(body.action==='upload'){
