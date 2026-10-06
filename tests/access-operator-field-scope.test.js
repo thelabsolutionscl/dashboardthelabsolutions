@@ -39,7 +39,10 @@ test('operator can see legitimate business totals, not margins, bank details or 
     Clientes:['Empresa','Teléfono','Email','Pedidos','Cotizaciones'],
     Cotizaciones:['N° Cotización','Subtotal (CLP)','Total final (CLP)','Cliente','Pedido'],
     Pedidos:['N° Pedido','Estado pedido','Monto total (CLP)','Cliente','Cotizaciones'],
-    Proveedores:['Nombre','Email','WhatsApp','Estado']
+    Proveedores:['Nombre','Email','WhatsApp','Estado'],
+    Maquinas:['id','nombre','modelo','estado','ip','cam'],
+    Maquinas_Eventos:['maquina_id','fecha','tipo','desc','tiempo','pedido_id'],
+    Maquinas_Mant:['maquina_id','tipo','notas','print_hours','fecha','ts']
   };
   const forbidden={
     Clientes:['Datos pago / banco','Facturas vencidas',
@@ -48,7 +51,10 @@ test('operator can see legitimate business totals, not margins, bank details or 
     Pedidos:['Costo real total (CLP)','Costo material real (CLP)',
       'Costo mano de obra (CLP)','Análisis FINANCE_AGENT',
       'N° documento tributario','Factura URL','Monto abono (CLP)'],
-    Proveedores:['Condiciones de pago','RUT','Notas']
+    Proveedores:['Condiciones de pago','RUT','Notas'],
+    Maquinas:['WA: estado notificado','FutureMachineSecret'],
+    Maquinas_Eventos:['FutureEventSecret'],
+    Maquinas_Mant:['FutureMaintenanceSecret']
   };
   for(const [table,fields] of Object.entries(required))
     for(const field of fields)
@@ -57,7 +63,8 @@ test('operator can see legitimate business totals, not margins, bank details or 
     for(const field of fields)
       assert.equal(OPERATOR_READ_FIELDS[table].has(field),false,table+' '+field);
   assert.deepEqual([...Object.keys(OPERATOR_READ_FIELDS)].sort(),
-    ['Clientes','Cotizaciones','Pedidos','Proveedores'].sort());
+    ['Clientes','Cotizaciones','Pedidos','Proveedores',
+      'Maquinas','Maquinas_Eventos','Maquinas_Mant'].sort());
   assert.equal(VIEWER_READ_FIELDS.Cotizaciones.has('Total final (CLP)'),false);
   assert.equal(OPERATOR_READ_FIELDS.Cotizaciones.has('Total final (CLP)'),true);
 });
@@ -66,7 +73,10 @@ test('operator company-wide lists have reviewed projections and upstream field f
     ['Clientes','Empresa','Datos pago / banco'],
     ['Cotizaciones','Total final (CLP)','Margen real (%)'],
     ['Pedidos','Monto total (CLP)','Costo real total (CLP)'],
-    ['Proveedores','Nombre','Condiciones de pago']
+    ['Proveedores','Nombre','Condiciones de pago'],
+    ['Maquinas','ip','WA: estado notificado'],
+    ['Maquinas_Eventos','pedido_id','FutureEventSecret'],
+    ['Maquinas_Mant','notas','FutureMaintenanceSecret']
   ]){
     const f=fixture({records:[record({[shown]:'business',
       [privateField]:'private',FutureUnknown:'unreviewed'})],
@@ -119,4 +129,26 @@ test('admin unaffected and signed operator may still read machine runtime in its
   assert.equal(runtime.status,200);
   assert.equal(f.calls.filter(c=>[base+'Clientes',base+'Maquinas']
     .includes(new URL(c.url).pathname)).length,2);
+});
+
+test('operator machine reads expose reviewed operations only and reject query side channels',async()=>{
+  const f=fixture({records:[record({
+    id:'k1-1',nombre:'Creality K1',estado:'disponible',ip:'192.168.100.51',
+    cam:'http://192.168.100.51:8080/?action=stream',
+    'WA: estado notificado':'mantencion',FutureMachineSecret:'private'
+  })]});
+  const x=await f.run(base+'Maquinas');
+  assert.equal(x.status,200);
+  assert.equal(x.body.records[0].fields.ip,'192.168.100.51');
+  assert.equal(x.body.records[0].fields.cam,'http://192.168.100.51:8080/?action=stream');
+  assert.equal(x.body.records[0].fields['WA: estado notificado'],undefined);
+  assert.equal(x.body.records[0].fields.FutureMachineSecret,undefined);
+  const upstreamFields=new URL(f.calls[0].url).searchParams.getAll('fields[]');
+  assert.equal(upstreamFields.includes('WA: estado notificado'),false);
+
+  const blocked=fixture({records:[]});
+  const q=await blocked.run(base+'Maquinas?filterByFormula='+encodeURIComponent(
+    "{WA: estado notificado}!=''"));
+  assert.equal(q.status,422);
+  assert.equal(blocked.calls.length,0);
 });

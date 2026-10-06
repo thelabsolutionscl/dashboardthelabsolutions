@@ -21,9 +21,17 @@ const ACCESS_VIEWER_TABLES=new Set([
   'Maquinas_Eventos','Maquinas_Mant'
 ]);
 const ACCESS_WRITE_TABLES={
-  operator:new Set(['Clientes','Cotizaciones','Pedidos','Maquinas','Maquinas_Eventos','Maquinas_Mant','Proveedores']),
   finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas','Proveedores','Reportes']),
 };
+const ACCESS_OPERATOR_WRITE_METHODS=Object.freeze({
+  Clientes:new Set(['POST','PATCH']),
+  Cotizaciones:new Set(['POST','PATCH']),
+  Pedidos:new Set(['POST','PATCH']),
+  Proveedores:new Set(['POST','PATCH']),
+  Maquinas:new Set(['PATCH']),
+  Maquinas_Eventos:new Set(['POST','PATCH']),
+  Maquinas_Mant:new Set(['POST'])
+});
 const ACCESS_FINANCE_TABLES=new Set([
   'Facturas','Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones',
   'Presupuestos','Prestamos','Préstamos','Ventas','Caja','Reportes'
@@ -296,8 +304,7 @@ function accessAllows(identity,method,path){
   if(admin)return ['POST','PATCH','DELETE'].includes(method);
   // No destructive permissions for operational staff. CRM and supplier
   // POST/PATCH also require a separate server-side field/type guard.
-  if(operator)return ['POST','PATCH'].includes(method)&&
-    ACCESS_WRITE_TABLES.operator.has(table);
+  if(operator)return ACCESS_OPERATOR_WRITE_METHODS[table]?.has(method)===true;
   return ['POST','PATCH','DELETE'].includes(method)&&
     !!ACCESS_WRITE_TABLES[identity.role]?.has(table);
 }
