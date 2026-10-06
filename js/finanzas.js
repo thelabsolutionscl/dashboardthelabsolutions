@@ -139,7 +139,8 @@ function _finSharedSnapshotLocal(){
     cobranza:_finJsonLocal(typeof _COB_LOG_KEY!=='undefined'?_COB_LOG_KEY:'thelab_cob_log_v1',{}),
     costosFijos:Number(localStorage.getItem(typeof _COSTOS_FIJOS_KEY!=='undefined'?_COSTOS_FIJOS_KEY:'thelab_costos_fijos_v1'))||0,
     comisionCfg:{rate:Number(cfg?.rate)>=0?Number(cfg.rate):3.5,base:cfg?.base==='utilidad'?'utilidad':'venta'},
-    metasVendedor:_finJsonLocal(typeof _META_VEND_KEY!=='undefined'?_META_VEND_KEY:'thelab_meta_vendedor_v1',{})
+    metasVendedor:_finJsonLocal(typeof _META_VEND_KEY!=='undefined'?_META_VEND_KEY:'thelab_meta_vendedor_v1',{}),
+    plazoDefault:Math.max(0,Math.min(365,parseInt(localStorage.getItem('fin_plazo_default'))||30))
   };
 }
 function _finSharedApplyLocal(doc){
@@ -157,6 +158,7 @@ function _finSharedApplyLocal(doc){
     localStorage.setItem('thelab_costos_fijos_v1',String(Number(doc.costosFijos)||0));
     localStorage.setItem('thelab_comision_cfg_v1',JSON.stringify(doc.comisionCfg||{rate:3.5,base:'venta'}));
     localStorage.setItem('thelab_meta_vendedor_v1',JSON.stringify(doc.metasVendedor||{}));
+    localStorage.setItem('fin_plazo_default',String(Math.max(0,Math.min(365,parseInt(doc.plazoDefault)||30))));
     return true;
   }catch(_){return false;}
 }
@@ -566,7 +568,13 @@ function finPagNext(){const pages=Math.ceil(finFactFiltradas.length/FIN_PAG_SIZE
 /* ── Por cobrar ── */
 // Plazo de pago por defecto (configurable) — muchos clientes B2B en Chile son a 30/60/90 días
 function finPlazoDefault(){const v=parseInt(localStorage.getItem('fin_plazo_default'));return(v>0&&v<=365)?v:30;}
-function setFinPlazoDefault(v){const n=parseInt(v)||30;localStorage.setItem('fin_plazo_default',Math.max(0,Math.min(365,n)));try{finRenderCobrar();finRenderAging();}catch(e){}}
+async function setFinPlazoDefault(v){
+  const n=Math.max(0,Math.min(365,parseInt(v)||30));
+  const ok=await _finSharedMutate(doc=>{doc.plazoDefault=n;},{label:'plazo de cobranza'});
+  if(!ok)return false;
+  try{finRenderCobrar();finRenderAging();}catch(e){}
+  return true;
+}
 // Vencimiento real de una factura: usa fecha explícita o plazo propio si existen; si no, el plazo por defecto
 function finVenc(r){
   // Siempre anclar a medianoche local para evitar desfases UTC en Chile.
@@ -2540,6 +2548,27 @@ function dteValidarRut(el){
   if(validRUT(v)){msg.style.color='var(--accent)';msg.textContent='✓ RUT válido';el.value=formatRUT(v);}
   else{msg.style.color='var(--danger)';msg.textContent='✗ RUT inválido — revisa el dígito verificador';}
 }
+function _finPagoPedidoParaFactura(p,totalDte){
+  const f=p?.fields||{};
+  const totalPedido=Number(f['Monto total (CLP)']);
+  const anticipo=!!f['Anticipo pagado (50%)'];
+  const saldo=!!f['Saldo pagado (50%)'];
+  const abonoRaw=f['Monto abono (CLP)'];
+  const abonoExplicito=abonoRaw!==null&&abonoRaw!==undefined&&abonoRaw!==''&&Number.isFinite(Number(abonoRaw))
+    ?Math.max(0,Number(abonoRaw)):null;
+  let pagado=0;
+  if(Number.isFinite(totalPedido)&&totalPedido>0){
+    if(anticipo&&saldo)pagado=totalPedido;
+    else{
+      if(anticipo)pagado+=abonoExplicito!=null?abonoExplicito:totalPedido*0.5;
+      if(saldo)pagado+=totalPedido*0.5;
+    }
+  }else if(abonoExplicito!=null)pagado=abonoExplicito;
+  pagado=Math.max(0,Math.min(Number(totalDte)||0,pagado));
+  const pendiente=Math.max(0,(Number(totalDte)||0)-pagado);
+  return{pagado,pendiente,estado:pendiente<=0?'Pagada':pagado>0?'Parcial':'Pendiente'};
+}
+
 async function emitirDTE(){
   const cfg=getSIICfg();
   if(!cfg?.webhookUrl){toast('Configura el Worker SII primero','error');openSIIConfigModal();return;}
@@ -2604,11 +2633,14 @@ async function emitirDTE(){
         const vencDate=new Date(fechaDoc+'T12:00:00');
         vencDate.setDate(vencDate.getDate()+30); // días civiles, no bloques 24h (DST Chile)
         const venc=vencDate.getFullYear()+'-'+String(vencDate.getMonth()+1).padStart(2,'0')+'-'+String(vencDate.getDate()).padStart(2,'0');
+        const pagoFactura=_finPagoPedidoParaFactura(p,neto+iva);
         const facturaFields={
           'Cliente':razonSocial,'Cliente ID':cid||'','Tipo DTE':tipoDTE,'Folio':Number(dteNum)||0,
           'Fecha':fechaDoc,'Neto':neto,'IVA':iva,'Total':neto+iva,
           'Track ID':_trackId,'Estado SII':_recibido?(resp.estado_sii||resp.estado||'Enviado'):'Sin confirmar',
-          'Estado Pago':'Pendiente','Fecha Vencimiento':venc,'N° Pedido':p?.fields['N° Pedido']||''
+          'Estado Pago':pagoFactura.estado,'Monto Pagado':Math.round(pagoFactura.pagado),
+          'Saldo Pendiente':Math.round(pagoFactura.pendiente),'Fecha Vencimiento':venc,
+          'N° Pedido':p?.fields['N° Pedido']||''
         };
         // El Worker puede devolver exactamente el mismo DTE a otro navegador.
         // Usar Airtable como fuente de verdad antes de crear Factura: la lista
@@ -2627,6 +2659,8 @@ async function emitirDTE(){
           // que ya fue pagada ni pisar el vencimiento renegociado por cobranza.
           const updateFields={...facturaFields};
           delete updateFields['Estado Pago'];
+          delete updateFields['Monto Pagado'];
+          delete updateFields['Saldo Pendiente'];
           delete updateFields['Fecha Vencimiento'];
           await airtableWrite('Facturas','PATCH',facturaExistente.id,updateFields);
         }else if(resp.replayed){

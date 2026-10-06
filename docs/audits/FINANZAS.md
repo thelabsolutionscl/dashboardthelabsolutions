@@ -1,5 +1,20 @@
 # Auditoría de FINANZAS
 
+## Actualización 2026-10-06 — cierre funcional de #101
+
+Se auditó la migración recién fusionada de `/shared/finance` y se cerraron los últimos huecos funcionales de Finanzas.
+
+**Correcciones finales:**
+
+- el plazo por defecto de cobranza deja de ser una preferencia aislada del navegador y entra al documento financiero compartido;
+- la migración es retrocompatible con un `FINANZAS_V2` creado antes de este campo: se asume 30 días y se persiste en la siguiente escritura;
+- al materializar un DTE en `Facturas`, se concilian `Anticipo pagado (50%)`, `Saldo pagado (50%)` y `Monto abono (CLP)` del pedido;
+- la Factura nace con `Monto Pagado`, `Saldo Pendiente` y estado `Pendiente / Parcial / Pagada` coherentes;
+- el bootstrap de schema admite `Monto Pagado` y `Saldo Pendiente`;
+- los dos últimos `test.todo` de SII pasan a controles activos: idempotencia/reconciliación server-side y vía protegida CAF/emisión por proxy + RBAC.
+
+Con esto, los criterios funcionales de #101 quedan cubiertos en código. La activación productiva de Cloudflare Access/SII, credenciales, CAF real y prueba fiscal controlada se mantienen en la **fase manual final** de seguridad; no requieren reabrir la lógica de Finanzas salvo que esa prueba detecte un fallo.
+
 ## Actualización 2026-10-06 — persistencia financiera compartida
 
 Se migró el estado financiero operativo que seguía ligado al navegador a un documento
@@ -48,7 +63,7 @@ Se revalidó Finanzas contra `main` después del cierre de WEB (#100). La issue 
 - punto de equilibrio deja de tratar pedidos creados como venta del mes y usa facturación neta emitida;
 - los `test.todo` de estos puntos pasan a pruebas activas.
 
-**Pendiente para cierre total:** migrar Libro Diario/presupuesto/caja/pagos programados/préstamos/ventas manuales desde `localStorage` a una fuente compartida con rollback remoto. La ruta SII segura e idempotente ya existe en código, pero su activación productiva y prueba real con credenciales/CAF sigue siendo parte de la configuración manual final.
+**Estado posterior:** este pendiente fue cerrado por el PR #429 mediante `/shared/finance`. La activación productiva y prueba real de SII/CAF siguen agrupadas en la configuración manual final.
 
 ## Actualización 2026-09-30 — cobranza histórica falsa
 
@@ -158,7 +173,10 @@ Workflow:
 
 La prueba protege navegación, funciones únicas, fuentes de facturas, agregación interna, cobranza, aging, caja, Libro Diario, presupuesto, DTE, calculadoras y comisiones.
 
-## Hallazgos pendientes
+## Hallazgos originales de la auditoría (histórico)
+
+> Esta lista conserva el diagnóstico inicial para trazabilidad. Los puntos funcionales fueron corregidos en las actualizaciones superiores; no representa el estado actual de `main`.
+
 
 ### 1. Revenue congelado y separado de Airtable
 
