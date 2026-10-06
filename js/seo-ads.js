@@ -220,7 +220,8 @@ const ADS_DEFAULT_URL='https://thelab.solutions';
 // Webhook de Make que crea el "cascarón" de campaña vía la API real de Google
 // Ads (con la declaración de anuncios políticos UE que el CSV no puede setear).
 // El Script 2 completa la campaña (keywords/RSA/negativas) en su próxima corrida.
-const ADS_MAKE_SHELL={url:'https://hook.us2.make.com/4lvyro1ddp3nkqbiwteb1wmg5442dspk',clave:'tl-cascaron-9f27c4a1'};
+// Make webhook URL/key and Google Ads mutation secret live only in the Proxy
+// Worker environment. They must never be shipped in the Pages bundle.
 // id === slug de la landing /servicios/<slug>. finalUrl se arma en openCreateCampaignByLineaId.
 const ADS_LINEAS=[
   {id:'activaciones',slug:'activaciones',label:'Activaciones',campañaSugerida:'Búsqueda - Activaciones de Marca',tipo:'SEARCH',presupuesto:6000,
@@ -574,32 +575,56 @@ function adsExportKeywordsCSV(){
 }
 function getAdsConfig(){
   const _dw=_DEFAULTS.ADS_WEBAPP,_dc=_DEFAULTS.ADS_CUSTOMER;
-  const defaults={endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbzepd4w_8meCRmOCsx-pngGHyQ_BqUXAaWAFE8WpIFtTO6zRmFPDukNarCXUNzmfLdt/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099',secret:''};
+  const defaults={endpoint:(_dw&&!_dw.startsWith('%%'))?_dw:'https://script.google.com/macros/s/AKfycbzepd4w_8meCRmOCsx-pngGHyQ_BqUXAaWAFE8WpIFtTO6zRmFPDukNarCXUNzmfLdt/exec',customerId:(_dc&&!_dc.startsWith('%%'))?_dc:'757-781-2099'};
   try{
+    // Mutation credentials are server-side only. Purge the legacy browser copy
+    // instead of migrating it between local/session storage.
+    localStorage.removeItem('ads_mutation_secret');
+    sessionStorage.removeItem('ads_mutation_secret');
     const previous=localStorage.getItem('ads_config');
     if(previous){
       const old=JSON.parse(previous);
-      // Keep only nonsensitive endpoint and customer ID in persistent storage.
-      if(old&&typeof old==='object'){
-        if(old.secret&&!sessionStorage.getItem('ads_mutation_secret'))
-          sessionStorage.setItem('ads_mutation_secret',old.secret);
+      if(old&&typeof old==='object')
         localStorage.setItem('ads_config',JSON.stringify({endpoint:old.endpoint||'',customerId:old.customerId||''}));
-      }
     }
     const stored=JSON.parse(localStorage.getItem('ads_config')||'null');
-    return {...defaults,...(stored||{}),secret:sessionStorage.getItem('ads_mutation_secret')||''};
+    return {...defaults,...(stored||{})};
   }catch(e){return defaults;}
+}
+function _adsProxyConfig(){
+  try{
+    const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+    if(!px?.url||!px?.key)return null;
+    const u=new URL(px.url);
+    if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash)return null;
+    return{url:u.href.replace(/\/$/,''),key:px.key};
+  }catch(_){return null;}
+}
+async function _adsProxyFetch(path,options={}){
+  const px=_adsProxyConfig();
+  if(!px)throw new Error('Google Ads requiere Proxy Worker + Cloudflare Access para cambios');
+  const url=px.url+path;
+  const headers={...(options.headers||{}),'X-App-Key':px.key,Accept:'application/json'};
+  if(options.body&&!headers['Content-Type'])headers['Content-Type']='application/json';
+  const res=await fetch(url,{...options,headers,
+    credentials:typeof _proxyCredentials==='function'?_proxyCredentials(url):'include',
+    redirect:'manual'});
+  let body={};try{body=await res.json();}catch(_){}
+  if(!res.ok)throw Object.assign(new Error(body.error||('HTTP '+res.status)),{status:res.status,code:body.code,body});
+  return body;
 }
 function saveAdsConfig(){
   const endpoint=(document.getElementById('ads-endpoint')?.value||'').trim();
   const customerId=(document.getElementById('ads-customer-id')?.value||'').trim();
-  const secret=(document.getElementById('ads-secret')?.value||'').trim();
-  if(!endpoint){toast('Ingresa la URL del endpoint','error');return;}
-  if(secret.length<16){toast('Usa un secreto de al menos 16 caracteres','error');return;}
-  sessionStorage.setItem('ads_mutation_secret',secret);
+  if(!endpoint){toast('Ingresa la URL del endpoint de lectura','error');return;}
+  try{
+    const u=new URL(endpoint);
+    if(u.protocol!=='https:'||u.hostname!=='script.google.com'||!/\/macros\/s\/[^/]+\/exec$/.test(u.pathname)||u.username||u.password)
+      throw Error('endpoint');
+  }catch(_){toast('Usa la URL HTTPS /macros/s/.../exec del Apps Script','error');return;}
   localStorage.setItem('ads_config',JSON.stringify({endpoint,customerId}));
   document.getElementById('adsConfigPanel').style.display='none';
-  toast('✓ Configuración Google Ads guardada','success');
+  toast('✓ Configuración de lectura Google Ads guardada','success');
   loadAdsData();
 }
 function toggleAdsConfig(){
@@ -610,7 +635,6 @@ function toggleAdsConfig(){
     const cfg=getAdsConfig();
     if(cfg.endpoint) document.getElementById('ads-endpoint').value=cfg.endpoint;
     if(cfg.customerId) document.getElementById('ads-customer-id').value=cfg.customerId;
-    document.getElementById('ads-secret').value=cfg.secret||'';
   }
 }
 function copyAdsScript(id){
