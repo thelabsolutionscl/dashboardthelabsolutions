@@ -24,17 +24,20 @@ test('limpieza definitiva elimina las credenciales heredadas de ambos almacenami
  assert.equal(sessionStorage.getItem('wp_config'),null);
  assert.doesNotMatch(source,/function getWPConfig|\/wp-json\/|_yoast_wpseo_/);
 });
-test('Ads mutation secret moves to session storage while retaining public endpoint and customer ID',()=>{
+test('Ads mutation secret is purged from both browser stores; only read config remains',()=>{
  const {localStorage,sessionStorage}=stores();
  localStorage.setItem('ads_config',JSON.stringify({endpoint:'https://script.google.com/macros/s/demo/exec',customerId:'123',secret:'old-key'}));
- const fn=new Function('localStorage','sessionStorage','_DEFAULTS',fragment('function getAdsConfig(){','function saveAdsConfig(){')+'return getAdsConfig;')(localStorage,sessionStorage,{ADS_WEBAPP:'%%ADS_WEBAPP%%',ADS_CUSTOMER:'%%ADS_CUSTOMER%%'});
+ localStorage.setItem('ads_mutation_secret','legacy-local');
+ sessionStorage.setItem('ads_mutation_secret','legacy-session');
+ const fn=new Function('localStorage','sessionStorage','_DEFAULTS','URL',fragment('function getAdsConfig(){','function saveAdsConfig(){')+'return getAdsConfig;')(localStorage,sessionStorage,{ADS_WEBAPP:'%%ADS_WEBAPP%%',ADS_CUSTOMER:'%%ADS_CUSTOMER%%'},URL);
  const cfg=fn();
- assert.equal(cfg.secret,'old-key');
+ assert.equal(cfg.secret,undefined);
  assert.equal(cfg.customerId,'123');
- assert.equal(sessionStorage.getItem('ads_mutation_secret'),'old-key');
+ assert.equal(localStorage.getItem('ads_mutation_secret'),null);
+ assert.equal(sessionStorage.getItem('ads_mutation_secret'),null);
  assert.equal(JSON.parse(localStorage.getItem('ads_config')).secret,undefined);
  const save=fragment('function saveAdsConfig(){','function toggleAdsConfig(){');
- assert.match(save,/sessionStorage\.setItem\('ads_mutation_secret',secret\)/);
+ assert.doesNotMatch(save,/ads_mutation_secret|secret/);
  assert.match(save,/localStorage\.setItem\('ads_config',JSON\.stringify\(\{endpoint,customerId\}\)\)/);
 });
 test('read-only guard activates for both explicit demo and live dashboard showing fixture fallback',()=>{
