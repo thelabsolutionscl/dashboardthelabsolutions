@@ -265,3 +265,87 @@ test('ambiguous Airtable response never triggers a retry and is not reflected to
   assert.equal(body.fields,undefined);
   assert.equal(h.calls.filter(c=>c.method==='PATCH').length,1);
 });
+
+test('operator machine table methods and payloads are explicitly scoped',()=>{
+  assert.equal(accessAllows({role:'operator'},'PATCH',root+'Maquinas/'+rec),true);
+  assert.equal(accessAllows({role:'operator'},'POST',root+'Maquinas'),false);
+  assert.equal(accessAllows({role:'operator'},'POST',root+'Maquinas_Eventos'),true);
+  assert.equal(accessAllows({role:'operator'},'PATCH',root+'Maquinas_Eventos/'+rec),true);
+  assert.equal(accessAllows({role:'operator'},'POST',root+'Maquinas_Mant'),true);
+  assert.equal(accessAllows({role:'operator'},'PATCH',root+'Maquinas_Mant/'+rec),false);
+
+  assert.equal(operatorWritePayloadAllowed('Maquinas','PATCH',{fields:{
+    estado:'mantencion',ip:'192.168.100.51',
+    cam:'http://192.168.100.51:8080/?action=stream'
+  }}),true);
+  assert.equal(operatorWritePayloadAllowed('Maquinas','POST',{fields:{
+    estado:'disponible'
+  }}),false);
+  assert.equal(operatorWritePayloadAllowed('Maquinas_Eventos','POST',{fields:{
+    maquina_id:'k1-1',fecha:'2026-10-06',tipo:'uso',
+    desc:'PED-2026-050 · Cliente',tiempo:8,pedido_id:rec
+  }}),true);
+  assert.equal(operatorWritePayloadAllowed('Maquinas_Eventos','PATCH',{fields:{
+    desc:'Reserva ajustada',tiempo:4,pedido_id:''
+  }}),true);
+  assert.equal(operatorWritePayloadAllowed('Maquinas_Mant','POST',{fields:{
+    maquina_id:'e5-2',tipo:'belt',notas:'Correa revisada',
+    print_hours:321.5,fecha:'2026-10-06',ts:1791234000000
+  }}),true);
+
+  for(const [table,method,fields] of [
+    ['Maquinas','PATCH',{'WA: estado notificado':'disponible'}],
+    ['Maquinas','PATCH',{nombre:'K1 alterada'}],
+    ['Maquinas','PATCH',{ip:'8.8.8.8'}],
+    ['Maquinas','PATCH',{estado:'hack'}],
+    ['Maquinas','PATCH',{cam:'javascript:alert(1)'}],
+    ['Maquinas_Eventos','POST',{maquina_id:'k1-1',fecha:'2026-10-06',
+      tipo:'otro'}],
+    ['Maquinas_Eventos','POST',{maquina_id:'../admin',fecha:'2026-10-06',
+      tipo:'uso'}],
+    ['Maquinas_Eventos','PATCH',{maquina_id:'k1-2'}],
+    ['Maquinas_Eventos','PATCH',{pedido_id:'PED-2026-050'}],
+    ['Maquinas_Mant','POST',{maquina_id:'k1-1',tipo:'shell',
+      fecha:'2026-10-06',ts:1791234000000}],
+    ['Maquinas_Mant','POST',{maquina_id:'k1-1',tipo:'nozzle',
+      fecha:'2026-10-06',ts:123}],
+    ['Maquinas_Mant','PATCH',{notas:'rewrite'}]
+  ]){
+    assert.equal(operatorWritePayloadAllowed(table,method,{fields}),false,
+      table+' '+method+' '+JSON.stringify(fields));
+  }
+});
+test('signed operator machine mutations are filtered before and after Airtable',async()=>{
+  for(const [table,method,fields,shown] of [
+    ['Maquinas','PATCH',{estado:'mantencion',ip:'192.168.100.51'},'estado'],
+    ['Maquinas_Eventos','POST',{maquina_id:'k1-1',fecha:'2026-10-06',
+      tipo:'uso',desc:'PED-2026-050',tiempo:6,pedido_id:rec},'tipo'],
+    ['Maquinas_Mant','POST',{maquina_id:'k1-1',tipo:'nozzle',
+      notas:'Cambio preventivo',print_hours:200,fecha:'2026-10-06',
+      ts:1791234000000},'tipo']
+  ]){
+    const h=harness();
+    const res=await h.run(h.make(table,method,{fields}));
+    assert.equal(res.status,200,table+' '+await res.clone().text());
+    const data=await res.json();
+    assert.equal(data.fields[shown],fields[shown]);
+    assert.equal(data.fields['Datos pago / banco'],undefined);
+    assert.equal(data.fields['Costo real total (CLP)'],undefined);
+    assert.equal(h.calls.filter(c=>c.method===method).length,1);
+    assert.equal(res.headers.get('Cache-Control'),'private, no-store');
+  }
+
+  for(const [table,method,fields] of [
+    ['Maquinas','PATCH',{'WA: estado notificado':'disponible'}],
+    ['Maquinas','PATCH',{ip:'1.1.1.1'}],
+    ['Maquinas_Eventos','POST',{maquina_id:'k1-1',fecha:'2026-10-06',
+      tipo:'uso',FUTURE_SECRET:'x'}],
+    ['Maquinas_Mant','POST',{maquina_id:'k1-1',tipo:'nozzle',
+      fecha:'2026-10-06',ts:1791234000000,FUTURE_SECRET:'x'}]
+  ]){
+    const h=harness();
+    const res=await h.run(h.make(table,method,{fields}));
+    assert.ok(res.status>=400,table+' '+method);
+    assert.equal(h.calls.filter(c=>['POST','PATCH','DELETE'].includes(c.method)).length,0);
+  }
+});
