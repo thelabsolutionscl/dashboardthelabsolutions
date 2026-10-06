@@ -11,7 +11,7 @@ const {accessAllows,accessTable,ACCESS_ALLOWED_TABLES,ACCESS_ADMIN_ONLY_TABLES}=
   new Function(source+'\nreturn {accessAllows,accessTable,ACCESS_ALLOWED_TABLES,ACCESS_ADMIN_ONLY_TABLES};')();
 const sourceFiles=[
   'js/redes.js','js/linkedin.js','js/oficina.js','js/seo-ads.js','js/agentes.js','js/proveedores.js',
-  'js/finanzas.js','js/calendario-base.js','js/maquinas-operaciones.js','js/correo.js'
+  'js/finanzas.js','js/calendario-base.js','js/maquinas-operaciones.js','js/correo.js','js/operativo-visual.js'
 ];
 test('all actual literal Airtable tables in major dashboard modules are in the signed-access catalog',()=>{
   const used=new Map();
@@ -32,9 +32,10 @@ test('all actual literal Airtable tables in major dashboard modules are in the s
   assert.ok(used.has('Automations'));
   assert.ok(used.has('Newsletter_Campañas'));
   assert.ok(used.has('Google_Ads_KPIs'));
+  assert.ok(used.has('Contenido'));
 });
 test('campaign and agent tables remain admin-only pending explicit per-role record scoping',()=>{
-  const names=['Automations','Agent_Queue','Agent_Log','Social_Posts',
+  const names=['Automations','Agent_Queue','Agent_Log','Contenido','Social_Posts',
     'Social_Interactions','Social_Metrics','LinkedIn_Prospects','Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'];
   const prefix='/v0/app1YtD74AqiPWQhy/';
   for(const name of names){
