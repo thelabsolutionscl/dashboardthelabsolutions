@@ -2103,7 +2103,8 @@ export class CrmMutationGuard {
   fetch(request) {
     const path=new URL(request.url).pathname;
     const run = this._queue.then(() => path==='/marketing/spend'
-      ?this._handleSpend(request):path==='/shared-calendar'
+      ?this._handleSpend(request):path==='/ads-shell'
+        ?this._handleAdsShell(request):path==='/shared-calendar'
         ?this._handleSharedCalendar(request):path==='/shared-agenda'
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/shared-machineops'
@@ -2118,6 +2119,46 @@ export class CrmMutationGuard {
       status, headers: { 'Content-Type': 'application/json' },
     });
   }
+  async _handleAdsShell(request){
+    if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
+    let payload;try{payload=await request.json();}catch(_){return this._json({error:'Invalid Ads shell request'},422);}
+    const actor=payload?.actor;
+    const signed=actor&&typeof actor.email==='string'&&['operator','finance','admin'].includes(actor.role);
+    const legacy=actor?.legacy===true;
+    if(!signed&&!legacy||typeof payload.mutationId!=='string'||payload.mutationId.length<10||
+       typeof payload.nombre!=='string'||!payload.nombre.trim()||
+       !Number.isSafeInteger(Number(payload.presupuesto)))
+      return this._json({error:'Ads shell write denied'},403);
+    if(!this.env.ADS_MAKE_SHELL_URL||!this.env.ADS_MAKE_SHELL_KEY)
+      return this._json({error:'Ads shell backend not configured'},503);
+    let endpoint;try{endpoint=new URL(this.env.ADS_MAKE_SHELL_URL);}catch(_){return this._json({error:'Ads shell backend misconfigured'},503);}
+    if(endpoint.protocol!=='https:'||!/^hook\.[a-z0-9-]+\.make\.com$/i.test(endpoint.hostname))
+      return this._json({error:'Ads shell backend host denied'},503);
+    const key='ads-shell:'+payload.mutationId;
+    const prior=await this.state.storage.get(key);
+    if(prior?.ok)return this._json({ok:true,reused:true,createdAt:prior.createdAt},200);
+    endpoint.searchParams.set('clave',this.env.ADS_MAKE_SHELL_KEY);
+    endpoint.searchParams.set('nombre',payload.nombre.trim());
+    endpoint.searchParams.set('presupuesto',String(payload.presupuesto));
+    let upstream;
+    try{
+      upstream=await fetch(endpoint.toString(),{method:'POST',redirect:'manual',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({clave:this.env.ADS_MAKE_SHELL_KEY,nombre:payload.nombre.trim(),
+          presupuesto:payload.presupuesto,mutationId:payload.mutationId})});
+    }catch(_){return this._json({error:'Ads shell outcome uncertain; retry uses same mutationId',
+      code:'ADS_SHELL_UNCERTAIN'},503);}
+    if(!upstream.ok||upstream.status>=300&&upstream.status<400){
+      try{await upstream.body?.cancel?.();}catch(_){}
+      return this._json({error:'Ads shell backend rejected request',code:'ADS_SHELL_REJECTED'},502);
+    }
+    try{await upstream.body?.cancel?.();}catch(_){}
+    const createdAt=new Date().toISOString();
+    await this.state.storage.put(key,{ok:true,createdAt,nombre:payload.nombre.trim(),
+      actor:signed?actor.email:'legacy'});
+    return this._json({ok:true,reused:false,createdAt},201);
+  }
+
   async _handleSharedCalendar(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
       return this._json({error:'Shared calendar guard unavailable'},503);
@@ -3009,7 +3050,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3022,6 +3063,35 @@ export default {
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
+    // Google Ads privileged bridge. The Make webhook and its shared key never
+    // reach Pages; the browser submits only a bounded idempotent command.
+    if(url.pathname==='/ads/campaign-shell'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search)return json({error:'Ads shell query parameters not allowed'},422,scopedHeaders);
+      if(request.method!=='POST')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>12000)
+        return json({error:'Ads shell expects bounded JSON'},415,scopedHeaders);
+      let body;try{const raw=await request.text();if(raw.length>12000)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid Ads shell JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>!['mutationId','nombre','presupuesto'].includes(k))||
+         typeof body.mutationId!=='string'||body.mutationId.length<10||body.mutationId.length>100||
+         typeof body.nombre!=='string'||!body.nombre.trim()||body.nombre.length>120||
+         !Number.isSafeInteger(Number(body.presupuesto))||Number(body.presupuesto)<1000||Number(body.presupuesto)>500000)
+        return json({error:'Invalid Ads shell request'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Ads mutation guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-ads-shell-global'));
+        const guarded=await stub.fetch('https://crm-write.internal/ads-shell',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({mutationId:body.mutationId,nombre:body.nombre.trim(),
+            presupuesto:Number(body.presupuesto),actor:authorized.identity
+              ?{email:authorized.identity.email,role:authorized.identity.role}:{legacy:true}})});
+        const headers=new Headers(guarded.headers);Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Ads shell guard unavailable'},503,scopedHeaders);}
+    }
+
     // Diagnóstico bajo demanda: GET exclusivamente, lista fija de proveedores
     // y solicitudes de identidad/metadatos. No ejecuta modelos ni envía eventos.
     // Requiere APP_KEY y origen autorizados antes de este bloque; Access, si
