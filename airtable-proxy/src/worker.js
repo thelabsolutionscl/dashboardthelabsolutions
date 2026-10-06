@@ -1876,6 +1876,135 @@ const OPENAI_ESTIMATED_COST_USD = {
   imageEditLow: 0.08,
 };
 
+const VISUAL_AI_PROVIDER='https://api.muapi.ai/api/v1';
+const VISUAL_AI_ALLOWED_ENDPOINTS=new Set([
+  'add-image-watermark',
+  'ai-anime-generator',
+  'ai-background-remover',
+  'ai-color-photo',
+  'ai-dress-change',
+  'ai-ghibli-style',
+  'ai-image-extension',
+  'ai-image-face-swap',
+  'ai-image-upscaler',
+  'ai-object-eraser',
+  'ai-product-photography',
+  'ai-product-shot',
+  'ai-skin-enhancer',
+  'ai-video-effects',
+  'bytedance-seededit-image',
+  'bytedance-seedream-v4.5',
+  'creatify-lipsync',
+  'flux-dev-image',
+  'flux-kontext-dev',
+  'flux-kontext-effects',
+  'flux-kontext-max',
+  'flux-kontext-pro',
+  'flux-kontext-pro-i2i',
+  'flux-schnell-image',
+  'google-imagen4',
+  'google-imagen4-ultra',
+  'gpt-image-2-image-to-image',
+  'gpt4o-edit',
+  'gpt4o-text-to-image',
+  'grok-imagine-image-to-video',
+  'grok-imagine-text-to-image',
+  'grok-imagine-text-to-video',
+  'hidream-i1-full',
+  'hunyuan-image-to-video',
+  'hunyuan-text-to-video',
+  'ideogram-v3',
+  'image-effects',
+  'infinitetalk-image-to-video',
+  'kling-v2.1-master-i2v',
+  'kling-v2.6-std-motion-control',
+  'kling-v3.0-pro-image-to-video',
+  'kling-v3.0-pro-motion-control',
+  'kling-v3.0-pro-text-to-video',
+  'kling-v3.0-standard-image-to-video',
+  'ltx-2-19b-lipsync',
+  'ltx-2-19b-text-to-video',
+  'ltx-2-pro-image-to-video',
+  'ltx-2-pro-text-to-video',
+  'midjourney-v7-text-to-image',
+  'minimax-hailuo-02-pro-i2v',
+  'minimax-hailuo-2.3-pro-i2v',
+  'minimax-speech-2.6-hd',
+  'minimax-voice-clone',
+  'mmaudio-v2-text-to-audio',
+  'motion-controls',
+  'nano-banana',
+  'nano-banana-edit',
+  'nano-banana-effects',
+  'openai-sora-2-image-to-video',
+  'openai-sora-2-pro-text-to-video',
+  'openai-sora-2-text-to-video',
+  'pixverse-v5-i2v',
+  'qwen-image-edit',
+  'reve-image-edit',
+  'runway-image-to-video',
+  'runway-text-to-video',
+  'seedance-pro-i2v',
+  'seedance-v2.0-i2v',
+  'seedvr2-image-upscale',
+  'suno-create-music',
+  'suno-extend-music',
+  'suno-remix-music',
+  'sync-lipsync',
+  'topaz-image-upscale',
+  'veed-lipsync',
+  'veo3-image-to-video',
+  'veo3-text-to-video',
+  'veo3.1-image-to-video',
+  'veo3.1-text-to-video',
+  'vfx',
+  'video-effects',
+  'wan2.2-image-to-video',
+  'wan2.2-speech-to-video',
+  'wan2.5-text-to-video',
+  'wan2.6-image-edit',
+  'wan2.6-text-to-video',
+]);
+const VISUAL_AI_MAX_PROMPT=3000;
+const VISUAL_AI_MAX_UPLOAD_BYTES=8*1024*1024;
+const VISUAL_AI_MAX_GENERATIONS_PER_DAY=40;
+const VISUAL_AI_RESULT_HOST_SUFFIXES=[
+  'muapi.ai','fal.media','replicate.delivery','cloudfront.net','amazonaws.com'
+];
+function visualAiHttpsUrl(value){
+  try{
+    const u=new URL(String(value||''));
+    if(u.protocol!=='https:'||u.username||u.password)return null;
+    const h=u.hostname.toLowerCase();
+    if(!h||h==='localhost'||h.endsWith('.local')||/^\d+\.\d+\.\d+\.\d+$/.test(h))return null;
+    return u.toString();
+  }catch(_){return null;}
+}
+function visualAiResultUrl(value){
+  const safe=visualAiHttpsUrl(value);if(!safe)return null;
+  const h=new URL(safe).hostname.toLowerCase();
+  return VISUAL_AI_RESULT_HOST_SUFFIXES.some(s=>h===s||h.endsWith('.'+s))?safe:null;
+}
+function visualAiPayloadAllowed(payload){
+  if(!payload||typeof payload!=='object'||Array.isArray(payload))return false;
+  const allowed=new Set(['prompt','images_list','image_url','model_image_url','person_image_url',
+    'aspect_ratio','duration','resolution']);
+  if(Object.keys(payload).some(k=>!allowed.has(k)))return false;
+  if(payload.prompt!=null&&(typeof payload.prompt!=='string'||payload.prompt.length>VISUAL_AI_MAX_PROMPT))return false;
+  for(const k of ['image_url','model_image_url','person_image_url']){
+    if(payload[k]!=null&&!visualAiHttpsUrl(payload[k]))return false;
+  }
+  if(payload.images_list!=null&&(!Array.isArray(payload.images_list)||payload.images_list.length>4||
+    payload.images_list.some(v=>!visualAiHttpsUrl(v))))return false;
+  if(payload.aspect_ratio!=null&&!['1:1','16:9','9:16','4:3','3:4','21:9'].includes(payload.aspect_ratio))return false;
+  if(payload.duration!=null&&![5,10].includes(Number(payload.duration)))return false;
+  if(payload.resolution!=null&&!['480p','720p','1080p'].includes(payload.resolution))return false;
+  return true;
+}
+function visualAiActorAllowed(actor){
+  return actor&&typeof actor.email==='string'&&['sales','operator','finance','admin'].includes(actor.role);
+}
+
 // Una reserva representa una llamada en curso. El cliente corta las llamadas a los 60 s,
 // así que cualquier reserva de más de 2 min es huérfana y no debe bloquear el día.
 const AI_RESERVATION_STALE_MS = 2 * 60 * 1000;
@@ -2258,7 +2387,8 @@ export class CrmMutationGuard {
             ?this._handleSharedMail(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
-                  ?this._handleSharedFinance(request):path==='/scoped-patch'
+                  ?this._handleSharedFinance(request):path==='/visual-ai-guard'
+                    ?this._handleVisualAiGuard(request):path==='/scoped-patch'
                   ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
@@ -2596,6 +2726,42 @@ export class CrmMutationGuard {
       revisions:Object.fromEntries(Object.entries(verified.revisions).filter(([name])=>wanted.has(name)))},200);
   }
 
+
+  async _handleVisualAiGuard(request){
+    if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid visual job'},422);}
+    if(!visualAiActorAllowed(p?.actor)||typeof p.jobId!=='string'||!/^[A-Za-z0-9_-]{10,100}$/.test(p.jobId))
+      return this._json({error:'Visual job denied'},403);
+    const key='visual-job:'+p.jobId;
+    if(p.op==='reserve'){
+      if(!VISUAL_AI_ALLOWED_ENDPOINTS.has(p.endpoint))return this._json({error:'Visual model denied'},422);
+      const existing=await this.state.storage.get(key);
+      if(existing?.committed&&existing.response)return this._json({ok:true,replayed:true,response:existing.response},200);
+      if(existing)return this._json({error:'Visual job result uncertain; do not duplicate',code:'VISUAL_JOB_PENDING'},409);
+      const day=aiChileDate(),counterKey='visual-count:'+day;
+      const count=Math.max(0,Number(await this.state.storage.get(counterKey))||0);
+      const max=Math.max(1,Math.min(200,Number(this.env.VISUAL_AI_DAILY_LIMIT)||VISUAL_AI_MAX_GENERATIONS_PER_DAY));
+      if(count>=max)return this._json({error:'Visual AI daily quota reached',code:'VISUAL_AI_QUOTA',used:count,limit:max},429);
+      await this.state.storage.put(key,{endpoint:p.endpoint,actor:p.actor.email,createdAt:Date.now(),committed:false});
+      await this.state.storage.put(counterKey,count+1);
+      return this._json({ok:true,replayed:false,used:count+1,limit:max},200);
+    }
+    if(p.op==='commit'){
+      const row=await this.state.storage.get(key);
+      if(!row)return this._json({error:'Visual job reservation missing'},409);
+      if(row.committed)return this._json({ok:true,replayed:true,response:row.response},200);
+      if(!p.response||typeof p.response.request_id!=='string'||p.response.request_id.length>240)
+        return this._json({error:'Invalid provider receipt'},422);
+      row.committed=true;row.response={request_id:p.response.request_id};row.committedAt=Date.now();
+      await this.state.storage.put(key,row);
+      return this._json({ok:true,response:row.response},200);
+    }
+    if(p.op==='release'){
+      await this.state.storage.delete(key);
+      return this._json({ok:true},200);
+    }
+    return this._json({error:'Unknown visual guard operation'},404);
+  }
 
   async _handleSharedFinance(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
@@ -3235,7 +3401,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3248,6 +3414,107 @@ export default {
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
+    if(url.pathname==='/visual-ai/rpc'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(!authorized.identity||!visualAiActorAllowed(authorized.identity))
+        return json({error:'Visual AI requires signed user access'},403,headers);
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>12000000)
+        return json({error:'Visual AI expects bounded JSON'},415,headers);
+      let body;try{const raw=await request.text();if(raw.length>12000000)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid Visual AI JSON'},422,headers);}
+      if(!body||typeof body.action!=='string')return json({error:'Invalid Visual AI request'},422,headers);
+      if(!env.MUAPI_KEY)return json({error:'Visual AI provider is not configured',code:'VISUAL_AI_NOT_CONFIGURED'},503,headers);
+      const providerHeaders={'x-api-key':env.MUAPI_KEY};
+
+      if(body.action==='quota'){
+        if(!env.CRM_MUTATION_GUARD)return json({error:'Visual AI quota guard unavailable'},503,headers);
+        // Only report configured daily cap; exact used count is returned on reserve.
+        const limit=Math.max(1,Math.min(200,Number(env.VISUAL_AI_DAILY_LIMIT)||VISUAL_AI_MAX_GENERATIONS_PER_DAY));
+        return json({ok:true,provider:'MuAPI via TLS secure proxy',daily_limit:limit},200,headers);
+      }
+
+      if(body.action==='upload'){
+        if(typeof body.dataUrl!=='string'||body.dataUrl.length>VISUAL_AI_MAX_UPLOAD_BYTES*1.4)
+          return json({error:'Image upload too large'},413,headers);
+        const m=/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(body.dataUrl);
+        if(!m)return json({error:'Unsupported image upload'},422,headers);
+        let bytes;try{bytes=Uint8Array.from(atob(m[2]),c=>c.charCodeAt(0));}catch(_){return json({error:'Invalid image data'},422,headers);}
+        if(!bytes.length||bytes.length>VISUAL_AI_MAX_UPLOAD_BYTES)return json({error:'Image upload too large'},413,headers);
+        const jpeg=bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff;
+        const png=bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47;
+        const webp=bytes.length>12&&String.fromCharCode(...bytes.slice(0,4))==='RIFF'&&String.fromCharCode(...bytes.slice(8,12))==='WEBP';
+        if(!(jpeg||png||webp))return json({error:'Image signature does not match an allowed format'},422,headers);
+        const fd=new FormData();
+        fd.append('file',new File([bytes],'upload.'+(jpeg?'jpg':png?'png':'webp'),{type:m[1]}));
+        let upstream;try{upstream=await fetch(VISUAL_AI_PROVIDER+'/upload_file',{method:'POST',headers:providerHeaders,body:fd,redirect:'manual'});}
+        catch(_){return json({error:'Visual upload unavailable'},502,headers);}
+        if(!upstream.ok||upstream.status>=300&&upstream.status<400)return json({error:'Visual upload rejected by provider'},502,headers);
+        let d;try{d=await upstream.json();}catch(_){return json({error:'Visual upload returned invalid JSON'},502,headers);}
+        const asset=visualAiResultUrl(d.url||d.file_url||d.data?.url);
+        if(!asset)return json({error:'Visual upload returned an untrusted URL'},502,headers);
+        return json({ok:true,url:asset},200,headers);
+      }
+
+      if(body.action==='generate'){
+        const endpoint=String(body.endpoint||'');
+        if(!VISUAL_AI_ALLOWED_ENDPOINTS.has(endpoint)||!visualAiPayloadAllowed(body.payload)||
+           typeof body.jobId!=='string'||!/^[A-Za-z0-9_-]{10,100}$/.test(body.jobId))
+          return json({error:'Visual generation request denied'},422,headers);
+        if(!env.CRM_MUTATION_GUARD)return json({error:'Visual AI job guard unavailable'},503,headers);
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-visual-ai-global'));
+        const actor={email:authorized.identity.email,role:authorized.identity.role};
+        let gate;
+        try{gate=await stub.fetch('https://crm-write.internal/visual-ai-guard',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({op:'reserve',jobId:body.jobId,endpoint,actor})});}
+        catch(_){return json({error:'Visual AI job guard unavailable'},503,headers);}
+        const gateBody=await gate.json().catch(()=>({}));
+        if(!gate.ok)return json(gateBody,gate.status,headers);
+        if(gateBody.replayed&&gateBody.response)return json({ok:true,replayed:true,...gateBody.response,quota:{used:gateBody.used,limit:gateBody.limit}},200,headers);
+        let upstream;
+        try{
+          upstream=await fetch(VISUAL_AI_PROVIDER+'/'+endpoint,{method:'POST',redirect:'manual',
+            headers:{...providerHeaders,'Content-Type':'application/json'},body:JSON.stringify(body.payload)});
+        }catch(_){
+          return json({error:'Visual generation outcome uncertain; do not retry this job',code:'VISUAL_JOB_PENDING'},503,headers);
+        }
+        let d={};try{d=await upstream.json();}catch(_){}
+        if(!upstream.ok||upstream.status>=300&&upstream.status<400){
+          if(upstream.status>=400&&upstream.status<500){
+            try{await stub.fetch('https://crm-write.internal/visual-ai-guard',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({op:'release',jobId:body.jobId,actor})});}catch(_){}
+          }
+          return json({error:typeof d.error==='string'?d.error:'Visual provider rejected request'},upstream.status>=400&&upstream.status<500?422:502,headers);
+        }
+        const requestId=String(d.request_id||d.id||'');
+        if(!requestId||requestId.length>240)return json({error:'Visual provider returned no request id',code:'VISUAL_JOB_PENDING'},502,headers);
+        const receipt={request_id:requestId};
+        let commit;try{commit=await stub.fetch('https://crm-write.internal/visual-ai-guard',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({op:'commit',jobId:body.jobId,response:receipt,actor})});}
+        catch(_){return json({error:'Visual request created but receipt could not be committed',code:'VISUAL_JOB_PENDING'},503,headers);}
+        if(!commit.ok)return json({error:'Visual request created but receipt is pending reconciliation',code:'VISUAL_JOB_PENDING'},503,headers);
+        return json({ok:true,...receipt,quota:{used:gateBody.used,limit:gateBody.limit}},200,headers);
+      }
+
+      if(body.action==='poll'){
+        const requestId=String(body.requestId||'');
+        if(!/^[A-Za-z0-9._:-]{4,240}$/.test(requestId))return json({error:'Invalid visual request id'},422,headers);
+        let upstream;try{upstream=await fetch(VISUAL_AI_PROVIDER+'/predictions/'+encodeURIComponent(requestId)+'/result',
+          {method:'GET',headers:providerHeaders,redirect:'manual'});}
+        catch(_){return json({error:'Visual provider temporarily unavailable',transient:true},502,headers);}
+        if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+          return json({error:'Visual provider status unavailable',transient:upstream.status>=500},upstream.status>=500?502:422,headers);
+        let d;try{d=await upstream.json();}catch(_){return json({error:'Visual provider returned invalid JSON',transient:true},502,headers);}
+        const status=String(d.status||'').toLowerCase();
+        const rawUrl=d.url||d.outputs?.[0]||d.output?.[0]||'';
+        const asset=rawUrl?visualAiResultUrl(rawUrl):null;
+        if(rawUrl&&!asset)return json({error:'Visual provider returned an untrusted asset URL'},502,headers);
+        return json({ok:true,status,url:asset||null,error:typeof d.error==='string'?d.error.slice(0,500):null},200,headers);
+      }
+      return json({error:'Unknown Visual AI action'},404,headers);
+    }
+
     // Google Ads privileged bridge. The Make webhook and its shared key never
     // reach Pages; the browser submits only a bounded idempotent command.
     if(url.pathname==='/ads/campaign-shell'){
