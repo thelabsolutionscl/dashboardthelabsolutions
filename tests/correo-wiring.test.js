@@ -264,13 +264,22 @@ test('diagnóstico: IMAP debe validar el certificado TLS', (t) => {
 });
 
 // Hallazgos confirmados que deben convertirse en pruebas obligatorias al corregirse.
-test.todo('mail-api debe validar To/CC/BCC, limitar cantidad de destinatarios y restringir From a casillas autorizadas de thelab.solutions');
+test('mail-api valida destinatarios, limita el total y restringe la identidad From al buzón TLS autenticado',()=>{
+  const send=phpCase('send');
+  assert.match(send,/mail_recipient_list\(\$to, true, 50\)/);
+  assert.match(send,/mail_recipient_list\(\$cc, false, 50\)/);
+  assert.match(send,/mail_recipient_list\(\$bcc, false, 50\)/);
+  assert.match(send,/Máximo 50 destinatarios por correo/);
+  assert.match(PHP,/@thelab\\.solutions\$\/i/);
+  assert.match(send,/resend_send\(\$from_name, \$user,/,
+    'From debe provenir de la misma casilla que autenticó IMAP');
+});
 test.todo('el visor debe bloquear imágenes y recursos remotos por defecto para evitar tracking pixels y filtración de IP');
 test.todo('reply, forward, firmas e imágenes insertadas por URL deben pasar por un sanitizador HTML y una política de URLs');
 test.todo('frontend y host PHP deben verificar automáticamente el mismo MAIL_API_BUILD para detectar despliegues desfasados');
 test.todo('acciones masivas y automáticas deben usar una idempotency key compartida para evitar duplicados tras timeouts');
-test.todo('el backend debe imponer rate limit, cuota por cuenta, tamaño de cuerpo y auditoría mínima sin guardar contraseñas ni contenido');
-test.todo('descargas de adjuntos deben tener límite de tamaño y advertencia/allowlist para ejecutables y formatos activos');
+test.todo('rate limit/cuota/tamaño ya son backend; falta auditoría mínima de envíos sin guardar contraseñas ni contenido');
+test.todo('descargas de adjuntos ya tienen límite backend; falta advertencia/allowlist para ejecutables y formatos activos');
 test.todo('las cuentas compartidas deben asignarse por RBAC; no deben aparecer automáticamente para cualquier usuario con acceso a Correo');
 test.todo('postAs no debe caer silenciosamente a otra casilla cuando falta la credencial del remitente solicitado');
 test.todo('plantillas, firmas y borradores deben tener respaldo versionado, sanitizado y permisos por cuenta');
