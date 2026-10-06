@@ -8101,25 +8101,132 @@ function getMaintLogLocal(){const raw=localStorage.getItem(MAINT_KEY)||'[]';if(r
 // ── EQUIPO PERSISTENCE ────────────────────────────────────────
 async function crearTablaEquipoEventos(){
   const t=getToken();if(!t&&!_proxyCfg()) return false;
-  try{const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});if(!r.ok) return false;const d=await r.json();if(d.tables?.find(x=>x.name==='Equipo_Eventos')) return true;const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Equipo_Eventos',fields:[{name:'persona_id',type:'singleLineText'},{name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},{name:'tipo',type:'singleLineText'},{name:'desc',type:'singleLineText'},{name:'hora_inicio',type:'singleLineText'},{name:'hora_fin',type:'singleLineText'}]})});return cr.ok;}catch(e){return false;}
-}
-async function saveEquipoEventosAirtable(){
-  const t=getToken();if(!t&&!_proxyCfg()) return;
   try{
-    const res=await airtableFetch('Equipo_Eventos',500);const existentes=res.records||[];const existMap={};existentes.forEach(r=>{existMap[`${r.fields.persona_id}_${r.fields.fecha}`]=r.id;});
-    const toUpsert=Object.entries(equipoState.eventos).map(([key,ev])=>{const[pid,...dp]=key.split('_');return{key,personaId:pid,fecha:dp.join('_'),ev};});
-    const toCreate=toUpsert.filter(x=>!existMap[`${x.personaId}_${x.fecha}`]);
-    for(let i=0;i<toCreate.length;i+=10){const b=toCreate.slice(i,i+10);await _atFetch(`/${BASE_ID}/Equipo_Eventos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({fields:{persona_id:x.personaId,fecha:x.fecha,tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}})),typecast:true})});}
-    const toUpdate=toUpsert.filter(x=>existMap[`${x.personaId}_${x.fecha}`]);
-    for(let i=0;i<toUpdate.length;i+=10){const b=toUpdate.slice(i,i+10);await _atFetch(`/${BASE_ID}/Equipo_Eventos`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({records:b.map(x=>({id:existMap[`${x.personaId}_${x.fecha}`],fields:{tipo:x.ev.tipo||'',desc:x.ev.desc||'',hora_inicio:x.ev.horaInicio||'',hora_fin:x.ev.horaFin||''}}))})});}
-    const toDelete=existentes.filter(r=>!equipoState.eventos[`${r.fields.persona_id}_${r.fields.fecha}`]);
-    for(let i=0;i<toDelete.length;i+=10){const ids=toDelete.slice(i,i+10).map(r=>`records[]=${r.id}`).join('&');await _atFetch(`/${BASE_ID}/Equipo_Eventos?${ids}`,{method:'DELETE',headers:{'Authorization':'Bearer '+t}});}
-  }catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('unknown')){const ok=await crearTablaEquipoEventos();if(ok){toast('Tabla Equipo_Eventos creada ✓','success');await saveEquipoEventosAirtable();}}}
+    const r=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{headers:{}});
+    if(!r.ok)return false;
+    const d=await r.json();
+    if(d.tables?.find(x=>x.name==='Equipo_Eventos'))return true;
+    const cr=await _atFetch(`/meta/bases/${BASE_ID}/tables`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:'Equipo_Eventos',fields:[
+        {name:'persona_id',type:'singleLineText'},
+        {name:'fecha',type:'date',options:{dateFormat:{name:'iso'}}},
+        {name:'tipo',type:'singleLineText'},
+        {name:'desc',type:'singleLineText'},
+        {name:'hora_inicio',type:'singleLineText'},
+        {name:'hora_fin',type:'singleLineText'}
+      ]})
+    });
+    return cr.ok;
+  }catch(e){return false;}
+}
+function _equipoKeyParts(key){
+  const raw=String(key||''),cut=raw.indexOf('_');
+  if(cut<1)return null;
+  const personaId=raw.slice(0,cut),fecha=raw.slice(cut+1);
+  if(!PERSONAS.some(p=>p.id===personaId)||!/^\d{4}-\d{2}-\d{2}$/.test(fecha))return null;
+  const d=new Date(fecha+'T12:00:00Z');
+  if(Number.isNaN(d.getTime())||d.toISOString().slice(0,10)!==fecha)return null;
+  return{personaId,fecha,key:personaId+'_'+fecha};
+}
+function _equipoEventFields(personaId,fecha,ev){
+  const tipo=String(ev?.tipo||'');
+  if(!Object.hasOwn(EQUIPO_TIPOS,tipo)||tipo==='disponible')
+    throw new Error('Tipo de disponibilidad inválido');
+  const clock=v=>v===''||/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v||''));
+  const horaInicio=String(ev?.horaInicio||''),horaFin=String(ev?.horaFin||'');
+  if(!clock(horaInicio)||!clock(horaFin))throw new Error('Horario de disponibilidad inválido');
+  return{
+    persona_id:personaId,fecha,tipo,
+    desc:String(ev?.desc||'').slice(0,2000),
+    hora_inicio:horaInicio,hora_fin:horaFin
+  };
+}
+async function _equipoMutation(path,method,body){
+  const cfg=_airtableConfig();
+  const url=cfg.base+path;
+  const headers={...cfg.headers};
+  if(body!==undefined)headers['Content-Type']='application/json';
+  const r=await airtableHttp(url,{
+    method,headers,...(body===undefined?{}:{body:JSON.stringify(body)})
+  },{idempotent:method!=='POST'});
+  if(!r.ok){
+    const j=await r.json().catch(()=>({}));
+    const detail=j.error?.message||j.error?.type||
+      (typeof j.error==='string'?j.error:'sin detalle');
+    throw new Error(`Equipo_Eventos ${method} HTTP ${r.status}: ${detail}`);
+  }
+  return r;
+}
+// Persiste SOLO las claves modificadas. Nunca reconcilia la tabla completa:
+// un navegador atrasado no puede borrar eventos creados desde otro equipo.
+async function saveEquipoEventosAirtable(ops=[]){
+  const t=getToken();if(!t&&!_proxyCfg())
+    throw new Error('Airtable no está configurado para respaldar Equipo');
+  if(!Array.isArray(ops))throw new Error('Mutación de Equipo inválida');
+  if(!ops.length)return true;
+
+  const collapsed=new Map();
+  for(const op of ops){
+    if(!op||!['set','delete'].includes(op.type))throw new Error('Operación de Equipo inválida');
+    const parts=_equipoKeyParts(op.key);
+    if(!parts)throw new Error('Clave de disponibilidad inválida');
+    collapsed.set(parts.key,{...op,...parts});
+  }
+  const res=await airtableFetch('Equipo_Eventos',500),existMap=new Map();
+  for(const row of (res.records||[])){
+    const f=row.fields||{},parts=_equipoKeyParts(`${f.persona_id||''}_${f.fecha||''}`);
+    if(!parts)continue;
+    if(existMap.has(parts.key))
+      throw new Error('Equipo_Eventos contiene duplicados para '+parts.key);
+    existMap.set(parts.key,row.id);
+  }
+
+  for(const op of collapsed.values()){
+    const recordId=existMap.get(op.key);
+    if(op.type==='delete'){
+      if(recordId)await _equipoMutation(
+        `/${BASE_ID}/Equipo_Eventos/${recordId}`,'DELETE');
+      continue;
+    }
+    const fields=_equipoEventFields(op.personaId,op.fecha,op.value);
+    if(recordId){
+      await _equipoMutation(
+        `/${BASE_ID}/Equipo_Eventos/${recordId}`,'PATCH',
+        {fields:{tipo:fields.tipo,desc:fields.desc,
+          hora_inicio:fields.hora_inicio,hora_fin:fields.hora_fin}});
+    }else{
+      await _equipoMutation(
+        `/${BASE_ID}/Equipo_Eventos`,'POST',{fields});
+    }
+  }
+  return true;
 }
 async function loadEquipoEventosAirtable(){
-  const t=getToken();if(!t&&!_proxyCfg()) return;
-  try{const res=await airtableFetch('Equipo_Eventos',500);equipoState.eventos={};(res.records||[]).forEach(r=>{const f=r.fields;if(f.persona_id&&f.fecha) equipoState.eventos[`${f.persona_id}_${f.fecha}`]={tipo:f.tipo||'ocupado',desc:f.desc||'',horaInicio:f.hora_inicio||'',horaFin:f.hora_fin||''};});}
-  catch(e){if(e.message?.includes('404')||e.message?.includes('403')||e.message?.includes('NOT_FOUND')||e.message?.includes('Could not find')) await crearTablaEquipoEventos();}
+  const t=getToken();if(!t&&!_proxyCfg())return false;
+  try{
+    const res=await airtableFetch('Equipo_Eventos',500),next={},seen=new Set();
+    for(const r of (res.records||[])){
+      const f=r.fields||{},parts=_equipoKeyParts(`${f.persona_id||''}_${f.fecha||''}`);
+      if(!parts)continue;
+      if(seen.has(parts.key))throw new Error('Disponibilidad duplicada en '+parts.key);
+      seen.add(parts.key);
+      const tipo=String(f.tipo||'ocupado');
+      if(!Object.hasOwn(EQUIPO_TIPOS,tipo)||tipo==='disponible')continue;
+      next[parts.key]={
+        tipo,desc:String(f.desc||'').slice(0,2000),
+        horaInicio:String(f.hora_inicio||''),horaFin:String(f.hora_fin||'')
+      };
+    }
+    equipoState.eventos=next;
+    return true;
+  }catch(e){
+    // No vaciar la agenda ni intentar crear tablas ante un 403 de Access.
+    // Mantener la última vista y decir la verdad al usuario.
+    try{console.warn('[Equipo] no se pudo cargar Equipo_Eventos',e);}catch(_){}
+    toast('No se pudo cargar la disponibilidad compartida de Equipo','error');
+    return false;
+  }
 }
 
 // ── LOAD DATA ─────────────────────────────────────────────────

@@ -30,7 +30,8 @@ const ACCESS_OPERATOR_WRITE_METHODS=Object.freeze({
   Proveedores:new Set(['POST','PATCH']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
-  Maquinas_Mant:new Set(['POST'])
+  Maquinas_Mant:new Set(['POST']),
+  Equipo_Eventos:new Set(['POST','PATCH','DELETE'])
 });
 const ACCESS_FINANCE_TABLES=new Set([
   'Facturas','Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones',
