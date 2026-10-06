@@ -247,8 +247,9 @@ test('syncAdsToAirtable hace upsert por fecha/período y campaña',()=>{
 test('ROAS CRM usa solo ingresos atribuibles a Google Ads',()=>{
   const snap=functionBlock(SOURCE,'adsSaveSnapshot');
   const attr=functionBlock(SOURCE,'_adsAttributedCrm');
+  const clientAttr=functionBlock(SOURCE,'_adsClientIsAttributed');
   assert.match(attr,/_adsClientIsAttributed/);
-  assert.match(attr,/GCLID|Campaña Ads|google_ads/);
+  assert.match(clientAttr,/GCLID|Campaña Ads|google_ads/);
   assert.match(snap,/ingresoAdsCRM/);
   assert.match(snap,/roasAtribuido/);
   assert.doesNotMatch(snap,/const roasReal=gasto>0\?ingresoCRM\/gasto/);
