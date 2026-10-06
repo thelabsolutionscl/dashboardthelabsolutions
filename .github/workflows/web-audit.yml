@@ -6,18 +6,32 @@ on:
     paths:
       - 'index.html'
       - 'js/seo-ads.js'
+      - 'js/web-analytics.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'js/maquinas.js'
       - 'js/maquinas-operaciones.js'
       - 'tests/web-wiring.test.js'
+      - 'tests/web-demo-readonly-credentials.test.js'
+      - 'tests/web-ads-server-guard.test.js'
+      - 'tests/ads-presupuesto.test.js'
+      - 'tests/access-rbac.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/web-audit.yml'
   pull_request:
     paths:
       - 'index.html'
       - 'js/seo-ads.js'
+      - 'js/web-analytics.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'js/maquinas.js'
       - 'js/maquinas-operaciones.js'
       - 'tests/web-wiring.test.js'
+      - 'tests/web-demo-readonly-credentials.test.js'
+      - 'tests/web-ads-server-guard.test.js'
+      - 'tests/ads-presupuesto.test.js'
+      - 'tests/access-rbac.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/web-audit.yml'
   workflow_dispatch:
@@ -41,10 +55,16 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           node --check js/seo-ads.js
+          node --check js/web-analytics.js
+          node --check airtable-proxy/src/worker.js
+          node --check airtable-proxy/src/access-auth.js
           node --check tests/web-wiring.test.js
+          node --check tests/web-demo-readonly-credentials.test.js
+          node --check tests/web-ads-server-guard.test.js
+          node --check tests/ads-presupuesto.test.js
 
       - name: Audit WEB wiring
-        run: node --test tests/web-wiring.test.js
+        run: node --test tests/web-wiring.test.js tests/web-demo-readonly-credentials.test.js tests/web-ads-server-guard.test.js tests/ads-presupuesto.test.js tests/access-rbac.test.js
 
       - name: General smoke audit
         run: node tests/smoke.test.js
