@@ -4132,9 +4132,8 @@
             <input class="field-input" id="ads-customer-id" placeholder="123-456-7890">
           </div>
           <div class="field-group">
-            <label class="field-label">Secreto de mutaciones</label>
-            <input class="field-input" id="ads-secret" type="password" autocomplete="off" placeholder="Usa una clave larga, única y distinta a la anterior">
-            <div style="font-size:10px;color:var(--text3);margin-top:4px">Se guarda solo en este navegador y debe coincidir con <code>SECRET</code> en ambos scripts.</div>
+            <label class="field-label">Escrituras Google Ads</label>
+            <div style="font-size:11px;color:var(--text2);line-height:1.55;padding:9px 10px;border:1px solid var(--border2);border-radius:7px;background:var(--surface2)">Las campañas, presupuestos y decisiones del piloto se envían por el <b>Proxy Worker con Cloudflare Access</b>. El secreto del Apps Script y la clave del webhook de Make ya no se guardan ni se muestran en este navegador.</div>
           </div>
         </div>
         <div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
@@ -4147,8 +4146,9 @@
           <div style="background:#1a1a2e;border:1px solid rgba(255,200,0,0.25);border-radius:8px;padding:12px">
             <div style="font-size:11px;font-weight:600;color:#ffc107;margin-bottom:6px">⚙ Configuración — 2 scripts obligatorios</div>
             <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.6">
-              <strong>Por qué 2 scripts:</strong> <code>AdsApp</code> solo existe <em>dentro</em> de Google Ads y no puede desplegarse como App Web. Se necesita un puente.<br><br>
-              <strong style="color:#e6edf3">Script 1 — Apps Script</strong> (script.google.com) = el endpoint web:<br>
+              <strong>Por qué 2 scripts:</strong> <code>AdsApp</code> solo existe <em>dentro</em> de Google Ads y no puede desplegarse como App Web. Se necesita un puente.<br>
+              <strong style="color:#ffc107">Seguridad:</strong> <code>SECRET</code> se configura en Script 1 y como secreto <code>ADS_MUTATION_SECRET</code> del Proxy Worker; nunca se copia al navegador. El webhook/clave de Make también son secretos del Worker.<br><br>
+              <strong style="color:#e6edf3">Script 1 — Apps Script</strong> (script.google.com) = el endpoint web de lectura/cola:<br>
               Crea un proyecto nuevo → pega el código → <em>Desplegar → App Web → Ejecutar como: Yo → Acceso: Cualquier persona</em> → copia la URL al campo Endpoint arriba.<br><br>
               <strong style="color:#e6edf3">Script 2 — Google Ads Script</strong> (ads.google.com → Herramientas → Scripts):<br>
               Crea un nuevo script → pega el 2° bloque → actualiza <code>ENDPOINT</code> con la URL del Script 1 → ejecútalo manualmente una vez y programa diario.<br><br>
@@ -4745,12 +4745,12 @@ function _reportarResultados(muts) {
         <div style="padding:14px 16px">
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px">
             <div class="stat-card"><div class="stat-label">Gasto Ads</div><div class="stat-value" id="crm-ads-gasto" style="color:var(--danger)">—</div></div>
-            <div class="stat-card"><div class="stat-label">Ingresos CRM</div><div class="stat-value" id="crm-ads-ingresos" style="color:var(--success)">—</div><div class="stat-sub" id="crm-ads-ingresos-sub"></div></div>
-            <div class="stat-card"><div class="stat-label">ROAS Real</div><div class="stat-value" id="crm-ads-roas" style="color:var(--accent)">—</div><div class="stat-sub">ingresos / gasto</div></div>
-            <div class="stat-card"><div class="stat-label">Costo por Lead</div><div class="stat-value" id="crm-ads-cpl" style="color:var(--warn)">—</div><div class="stat-sub" id="crm-ads-cpl-sub"></div></div>
+            <div class="stat-card"><div class="stat-label">Ingresos atribuidos Ads</div><div class="stat-value" id="crm-ads-ingresos" style="color:var(--success)">—</div><div class="stat-sub" id="crm-ads-ingresos-sub"></div></div>
+            <div class="stat-card"><div class="stat-label">ROAS CRM atribuido</div><div class="stat-value" id="crm-ads-roas" style="color:var(--accent)">—</div><div class="stat-sub">ventas con origen Ads / gasto</div></div>
+            <div class="stat-card"><div class="stat-label">Costo por Lead Ads</div><div class="stat-value" id="crm-ads-cpl" style="color:var(--warn)">—</div><div class="stat-sub" id="crm-ads-cpl-sub"></div></div>
           </div>
           <div id="crm-ads-bar" style="height:8px;border-radius:4px;background:var(--surface3);overflow:hidden;margin-bottom:6px"></div>
-          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>Gasto Ads</span><span id="crm-ads-bar-label"></span><span>Ingresos CRM</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>Gasto Ads</span><span id="crm-ads-bar-label"></span><span>Ingresos atribuidos Ads</span></div>
         </div>
       </div>
     </div>
