@@ -93,7 +93,8 @@ test('recipient parser performs server-side RFC822 validation and count limiting
 test('attachment download validates part path and applies preflight plus decoded caps',()=>{
   const att=block("case 'attachment':","case 'check':");
   assert.match(att,/\$uid < 1/);
-  assert.match(att,/preg_match\('\/\^\\d\+\(\?:\\\\\.\\d\+\)\*\$\/'/);
+  assert.ok(att.includes("preg_match('/^\\d+(?:\\.\\d+)*$/', $part)"),
+    'part must be a dotted numeric IMAP section');
   assert.match(att,/\$target->bytes.*28 \* 1024 \* 1024/s);
   assert.match(att,/strlen\(\$raw\) > 28 \* 1024 \* 1024/);
   assert.match(att,/base64_decode\(\$raw, true\)/);
