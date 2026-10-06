@@ -239,7 +239,16 @@ test('ventas manuales no llaman persistencia inexistente y fallan sin corromper 
 });
 test.todo('ventas manuales deben migrar desde almacenamiento local a una fuente compartida, auditable y con rollback remoto');
 test.todo('Libro Diario, presupuesto, caja, pagos programados y préstamos deben persistirse en una fuente compartida y no solo localStorage');
-test.todo('_ivaMes debe ser una proyección no tributaria basada en DTE emitidos/compras documentadas, no en pedidos creados y gastos genéricos');
+test('_ivaMes usa DTE emitidos, resta notas de crédito y exige compras documentadas',()=>{
+  const iva=functionBlock(FIN,'_ivaMes');
+  const card=functionBlock(FIN,'renderIvaMensual');
+  assert.match(iva,/finGetAllFacturas\s*\(\)/);
+  assert.match(iva,/_source\s*!==\s*['"]airtable['"]/);
+  assert.match(iva,/nota de cr/);
+  assert.match(iva,/documentoTributario===true/);
+  assert.doesNotMatch(iva,/state\.pedidos/);
+  assert.match(card,/NO USAR PARA DECLARAR F29/);
+});
 test.todo('emitirDTE necesita idempotencia server-side por referencia y cola de reconciliación para DTE externos que no lograron guardarse en Airtable');
 test.todo('uploadCAF y emisión SII deben usar autenticación servidor a servidor; el CAF no debe quedar protegido solo por una URL pública');
 test('c3dCalcPieza distribuye extras del trabajo una sola vez',()=>{
@@ -277,16 +286,47 @@ test('tablas financieras escapan texto procedente de Airtable y ventas manuales'
   assert.match(fact,/escapeHtml\(String\(r\.cat/);
 });
 
-test.todo('finDrawCanalDonut y finRenderTopClientes deben usar una base monetaria consistente, sin mezclar pagos brutos con ventas netas');
-test.todo('presExportCSV debe exportar el ejecutado real usado en pantalla cuando no hay ajuste manual');
-test.todo('FIN_PRESTAMOS debe ordenarse por fecha real y corregir/validar la entrada 13/03/25 dentro de la secuencia 2026');
+test('canal y top clientes usan venta neta consistente',()=>{
+  const donut=functionBlock(FIN,'finDrawCanalDonut');
+  const top=functionBlock(FIN,'finRenderTopClientes');
+  for(const body of [donut,top]){
+    assert.match(body,/_neto/);
+    assert.doesNotMatch(body,/r\.pago!=null\?r\.pago/);
+  }
+  assert.match(donut,/new Date\(\)\.getFullYear\(\)/);
+  assert.match(top,/venta neta/);
+});
+test('presExportCSV exporta el mismo ejecutado usado en pantalla',()=>{
+  const csv=functionBlock(FIN,'presExportCSV');
+  assert.match(csv,/_presEjecutadoReal\s*\(/);
+  assert.match(csv,/c\.ejecutado/);
+  assert.match(csv,/real\[c\.id\]/);
+  assert.match(csv,/Ejecutado usado/);
+});
+test('préstamos se ordenan por fecha real y no conservan el typo 13/03/25',()=>{
+  assert.doesNotMatch(FIN,/13\/03\/25/);
+  const rows=functionBlock(FIN,'_finPrestamosOrdenados');
+  const render=functionBlock(FIN,'finRenderPrestamos');
+  const chart=functionBlock(FIN,'finDrawDeudaTimeline');
+  assert.match(rows,/_finParseFechaPrestamo/);
+  assert.match(rows,/\.sort\s*\(/);
+  assert.match(render,/_finPrestamosOrdenados\s*\(\)/);
+  assert.match(chart,/_finPrestamosOrdenados\s*\(\)/);
+});
 test('cobWhatsApp no registra el toque sin confirmación explícita',()=>{
   const wa=functionBlock(FIN,'cobWhatsApp');
   const ask=wa.search(/confirm\s*\(/);
   const log=wa.search(/cobRegistrar\s*\(/);
   assert.ok(ask>=0&&log>ask,'debe confirmar el envío antes de registrar cobranza');
 });
-test.todo('punto de equilibrio debe distinguir pedidos creados, facturación y revenue reconocido para no presentar ventas no emitidas como ingreso del mes');
+test('punto de equilibrio usa facturación emitida y la etiqueta explícitamente',()=>{
+  const sale=functionBlock(FIN,'_ventaNetaMes');
+  const card=functionBlock(FIN,'renderBreakEven');
+  assert.match(sale,/finGetAllFacturas\s*\(\)/);
+  assert.doesNotMatch(sale,/state\.pedidos/);
+  assert.match(card,/facturación emitida/i);
+  assert.match(card,/Facturación neta emitida del mes/);
+});
 
 
 test('cobranza activa no confía en saldos embebidos históricos sin conciliación',()=>{
