@@ -80,6 +80,8 @@ test('documento financiero válido cubre todas las áreas migradas',()=>{
   assert.deepEqual(Object.keys(sharedFinanceEmpty()).sort(),Object.keys(d).sort());
   assert.equal(sharedFinanceDocumentAllowed({...d,secret:'x'}),false);
   assert.equal(sharedFinanceDocumentAllowed({...d,plazoDefault:366}),false);
+  const legacy={...d};delete legacy.plazoDefault;
+  assert.equal(sharedFinanceDocumentAllowed(legacy),true,'el documento previo debe seguir siendo legible');
 });
 test('GET no expone recordId y devuelve revisión CAS',async()=>{
   const h=harness(),res=await h.run('GET');assert.equal(res.status,200);
