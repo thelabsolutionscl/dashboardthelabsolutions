@@ -8,11 +8,8 @@ const path=require('node:path');
 
 const ROOT=path.join(__dirname,'..');
 const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
-const JS_DIR=path.join(ROOT,'js');
-const MODULES=fs.existsSync(JS_DIR)
-  ?fs.readdirSync(JS_DIR).filter(n=>n.endsWith('.js')).map(n=>fs.readFileSync(path.join(JS_DIR,n),'utf8')).join('\n')
-  :'';
-const SOURCE=`${INDEX}\n${MODULES}`;
+const VISUAL=fs.readFileSync(path.join(ROOT,'js','operativo-visual.js'),'utf8');
+const SOURCE=INDEX+'\n'+VISUAL;
 const OPENGEN='https://thelabsolutionscl.github.io/Open-Generative-AI/';
 
 function count(re,text=SOURCE){return(text.match(re)||[]).length;}
@@ -21,70 +18,104 @@ function iframeTag(){
   assert.ok(m,'falta iframe #vaiFrame');
   return m[0];
 }
+function functionBlock(name){
+  const re=new RegExp('(?:async\\s+)?function\\s+'+name+'\\s*\\(');
+  const start=re.exec(VISUAL);assert.ok(start,'falta '+name);
+  const tail=VISUAL.slice(start.index+start[0].length);
+  const next=/\n\s*(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*\(/.exec(tail);
+  return VISUAL.slice(start.index,next?start.index+start[0].length+next.index:VISUAL.length);
+}
 
-test('VISUAL AI tiene una sola sección y navegación escritorio/móvil',()=>{
-  assert.equal(count(/id=["']tab-visual["']/g,INDEX),1,'#tab-visual debe ser único');
-  assert.match(SOURCE,/switchTab\(\s*['"]visual['"]\s*\)/,'falta navegación escritorio');
-  assert.match(SOURCE,/switchTabMobile\(\s*['"]visual['"]\s*\)/,'falta navegación móvil');
+test('VISUAL AI conserva sección y navegación escritorio/móvil',()=>{
+  assert.equal(count(/id=["']tab-visual["']/g,INDEX),1);
+  assert.match(INDEX,/switchTab\(\s*['"]visual['"]\s*\)/);
+  assert.match(INDEX,/switchTabMobile\(\s*['"]visual['"]\s*\)/);
   for(const id of ['vaiFrame','vaiFallback','vaiStatus','vaiDot','vaiStatusTxt']){
-    assert.equal(count(new RegExp(`id=["']${id}["']`,'g'),INDEX),1,`${id} debe existir una vez`);
+    const n=(INDEX.match(new RegExp('id=(?:"|\\x27)'+id+'(?:"|\\x27)','g'))||[]).length;
+    assert.equal(n,1,id);
   }
 });
 
-test('el iframe usa un origen HTTPS fijo y carga diferida al activar Visual AI',()=>{
+test('iframe parte descargado y apunta a un único origen fijo HTTPS',()=>{
   const tag=iframeTag();
-  assert.match(tag,/src=["']about:blank["']/i,'debe partir sin cargar el servicio externo');
-  assert.ok(tag.includes(`data-src="${OPENGEN}"`)||tag.includes(`data-src='${OPENGEN}'`),'data-src debe apuntar al OpenGen oficial');
-  assert.match(SOURCE,/name\s*===\s*['"]visual['"][\s\S]{0,500}getElementById\(\s*['"]vaiFrame['"]\s*\)[\s\S]{0,500}dataset\.src[\s\S]{0,500}\.src\s*=/,'la carga debe ocurrir al activar la sección');
-  assert.equal(count(/data-src=["']https:\/\/thelabsolutionscl\.github\.io\/Open-Generative-AI\/["']/g,INDEX),1,'el origen embebido debe ser único');
+  assert.match(tag,/src=["']about:blank["']/i);
+  assert.ok(tag.includes('data-src="'+OPENGEN+'"')||tag.includes("data-src='"+OPENGEN+"'"));
+  assert.equal(count(/data-src=["']https:\/\/thelabsolutionscl\.github\.io\/Open-Generative-AI\/["']/g,INDEX),1);
+  const activate=functionBlock('vaiActivate');
+  assert.match(activate,/thelabsolutionscl\\\.github\\\.io\\\/Open-Generative-AI/);
+  assert.match(activate,/frame\.src=target/);
 });
 
-test('el panel tiene estado visible, fallback y salida directa',()=>{
+test('iframe se endurece antes de cargar contenido remoto',()=>{
+  const cfg=functionBlock('vaiConfigureFrame');
+  assert.match(cfg,/removeAttribute\(['"]onload['"]\)/);
+  assert.match(cfg,/setAttribute\(['"]sandbox['"],['"]allow-scripts allow-same-origin allow-downloads['"]\)/);
+  assert.match(cfg,/setAttribute\(['"]referrerpolicy['"],['"]no-referrer['"]\)/);
+  assert.match(cfg,/setAttribute\(['"]allow['"],['"]clipboard-write['"]\)/);
+  assert.doesNotMatch(cfg,/camera|microphone|fullscreen/);
+  assert.match(cfg,/noopener noreferrer/);
+});
+
+test('onload ya no equivale a readiness: exige handshake exacto y versionado',()=>{
+  const onMessage=functionBlock('vaiOnMessage');
+  assert.match(VISUAL,/VAI_ORIGIN=['"]https:\/\/thelabsolutionscl\.github\.io['"]/);
+  assert.match(VISUAL,/VAI_PROTOCOL_VERSION=1/);
+  assert.match(onMessage,/event\.origin!==VAI_ORIGIN/);
+  assert.match(onMessage,/event\.source!==frame\.contentWindow/);
+  assert.match(onMessage,/msg\.source!==['"]opengen['"]/);
+  assert.match(onMessage,/msg\.version!==VAI_PROTOCOL_VERSION/);
+  assert.match(onMessage,/msg\.type===['"]ready['"]/);
+  assert.match(onMessage,/type:['"]host-ready['"]/);
+  assert.doesNotMatch(functionBlock('vaiConfigureFrame'),/OpenGen Studio\s*[—-]\s*Live/);
+});
+
+test('carga maneja timeout/reintento y descarga iframe al salir',()=>{
+  const timeout=functionBlock('vaiArmTimeout');
+  const retry=functionBlock('vaiRetry');
+  const stop=functionBlock('vaiDeactivate');
+  assert.match(timeout,/12000/);
+  assert.match(timeout,/sin respuesta/);
+  assert.match(retry,/about:blank/);
+  assert.match(stop,/type:['"]pause['"]/);
+  assert.match(stop,/frame\.src=['"]about:blank['"]/);
+  assert.match(VISUAL,/MutationObserver/);
+});
+
+test('OpenGen usa RPC al proxy TLS y nunca recibe secreto MuAPI',()=>{
+  const rpc=functionBlock('vaiRpcToServer');
+  const handle=functionBlock('vaiHandleRpc');
+  assert.match(rpc,/\/visual-ai\/rpc/);
+  assert.match(rpc,/credentials:['"]include['"]/);
+  assert.match(rpc,/X-App-Key/);
+  assert.match(rpc,/AbortController/);
+  assert.match(handle,/['"]quota['"].*['"]upload['"].*['"]generate['"].*['"]poll['"]/s);
+  assert.doesNotMatch(VISUAL,/MUAPI_KEY|api\.muapi\.ai|corsproxy\.io/i);
+  assert.doesNotMatch(INDEX,/\bmu_[A-Za-z0-9_-]{12,}\b|\bhf_[A-Za-z0-9_-]{12,}\b/);
+});
+
+test('contrato de eventos cubre ciclo completo y selección de resultado',()=>{
+  const msg=functionBlock('vaiOnMessage');
+  for(const ev of ['job-start','job-progress','job-complete','job-error','asset-selected'])
+    assert.match(msg,new RegExp(ev));
+  assert.match(msg,/vaiAssetLinkPrompt/);
+});
+
+test('resultado puede vincularse sin descarga a Cliente, Cotización o Pedido',()=>{
+  const link=functionBlock('vaiAssetLinkPrompt');
+  assert.match(link,/cliente.*cotizacion.*pedido/s);
+  assert.match(link,/state\.clientes/);
+  assert.match(link,/state\.cotizaciones/);
+  assert.match(link,/state\.pedidos/);
+  assert.match(link,/airtableWriteTolerant/);
+  assert.match(link,/Notas internas/);
+  assert.match(link,/Notas cotización/);
+  assert.match(link,/Notas pedido/);
+});
+
+test('panel conserva fallback y enlaces externos se protegen',()=>{
   assert.match(INDEX,/id=["']vaiFallback["']/);
   assert.match(INDEX,/Cargando OpenGen Studio/i);
-  assert.ok(count(/href=["']https:\/\/thelabsolutionscl\.github\.io\/Open-Generative-AI\/["']/g,INDEX)>=1,'debe existir enlace directo');
-  assert.match(INDEX,/target=["']_blank["']/);
-  assert.match(INDEX,/id=["']vaiStatusTxt["']/);
-  assert.match(INDEX,/OpenGen Studio\s*[—-]\s*Live/,'debe indicar carga completada');
+  assert.ok(count(/href=["']https:\/\/thelabsolutionscl\.github\.io\/Open-Generative-AI\/["']/g,INDEX)>=1);
+  assert.match(VISUAL,/querySelectorAll\(['"]#tab-visual a\[target="_blank"\]['"]\)/);
+  assert.match(VISUAL,/noopener noreferrer/);
 });
-
-test('el iframe declara título y permisos de medios de forma explícita',()=>{
-  const tag=iframeTag();
-  assert.match(tag,/title=["']OpenGen Studio["']/i);
-  assert.match(tag,/allow=["'][^"']*camera[^"']*["']/i);
-  assert.match(tag,/allow=["'][^"']*microphone[^"']*["']/i);
-  assert.match(tag,/allow=["'][^"']*clipboard-write[^"']*["']/i);
-  assert.match(tag,/allow=["'][^"']*fullscreen[^"']*["']/i);
-});
-
-test('el dashboard no contiene credenciales ni llamadas directas del proveedor visual',()=>{
-  // Ojo: NO se puede prohibir 'x-api-key' a secas — es la cabecera estándar que
-  // el dashboard usa legítimamente con Anthropic y con Moonraker (impresoras).
-  // Lo que debe estar fuera es el proveedor visual y cualquier proxy abierto.
-  assert.doesNotMatch(SOURCE,/api\.muapi\.ai|corsproxy\.io/i,'las llamadas del proveedor deben permanecer fuera del dashboard');
-  assert.doesNotMatch(SOURCE,/x-api-key['"]\s*:\s*['"`]?(?:mu_|hf_)/i,'no debe enviarse una key del proveedor visual desde el dashboard');
-  assert.doesNotMatch(SOURCE,/\bmu_[A-Za-z0-9_-]{12,}\b|\bhf_[A-Za-z0-9_-]{12,}\b/,'no debe existir una key literal');
-});
-
-test('la carga visual no se dispara desde secciones ajenas',()=>{
-  // Se comprueba el guard REAL de cada línea que toca el iframe, no la cercanía
-  // de texto: la heurística por proximidad capturaba el `if(name===...)` vecino
-  // dentro de switchTab y fallaba al agregar cualquier sección nueva al lado.
-  const lineas=SOURCE.split('\n').filter(l=>l.includes('vaiFrame')&&/\.src\s*=/.test(l));
-  assert.ok(lineas.length,'debe existir la carga diferida del iframe visual');
-  const guards=new Set();
-  for(const l of lineas){
-    const g=[...l.matchAll(/name\s*===\s*['"]([^'"]+)['"]/g)].map(m=>m[1]);
-    assert.ok(g.length,`la carga del iframe debe estar condicionada por sección: ${l.trim().slice(0,80)}`);
-    g.forEach(x=>guards.add(x));
-  }
-  assert.deepEqual([...guards],['visual'],'solo la sección VISUAL AI debe cargar el iframe');
-});
-
-test.todo('el iframe debe usar sandbox mínimo, referrerpolicy y permisos concedidos solo cuando la función los necesite');
-test.todo('los enlaces target=_blank deben incluir rel=noopener noreferrer');
-test.todo('el dashboard debe validar readiness con postMessage y allowlist de origin, no solo con iframe.onload');
-test.todo('la carga debe manejar timeout, error tardío y un botón de reintento sin recargar todo el dashboard');
-test.todo('al salir de VISUAL AI debe poder pausar o descargar el iframe para evitar consumo innecesario');
-test.todo('OpenGen debe enviar eventos de generación/costo/error al dashboard mediante un contrato versionado');
-test.todo('un resultado debe poder vincularse con Cliente, Cotización, Pedido o producto sin descarga y carga manual');

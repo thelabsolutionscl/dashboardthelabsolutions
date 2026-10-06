@@ -592,6 +592,176 @@
     if(a==='quote-pdf')generarPDFCotizacion(arg);
     if(a==='quote-notes')openNotasModal('cot',arg,'Cotización');
   }
+
+  // ── Visual AI secure host bridge ─────────────────────────────────────────
+  const VAI_ORIGIN='https://thelabsolutionscl.github.io';
+  const VAI_PROTOCOL_VERSION=1;
+  let vaiReady=false,vaiTimer=0,vaiObserver=null,vaiLastAsset=null;
+
+  function vaiFrame(){return document.getElementById('vaiFrame');}
+  function vaiStatus(text,tone){
+    const txt=document.getElementById('vaiStatusTxt'),dot=document.getElementById('vaiDot');
+    if(txt)txt.textContent=text;
+    if(dot){
+      dot.style.background=tone==='ok'?'var(--success)':tone==='bad'?'var(--danger)':'#facc15';
+      dot.style.animation=tone==='ok'?'pulse 2s infinite':'';
+    }
+  }
+  function vaiFallback(show,message){
+    const el=document.getElementById('vaiFallback');if(!el)return;
+    el.style.display=show?'flex':'none';
+    if(message){
+      const body=el.querySelector('[data-vai-fallback-message]')||el.querySelector('div:nth-child(2)');
+      if(body)body.textContent=message;
+    }
+    let retry=document.getElementById('vaiRetry');
+    if(show&&!retry){
+      retry=document.createElement('button');retry.id='vaiRetry';retry.className='btn btn-primary btn-sm';
+      retry.type='button';retry.textContent='↻ Reintentar';retry.addEventListener('click',vaiRetry);el.appendChild(retry);
+    }
+  }
+  function vaiArmTimeout(){
+    clearTimeout(vaiTimer);vaiReady=false;vaiStatus('OpenGen Studio — conectando…','wait');
+    vaiFallback(true,'Conectando de forma segura con OpenGen Studio…');
+    vaiTimer=setTimeout(()=>{
+      if(vaiReady)return;
+      vaiStatus('OpenGen Studio — sin respuesta','bad');
+      vaiFallback(true,'OpenGen no confirmó el canal seguro. Puedes reintentar sin recargar el dashboard.');
+    },12000);
+  }
+  function vaiConfigureFrame(){
+    const frame=vaiFrame();if(!frame)return null;
+    frame.removeAttribute('onload');
+    frame.setAttribute('sandbox','allow-scripts allow-same-origin allow-downloads');
+    frame.setAttribute('referrerpolicy','no-referrer');
+    frame.setAttribute('allow','clipboard-write');
+    frame.setAttribute('loading','lazy');
+    document.querySelectorAll('#tab-visual a[target="_blank"]').forEach(a=>a.setAttribute('rel','noopener noreferrer'));
+    frame.addEventListener('load',()=>{
+      if(frame.src==='about:blank')return;
+      vaiStatus('OpenGen Studio — esperando handshake…','wait');
+      if(!vaiReady)vaiArmTimeout();
+    });
+    return frame;
+  }
+  function vaiActivate(){
+    const frame=vaiConfigureFrame();if(!frame)return;
+    const target=frame.dataset.src||'';
+    if(!/^https:\/\/thelabsolutionscl\.github\.io\/Open-Generative-AI\/$/.test(target)){
+      vaiStatus('OpenGen Studio — origen inválido','bad');return;
+    }
+    if(frame.src==='about:blank'||!frame.src){
+      vaiArmTimeout();frame.src=target;
+    }else if(!vaiReady)vaiArmTimeout();
+  }
+  function vaiDeactivate(){
+    const frame=vaiFrame();if(!frame||frame.src==='about:blank')return;
+    try{frame.contentWindow?.postMessage({source:'tls-dashboard',version:VAI_PROTOCOL_VERSION,type:'pause'},VAI_ORIGIN);}catch(_){}
+    clearTimeout(vaiTimer);vaiReady=false;
+    frame.src='about:blank';
+    vaiStatus('OpenGen Studio — pausado','wait');
+    vaiFallback(true,'OpenGen está pausado mientras trabajas en otra sección.');
+  }
+  function vaiRetry(){
+    const frame=vaiFrame();if(!frame)return;
+    clearTimeout(vaiTimer);vaiReady=false;frame.src='about:blank';
+    setTimeout(vaiActivate,60);
+  }
+  function vaiProxyCfg(){
+    try{
+      const cfg=typeof global._proxyCfg==='function'?global._proxyCfg():null;
+      if(!cfg?.url||!cfg?.key)return null;
+      const u=new URL(cfg.url);
+      if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.search||u.hash)return null;
+      return{base:u.origin+u.pathname.replace(/\/$/,''),key:cfg.key};
+    }catch(_){return null;}
+  }
+  async function vaiRpcToServer(action,payload){
+    const cfg=vaiProxyCfg();if(!cfg)throw new Error('Proxy seguro no configurado');
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),45000);
+    try{
+      const r=await fetch(cfg.base+'/visual-ai/rpc',{
+        method:'POST',credentials:'include',redirect:'error',signal:ctrl.signal,
+        headers:{'Content-Type':'application/json','X-App-Key':cfg.key},
+        body:JSON.stringify({action,...(payload||{})})
+      });
+      const data=await r.json().catch(()=>({error:'Respuesta inválida del proxy Visual AI'}));
+      return{ok:r.ok,status:r.status,data};
+    }finally{clearTimeout(timer);}
+  }
+  function vaiPost(frame,payload){
+    try{frame?.contentWindow?.postMessage({source:'tls-dashboard',version:VAI_PROTOCOL_VERSION,...payload},VAI_ORIGIN);}catch(_){}
+  }
+  async function vaiHandleRpc(frame,msg){
+    if(!vaiReady||typeof msg.requestId!=='string'||msg.requestId.length>120||
+       !['quota','upload','generate','poll'].includes(msg.action))return;
+    try{
+      const result=await vaiRpcToServer(msg.action,msg.payload);
+      vaiPost(frame,{type:'rpc-result',requestId:msg.requestId,ok:result.ok,status:result.status,data:result.data});
+    }catch(err){
+      vaiPost(frame,{type:'rpc-result',requestId:msg.requestId,ok:false,status:0,
+        data:{error:err?.name==='AbortError'?'Tiempo de espera del proxy agotado':String(err?.message||err)}});
+    }
+  }
+  function vaiAssetLinkPrompt(asset){
+    if(!asset||typeof asset.url!=='string')return;
+    vaiLastAsset=asset;
+    const kind=(prompt('Vincular resultado Visual AI a: cliente, cotizacion o pedido\n(Cancelar = dejarlo solo como resultado)')||'').trim().toLowerCase();
+    if(!['cliente','cotizacion','pedido'].includes(kind))return;
+    const query=(prompt('Escribe nombre de cliente o número de cotización/pedido:')||'').trim().toLowerCase();
+    if(!query)return;
+    let row=null,table='',field='';
+    if(kind==='cliente'){
+      row=(state.clientes||[]).find(r=>String(r.fields?.Empresa||r.fields?.Contacto||'').toLowerCase().includes(query));
+      table='Clientes';field='Notas internas';
+    }else if(kind==='cotizacion'){
+      row=(state.cotizaciones||[]).find(r=>String(r.fields?.['N° Cotización']||'').toLowerCase().includes(query));
+      table='Cotizaciones';field='Notas cotización';
+    }else{
+      row=(state.pedidos||[]).find(r=>String(r.fields?.['N° Pedido']||'').toLowerCase().includes(query));
+      table='Pedidos';field='Notas pedido';
+    }
+    if(!row){toast('No encontré el registro para vincular el resultado','error');return;}
+    const prev=String(row.fields?.[field]||'');
+    const note='[Visual AI] '+asset.url+(asset.model?' · '+asset.model:'');
+    airtableWriteTolerant(table,'PATCH',row.id,{[field]:prev+(prev?'\n':'')+note}).then(()=>{
+      row.fields[field]=prev+(prev?'\n':'')+note;
+      toast('✓ Resultado Visual AI vinculado a '+kind,'success');
+    }).catch(e=>toast('No se pudo vincular el resultado: '+e.message,'error'));
+  }
+  function vaiOnMessage(event){
+    const frame=vaiFrame();
+    if(!frame||event.origin!==VAI_ORIGIN||event.source!==frame.contentWindow)return;
+    const msg=event.data;
+    if(!msg||msg.source!=='opengen'||msg.version!==VAI_PROTOCOL_VERSION||typeof msg.type!=='string')return;
+    if(msg.type==='ready'){
+      vaiReady=true;clearTimeout(vaiTimer);vaiStatus('OpenGen Studio — canal seguro activo','ok');vaiFallback(false);
+      vaiPost(frame,{type:'host-ready',capabilities:['secure-rpc','crm-link'],session:'dashboard'});
+      return;
+    }
+    if(msg.type==='rpc'){void vaiHandleRpc(frame,msg);return;}
+    if(!vaiReady)return;
+    if(msg.type==='job-start')vaiStatus('Visual AI — generando…','wait');
+    else if(msg.type==='job-progress')vaiStatus('Visual AI — '+Math.max(0,Math.min(100,Number(msg.progress)||0))+'%','wait');
+    else if(msg.type==='job-complete')vaiStatus('Visual AI — resultado listo','ok');
+    else if(msg.type==='job-error')vaiStatus('Visual AI — error de generación','bad');
+    else if(msg.type==='asset-selected')vaiAssetLinkPrompt(msg.asset);
+  }
+  function vaiWatchTab(){
+    const tab=document.getElementById('tab-visual');if(!tab)return;
+    vaiObserver?.disconnect();
+    vaiObserver=new MutationObserver(()=>{
+      if(tab.classList.contains('active'))vaiActivate();else vaiDeactivate();
+    });
+    vaiObserver.observe(tab,{attributes:true,attributeFilter:['class']});
+    if(tab.classList.contains('active'))vaiActivate();
+  }
+  global.visualAiRetry=vaiRetry;
+  global.visualAiLastAsset=()=>vaiLastAsset;
+  if(typeof global.addEventListener==='function')global.addEventListener('message',vaiOnMessage);
+  if(typeof document!=='undefined'&&typeof document.addEventListener==='function')
+    document.addEventListener('DOMContentLoaded',()=>{vaiConfigureFrame();vaiWatchTab();});
+
   global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,quoteWorkItems,quoteWorkDetail,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
   // Los botones de pago en Vista Tarjetas viven dentro de <details> y pueden
   // quedar aislados por handlers que detienen el bubbling en menús/tarjetas.

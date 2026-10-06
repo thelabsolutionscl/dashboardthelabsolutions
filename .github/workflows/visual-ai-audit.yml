@@ -5,13 +5,21 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'js/operativo-visual.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'tests/visual-ai-wiring.test.js'
+      - 'tests/access-visual-ai-route.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/visual-ai-audit.yml'
   pull_request:
     paths:
       - 'index.html'
+      - 'js/operativo-visual.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'tests/visual-ai-wiring.test.js'
+      - 'tests/access-visual-ai-route.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/visual-ai-audit.yml'
   workflow_dispatch:
@@ -33,7 +41,14 @@ jobs:
           node-version: '22'
 
       - name: Validate test syntax
-        run: node --check tests/visual-ai-wiring.test.js
+        run: |
+          node --check tests/visual-ai-wiring.test.js
+          node --check tests/access-visual-ai-route.test.js
+          node --check js/operativo-visual.js
+          node --check airtable-proxy/src/worker.js
+
+      - name: Audit Visual AI secure proxy
+        run: node --test tests/access-visual-ai-route.test.js
 
       - name: Audit Visual AI integration
         run: node --test tests/visual-ai-wiring.test.js
