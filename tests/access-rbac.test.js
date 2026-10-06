@@ -308,7 +308,10 @@ test('admin has no blanket bypass for undocumented routes or HTTP methods',()=>{
     ['PATCH',base+'Pedidos/recABCDEFGHIJKLMN'],
     ['DELETE',base+'Clientes/recABCDEFGHIJKLMN'],
     ['GET','/access/me'],['GET','/marketing/spend/history'],
-    ['PUT','/marketing/spend'],['POST','/printer/session'],
+    ['PUT','/marketing/spend'],
+    ['POST','/ads/mutation'],['GET','/ads/mutations'],['PUT','/ads/mutations'],
+    ['POST','/ads/snapshot'],['POST','/ads/autopilot/decision'],
+    ['POST','/printer/session'],
     ['POST','/portal-admin/link'],['POST','/portal-admin/revocar'],
     ['POST','/sii/emit'],['GET','/sii/folio/33'],['PUT','/sii/caf'],
     ['GET','/anthropic/usage'],['POST','/anthropic/v1/messages'],
@@ -332,6 +335,8 @@ test('admin has no blanket bypass for undocumented routes or HTTP methods',()=>{
     ['GET','/portal-admin/revocar'],['POST','/portal-admin/anything'],
     ['POST','/sii/folio/33'],['GET','/sii/folio/999'],['DELETE','/sii/caf'],
     ['PUT','/marketing/spend/history'],['DELETE','/marketing/spend'],
+    ['GET','/ads/mutation'],['DELETE','/ads/mutations'],['GET','/ads/snapshot'],
+    ['POST','/ads/other'],['PUT','/ads/autopilot/decision'],
     ['POST','/seo-fetch'],['POST','/anthropic/usage'],
     ['POST','/anthropic/models'],['POST','/openai/v1/models'],
     ['PUT',base+'Clientes'],['HEAD',base+'Pedidos']
@@ -344,6 +349,28 @@ test('admin has no blanket bypass for undocumented routes or HTTP methods',()=>{
   assert.equal(accessAllows({role:'operator'},'PATCH',base+'Pedidos/recABCDEFGHIJKLMN'),true);
   assert.equal(accessAllows({role:'finance'},'POST',base+'Reportes'),true);
 });
+test('Google Ads control routes require signed admin and campaign snapshots stay admin-only',()=>{
+  const routes=[
+    ['POST','/ads/mutation'],['GET','/ads/mutations'],['PUT','/ads/mutations'],
+    ['POST','/ads/snapshot'],['POST','/ads/autopilot/decision']
+  ];
+  for(const [method,path] of routes){
+    assert.equal(accessAllows({role:'admin'},method,path),true,method+' '+path);
+    for(const role of ['finance','operator','viewer','sales'])
+      assert.equal(accessAllows({role,seller:'nicanor'},method,path),false,role+' '+method+' '+path);
+  }
+  for(const method of ['GET','POST','PUT','PATCH','DELETE']){
+    if(method!=='POST')assert.equal(accessAllows({role:'admin'},method,'/ads/mutation'),false);
+  }
+  const table='/v0/app1YtD74AqiPWQhy/Google_Ads_Campanas';
+  assert.equal(accessAllows({role:'admin'},'GET',table),true);
+  assert.equal(accessAllows({role:'admin'},'POST',table),true);
+  for(const role of ['finance','operator','viewer','sales']){
+    assert.equal(accessAllows({role,seller:'nicanor'},'GET',table),false,role+' campaign read');
+    assert.equal(accessAllows({role,seller:'nicanor'},'POST',table),false,role+' campaign write');
+  }
+});
+
 test('signed admin JWT cannot request an unknown table or unrelated privileged endpoint',async()=>{
   const token=jwt({email:'administrador@example.com'}),base='/v0/app1YtD74AqiPWQhy/';
   for(const [method,path] of [
