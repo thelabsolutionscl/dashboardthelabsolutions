@@ -129,6 +129,56 @@ test('comisiones usa pedidos, cotización vinculada, vendedor, venta neta y util
   assert.match(render,/meta/i,'debe mostrar avance de meta');
 });
 
-test.todo('saveEquipoEvento debe rechazar una fecha final anterior a la inicial');
-test.todo('las mutaciones de disponibilidad deben restaurarse si falla Airtable');
-test.todo('syncGcalEquipo debe tratar end.date como límite exclusivo y restaurar el botón en finally');
+test('saveEquipoEvento rechaza un rango invertido antes de cerrar o persistir',()=>{
+  const body=functionBlock(MODULES,'saveEquipoEvento');
+  const invalid=body.indexOf('if(end<start)');
+  const close=body.indexOf('closeEquipoModal()');
+  const persist=body.indexOf('await saveEquipoEventosAirtable(ops)');
+  assert.ok(invalid>=0,'debe validar que fin no sea anterior al inicio');
+  assert.match(body,/La fecha final no puede ser anterior a la fecha inicial/);
+  assert.ok(close>invalid,'el modal no debe cerrarse antes de validar');
+  assert.ok(persist>invalid,'no debe persistir antes de validar');
+});
+
+test('altas, bajas y cambios rápidos restauran el estado local si falla Airtable',()=>{
+  const save=functionBlock(MODULES,'saveEquipoEvento');
+  const del=functionBlock(MODULES,'deleteEquipoEvento');
+  const quick=functionBlock(MODULES,'quickToggleEquipo');
+  for(const [name,body] of [['save',save],['delete',del],['quick',quick]]){
+    assert.match(body,/_cloneEquipoEventos\(\)/,name+' debe tomar snapshot previo');
+    assert.match(body,/catch\s*\(e\)/,name+' debe capturar error de persistencia');
+    assert.match(body,/_restoreEquipoEventos\(previous\)/,name+' debe restaurar snapshot');
+    assert.match(body,/_equipoPersistError\(/,name+' debe informar el fallo');
+  }
+  assert.ok(save.indexOf('await saveEquipoEventosAirtable(ops)')<
+    save.indexOf('closeEquipoModal()'),
+    'el modal se cierra solo después de confirmar persistencia');
+});
+
+test('persistencia de Equipo muta solo claves pedidas y no reconcilia/borrar la tabla completa',()=>{
+  const save=functionBlock(INDEX,'saveEquipoEventosAirtable');
+  const mutation=functionBlock(INDEX,'_equipoMutation');
+  assert.match(save,/Array\.isArray\(ops\)/);
+  assert.match(save,/collapsed\.set\(parts\.key/);
+  assert.match(save,/for\s*\(const\s+op\s+of\s+collapsed\.values\(\)\)/);
+  assert.doesNotMatch(save,/toDelete\s*=\s*existentes\.filter/,
+    'un navegador desactualizado nunca debe inferir borrados globales');
+  assert.doesNotMatch(save,/Object\.entries\(equipoState\.eventos\)/,
+    'persistir un cambio no debe volver a subir todo el estado local');
+  assert.match(mutation,/if\(!r\.ok\)/,'toda mutación debe comprobar HTTP real');
+  assert.match(mutation,/throw new Error/,'un rechazo debe propagarse al rollback');
+});
+
+test('syncGcalEquipo trata end.date como exclusivo y siempre restaura el botón',()=>{
+  const body=functionBlock(MODULES,'syncGcalEquipo');
+  assert.match(body,/if\(ev\.end\?\.date\)end\.setDate\(end\.getDate\(\)-1\)/,
+    'Google all-day usa end.date exclusivo');
+  assert.doesNotMatch(body,/if\(ev\.end\?\.dateTime\)end\.setDate/,
+    'un evento con hora no debe perder su día final');
+  assert.match(body,/finally\s*\{/);
+  assert.match(body,/btn\.disabled=false/);
+  assert.match(body,/btn\.textContent=previousLabel/);
+  assert.match(body,/await\s+saveEquipoEventosAirtable\(ops\)/);
+  assert.match(body,/_restoreEquipoEventos\(previous\)/,
+    'si el respaldo falla debe volver al estado anterior');
+});
