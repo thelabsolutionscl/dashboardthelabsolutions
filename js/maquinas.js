@@ -3828,7 +3828,7 @@ async function syncGcalEquipo(){
     renderEquipoCalendar();
     if(total)toast(`✓ ${total} día${total===1?'':'s'} importado${total===1?'':'s'} desde Google Calendar`,'success');
     else if(!failedCalendars)toast('Sin eventos nuevos en la semana visible','info');
-    if(failedCalendars)toast(`${failedCalendars} calendario${failedCalendars===1?'':'s'} no se pudo${failedCalendars===1?'':'ieron'} sincronizar`,'warning');
+    if(failedCalendars)toast(`${failedCalendars} calendario${failedCalendars===1?'':'s'} no se ${failedCalendars===1?'pudo':'pudieron'} sincronizar`,'warning');
   }catch(e){
     _restoreEquipoEventos(previous);
     _equipoPersistError('respaldar la sincronización de Google Calendar',e);
