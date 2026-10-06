@@ -2094,6 +2094,121 @@ export class AiBudgetGuard {
  * Contiene duplicados por rutas del proxy. No sustituye identidad server-side
  * ni evita escrituras hechas fuera de este Worker con otro PAT.
  */
+
+const ADS_MUTATION_OPS=new Set(['create','edit','delete','negative','pause_keyword']);
+function adsPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype;}
+function adsSafeJson(v,depth=0){
+  if(depth>6)return false;
+  if(v===null||typeof v==='boolean')return true;
+  if(typeof v==='number')return Number.isFinite(v)&&Math.abs(v)<=1e12;
+  if(typeof v==='string')return v.length<=5000&&!/[\x00-\x08\x0b\x0e-\x1f]/.test(v);
+  if(Array.isArray(v))return v.length<=100&&v.every(x=>adsSafeJson(x,depth+1));
+  if(adsPlainObject(v)){
+    const keys=Object.keys(v);
+    return keys.length<=80&&keys.every(k=>k.length<=80&&adsSafeJson(v[k],depth+1));
+  }
+  return false;
+}
+function adsMutationAllowed(m){
+  if(!adsPlainObject(m)||!ADS_MUTATION_OPS.has(m.op)||
+     !Object.keys(m).every(k=>['op','id','data','timestamp','status','error'].includes(k))||
+     typeof m.id!=='string'||m.id.length>128||
+     !adsPlainObject(m.data)||!adsSafeJson(m.data)||
+     typeof m.timestamp!=='string'||m.timestamp.length>40||!Number.isFinite(Date.parse(m.timestamp))||
+     m.status!==undefined&&!['pending','enviado','aplicado','error'].includes(m.status)||
+     m.error!==undefined&&(typeof m.error!=='string'||m.error.length>2000))
+    return false;
+  if(m.op==='create'&&(!String(m.data.nombre||'').trim()||Number(m.data.presupuesto)<1000))return false;
+  if(['edit','delete'].includes(m.op)&&!m.id)return false;
+  if(['negative','pause_keyword'].includes(m.op)&&
+     (!String(m.data.termino||'').trim()||!String(m.data.campana||'').trim()))return false;
+  return JSON.stringify(m).length<=32000;
+}
+function adsHistoryAllowed(items){
+  return Array.isArray(items)&&items.length<=500&&items.every(adsMutationAllowed);
+}
+function adsEndpoint(env){
+  const raw=String(env.ADS_MUTATION_URL||'').trim();
+  if(!raw)return null;
+  try{
+    const u=new URL(raw);
+    if(u.protocol!=='https:'||u.hostname!=='script.google.com'||u.username||u.password||
+       u.search||u.hash||!/^\/macros\/s\/[A-Za-z0-9_-]{20,}\/(?:exec)$/.test(u.pathname))return null;
+    return u;
+  }catch(_){return null;}
+}
+function adsMakeEndpoint(env){
+  const raw=String(env.ADS_MAKE_SHELL_URL||'').trim();
+  if(!raw)return null;
+  try{
+    const u=new URL(raw);
+    if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash||
+       !/^hook\.(?:eu1|eu2|us1|us2|ca1|au1)\.make\.com$/.test(u.hostname)||
+       !/^\/[A-Za-z0-9_-]{10,120}$/.test(u.pathname))return null;
+    return u;
+  }catch(_){return null;}
+}
+function adsCanonicalCustomer(v){return String(v||'').replace(/\D/g,'');}
+function adsIsoDate(v){
+  if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;
+  const d=new Date(v+'T12:00:00Z');return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===v;
+}
+function adsNum(v,min=0,max=1e12){return typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;}
+function adsSnapshotAllowed(p){
+  if(!adsPlainObject(p)||!Object.keys(p).every(k=>['date','days','customerId','kpi','campaigns','actor'].includes(k))||
+     !adsIsoDate(p.date)||!Number.isInteger(p.days)||p.days<1||p.days>365||
+     !/^\d{6,20}$/.test(adsCanonicalCustomer(p.customerId))||!adsPlainObject(p.kpi)||
+     !Object.keys(p.kpi).every(k=>['gasto','impresiones','clics','conversiones','valor_conversion'].includes(k))||
+     !['gasto','impresiones','clics','conversiones','valor_conversion'].every(k=>adsNum(p.kpi[k],0))||
+     !Array.isArray(p.campaigns)||p.campaigns.length>100)return false;
+  return p.campaigns.every(c=>adsPlainObject(c)&&
+    Object.keys(c).every(k=>['id','nombre','estado','presupuesto','gasto','impresiones','clics','conversiones','valor_conversion','score'].includes(k))&&
+    /^[A-Za-z0-9_-]{1,80}$/.test(c.id)&&typeof c.nombre==='string'&&c.nombre.length<=300&&
+    typeof c.estado==='string'&&c.estado.length<=80&&
+    ['presupuesto','gasto','impresiones','clics','conversiones','valor_conversion','score'].every(k=>adsNum(c[k],0))&&c.score<=100);
+}
+async function adsBackendJson(url,options,max=350000){
+  let res;
+  try{res=await fetch(url,options);}catch(e){throw Object.assign(new Error('Ads backend response uncertain'),{code:'ADS_BACKEND_UNCERTAIN',status:503});}
+  let raw;
+  try{raw=await res.text();}catch(_){throw Object.assign(new Error('Ads backend response unreadable'),{code:'ADS_BACKEND_UNCERTAIN',status:503});}
+  if(raw.length>max)throw Object.assign(new Error('Ads backend response too large'),{code:'ADS_BACKEND_INVALID',status:502});
+  let body;try{body=JSON.parse(raw);}catch(_){throw Object.assign(new Error('Ads backend response invalid'),{code:'ADS_BACKEND_INVALID',status:502});}
+  return{res,body};
+}
+async function adsBackendMutation(env,mutation){
+  const endpoint=adsEndpoint(env),secret=String(env.ADS_MUTATION_SECRET||'');
+  if(!endpoint||secret.length<16)throw Object.assign(new Error('Ads mutation backend is not configured'),{code:'ADS_BACKEND_CONFIG',status:503});
+  const {res,body}=await adsBackendJson(endpoint.href,{method:'POST',
+    headers:{'Content-Type':'text/plain'},body:JSON.stringify({secret,type:'mutation',...mutation})});
+  if(!res.ok||body?.ok!==true){
+    if(res.status>=400&&res.status<500||body?.ok===false)
+      throw Object.assign(new Error(body?.error||'Ads mutation rejected'),{code:'ADS_MUTATION_REJECTED',status:422});
+    throw Object.assign(new Error('Ads mutation result uncertain'),{code:'ADS_BACKEND_UNCERTAIN',status:503});
+  }
+  return body;
+}
+async function adsBackendMutations(env){
+  const endpoint=adsEndpoint(env);
+  if(!endpoint)throw Object.assign(new Error('Ads mutation backend is not configured'),{code:'ADS_BACKEND_CONFIG',status:503});
+  const u=new URL(endpoint.href);u.searchParams.set('action','mutations');u.searchParams.set('_t',String(Date.now()));
+  const {res,body}=await adsBackendJson(u.href,{method:'GET'});
+  if(!res.ok||body?.ok!==true||!adsHistoryAllowed(body.mutations||[]))
+    throw Object.assign(new Error('Ads mutation history invalid'),{code:'ADS_BACKEND_INVALID',status:502});
+  return body;
+}
+async function adsBackendReplaceMutations(env,mutations){
+  const endpoint=adsEndpoint(env),secret=String(env.ADS_MUTATION_SECRET||'');
+  if(!endpoint||secret.length<16)throw Object.assign(new Error('Ads mutation backend is not configured'),{code:'ADS_BACKEND_CONFIG',status:503});
+  if(!adsHistoryAllowed(mutations))throw Object.assign(new Error('Invalid mutation history'),{code:'ADS_HISTORY_INVALID',status:422});
+  const {res,body}=await adsBackendJson(endpoint.href,{method:'POST',headers:{'Content-Type':'text/plain'},
+    body:JSON.stringify({secret,type:'update_mutations',mutations})});
+  if(!res.ok||body?.ok!==true)throw Object.assign(new Error(body?.error||'Mutation history update failed'),{
+    code:res.status>=400&&res.status<500?'ADS_HISTORY_REJECTED':'ADS_BACKEND_UNCERTAIN',
+    status:res.status>=400&&res.status<500?422:503});
+  return body;
+}
+
 export class CrmMutationGuard {
   constructor(state, env) {
     this.state = state;
@@ -2102,8 +2217,11 @@ export class CrmMutationGuard {
   }
   fetch(request) {
     const path=new URL(request.url).pathname;
-    const run = this._queue.then(() => path==='/marketing/spend'
-      ?this._handleSpend(request):path==='/shared-calendar'
+    const run = this._queue.then(() => path==='/ads-mutation'
+      ?this._handleAdsMutation(request):path==='/ads-snapshot'
+        ?this._handleAdsSnapshot(request):path==='/ads-autopilot'
+          ?this._handleAdsAutopilot(request):path==='/marketing/spend'
+            ?this._handleSpend(request):path==='/shared-calendar'
         ?this._handleSharedCalendar(request):path==='/shared-agenda'
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/shared-machineops'
@@ -2651,6 +2769,195 @@ export class CrmMutationGuard {
     },409);
     return this._json({...result.record,unchanged:!!result.unchanged},200);
   }
+  async _adsMutationCore(mutation,actor){
+    if(!actor||actor.role!=='admin'||typeof actor.email!=='string'||!adsMutationAllowed(mutation))
+      throw Object.assign(new Error('Ads mutation denied'),{code:'ADS_MUTATION_INVALID',status:422});
+    const key='ads:mutation:'+mutation.timestamp+'|'+mutation.op+'|'+mutation.id;
+    let marker=await this.state.storage.get(key);
+    if(marker?.uncertain)
+      throw Object.assign(new Error('Previous Ads mutation has an uncertain outcome; reconcile history before retrying'),{
+        code:marker.shell?'ADS_SHELL_PENDING_RECONCILIATION':'ADS_MUTATION_PENDING_RECONCILIATION',status:503});
+    if(!marker?.queued){
+      await this.state.storage.put(key,{reservedAt:new Date().toISOString(),mutation});
+      try{
+        const result=await adsBackendMutation(this.env,mutation);
+        marker={reservedAt:new Date().toISOString(),mutation,queued:true,result};
+        await this.state.storage.put(key,marker);
+      }catch(e){
+        if(e.code==='ADS_MUTATION_REJECTED')await this.state.storage.delete(key);
+        else await this.state.storage.put(key,{...(marker||{}),mutation,uncertain:true,at:new Date().toISOString()});
+        throw e.code==='ADS_BACKEND_UNCERTAIN'
+          ?Object.assign(new Error('Ads mutation outcome uncertain; reconcile history before retrying'),{
+            code:'ADS_MUTATION_PENDING_RECONCILIATION',status:503}):e;
+      }
+    }
+    let shell=marker.shell||'not_required';
+    if(mutation.op==='create'&&shell!=='created'){
+      const make=adsMakeEndpoint(this.env),makeKey=String(this.env.ADS_MAKE_SHELL_KEY||'');
+      if(!make||makeKey.length<16)
+        throw Object.assign(new Error('Ads create is queued, but Make shell backend is not configured'),{
+          code:'ADS_SHELL_CONFIG',status:503,queued:true});
+      const body=JSON.stringify({clave:makeKey,nombre:String(mutation.data.nombre||'').slice(0,300),
+        presupuesto:Math.round(Number(mutation.data.presupuesto)||1000),mutation_id:key});
+      let response;
+      try{response=await fetch(make.href,{method:'POST',headers:{'Content-Type':'text/plain'},body});}
+      catch(_){
+        await this.state.storage.put(key,{...marker,shell:true,uncertain:true,at:new Date().toISOString()});
+        throw Object.assign(new Error('Make shell outcome uncertain; do not retry blindly'),{
+          code:'ADS_SHELL_PENDING_RECONCILIATION',status:503});
+      }
+      if(!response.ok){
+        if(response.status>=500){
+          await this.state.storage.put(key,{...marker,shell:true,uncertain:true,at:new Date().toISOString()});
+          throw Object.assign(new Error('Make shell outcome uncertain; do not retry blindly'),{
+            code:'ADS_SHELL_PENDING_RECONCILIATION',status:503});
+        }
+        throw Object.assign(new Error('Make shell request rejected after mutation was queued'),{
+          code:'ADS_SHELL_REJECTED',status:502,queued:true});
+      }
+      shell='created';marker={...marker,shell};
+      await this.state.storage.put(key,marker);
+    }
+    return{ok:true,queued:true,shell,reused:!!marker?.served,mutation:{timestamp:mutation.timestamp,op:mutation.op}};
+  }
+  async _handleAdsMutation(request){
+    if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
+    let payload;try{payload=await request.json();}catch(_){return this._json({error:'Invalid Ads mutation JSON'},400);}
+    try{
+      const out=await this._adsMutationCore(payload?.mutation,payload?.actor);
+      const key='ads:mutation:'+payload.mutation.timestamp+'|'+payload.mutation.op+'|'+payload.mutation.id;
+      const marker=await this.state.storage.get(key);if(marker)await this.state.storage.put(key,{...marker,served:true});
+      return this._json(out,200);
+    }catch(e){return this._json({error:e.message,code:e.code,queued:!!e.queued},e.status||503);}
+  }
+  async _adsWriteRecord(table,recordId,fields){
+    const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+(recordId?'/'+recordId:'');
+    let res;
+    try{res=await fetch(target,{method:recordId?'PATCH':'POST',headers:{
+      Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'
+    },body:JSON.stringify({fields,typecast:true})});}
+    catch(_){throw Object.assign(new Error('Airtable snapshot outcome uncertain'),{code:'ADS_SNAPSHOT_UNCERTAIN',status:503});}
+    if([400,401,403,404,422].includes(res.status))
+      throw Object.assign(new Error('Airtable rejected Ads snapshot'),{code:'ADS_SNAPSHOT_REJECTED',status:422});
+    if(!res.ok)throw Object.assign(new Error('Airtable snapshot outcome uncertain'),{code:'ADS_SNAPSHOT_UNCERTAIN',status:503});
+    let row;try{row=await res.json();}catch(_){throw Object.assign(new Error('Airtable snapshot response unreadable'),{code:'ADS_SNAPSHOT_UNCERTAIN',status:503});}
+    if(!row?.id)throw Object.assign(new Error('Airtable snapshot returned no record'),{code:'ADS_SNAPSHOT_UNCERTAIN',status:503});
+    return row;
+  }
+  async _adsUpsert(table,key,keyOf,fields){
+    let rows;try{rows=await this._readAll(table);}catch(_){
+      throw Object.assign(new Error('Cannot verify Ads snapshot uniqueness'),{code:'ADS_SNAPSHOT_VERIFY_UNAVAILABLE',status:503});
+    }
+    const matches=rows.filter(r=>keyOf(r.fields||{})===key).sort((a,b)=>
+      String(b.createdTime||'').localeCompare(String(a.createdTime||''))||String(b.id).localeCompare(String(a.id)));
+    if(matches.length){
+      const row=await this._adsWriteRecord(table,matches[0].id,fields);
+      return{recordId:row.id,legacyDuplicates:Math.max(0,matches.length-1),created:false};
+    }
+    const reserve='ads:snapshot:'+table+':'+key;
+    const prior=await this.state.storage.get(reserve);
+    if(prior)return Promise.reject(Object.assign(new Error('Previous Ads snapshot POST is pending reconciliation'),{
+      code:'ADS_SNAPSHOT_PENDING_RECONCILIATION',status:503}));
+    await this.state.storage.put(reserve,{at:new Date().toISOString(),key});
+    try{
+      const row=await this._adsWriteRecord(table,'',fields);
+      await this.state.storage.put(reserve,{at:new Date().toISOString(),key,committed:true,recordId:row.id});
+      return{recordId:row.id,legacyDuplicates:0,created:true};
+    }catch(e){
+      if(e.code==='ADS_SNAPSHOT_REJECTED')await this.state.storage.delete(reserve);
+      throw e;
+    }
+  }
+  async _handleAdsSnapshot(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)return this._json({error:'Ads snapshot guard unavailable'},503);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid Ads snapshot JSON'},400);}
+    if(p?.actor?.role!=='admin'||!adsSnapshotAllowed(p))return this._json({error:'Invalid Ads snapshot'},422);
+    const customer=adsCanonicalCustomer(p.customerId),k=p.kpi;
+    const ctr=k.impresiones>0?k.clics/k.impresiones:0,cpc=k.clics>0?Math.round(k.gasto/k.clics):0,
+      cpa=k.conversiones>0?Math.round(k.gasto/k.conversiones):0,
+      roas=k.gasto>0&&k.valor_conversion>0?Math.round(k.valor_conversion/k.gasto*100)/100:0;
+    const kpiFields={'Período':p.date+' · '+p.days+'d','Fecha':p.date,'Días período':p.days,
+      'Gasto (CLP)':k.gasto,'Impresiones':k.impresiones,'Clics':k.clics,'CTR (%)':ctr,
+      'CPC Promedio (CLP)':cpc,'Conversiones':k.conversiones,'Valor Conversiones (CLP)':k.valor_conversion,
+      'CPA (CLP)':cpa,'ROAS':roas,'Customer ID':p.customerId,'Fuente':'real'};
+    const kpiKey=customer+'|'+p.date+'|'+p.days;
+    const kpiKeyOf=f=>adsCanonicalCustomer(f['Customer ID'])+'|'+String(f.Fecha||'')+'|'+Number(f['Días período']||30);
+    let duplicates=0;
+    try{
+      const first=await this._adsUpsert('Google_Ads_KPIs',kpiKey,kpiKeyOf,kpiFields);duplicates+=first.legacyDuplicates;
+      for(const c of p.campaigns){
+        const ct=c.impresiones>0?c.clics/c.impresiones:0,cp=c.clics>0?Math.round(c.gasto/c.clics):0,
+          ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0,
+          cr=c.gasto>0&&c.valor_conversion>0?Math.round(c.valor_conversion/c.gasto*100)/100:0;
+        const fields={'Campaña':c.nombre,'Campaign ID':c.id,'Fecha snapshot':p.date,'Estado':c.estado,
+          'Presupuesto diario (CLP)':c.presupuesto,'Gasto (CLP)':c.gasto,'Impresiones':c.impresiones,
+          'Clics':c.clics,'CTR (%)':ct,'CPC (CLP)':cp,'Conversiones':c.conversiones,
+          'CPA (CLP)':ca,'ROAS':cr,'Score salud':c.score,'Período (días)':p.days};
+        const key=c.id+'|'+p.date+'|'+p.days;
+        const keyOf=f=>String(f['Campaign ID']||'')+'|'+String(f['Fecha snapshot']||'')+'|'+Number(f['Período (días)']||30);
+        const row=await this._adsUpsert('Google_Ads_Campanas',key,keyOf,fields);duplicates+=row.legacyDuplicates;
+      }
+      return this._json({ok:true,legacy_duplicates:duplicates,upserted:1+p.campaigns.length},200);
+    }catch(e){return this._json({error:e.message,code:e.code},e.status||503);}
+  }
+  async _adsPatchAgentQueue(recordId,fields){
+    const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Agent_Queue')+'/'+recordId;
+    let res;
+    try{res=await fetch(target,{method:'PATCH',headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,
+      'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})});}
+    catch(_){throw Object.assign(new Error('Agent queue update uncertain'),{code:'ADS_AUTOPILOT_QUEUE_UNCERTAIN',status:503});}
+    if(!res.ok)throw Object.assign(new Error('Agent queue update failed'),{code:'ADS_AUTOPILOT_QUEUE_FAILED',status:502});
+    return res.json();
+  }
+  async _handleAdsAutopilot(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN||!this.env.CRM_MUTATION_GUARD)
+      return this._json({error:'Ads autopilot guard unavailable'},503);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid Ads autopilot JSON'},400);}
+    if(p?.actor?.role!=='admin'||!/^rec[A-Za-z0-9]{14}$/.test(p.recordId||'')||
+       typeof p.approve!=='boolean'||!Array.isArray(p.mutations)||p.mutations.length>20||
+       p.approve&&(!p.mutations.length||!p.mutations.every(adsMutationAllowed))||
+       !p.approve&&p.mutations.length)
+      return this._json({error:'Invalid Ads autopilot decision'},422);
+    let rows;try{rows=await this._readAll('Agent_Queue');}catch(_){
+      return this._json({error:'Cannot verify autopilot queue'},503);}
+    const row=rows.find(r=>r.id===p.recordId);if(!row)return this._json({error:'Autopilot proposal not found'},404);
+    const state=String(row.fields?.Estado||'');
+    if(state==='Completado'&&p.approve)return this._json({ok:true,reused:true},200);
+    if(state!=='Pendiente')return this._json({error:'Autopilot proposal already processed',state},409);
+    if(!p.approve){
+      try{await this._adsPatchAgentQueue(p.recordId,{Estado:'Error',
+        Error:'Rechazado desde dashboard por '+p.actor.email+' · '+new Date().toISOString()});}
+      catch(e){return this._json({error:e.message,code:e.code},e.status||503);}
+      return this._json({ok:true,rejected:true},200);
+    }
+    try{await this._adsPatchAgentQueue(p.recordId,{Estado:'Procesando',Error:''});}
+    catch(e){return this._json({error:e.message,code:e.code},e.status||503);}
+    const results=[];
+    for(const mutation of p.mutations){
+      try{
+        const id=this.env.CRM_MUTATION_GUARD.idFromName('tls-ads-mutations-global');
+        const res=await this.env.CRM_MUTATION_GUARD.get(id).fetch('https://ads.internal/ads-mutation',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({actor:p.actor,mutation})
+        });
+        const body=await res.json();results.push({status:res.status,body});
+        if(!res.ok)throw Object.assign(new Error(body?.error||'Mutation failed'),{code:body?.code||'ADS_MUTATION_FAILED'});
+      }catch(e){
+        try{await this._adsPatchAgentQueue(p.recordId,{Estado:'Pendiente',
+          Error:'Reintento seguro pendiente: '+String(e.code||e.message||'error').slice(0,300)});}catch(_){}
+        return this._json({error:'Autopilot stopped safely; confirmed mutations are idempotent on retry',
+          code:e.code||'ADS_AUTOPILOT_PARTIAL',results},503);
+      }
+    }
+    try{await this._adsPatchAgentQueue(p.recordId,{Estado:'Completado','Fecha ejecución':new Date().toISOString(),
+      'Accion sugerida':'Aprobado por '+p.actor.email+': '+p.mutations.length+' mutaciones encoladas',Error:''});}
+    catch(e){
+      return this._json({error:'Mutations were queued, but final queue status is uncertain; retry is safe',
+        code:'ADS_AUTOPILOT_FINALIZE_UNCERTAIN',results},503);
+    }
+    return this._json({ok:true,reused:false,results},200);
+  }
+
   async _readAll(table) {
     const records = [], seen = new Set();
     let offset = '';
@@ -2966,7 +3273,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
-      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN, reportes_iso_upsert: !!env.CRM_MUTATION_GUARD, marketing_spend_guard: !!env.CRM_MUTATION_GUARD }, 200, CORS);
+      return json({ ok: true, proxy: 'thelab-proxy', anthropic: !!env.ANTHROPIC_TOKEN, openai: !!env.OPENAI_TOKEN, airtable: !!env.AIRTABLE_TOKEN, reportes_iso_upsert: !!env.CRM_MUTATION_GUARD, marketing_spend_guard: !!env.CRM_MUTATION_GUARD, ads_guard: !!env.CRM_MUTATION_GUARD }, 200, CORS);
     }
 
     // Login is a top-level browser navigation. Cloudflare Access handles the
@@ -3009,7 +3316,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3415,6 +3722,67 @@ export default {
     }
 
 
+
+    // Paid-media writes are admin-only and require a signed Access identity.
+    // Browser code never receives the Apps Script mutation secret or Make key.
+    if(url.pathname.startsWith('/ads/')){
+      const headers={...CORS,'Cache-Control':'no-store'};
+      if(!authorized.identity)
+        return json({error:'Google Ads control requires Cloudflare Access',code:'ACCESS_REQUIRED'},503,headers);
+      if(authorized.identity.role!=='admin')return json({error:'Google Ads admin role required'},403,headers);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Google Ads guard unavailable'},503,headers);
+      const path=url.pathname;
+      if(path==='/ads/mutations'){
+        if(url.search)return json({error:'Ads mutation query parameters are not allowed'},422,headers);
+        try{
+          if(request.method==='GET'){
+            const body=await adsBackendMutations(env);return json(body,200,headers);
+          }
+          if(request.method==='PUT'){
+            if(!String(request.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json')||
+               Number(request.headers.get('Content-Length')||0)>160000)
+              return json({error:'Invalid mutation history request'},413,headers);
+            const raw=await request.text();if(raw.length>160000)return json({error:'Mutation history too large'},413,headers);
+            const parsed=JSON.parse(raw);
+            if(!adsPlainObject(parsed)||!Object.keys(parsed).every(k=>k==='mutations')||!adsHistoryAllowed(parsed.mutations))
+              return json({error:'Invalid mutation history'},422,headers);
+            const body=await adsBackendReplaceMutations(env,parsed.mutations);return json(body,200,headers);
+          }
+          return json({error:'Method not allowed'},405,headers);
+        }catch(e){return json({error:e.message,code:e.code},e.status||503,headers);}
+      }
+      const allowed=path==='/ads/mutation'&&request.method==='POST'||
+        path==='/ads/snapshot'&&request.method==='POST'||
+        path==='/ads/autopilot/decision'&&request.method==='POST';
+      if(!allowed||url.search)return json({error:'Ads route not allowed'},404,headers);
+      if(!String(request.headers.get('Content-Type')||'').toLowerCase().startsWith('application/json')||
+         Number(request.headers.get('Content-Length')||0)>160000)
+        return json({error:'Ads request must be bounded JSON'},413,headers);
+      let parsed;
+      try{const raw=await request.text();if(raw.length>160000)throw Error('too large');parsed=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid Ads JSON'},400,headers);}
+      if(!adsPlainObject(parsed))return json({error:'Invalid Ads payload'},422,headers);
+      const actor={role:'admin',email:authorized.identity.email};
+      let name,internalPath,payload;
+      if(path==='/ads/mutation'){
+        if(!Object.keys(parsed).every(k=>k==='mutation')||!adsMutationAllowed(parsed.mutation))
+          return json({error:'Invalid Ads mutation'},422,headers);
+        name='tls-ads-mutations-global';internalPath='/ads-mutation';payload={actor,mutation:parsed.mutation};
+      }else if(path==='/ads/snapshot'){
+        name='tls-ads-snapshots-global';internalPath='/ads-snapshot';payload={...parsed,actor};
+        if(!adsSnapshotAllowed(payload))return json({error:'Invalid Ads snapshot'},422,headers);
+      }else{
+        name='tls-ads-autopilot-global';internalPath='/ads-autopilot';payload={...parsed,actor};
+      }
+      try{
+        const id=env.CRM_MUTATION_GUARD.idFromName(name);
+        const upstream=await env.CRM_MUTATION_GUARD.get(id).fetch('https://ads.internal'+internalPath,{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+        });
+        return new Response(upstream.body,{status:upstream.status,
+          headers:{...headers,'Content-Type':'application/json'}});
+      }catch(_){return json({error:'Google Ads guard temporarily unavailable'},503,headers);}
+    }
 
     // Marketing spending is shared only under a verified individual Access
     // session. Legacy APP_KEY mode cannot read or mutate financial history.
