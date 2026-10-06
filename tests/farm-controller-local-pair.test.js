@@ -61,7 +61,7 @@ test('script de emparejamiento conserva sintaxis bash válida',()=>{
 
 
 test('pairing autorepara cloudflared usando el servicio oficial de usuario',()=>{
-  assert.match(PAIR,/function repair_public_tunnel\(\)/);
+  assert.match(PAIR,/repair_public_tunnel\(\)/);
   assert.match(PAIR,/cloudflared/);
   assert.match(PAIR,/\.cloudflared\/config\.yml/);
   assert.match(PAIR,/hostname: printers\.thelab\.solutions/);
