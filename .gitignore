@@ -1,6 +1,8 @@
 .claude/worktrees/
 printer-bridge/.bridge-token
 printer-bridge/maint-config.json
+# Datos de ejecución del Farm Controller (clave de sellado, auditorías, payloads)
+printer-bridge/data/
 # Secretos server-side de mail-api.php (Resend) — nunca versionar
 mail-api-config.php
 resend.key
