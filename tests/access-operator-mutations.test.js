@@ -159,15 +159,25 @@ test('typecast, invalid links, invalid JSON shapes, future columns and edit of d
     records:[{id:rec,fields:{Empresa:'One'}},{id:id2,fields:{Contacto:'Two'}}]}),true);
 });
 test('operator creates CRM records through DO and receives only approved fields on success',async()=>{
-  for(const [table,fields,visible,hidden] of [
-    ['Cotizaciones',{'N° Cotización':'260901',Cliente:[id2],'Total final (CLP)':170000},
-      'Total final (CLP)','Margen real (%)'],
-    ['Pedidos',{'N° Pedido':'PED-2026-050',Cotizaciones:[id2],
-      'Monto total (CLP)':150000},'Monto total (CLP)','Costo real total (CLP)']
+  const client='recCCCCCCCCCCCCCC',quote='recDDDDDDDDDDDDDD';
+  for(const [table,fields,visible,hidden,seed] of [
+    ['Cotizaciones',{'N° Cotización':'260901',Cliente:[client],
+      'Total final (CLP)':170000},'Total final (CLP)','Margen real (%)',[
+        [client,{table:'Clientes',fields:{Empresa:'Cliente correcto'}}]
+      ]],
+    ['Pedidos',{'N° Pedido':'PED-2026-050',Cliente:[client],
+      Cotizaciones:[quote],'Monto total (CLP)':150000},
+      'Monto total (CLP)','Costo real total (CLP)',[
+        [client,{table:'Clientes',fields:{Empresa:'Cliente correcto'}}],
+        [quote,{table:'Cotizaciones',fields:{
+          'N° Cotización':'260900',Cliente:[client],Pedido:[]
+        }}]
+      ]]
   ]){
     const h=harness();
+    for(const [id,row] of seed)h.rows.set(id,row);
     const res=await h.run(h.make(table,'POST',{fields}));
-    assert.equal(res.status,200,await res.clone().text());
+    assert.equal(res.status,200,table+' '+await res.clone().text());
     const data=await res.json();
     assert.equal(data.id,rec);
     assert.equal(data.fields[visible],fields[visible]);
