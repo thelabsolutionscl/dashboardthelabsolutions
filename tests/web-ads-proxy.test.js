@@ -24,7 +24,7 @@ test('el proxy contiene la única ruta de creación de cascarón y valida host M
   assert.match(WORKER,/path==='\/ads-shell'/);
   assert.match(WORKER,/ADS_MAKE_SHELL_URL/);
   assert.match(WORKER,/ADS_MAKE_SHELL_KEY/);
-  assert.match(WORKER,/\^hook\\\.[a-z0-9-]\+\\\.make\\\.com\$/i);
+  assert.ok(WORKER.includes("!/^hook\\.[a-z0-9-]+\\.make\\.com$/i.test(endpoint.hostname)"));
   assert.match(WORKER,/redirect:'manual'/);
 });
 
