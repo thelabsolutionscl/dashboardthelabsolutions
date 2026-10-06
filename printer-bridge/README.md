@@ -125,19 +125,21 @@ igual que el bridge):
 
 ```bash
 cloudflared tunnel run printers                # probar a mano (Ctrl-C para parar)
-sudo cloudflared service install               # instalar como servicio permanente
+cloudflared service install                    # LaunchAgent del usuario, usa ~/.cloudflared/config.yml
 ```
 
-> Importante: instala el túnel **como servicio** (`service install`). Si no, al
-> reiniciar el iMac el bridge volverá (launchd) pero el túnel no, y el modo
-> 🌐 Remoto quedará caído. Con el servicio, ambos sobreviven al reinicio.
+> Importante: con la configuración en `~/.cloudflared/config.yml`, en macOS
+> usa `cloudflared service install` **sin sudo**. Así Cloudflare instala un
+> LaunchAgent del usuario que arranca al iniciar sesión y usa ese mismo archivo.
+> El helper `pair-dashboard.sh` intenta reiniciarlo/reinstalarlo si detecta que
+> el túnel público está caído.
 
 Verifica que está activo y que sobrevive reinicios:
 
 ```bash
 curl https://printers.thelab.solutions/healthz   # desde cualquier red → {"ok":true,...}
-sudo launchctl list | grep cloudflared           # el servicio del túnel
-launchctl list | grep printer-bridge             # el bridge
+launchctl print gui/$(id -u)/com.cloudflare.cloudflared  # servicio del túnel
+launchctl list | grep farm-controller                    # Farm Controller
 ```
 
 > **Alternativa rápida sin dominio:** `cloudflared tunnel --url http://localhost:8347`

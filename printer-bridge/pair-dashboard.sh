@@ -63,6 +63,49 @@ issue_pair(){
   [[ "$PAIR_STATUS" == "302" && "$LOCATION" == https://dashboard.thelab.solutions/#printer_pair=* ]]
 }
 
+repair_public_tunnel(){
+  [[ "$(uname -s)" == "Darwin" ]] || return 1
+  local cf config label
+  cf="$(command -v cloudflared 2>/dev/null || true)"
+  [[ -n "$cf" && -x "$cf" ]] || {
+    ylw "→ cloudflared no está instalado; no puedo autoreparar el túnel."
+    return 1
+  }
+  config="$HOME/.cloudflared/config.yml"
+  [[ -f "$config" ]] || {
+    ylw "→ Falta $config; no tocaré la configuración del túnel."
+    return 1
+  }
+  grep -Fq 'hostname: printers.thelab.solutions' "$config" || {
+    ylw "→ config.yml no corresponde a printers.thelab.solutions; no lo modificaré."
+    return 1
+  }
+  grep -Eq 'service:[[:space:]]*http://(localhost|127\.0\.0\.1):8347' "$config" || {
+    ylw "→ config.yml no apunta al Farm Controller :8347; no lo modificaré."
+    return 1
+  }
+
+  label="gui/$(id -u)/com.cloudflare.cloudflared"
+  ylw "→ Cloudflare Tunnel no responde; intentando restaurar su servicio macOS…"
+  if launchctl print "$label" >/dev/null 2>&1; then
+    launchctl kickstart -k "$label" >/dev/null 2>&1 || true
+  else
+    # Sin sudo: Cloudflare instala un LaunchAgent que usa ~/.cloudflared/config.yml.
+    "$cf" service install >/dev/null 2>&1 || true
+    launchctl kickstart -k "$label" >/dev/null 2>&1 || true
+  fi
+
+  for _ in $(seq 1 15); do
+    if curl -q -fsS -m 5 "$PUBLIC_BASE/healthz" 2>/dev/null | grep -q '"service":"farm-controller"'; then
+      grn "✓ Cloudflare Tunnel restaurado y conectado al Farm Controller"
+      return 0
+    fi
+    sleep 1
+  done
+  ylw "⚠ cloudflared no recuperó el túnel automáticamente."
+  return 1
+}
+
 if ! controller_is_current; then
   ylw "→ El puerto ${PORT} no corresponde al Farm Controller nuevo; intentando reparación local."
   repair_controller || exit 1
@@ -135,11 +178,16 @@ else
 fi
 
 PUBLIC_STATUS="$(curl -q --config "$AUTH_CFG" -sS -m 8 -X POST -o "$TMP/public-body" -w '%{http_code}' "$PUBLIC_BASE/farm/session" 2>/dev/null || true)"
+if [[ "$PUBLIC_STATUS" != "200" && "$PUBLIC_STATUS" != "201" ]]; then
+  if repair_public_tunnel; then
+    PUBLIC_STATUS="$(curl -q --config "$AUTH_CFG" -sS -m 8 -X POST -o "$TMP/public-body" -w '%{http_code}' "$PUBLIC_BASE/farm/session" 2>/dev/null || true)"
+  fi
+fi
 if [[ "$PUBLIC_STATUS" == "200" || "$PUBLIC_STATUS" == "201" ]]; then
   grn "✓ Túnel público acepta la credencial"
 else
   ylw "⚠ El túnel público no confirmó la sesión (HTTP ${PUBLIC_STATUS:-sin respuesta})."
-  ylw "  El navegador se abrirá igual; si Máquinas sigue 0/14, el problema ya está entre Cloudflare Tunnel y el Controller."
+  ylw "  Si ves 530/1033, Cloudflare no tiene un conector cloudflared saludable en el iMac."
 fi
 
 # Probar además la MISMA query Moonraker que usa el dashboard. Esto detecta
