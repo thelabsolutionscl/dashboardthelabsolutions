@@ -28,7 +28,7 @@ function financeDoc(){
       fechaPago:'2026-10-06',_manual:true}],
     loans:[{fecha:'06/10/26',prestamo:100000,devolucion:null,deuda:200000,obs:'prueba'}],
     cobranza:{cliente:[{ts:1000,via:'Email'}]},costosFijos:1500000,
-    comisionCfg:{rate:3.5,base:'venta'},metasVendedor:{gustavo:10000000}};
+    comisionCfg:{rate:3.5,base:'venta'},metasVendedor:{gustavo:10000000},plazoDefault:30};
 }
 function harness({initial=financeDoc()}={}){
   let current=initial===null?null:JSON.stringify(initial),patches=0,creates=0;
@@ -79,6 +79,7 @@ test('documento financiero válido cubre todas las áreas migradas',()=>{
   const d=financeDoc();assert.equal(sharedFinanceDocumentAllowed(d),true);
   assert.deepEqual(Object.keys(sharedFinanceEmpty()).sort(),Object.keys(d).sort());
   assert.equal(sharedFinanceDocumentAllowed({...d,secret:'x'}),false);
+  assert.equal(sharedFinanceDocumentAllowed({...d,plazoDefault:366}),false);
 });
 test('GET no expone recordId y devuelve revisión CAS',async()=>{
   const h=harness(),res=await h.run('GET');assert.equal(res.status,200);
