@@ -42,7 +42,8 @@ test('operator can see legitimate business totals, not margins, bank details or 
     Proveedores:['Nombre','Email','WhatsApp','Estado'],
     Maquinas:['id','nombre','modelo','estado','ip','cam'],
     Maquinas_Eventos:['maquina_id','fecha','tipo','desc','tiempo','pedido_id'],
-    Maquinas_Mant:['maquina_id','tipo','notas','print_hours','fecha','ts']
+    Maquinas_Mant:['maquina_id','tipo','notas','print_hours','fecha','ts'],
+    Equipo_Eventos:['persona_id','fecha','tipo','desc','hora_inicio','hora_fin']
   };
   const forbidden={
     Clientes:['Datos pago / banco','Facturas vencidas',
@@ -54,7 +55,8 @@ test('operator can see legitimate business totals, not margins, bank details or 
     Proveedores:['Condiciones de pago','RUT','Notas'],
     Maquinas:['WA: estado notificado','FutureMachineSecret'],
     Maquinas_Eventos:['FutureEventSecret'],
-    Maquinas_Mant:['FutureMaintenanceSecret']
+    Maquinas_Mant:['FutureMaintenanceSecret'],
+    Equipo_Eventos:['FutureTeamSecret']
   };
   for(const [table,fields] of Object.entries(required))
     for(const field of fields)
@@ -64,7 +66,7 @@ test('operator can see legitimate business totals, not margins, bank details or 
       assert.equal(OPERATOR_READ_FIELDS[table].has(field),false,table+' '+field);
   assert.deepEqual([...Object.keys(OPERATOR_READ_FIELDS)].sort(),
     ['Clientes','Cotizaciones','Pedidos','Proveedores',
-      'Maquinas','Maquinas_Eventos','Maquinas_Mant'].sort());
+      'Maquinas','Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos'].sort());
   assert.equal(VIEWER_READ_FIELDS.Cotizaciones.has('Total final (CLP)'),false);
   assert.equal(OPERATOR_READ_FIELDS.Cotizaciones.has('Total final (CLP)'),true);
 });
@@ -76,7 +78,8 @@ test('operator company-wide lists have reviewed projections and upstream field f
     ['Proveedores','Nombre','Condiciones de pago'],
     ['Maquinas','ip','WA: estado notificado'],
     ['Maquinas_Eventos','pedido_id','FutureEventSecret'],
-    ['Maquinas_Mant','notas','FutureMaintenanceSecret']
+    ['Maquinas_Mant','notas','FutureMaintenanceSecret'],
+    ['Equipo_Eventos','desc','FutureTeamSecret']
   ]){
     const f=fixture({records:[record({[shown]:'business',
       [privateField]:'private',FutureUnknown:'unreviewed'})],
@@ -152,3 +155,20 @@ test('operator machine reads expose reviewed operations only and reject query si
   assert.equal(q.status,422);
   assert.equal(blocked.calls.length,0);
 });
+
+test('operator Equipo reads expose only reviewed availability fields',async()=>{
+  const f=fixture({records:[record({
+    persona_id:'gustavo',fecha:'2026-10-06',tipo:'remoto',
+    desc:'Casa',hora_inicio:'09:00',hora_fin:'18:00',
+    FutureTeamSecret:'private'
+  })]});
+  const x=await f.run(base+'Equipo_Eventos');
+  assert.equal(x.status,200);
+  assert.equal(x.body.records[0].fields.persona_id,'gustavo');
+  assert.equal(x.body.records[0].fields.hora_inicio,'09:00');
+  assert.equal(x.body.records[0].fields.FutureTeamSecret,undefined);
+  const fields=new URL(f.calls[0].url).searchParams.getAll('fields[]');
+  assert.equal(fields.includes('persona_id'),true);
+  assert.equal(fields.includes('FutureTeamSecret'),false);
+});
+

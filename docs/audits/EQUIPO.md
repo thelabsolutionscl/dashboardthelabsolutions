@@ -42,3 +42,77 @@ Google Calendar trata `end.date` como límite exclusivo. `syncGcalEquipo` recorr
 - `.github/workflows/equipo-audit.yml`
 
 Las tres correcciones abiertas están declaradas como pruebas `TODO` para permanecer visibles sin convertir un hallazgo conocido en un falso fallo de integración.
+
+## 2026-10-06 — cierre de rango, rollback, concurrencia y Access
+
+La reauditoría confirmó que los tres defectos abiertos del issue #98 seguían
+presentes en el código vigente. Además apareció un cuarto riesgo de integridad:
+`saveEquipoEventosAirtable()` reconciliaba la tabla completa contra la copia
+local y eliminaba cualquier fila remota ausente. Un navegador desactualizado
+podía, por tanto, borrar disponibilidad creada desde otro computador al guardar
+un solo día.
+
+### Esquema verificado
+
+Se contrastó en modo sólo lectura la tabla Airtable `Equipo_Eventos`
+(`tblqPncBEAShwpMvx`). Tiene 17 registros vigentes y exactamente seis campos:
+
+- `persona_id`
+- `fecha`
+- `tipo`
+- `desc`
+- `hora_inicio`
+- `hora_fin`
+
+No se modificaron registros durante la auditoría.
+
+### Correcciones
+
+- `saveEquipoEvento()` rechaza `fechaFin < fechaInicio` antes de cerrar el
+  modal o persistir.
+- Crear, eliminar y el cambio rápido guardan snapshot previo y restauran la UI
+  cuando Airtable rechaza la mutación.
+- El éxito ya no se muestra antes de confirmar persistencia.
+- El respaldo recibe una lista explícita de operaciones y modifica sólo esas
+  claves; desaparece el borrado inferido de todas las filas que no estén en la
+  copia local.
+- Todas las respuestas HTTP de escritura se comprueban y los errores se
+  propagan al rollback.
+- La carga fallida ya no vacía el estado de disponibilidad ni interpreta un
+  403 de Access como una tabla inexistente.
+- Google Calendar trata `end.date` de eventos all-day como límite exclusivo:
+  un evento de un día ocupa un solo día. `end.dateTime` conserva su semántica
+  temporal normal.
+- El botón de sincronización se restaura en `finally`, incluso ante error de
+  Google o Airtable.
+- La sincronización persiste únicamente los días efectivamente importados.
+
+### Cloudflare Access
+
+El esquema ya está clasificado. `operator` obtiene proyección de lectura
+limitada a los seis campos revisados y puede crear/editar/eliminar únicamente
+registros de `Equipo_Eventos`.
+
+Las escrituras validan:
+
+- persona: `gustavo`, `nicanor` o `florencia`;
+- fecha ISO real;
+- tipo: `ocupado`, `reunion`, `remoto`, `ausente` o `vacaciones`;
+- horas vacías o `HH:MM`;
+- descripción acotada;
+- `persona_id` y `fecha` son inmutables en PATCH;
+- campos nuevos o desconocidos fallan cerrados.
+
+DELETE de `operator` sigue prohibido para CRM, máquinas y el resto de tablas:
+la excepción está limitada a un record ID canónico dentro de
+`Equipo_Eventos`.
+
+### Cobertura
+
+- `tests/equipo-wiring.test.js`
+- `tests/access-operator-mutations.test.js`
+- `tests/access-operator-field-scope.test.js`
+
+Los antiguos diagnósticos `todo` de rango invertido, rollback y all-day pasan
+a pruebas obligatorias. También se protege contra una futura reintroducción de
+la reconciliación destructiva de toda la tabla.
