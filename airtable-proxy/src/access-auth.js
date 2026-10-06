@@ -48,7 +48,7 @@ const ACCESS_ALLOWED_TABLES=new Set([
   // notification or operational logs, which can contain personal information.
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
   'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
-  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
+  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);
 const ACCESS_ADMIN_ONLY_TABLES=new Set([
   // Live Monitor Sistema records share one unrestricted Notes column for
@@ -57,7 +57,7 @@ const ACCESS_ADMIN_ONLY_TABLES=new Set([
   'Monitor Sistema',
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
   'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
-  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
+  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);
 const ACCESS_JWKS_CACHE=new Map();
 const ACCESS_JWKS_TTL=5*60*1000;
@@ -263,6 +263,14 @@ function accessAllows(identity,method,path){
   // Financial endpoints are explicitly constrained even for administrators.
   if(path==='/marketing/spend')return (finance||admin)&&['GET','PUT'].includes(method);
   if(path==='/marketing/spend/history')return (finance||admin)&&method==='GET';
+  // Google Ads mutations, history cleanup, snapshot upserts and autopilot
+  // decisions can change paid media or its audit trail. They require a
+  // signed administrator; the public APP_KEY alone is never enough.
+  if(path==='/ads/mutation')return admin&&method==='POST';
+  if(path==='/ads/mutations')return admin&&['GET','PUT'].includes(method);
+  if(path==='/ads/snapshot')return admin&&method==='POST';
+  if(path==='/ads/autopilot/decision')return admin&&method==='POST';
+  if(path.startsWith('/ads/'))return false;
   if(path==='/printer/session')return method==='POST';
   if(path.startsWith('/printer/'))return false;
 
