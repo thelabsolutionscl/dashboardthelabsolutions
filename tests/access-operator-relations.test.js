@@ -57,7 +57,7 @@ function dbFixture(){
       }
       const formula=url.searchParams.get('filterByFormula')||'';
       const wanted=[...new Set(formula.match(/rec[A-Za-z0-9]{14}/g)||[])];
-      const records=wanted.map(id=>store.get(id)).filter(Boolean).map(structuredClone);
+      const records=wanted.map(id=>store.get(id)).filter(Boolean).map(row=>structuredClone(row));
       return Response.json({records});
     }
     if(method==='PATCH'){
