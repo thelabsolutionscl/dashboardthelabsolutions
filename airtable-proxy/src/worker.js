@@ -287,6 +287,137 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
     code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);}
 }
 
+const OPERATOR_CRM_RELATIONS=Object.freeze({
+  Cotizaciones:Object.freeze({client:'Cliente',related:'Pedido',target:'Pedidos'}),
+  Pedidos:Object.freeze({client:'Cliente',related:'Cotizaciones',target:'Cotizaciones'})
+});
+function operatorCrmLinks(value,max=25){
+  if(value===undefined||value===null)return [];
+  if(!Array.isArray(value)||value.length>max)return null;
+  const out=[];
+  for(const id of value){
+    if(typeof id!=='string'||!/^rec[A-Za-z0-9]{14}$/.test(id)||out.includes(id))return null;
+    out.push(id);
+  }
+  return out;
+}
+async function operatorCrmLoadRows(table,ids,fields,env){
+  const wanted=[...new Set(ids)];
+  if(!wanted.length)return new Map();
+  if(wanted.length>100||wanted.some(id=>!/^rec[A-Za-z0-9]{14}$/.test(id)))
+    throw Error('Invalid CRM relation lookup');
+  const q=new URLSearchParams();
+  q.set('pageSize','100');
+  const tests=wanted.map(id=>"RECORD_ID()='"+id+"'");
+  q.set('filterByFormula',tests.length===1?tests[0]:'OR('+tests.join(',')+')');
+  for(const field of fields)q.append('fields[]',field);
+  const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent(table)+'?'+q.toString();
+  const response=await fetch(target,{method:'GET',redirect:'manual',headers:{
+    Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'
+  }});
+  if(!response.ok||response.status>=300&&response.status<400)
+    throw Error('CRM relation lookup failed');
+  const body=await response.json();
+  if(!body||!Array.isArray(body.records)||body.records.length>wanted.length||
+     body.offset!==undefined)
+    throw Error('CRM relation lookup malformed');
+  const expected=new Set(wanted),rows=new Map();
+  for(const row of body.records){
+    if(!row||!expected.has(row.id)||rows.has(row.id)||!row.fields||
+       typeof row.fields!=='object'||Array.isArray(row.fields))
+      throw Error('CRM relation row malformed');
+    rows.set(row.id,row);
+  }
+  return rows;
+}
+function operatorCrmRelationError(error,status=422,code='CRM_RELATION_INVALID'){
+  return {ok:false,status,error,code};
+}
+async function operatorCrmRelationPreflight(table,mutations,env,{creating=false}={}){
+  const spec=OPERATOR_CRM_RELATIONS[table];
+  if(!spec)return {ok:true};
+  if(!Array.isArray(mutations)||!mutations.length||mutations.length>10)
+    return operatorCrmRelationError('Invalid CRM relation mutation shape');
+  const relevant=creating?mutations:mutations.filter(row=>row&&row.fields&&
+    (Object.hasOwn(row.fields,spec.client)||Object.hasOwn(row.fields,spec.related)));
+  if(!relevant.length)return {ok:true};
+
+  let current=new Map();
+  try{
+    if(!creating){
+      const sourceIds=relevant.map(row=>row.id);
+      if(sourceIds.some(id=>!/^rec[A-Za-z0-9]{14}$/.test(id)))
+        return operatorCrmRelationError('Invalid CRM source record');
+      current=await operatorCrmLoadRows(table,sourceIds,[spec.client,spec.related],env);
+      if(current.size!==new Set(sourceIds).size)
+        return operatorCrmRelationError('CRM source record not found',404,'CRM_RELATION_SOURCE_MISSING');
+    }
+  }catch(_){
+    return operatorCrmRelationError('Cannot verify CRM relationships',503,'CRM_RELATION_VERIFY_UNAVAILABLE');
+  }
+
+  const finalRows=[],clientIds=new Set(),targetIds=new Set();
+  for(const mutation of relevant){
+    if(!mutation||!mutation.fields||typeof mutation.fields!=='object'||Array.isArray(mutation.fields))
+      return operatorCrmRelationError('Invalid CRM relation mutation shape');
+    const before=creating?{}:current.get(mutation.id)?.fields||{};
+    const clientValue=Object.hasOwn(mutation.fields,spec.client)?
+      mutation.fields[spec.client]:before[spec.client];
+    const relatedValue=Object.hasOwn(mutation.fields,spec.related)?
+      mutation.fields[spec.related]:before[spec.related];
+    const clients=operatorCrmLinks(clientValue,1),related=operatorCrmLinks(relatedValue,10);
+    if(!clients||clients.length!==1||!related)
+      return operatorCrmRelationError('CRM records require one valid client and reviewed links');
+    if(table==='Cotizaciones'&&related.length>1)
+      return operatorCrmRelationError('A quotation can reference at most one order');
+
+    const beforeRelated=operatorCrmLinks(before[spec.related],10);
+    if(!creating&&!beforeRelated)
+      return operatorCrmRelationError('Cannot verify current CRM relationships',503,'CRM_RELATION_VERIFY_UNAVAILABLE');
+    if(!creating&&table==='Cotizaciones'&&Object.hasOwn(mutation.fields,spec.related)&&
+       beforeRelated.length&&
+       (related.length!==beforeRelated.length||related.some((id,i)=>id!==beforeRelated[i])))
+      return operatorCrmRelationError('An operator cannot reassign a quotation already linked to an order');
+    if(!creating&&table==='Pedidos'&&Object.hasOwn(mutation.fields,spec.related)&&
+       beforeRelated.some(id=>!related.includes(id)))
+      return operatorCrmRelationError('An operator cannot detach quotations from an existing order');
+
+    clients.forEach(id=>clientIds.add(id));
+    related.forEach(id=>targetIds.add(id));
+    finalRows.push({id:mutation.id||'',clients,related});
+  }
+
+  let clients,targetRows;
+  try{
+    clients=await operatorCrmLoadRows('Clientes',[...clientIds],['Empresa'],env);
+    targetRows=await operatorCrmLoadRows(spec.target,[...targetIds],
+      spec.target==='Cotizaciones'?['Cliente','Pedido']:['Cliente'],env);
+  }catch(_){
+    return operatorCrmRelationError('Cannot verify CRM relationships',503,'CRM_RELATION_VERIFY_UNAVAILABLE');
+  }
+  if(clients.size!==clientIds.size||targetRows.size!==targetIds.size)
+    return operatorCrmRelationError('A linked CRM record does not exist');
+
+  for(const row of finalRows){
+    const client=row.clients[0];
+    for(const targetId of row.related){
+      const target=targetRows.get(targetId),targetClients=operatorCrmLinks(target?.fields?.Cliente,1);
+      if(!targetClients||targetClients.length!==1||targetClients[0]!==client)
+        return operatorCrmRelationError('Linked quotation/order belongs to a different client');
+      if(table==='Pedidos'){
+        const targetOrders=operatorCrmLinks(target.fields.Pedido,10);
+        if(!targetOrders)
+          return operatorCrmRelationError('Cannot verify quotation assignment',503,'CRM_RELATION_VERIFY_UNAVAILABLE');
+        if(creating&&targetOrders.length)
+          return operatorCrmRelationError('Quotation is already assigned to another order');
+        if(!creating&&targetOrders.some(id=>id!==row.id))
+          return operatorCrmRelationError('Quotation is already assigned to another order');
+      }
+    }
+  }
+  return {ok:true};
+}
+
 
 const PROBLEM_REPORTS_TABLE='tbl2kU5lGg1JYcrPi';
 const PROBLEM_SCREENSHOT_FIELD='fldV1AHUN24F2lkdW';
@@ -2325,6 +2456,13 @@ export class CrmMutationGuard {
         // before either an individual or bulk CRM mutation reaches Airtable.
         if(search!==''||!operatorWritePayloadAllowed(table,'PATCH',payload))
           return this._json({error:'Unapproved operator patch fields'},422);
+        const rows=path===root?payload.records:[{
+          id:path.slice(root.length+1),fields:payload.fields
+        }];
+        const relation=await operatorCrmRelationPreflight(table,rows,this.env,{creating:false});
+        if(!relation.ok)return this._json({
+          error:relation.error,code:relation.code
+        },relation.status);
       }
       try{
         const upstream=await fetch(AIRTABLE_BASE+path+search,{
@@ -2514,6 +2652,13 @@ export class CrmMutationGuard {
         !data.body.fields || typeof data.body.fields !== 'object' ||
         Array.isArray(data.body.fields) || data.body.records) {
       return this._json({ error: 'Only single-record CRM creates are allowed' }, 400);
+    }
+    if(data?.actor?.role==='operator'&&['Pedidos','Cotizaciones'].includes(table)){
+      const relation=await operatorCrmRelationPreflight(table,[{fields:data.body.fields}],
+        this.env,{creating:true});
+      if(!relation.ok)return this._json({
+        error:relation.error,code:relation.code
+      },relation.status);
     }
     // Reportes: no more check-then-POST in two browsers. Canonical ISO week is
     // the natural identity; historical labels are adopted only when their
