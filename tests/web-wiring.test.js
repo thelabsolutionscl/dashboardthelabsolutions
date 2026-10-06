@@ -222,7 +222,7 @@ test('la creación persiste primero la cola y después solicita el cascarón ser
   const queue=save.indexOf('_adsQueueMutation(mutation)');
   const shell=save.indexOf('_adsCreateShellServer(mutation)');
   assert.ok(queue>=0&&shell>queue,'la orden local debe persistirse antes del cascarón');
-  assert.doesNotMatch(save,/hook\.|Make\.com|clave=/i);
+  assert.doesNotMatch(save,/https:\/\/hook\.|ADS_MAKE_SHELL|tl-cascaron|clave=/i);
 });
 test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ads o Make',()=>{
   const load=functionBlock(SOURCE,'loadAdsData');
