@@ -172,3 +172,35 @@ que está en cPanel. Validar el certificado de `mail.thelab.solutions:993`,
 instalar la versión nueva y comprobar el marcador
 `2026-09-29-mail-security-rate-guard` antes de dar por cerrada la auditoría
 de producción.
+
+## 2026-10-06 — límites autoritativos del mail-api
+
+La reauditoría del código vigente confirmó que autenticación IMAP antes de Resend,
+sanitización de citas/firmas, TLS con `validate-cert` y cuota por casilla ya
+estaban corregidos. Quedaban tres límites server-side incompletos:
+
+1. CORS anunciaba un origen permitido incluso ante un Origin desconocido y no
+   existía rechazo explícito de métodos distintos de POST/OPTIONS.
+2. El envío confiaba demasiado en validaciones del navegador para destinatarios,
+   tamaño del cuerpo y estructura/base64 real de adjuntos.
+3. `action=attachment` podía descargar y decodificar una parte grande sin un
+   límite backend propio.
+
+La corrección `2026-10-06-mail-boundaries`:
+
+- devuelve 403 a Origin no permitido y 405 a métodos no permitidos;
+- restringe la identidad IMAP/From a casillas `@thelab.solutions`;
+- parsea To/CC/BCC en servidor y limita el total a 50 destinatarios;
+- limita asunto a 250 bytes, nombre From a 120 y cuerpo HTML a 2 MiB;
+- acepta como máximo 10 adjuntos y 20 MiB decodificados, valida base64, nombre
+  y MIME en servidor;
+- valida UID/part de descargas y aplica cortes antes y después de decodificar;
+- sanea el nombre de archivo devuelto;
+- incorpora `tests/mail-api-boundaries.test.js` y convierte el diagnóstico de
+  destinatarios en prueba obligatoria.
+
+Esto **no** sustituye los pendientes arquitectónicos: sesión backend HttpOnly,
+RBAC central de casillas compartidas, idempotencia de envíos, bloqueo de recursos
+remotos/tracking, auditoría mínima de proveedor y política para adjuntos activos.
+Además, el PHP de GitHub no entra en producción hasta desplegarlo en cPanel y
+validar IMAP/Resend de extremo a extremo.
