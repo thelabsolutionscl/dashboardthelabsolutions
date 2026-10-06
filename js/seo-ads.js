@@ -1266,10 +1266,9 @@ async function adsDiagnostico(){
   Object.entries(byStatus).forEach(([s,n])=>lines.push(`  &nbsp;→ ${s}: ${n}`));
   if(cfg.endpoint){
     try{
-      const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=mutations&_t='+Date.now();
-      const r=await fetch(url);const d=await r.json();
+      const d=await _adsProxyFetch('/ads/mutations',{method:'GET'});
       if(d.ok&&Array.isArray(d.mutations)){
-        lines.push(`<b style="color:var(--success)">✓ Script 1 responde OK</b> — ${d.mutations.length} mutaciones almacenadas`);
+        lines.push(`<b style="color:var(--success)">✓ Proxy + Script 1 responden OK</b> — ${d.mutations.length} mutaciones almacenadas`);
         const byS2={};d.mutations.forEach(m=>{byS2[m.status]=(byS2[m.status]||0)+1;});
         Object.entries(byS2).forEach(([s,n])=>lines.push(`  &nbsp;→ <b>${s}</b>: ${n}`));
         const pending=d.mutations.filter(m=>m.status==='pending'||m.status==='enviado');
@@ -1286,8 +1285,8 @@ async function adsDiagnostico(){
         lines.push(`<b style="color:var(--danger)">✗ Script 1 respondió con error:</b> ${escapeHtml((d&&d.error)||'respuesta inválida')}`);
       }
     }catch(e){
-      lines.push(`<b style="color:var(--danger)">✗ No se pudo conectar con Script 1:</b> ${escapeHtml(e.message)}`);
-      lines.push(`→ Verifica que el Script 1 esté publicado como <b>Aplicación web</b> con acceso <b>Todos (Anyone)</b>.`);
+      lines.push(`<b style="color:var(--danger)">✗ No se pudo verificar el pipeline firmado:</b> ${escapeHtml(e.message)}`);
+      lines.push('→ Revisa Proxy Worker, Cloudflare Access y las credenciales server-side de Google Ads.');
     }
   } else {
     lines.push(`<b style="color:var(--danger)">✗ No hay endpoint configurado</b> — pega la URL del Script 1 arriba.`);
