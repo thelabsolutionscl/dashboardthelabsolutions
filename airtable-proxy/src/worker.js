@@ -3384,6 +3384,7 @@ export default {
     // convierte APP_KEY en identidad: clientes HTTP pueden enviar ese header.
     // /health queda libre más arriba para los monitores.
     const leadServiceRoute=url.pathname==='/service/lead/anthropic/v1/messages';
+    const visualServiceRoute=url.pathname==='/visual-ai/rpc';
     if (leadServiceRoute && url.search)
       return json({error:'Lead service query parameters not allowed'},400,CORS);
     if (!leadServiceRoute && !ALLOWED_ORIGINS.includes(origin)) {
@@ -3392,7 +3393,9 @@ export default {
 
     // Auth — la passphrase nunca sale al cliente como un token de servicio real
     const appKey = request.headers.get('X-App-Key');
-    if (!leadServiceRoute && (!appKey || appKey !== env.APP_KEY)) {
+    // Visual AI standalone (GitHub Pages) authenticates exclusively with signed
+    // Cloudflare Access identity; it never receives the shared APP_KEY.
+    if (!leadServiceRoute && !visualServiceRoute && (!appKey || appKey !== env.APP_KEY)) {
       return json({ error: 'Unauthorized' }, 403, CORS);
     }
     // After configuration, the shared app key is only a compatibility check.
