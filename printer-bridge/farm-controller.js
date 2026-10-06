@@ -333,6 +333,9 @@ function compactAuditScanCore(value){
   if(c?.moonraker?.history?.result?.jobs)c.moonraker.history.result.jobs=c.moonraker.history.result.jobs.slice(0,10);
   if(c?.moonraker?.gcodeResponses)c.moonraker.gcodeResponses=c.moonraker.gcodeResponses.slice(-30);
   if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
+  if(Array.isArray(c?.logForensics?.files))c.logForensics.files=c.logForensics.files.map(f=>({...f,hits:(f.hits||[]).slice(-12)}));
+  if(c?.moonraker?.temperatureStore?.series){const s=c.moonraker.temperatureStore.series;for(const k of Object.keys(s))if(!/^(extruder|heater_bed)$/.test(k))delete s[k];}
+  if(auditByteLength(c)<=AUDIT_MAX_SCAN)return c;
   if(c?.ssh?.output)c.ssh.output=String(c.ssh.output).slice(-24000);
   if(c?.moonraker?.history)c.moonraker.history={result:{jobs:(c.moonraker.history.result?.jobs||[]).slice(0,5)}};
   if(auditByteLength(c)>AUDIT_MAX_SCAN)throw new Error('escaneo técnico excede el presupuesto seguro');
@@ -1135,7 +1138,7 @@ const server = http.createServer(async (req, res) => {
     const machineId=decodeAuditPathPart(auditScan[1]);if(!machineId)return json(res,400,{ok:false,error:'machineId inválido'});
     const m=machineByIdentity({id:machineId});
     if(!m?.id||!isPrivateIp(m.ip))return json(res,404,{ok:false,error:'máquina no registrada o sin IP válida'});
-    const scan=await requestLegacy('GET','/diagnostics/'+m.ip,null,{},45_000);
+    const scan=await requestLegacy('GET','/diagnostics/'+m.ip,null,{},60_000);
     if(!scan.ok)return json(res,502,{ok:false,error:'diagnóstico profundo no disponible',status:scan.status});
     try{
       const diagnostics=JSON.parse(scan.body.toString('utf8')||'{}');

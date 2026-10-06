@@ -462,6 +462,96 @@ function runDiagnosticSsh(ip) {
     });
   });
 }
+// Forense de logs para el informe técnico: recorre klippy.log y sus rotaciones
+// (varios días) buscando sólo patrones de falla conocidos. Script fijo, de solo
+// lectura; por archivo devuelve conteo y las últimas coincidencias.
+const LOG_FORENSIC_PATTERN='key[0-9]{2,4}|ADC out of range|not heating at expected rate|Lost communication|Timer too close|Rescheduled timer|Transition to shutdown|MCU .* shutdown|[Tt]hermal runaway|PRES_NOISE|TMC .* error|Move out of range|addr 0?1 offline|!! ';
+function diagnosticLogForensicsScript() {
+  return [
+    'LOGDIRS="/usr/data/printer_data/logs /mnt/UDISK/printer_data/logs /root/printer_data/logs /home/pi/printer_data/logs"',
+    `PAT='${LOG_FORENSIC_PATTERN}'`,
+    'for d in $LOGDIRS; do',
+    '  [ -d "$d" ] || continue',
+    '  echo "@@DIR $d"',
+    '  ls -ln "$d" 2>/dev/null | grep klippy | head -n 20 | while read -r l; do echo "@@LS $l"; done',
+    '  for f in $(ls -t "$d"/klippy.log* 2>/dev/null | head -n 8); do',
+    '    [ -f "$f" ] || continue',
+    '    echo "@@FILE $f"',
+    '    case "$f" in',
+    '      *.gz) (zcat "$f" 2>/dev/null || gzip -dc "$f" 2>/dev/null) | grep -E "$PAT" > /tmp/.tls_forensic 2>/dev/null ;;',
+    '      *) grep -E "$PAT" "$f" > /tmp/.tls_forensic 2>/dev/null ;;',
+    '    esac',
+    '    echo "@@COUNT $(wc -l < /tmp/.tls_forensic 2>/dev/null)"',
+    '    tail -n 30 /tmp/.tls_forensic 2>/dev/null | cut -c1-400 | while read -r l; do echo "@@HIT $l"; done',
+    '    rm -f /tmp/.tls_forensic',
+    '  done',
+    '  break',
+    'done',
+    'exit 0',
+  ].join('\n');
+}
+function parseLogForensics(output) {
+  const out={dir:'',listing:[],files:[]};let cur=null;
+  for(const raw of String(output||'').split('\n')){
+    const line=raw.replace(/\r$/,'');
+    if(line.startsWith('@@DIR '))out.dir=line.slice(6).trim();
+    else if(line.startsWith('@@LS '))out.listing.push(line.slice(5).trim().slice(0,240));
+    else if(line.startsWith('@@FILE ')){cur={file:line.slice(7).trim().split('/').pop(),matches:0,codes:{},hits:[]};out.files.push(cur);}
+    else if(cur&&line.startsWith('@@COUNT '))cur.matches=Number(line.slice(8).trim())||0;
+    else if(cur&&line.startsWith('@@HIT ')){
+      const hit=redactDiagnosticSecrets(line.slice(6));cur.hits.push(hit);
+      for(const code of hit.match(/key\d{2,4}/g)||[])cur.codes[code]=(cur.codes[code]||0)+1;
+      for(const [re,label] of [[/ADC out of range/,'ADC out of range'],[/not heating at expected rate/,'Heater not heating at expected rate'],[/Lost communication/,'Lost communication'],[/Timer too close/,'Timer too close'],[/[Tt]hermal runaway/,'Thermal runaway'],[/PRES_NOISE/,'PRES_NOISE'],[/Transition to shutdown/,'Shutdown']])
+        if(re.test(hit))cur.codes[label]=(cur.codes[label]||0)+1;
+    }
+  }
+  return out;
+}
+function runLogForensicsSsh(ip) {
+  return new Promise(resolve=>{
+    const base=recoverSshCommand(ip),args=base.args.slice();
+    args[args.length-1]=diagnosticLogForensicsScript();
+    execFile(base.cmd,args,{timeout:28000,env:base.env,maxBuffer:512*1024},(err,stdout)=>{
+      const parsed=parseLogForensics(stdout);
+      if(err&&!parsed.files.length)return resolve({ok:false,error:String(err.killed?'timeout leyendo logs':err.message).split('\n')[0],...parsed});
+      resolve({ok:true,partial:!!err,...parsed});
+    });
+  });
+}
+// Configuración térmica activa y pendiente (PID, verify_heater, ventiladores):
+// sólo las secciones útiles para el informe, nunca la config completa.
+const AUDIT_CONFIG_SECTION=/^(extruder|heater_bed|verify_heater|fan|fan_generic |heater_fan |controller_fan |output_pin fan|temperature_fan |temperature_sensor |printer)/;
+function reduceAuditConfigfile(json) {
+  const cfg=json?.result?.status?.configfile||{};
+  const pick=(obj)=>{const o={};for(const [k,v] of Object.entries(obj||{}))if(AUDIT_CONFIG_SECTION.test(k))o[k]=v;return o;};
+  return redactDiagnosticValue({
+    saveConfigPending:!!cfg.save_config_pending,
+    saveConfigPendingItems:pick(cfg.save_config_pending_items),
+    settings:pick(cfg.settings),
+  });
+}
+const AUDIT_FAN_OBJECT=/^(fan|fan_generic .+|heater_fan .+|controller_fan .+|output_pin fan\d*|temperature_fan .+|temperature_sensor .+)$/;
+async function collectAuditFans(printer) {
+  const list=await moonraker(printer,'GET','/printer/objects/list',5000);
+  const names=(list?.json?.result?.objects||[]).filter(n=>AUDIT_FAN_OBJECT.test(String(n))).slice(0,24);
+  if(!names.length)return{objects:[],status:{}};
+  const q=await moonraker(printer,'GET','/printer/objects/query?'+names.map(encodeURIComponent).join('&'),5000);
+  return redactDiagnosticValue({objects:names,status:q?.json?.result?.status||{}});
+}
+// Últimos ~20 min de temperaturas que guarda Moonraker, muestreados cada 5 s.
+function summarizeTemperatureStore(json) {
+  const store=json?.result||{},out={};
+  for(const [name,row] of Object.entries(store)){
+    if(!/^(extruder|heater_bed)$/.test(name)&&Object.keys(out).length>=6)continue;
+    const series={};
+    for(const key of ['temperatures','targets','powers','speeds']){
+      const a=Array.isArray(row?.[key])?row[key]:null;if(!a)continue;
+      series[key]=a.filter((_,i)=>i%5===0).map(v=>Number.isFinite(Number(v))?Number(Number(v).toFixed(1)):null);
+    }
+    out[name]=series;
+  }
+  return{intervalSec:5,series:out};
+}
 function auditGcodeResponses(raw) {
   const items=raw?.result?.gcode_store;
   if(!Array.isArray(items))return[];
@@ -475,7 +565,7 @@ async function collectPrinterDiagnostics(ip) {
   const printer={ip};
   const [
     printerInfo,serverInfo,systemInfo,objects,gcode,history,deterministic,
-    camGo2rtc,camMjpeg,sshAccess
+    camGo2rtc,camMjpeg,sshAccess,configfile,tempStore,fans
   ]=await Promise.all([
     moonraker(printer,'GET','/printer/info',6500),
     moonraker(printer,'GET','/server/info',6500),
@@ -487,11 +577,15 @@ async function collectPrinterDiagnostics(ip) {
     cameraProbe(ip,1984,'/api/frame.jpeg?src=k2plus',4500),
     cameraProbe(ip,8080,'/?action=snapshot',3500),
     sshCheck(ip),
+    moonraker(printer,'GET','/printer/objects/query?configfile=save_config_pending,save_config_pending_items,settings',7500),
+    moonraker(printer,'GET','/server/temperature_store?include_monitors=false',7500),
+    collectAuditFans(printer).catch(()=>null),
   ]);
   const cameraFrame=(camGo2rtc||camMjpeg)?await captureAuditCameraFrame(ip):{ok:false,error:'cámara no disponible'};
-  const [ssh,stability]=await Promise.all([
+  const [ssh,stability,logForensics]=await Promise.all([
     sshAccess?.ok?runDiagnosticSsh(ip):Promise.resolve({ok:false,error:sshAccess?.error||'SSH no disponible',output:''}),
     collectStabilitySamples(printer).catch(e=>({samples:[],network:{successes:0,total:0,error:redactDiagnosticSecrets(e.message)},thermal:{hotend:null,bed:null}})),
+    sshAccess?.ok?runLogForensicsSsh(ip):Promise.resolve({ok:false,error:sshAccess?.error||'SSH no disponible',files:[]}),
   ]);
   const okCount=[printerInfo,serverInfo,systemInfo,objects,gcode,history].filter(r=>r?.ok).length;
   return{
@@ -502,7 +596,9 @@ async function collectPrinterDiagnostics(ip) {
       moonraker:{available:okCount>0,checksOk:okCount,checksTotal:6},
       ssh:{available:!!sshAccess?.ok,logsCaptured:!!ssh?.ok,error:ssh?.ok?'':String(ssh?.error||'')},
       camera:{available:!!(camGo2rtc||camMjpeg),go2rtc:!!camGo2rtc,mjpeg:!!camMjpeg,snapshotCaptured:!!cameraFrame.ok},
+      logForensics:{available:!!logForensics?.ok,files:(logForensics?.files||[]).length,error:logForensics?.ok?'':String(logForensics?.error||'')},
     },
+    logForensics:redactDiagnosticValue(logForensics||null),
     cameraFrame,
     stability:redactDiagnosticValue(stability),
     deterministic:redactDiagnosticValue(deterministic),
@@ -513,6 +609,9 @@ async function collectPrinterDiagnostics(ip) {
       objects:objects?.ok?redactDiagnosticValue(objects.json):null,
       gcodeResponses:redactDiagnosticValue(auditGcodeResponses(gcode?.json)),
       history:history?.ok?redactDiagnosticValue(history.json):null,
+      configfile:configfile?.ok?reduceAuditConfigfile(configfile.json):null,
+      temperatureStore:tempStore?.ok?summarizeTemperatureStore(tempStore.json):null,
+      fans:fans||null,
       failures:[
         ['printerInfo',printerInfo],['serverInfo',serverInfo],['systemInfo',systemInfo],
         ['objects',objects],['gcode',gcode],['history',history],
@@ -1133,4 +1232,4 @@ function startMaintScheduler() {
 }
 
 if(require.main===module)startServer();
-module.exports={redactDiagnosticSecrets,redactDiagnosticValue,sensitiveDiagnosticKey,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,maybeRestartStaleFarmParent,startServer};
+module.exports={diagnosticLogForensicsScript,parseLogForensics,reduceAuditConfigfile,summarizeTemperatureStore,redactDiagnosticSecrets,redactDiagnosticValue,sensitiveDiagnosticKey,capDiagnosticText,collectStabilitySamples,auditGcodeResponses,diagnosticSshScript,collectPrinterDiagnostics,maybeRestartStaleFarmParent,startServer};
