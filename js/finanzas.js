@@ -1448,18 +1448,23 @@ function finSetupTooltip(){
 /* ── Init cuando se activa el tab ── */
 function finInit(){
   if(window.OP)OP.finance();
-  finRenderMensual();
-  finInitKPIs();
-  finRenderFacturas();
-  finRenderCobrar();
-  finRenderPrestamos();
-  try{renderIvaMensual();}catch(e){}
-  try{renderBreakEven();}catch(e){}
-  _finSharedHydrateRemote().then(ok=>{
-    if(!ok)return;
-    try{finRenderMensual();finInitKPIs();finRenderFacturas();finRenderCobrar();finRenderPrestamos();}catch(_){}
-    try{ldInit();renderPresupuesto();renderArqueo();renderComisiones();}catch(_){}
-  }).catch(()=>{});
+  const render=()=>{
+    finRenderMensual();
+    finInitKPIs();
+    renderOverviewFinanzas();
+    if(finCurrentTab==='facturas')finRenderFacturas();
+    if(finCurrentTab==='cobrar')finRenderCobrar();
+    if(finCurrentTab==='prestamos')finRenderPrestamos();
+    if(finCurrentTab==='diario')ldInit();
+    if(finCurrentTab==='presupuesto')renderPresupuesto();
+    setTimeout(()=>{
+      finDrawChart();finDrawSparklines();finDrawCanalDonut();
+      finRenderResumenAnual();finRenderTopClientes();finSetupTooltip();
+      try{renderIvaMensual();renderBreakEven();renderArqueo();renderComisiones();}catch(_){}
+    },120);
+  };
+  render();
+  _finSharedHydrateRemote().then(ok=>{if(ok)render();}).catch(()=>{});
 }
 
 // ═══════════════════════════════════════════════════════════════
