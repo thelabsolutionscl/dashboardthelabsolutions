@@ -2071,6 +2071,7 @@ const SCHEMA_BOOTSTRAP_FIELDS = Object.freeze({
   "modelo": ["singleLineText"],
   "N° Cotización": ["singleLineText"],
   "N° Pedido": ["singleLineText"],
+  "Monto Pagado": ["number"],
   "Neto": ["number"],
   "nombre": ["singleLineText"],
   "notas": ["multilineText"],
