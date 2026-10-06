@@ -168,28 +168,60 @@ function seoCopyIAReport(){
 
 // ── GOOGLE ADS AGENT ─────────────────────────────────────
 // ── Snapshot histórico ──────────────────────────────────
+function _adsLeadDate(record){
+  const raw=String(record?.fields?.['Fecha primer contacto']||'').slice(0,10);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+    const d=new Date(raw+'T12:00:00');
+    if(!Number.isNaN(d.getTime()))return d;
+  }
+  const created=record?.createdTime?new Date(record.createdTime):null;
+  return created&&!Number.isNaN(created.getTime())?created:null;
+}
+function _adsClientAttributed(record){
+  const f=record?.fields||{};
+  const origin=String(f['Origen lead']?.name||f['Origen lead']||'').trim().toLowerCase();
+  return !!(String(f.GCLID||'').trim()||String(f['Campaña Ads']||'').trim()||
+    origin==='google_ads'||origin==='google ads');
+}
+function _adsCrmAttribution(days){
+  const cutoff=new Date(Date.now()-Math.max(1,Number(days)||30)*86400000);
+  const clients=state.clientes||[],adsIds=new Set();
+  let leadsAds=0;
+  for(const c of clients){
+    if(!_adsClientAttributed(c))continue;
+    adsIds.add(String(c.id));
+    const d=_adsLeadDate(c);if(d&&d>=cutoff)leadsAds++;
+  }
+  let revenueAds=0,ordersAds=0;
+  for(const p of state.pedidos||[]){
+    const f=p.fields||{};
+    if((f['Estado pedido']||'')==='Cancelado')continue;
+    const d=p.createdTime?new Date(p.createdTime):null;if(!d||Number.isNaN(d.getTime())||d<cutoff)continue;
+    const links=Array.isArray(f.Cliente)?f.Cliente:(f.Cliente?[f.Cliente]:[]);
+    const ids=links.map(v=>String(v?.id||v));
+    if(!ids.some(id=>adsIds.has(id)))continue;
+    revenueAds+=Math.round((Number(f['Monto total (CLP)'])||0)/1.19);ordersAds++;
+  }
+  return{revenueAds,ordersAds,leadsAds,attributedClients:adsIds.size};
+}
+
 function adsSaveSnapshot(data,days){
   let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
+  if(!Array.isArray(snaps))snaps=[];
   const today=hoyCL();
   const imp=data.impresiones||0,clics=data.clics||0,gasto=data.gasto||0;
   const conv=data.conversiones||0;
   const ctr=imp>0?(clics/imp*100):0;
   const roas=gasto>0&&(data.valor_conversion||0)>0?data.valor_conversion/gasto:0;
-  // Verdad CRM: ingresos netos + leads del mismo período, para que el agente vea la dirección REAL
-  let ingresoCRM=0,leads=0;
-  try{
-    const cutoff=new Date(Date.now()-days*86400000);
-    ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const dd=p.createdTime?new Date(p.createdTime):null;return dd&&dd>=cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-    leads=(state.clientes||[]).filter(c=>{const dd=c.createdTime?new Date(c.createdTime):null;return dd&&dd>=cutoff;}).length;
-  }catch(e){}
-  const roasReal=gasto>0?ingresoCRM/gasto:0;
-  // Huella por campaña (id→gasto/conv) para detectar anomalías a nivel campaña
+  const crm=_adsCrmAttribution(days);
+  const roasCRM=gasto>0?crm.revenueAds/gasto:0;
   const camps={};(data.campanas||[]).forEach(c=>{if(c&&c.id!=null)camps[c.id]={gasto:c.gasto||0,conv:c.conversiones||0};});
-  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days,ingresoCRM,leads,roasReal,camps};
-  const idx=snaps.findIndex(s=>s.date===today);
-  if(idx>=0) snaps[idx]=snap; else snaps.push(snap);
-  snaps.sort((a,b)=>a.date.localeCompare(b.date));
-  if(snaps.length>30) snaps.splice(0,snaps.length-30);
+  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days,
+    ingresoAdsCRM:crm.revenueAds,leadsAds:crm.leadsAds,ordersAds:crm.ordersAds,roasCRM,camps};
+  const idx=snaps.findIndex(row=>row.date===today&&Number(row.days||30)===Number(days||30));
+  if(idx>=0)snaps[idx]=snap;else snaps.push(snap);
+  snaps.sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.days||30)-Number(b.days||30));
+  if(snaps.length>90)snaps.splice(0,snaps.length-90);
   localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
   localStorage.setItem('ads_last_sync',new Date().toISOString());
 }
@@ -478,65 +510,51 @@ function adsHealthScore(c){
 // ── Airtable sync ────────────────────────────────────────
 async function syncAdsToAirtable(data,days){
   if(_adsIsReadOnly()||data?.demo)return;
-  let cfg;try{cfg=_airtableConfig();}catch(e){return;}
-  const today=hoyCL();
-  const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
-  const conv=data.conversiones||0,valConv=data.valor_conversion||0;
-  const ctr=imp>0?clics/imp:0;
-  const cpc=clics>0?Math.round(gasto/clics):0;
-  const cpa=conv>0?Math.round(gasto/conv):0;
-  const roas=gasto>0?Math.round(valConv/gasto*100)/100:0;
-  const adsCfg=getAdsConfig();
-  const base=cfg.base+'/'+BASE_ID;
-  const headers={...cfg.headers,'Content-Type':'application/json'};
-  // KPI record
-  await airtableHttp(base+'/Google_Ads_KPIs',{method:'POST',headers,body:JSON.stringify({records:[{fields:{
-    'Período':today+' · '+days+'d',
-    'Fecha':today,'Días período':days,
-    'Gasto (CLP)':gasto,'Impresiones':imp,'Clics':clics,
-    'CTR (%)':ctr,'CPC Promedio (CLP)':cpc,
-    'Conversiones':conv,'Valor Conversiones (CLP)':valConv,
-    'CPA (CLP)':cpa,'ROAS':roas,
-    'Customer ID':adsCfg.customerId||'','Fuente':'real'
-  }}],typecast:true})});
-  // Campaign records (batch 10)
-  const camps=data.campanas||[];
-  if(camps.length){
-    const recs=camps.map(c=>{
-      const ct=c.impresiones>0?c.clics/c.impresiones:0;
-      const cp=c.clics>0?Math.round(c.gasto/c.clics):0;
-      const ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0;
-      const ro=c.gasto>0&&(c.valor_conversion||0)>0?Math.round(c.valor_conversion/c.gasto*100)/100:0;
-      return{fields:{
-        'Campaña':c.nombre||String(c.id),
-        'Campaign ID':String(c.id||''),
-        'Fecha snapshot':today,'Estado':c.estado||'ENABLED',
-        'Presupuesto diario (CLP)':c.presupuesto||0,'Gasto (CLP)':c.gasto||0,
-        'Impresiones':c.impresiones||0,'Clics':c.clics||0,
-        'CTR (%)':ct,'CPC (CLP)':cp,
-        'Conversiones':c.conversiones||0,'CPA (CLP)':ca,'ROAS':ro,
-        'Score salud':adsHealthScore(c).score,'Período (días)':days
-      }};
-    });
-    for(let i=0;i<recs.length;i+=10){
-      await airtableHttp(base+'/Google_Ads_Campanas',{method:'POST',headers,body:JSON.stringify({records:recs.slice(i,i+10),typecast:true})});
-    }
+  const today=hoyCL(),gasto=Number(data.gasto)||0,imp=Number(data.impresiones)||0,
+    clics=Number(data.clics)||0,conv=Number(data.conversiones)||0,
+    valConv=Number(data.valor_conversion)||0;
+  const campaigns=(data.campanas||[]).slice(0,100).map(c=>({
+    id:String(c.id||''),nombre:String(c.nombre||String(c.id||'')),estado:String(c.estado||'ENABLED'),
+    presupuesto:Number(c.presupuesto)||0,gasto:Number(c.gasto)||0,
+    impresiones:Number(c.impresiones)||0,clics:Number(c.clics)||0,
+    conversiones:Number(c.conversiones)||0,valor_conversion:Number(c.valor_conversion)||0,
+    score:adsHealthScore(c).score
+  }));
+  try{
+    const result=await _adsProxyFetch('/ads/snapshot',{method:'POST',body:JSON.stringify({
+      date:today,days:Number(days)||30,customerId:getAdsConfig().customerId||'',
+      kpi:{gasto,impresiones:imp,clics,conversiones:conv,valor_conversion:valConv},
+      campaigns
+    })});
+    if((result.legacy_duplicates||0)>0)
+      console.warn('[Ads] snapshots históricos duplicados detectados:',result.legacy_duplicates);
+  }catch(e){
+    console.warn('[Ads] snapshot compartido no actualizado:',e.message);
   }
 }
 async function loadAdsSnapshotsFromAirtable(){
   let cfg;try{cfg=_airtableConfig();}catch(e){return;}
-  const res=await airtableFetch('Google_Ads_KPIs',60);
-  const records=res.records||[];if(!records.length) return;
-  records.sort((a,b)=>(b.fields['Fecha']||'').localeCompare(a.fields['Fecha']||''));
-  const seen=new Set();
-  const deduped=records.filter(r=>{const d=r.fields['Fecha']||'';if(seen.has(d)) return false;seen.add(d);return true;});
-  const snaps=deduped.reverse().map(r=>{const f=r.fields;return{
-    date:f['Fecha']||'',ts:f['Fecha']||'',
+  const res=await airtableFetch('Google_Ads_KPIs',500);
+  const records=res.records||[];if(!records.length)return;
+  const canon=v=>String(v||'').replace(/\D/g,'');
+  const current=canon(getAdsConfig().customerId);
+  records.sort((a,b)=>String(b.fields['Fecha']||'').localeCompare(String(a.fields['Fecha']||''))||
+    String(b.createdTime||'').localeCompare(String(a.createdTime||'')));
+  const seen=new Set(),deduped=[];
+  for(const r of records){
+    const f=r.fields||{},key=canon(f['Customer ID'])+'|'+String(f['Fecha']||'')+'|'+Number(f['Días período']||30);
+    if(current&&canon(f['Customer ID'])!==current||seen.has(key))continue;
+    seen.add(key);deduped.push(r);
+  }
+  const snaps=deduped.reverse().map(r=>{const f=r.fields||{};return{
+    date:f['Fecha']||'',ts:r.createdTime||f['Fecha']||'',
     gasto:f['Gasto (CLP)']||0,clics:f['Clics']||0,conv:f['Conversiones']||0,
-    roas:f['ROAS']||0,imp:f['Impresiones']||0,ctr:f['CTR (%)']||0,days:f['Días período']||30
+    roas:f['ROAS']||0,imp:f['Impresiones']||0,ctr:(f['CTR (%)']||0)*100,
+    days:f['Días período']||30
   };});
-  localStorage.setItem('ads_snapshots',JSON.stringify(snaps));
+  localStorage.setItem('ads_snapshots',JSON.stringify(snaps.slice(-90)));
 }
+
 // ── Export CSV ───────────────────────────────────────────
 function adsExportCSV(){
   const rows=document.querySelectorAll('#adsCampaignsArea table tr');
