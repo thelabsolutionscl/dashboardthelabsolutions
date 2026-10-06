@@ -1334,7 +1334,7 @@ function sharedFinanceDocumentAllowed(doc){
      !sharedFinancePlainObject(doc.comisionCfg)||!sharedFinanceFinite(Number(doc.comisionCfg.rate),{min:0,max:100})||
      !['venta','utilidad'].includes(doc.comisionCfg.base)||
      !sharedFinanceMapAllowed(doc.metasVendedor,{maxKeys:100,maxArray:1,maxText:200})||
-     !sharedFinanceFinite(Number(doc.plazoDefault),{min:0,max:365}))
+     (doc.plazoDefault!==undefined&&!sharedFinanceFinite(Number(doc.plazoDefault),{min:0,max:365})))
     return false;
   try{return JSON.stringify(doc).length<=95000;}catch(_){return false;}
 }
