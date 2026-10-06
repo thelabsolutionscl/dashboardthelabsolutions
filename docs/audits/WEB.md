@@ -126,3 +126,91 @@ primer enlace sea legítimo. Regresión automatizada: `tests/seo-proxy-ssrf.test
 ## 2026-09-29 — Retiro de componentes sin uso
 
 Se eliminó íntegramente la integración anterior del CMS, sus modales, rutas de escritura, fixtures de modo demo, KPI huérfanos y pruebas obsoletas. El auditor SEO del sitio Next.js y Google Ads se mantienen y son los únicos flujos web vigentes.
+
+## 2026-10-06 — cierre funcional de seguridad, snapshots y atribución Ads
+
+### Cascarón de campañas sin secreto en Pages
+
+Se retiró por completo `ADS_MAKE_SHELL` del bundle público. El navegador ya no
+conoce ni la URL del webhook de Make ni su clave compartida. La creación usa
+`POST /ads/campaign-shell` del airtable-proxy después de persistir la orden
+local.
+
+El Worker conserva `ADS_MAKE_SHELL_URL` y `ADS_MAKE_SHELL_KEY` como secretos,
+valida un host HTTPS `hook.<zona>.make.com`, limita el payload y serializa la
+creación mediante `CRM_MUTATION_GUARD`. La clave estable es `mutationId`: un
+reintento de la misma orden devuelve `reused=true` y no solicita un segundo
+cascarón.
+
+La configuración/rotación real de esos dos secretos queda agrupada con el corte
+final de infraestructura; no se versionan valores ni se cambian credenciales
+reales desde esta auditoría.
+
+### Snapshots sin duplicación por refresco
+
+`syncAdsToAirtable()` deja de hacer POST ciego. Antes de escribir:
+
+- KPI busca `Customer ID + Fecha + Días período`;
+- campañas buscan `Fecha snapshot + Período (días)` y se indexan por
+  `Campaign ID`.
+
+Registros existentes se actualizan con PATCH y sólo las claves ausentes se crean
+con POST, manteniendo lotes de máximo 10.
+
+También se incorporó `Google_Ads_Campanas` al catálogo cerrado de Access para
+que el corte de identidad no rompa esta persistencia.
+
+### Revenue y ROAS atribuibles
+
+Se eliminó la métrica que repartía todo el revenue CRM entre campañas según su
+participación en conversiones. Un pedido sólo se considera atribuible a Ads si
+el Cliente conserva evidencia: `GCLID`, `Campaña Ads` u
+`Origen lead = google_ads`.
+
+El snapshot conserva por separado:
+
+- revenue CRM total;
+- revenue CRM atribuible a Ads;
+- cantidad/cobertura de pedidos atribuibles;
+- ROAS atribuible.
+
+En la tabla de campañas el ROAS sólo aparece cuando `Campaña Ads` del CRM
+coincide con el nombre o ID de esa campaña. Sin evidencia se muestra “—”; no se
+inventa atribución.
+
+### Capacidad por línea
+
+El dashboard clasifica pedidos activos usando detalle de cotización,
+instrucciones, ficha técnica, material y notas. Cartelería/láser y las líneas
+manuales calculan su propio backlog en vez de heredar el total global.
+
+El piloto semanal del `lead-worker` también dejó de usar `occGeneral` como
+ocupación de todas las líneas no-3D. Usa el `Servicio interés` del Cliente
+vinculado a cada pedido activo y calcula ocupación independiente por línea.
+
+### Piloto: reserva antes de encolar
+
+La aprobación desde el dashboard cambia primero `Agent_Queue.Estado` a
+`Procesando`. Sólo después persiste las mutaciones y finalmente cierra como
+`Completado`. Si el cierre falla, permanece `Procesando` con
+`Requiere conciliación`; una segunda aprobación es rechazada por la relectura
+inicial y no vuelve a duplicar la cola.
+
+El rechazo tampoco oculta fallos de Airtable: se informa al operador y se exige
+recargar antes de reintentar.
+
+### Cobertura
+
+- los cinco `test.todo` restantes de `tests/web-wiring.test.js` pasan a
+  pruebas activas;
+- `tests/web-ads-proxy.test.js` protege ausencia de secretos en bundle,
+  idempotencia del puente, host allowlist, RBAC y secretos declarados en
+  Wrangler;
+- Web audit debe permanecer verde junto con la suite general.
+
+### Pendiente únicamente de infraestructura
+
+En la ventana final se deben configurar/rotar `ADS_MAKE_SHELL_URL` y
+`ADS_MAKE_SHELL_KEY` en Cloudflare, activar y validar Cloudflare Access y
+hacer una creación controlada de campaña con sesión real. No es necesario hacer
+esa configuración durante esta fase de auditoría de código.

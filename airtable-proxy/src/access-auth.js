@@ -48,7 +48,7 @@ const ACCESS_ALLOWED_TABLES=new Set([
   // notification or operational logs, which can contain personal information.
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
   'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
-  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
+  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);
 const ACCESS_ADMIN_ONLY_TABLES=new Set([
   // Live Monitor Sistema records share one unrestricted Notes column for
@@ -57,7 +57,7 @@ const ACCESS_ADMIN_ONLY_TABLES=new Set([
   'Monitor Sistema',
   'Automations','Agent_Queue','Agent_Log','Social_Posts',
   'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
-  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs'
+  'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);
 const ACCESS_JWKS_CACHE=new Map();
 const ACCESS_JWKS_TTL=5*60*1000;
@@ -238,6 +238,7 @@ function accessAllows(identity,method,path){
   if(path==='/access/me')return method==='GET';
   // Solo administradores verificados consultan las claves de servicios externos.
   if(path==='/integrations/check')return admin&&method==='GET';
+  if(path==='/ads/campaign-shell')return method==='POST'&&(operator||finance||admin);
   if(path==='/shared/calendar')return method==='GET'||
     (method==='PUT'&&['sales','operator','finance','admin'].includes(identity.role));
   if(path==='/shared/agenda')return method==='GET'||

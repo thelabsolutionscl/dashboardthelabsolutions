@@ -209,8 +209,21 @@ test('los snapshots de Ads se escriben en Airtable con lotes acotados',()=>{
   assert.match(body,/adsHealthScore/);
 });
 
-test.todo('el webhook y la clave de Make no deben estar expuestos en el bundle público');
-test.todo('la creación debe confirmar primero la cola y después solicitar el cascarón a Make');
+test('el webhook y la clave de Make no están expuestos en el bundle público',()=>{
+  const live=fs.readFileSync(path.join(JS_DIR,'seo-ads.js'),'utf8');
+  assert.doesNotMatch(live,/hook\.[a-z0-9-]+\.make\.com/i);
+  assert.doesNotMatch(live,/ADS_MAKE_SHELL|tl-cascaron/i);
+  const bridge=functionBlock(SOURCE,'_adsCreateShellServer');
+  assert.match(bridge,/\/ads\/campaign-shell/);
+  assert.match(bridge,/X-App-Key/);
+});
+test('la creación persiste primero la cola y después solicita el cascarón servidor',()=>{
+  const save=functionBlock(SOURCE,'saveCampaignMutation');
+  const queue=save.indexOf('_adsQueueMutation(mutation)');
+  const shell=save.indexOf('_adsCreateShellServer(mutation)');
+  assert.ok(queue>=0&&shell>queue,'la orden local debe persistirse antes del cascarón');
+  assert.doesNotMatch(save,/https:\/\/hook\.|ADS_MAKE_SHELL|tl-cascaron/i);
+});
 test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ads o Make',()=>{
   const load=functionBlock(SOURCE,'loadAdsData');
   const send=functionBlock(SOURCE,'sendAdsMutation');
@@ -218,10 +231,47 @@ test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ad
   assert.match(load,/window\._DEMO_MODE\|\|!cfg\.endpoint/);
   assert.match(send,/if\(_adsIsReadOnly\(\)\)/,'explicit demo and fixture fallback must both be blocked');
   assert.match(send,/status=['"]demo['"]/);
-  assert.match(save,/ADS_MAKE_SHELL\.url&&!window\._DEMO_MODE/);
+  assert.match(save,/if\(!_adsQueueMutation\(mutation\)\)return/);
   assert.match(SOURCE,/ads_demo_pending_mutations/,'la cola demo debe estar separada de la real');
 });
-test.todo('syncAdsToAirtable debe hacer upsert por fecha/campaña y no duplicar snapshots al refrescar');
-test.todo('ROAS real debe usar ingresos atribuibles a Google Ads, no todo el revenue del CRM');
-test.todo('la carga de líneas manuales y láser debe usar pedidos de su propia línea, no el total global');
-test.todo('el piloto debe reservar o cerrar la propuesta antes de encolar para evitar una segunda aprobación si falla Airtable');
+test('syncAdsToAirtable hace upsert por fecha/período y campaña',()=>{
+  const body=functionBlock(SOURCE,'syncAdsToAirtable');
+  assert.match(body,/filterByFormula/);
+  assert.match(body,/Customer ID/);
+  assert.match(body,/Campaign ID/);
+  assert.match(body,/existingK\[0\]\?\.id/);
+  assert.match(body,/byId\.get\(cid\)/);
+  assert.match(body,/method:'PATCH'/);
+  assert.match(body,/method:'POST'/);
+});
+test('ROAS CRM usa solo ingresos atribuibles a Google Ads',()=>{
+  const snap=functionBlock(SOURCE,'adsSaveSnapshot');
+  const attr=functionBlock(SOURCE,'_adsAttributedCrm');
+  const clientAttr=functionBlock(SOURCE,'_adsClientIsAttributed');
+  assert.match(attr,/_adsClientIsAttributed/);
+  assert.match(clientAttr,/GCLID|Campaña Ads|google_ads/);
+  assert.match(snap,/ingresoAdsCRM/);
+  assert.match(snap,/roasAtribuido/);
+  assert.doesNotMatch(snap,/const roasReal=gasto>0\?ingresoCRM\/gasto/);
+  assert.match(SOURCE,/ROAS atrib\./);
+  assert.match(SOURCE,/No se reparte revenue orgánico entre campañas/);
+});
+test('la carga manual y láser usa pedidos clasificados por su propia línea',()=>{
+  const body=functionBlock(SOURCE,'getCapacidadLineas');
+  assert.match(body,/const classify=/);
+  assert.match(body,/laserCount=lineCount\('carteleria'\)/);
+  assert.match(body,/manualCount=activos\.filter/);
+  assert.match(body,/laserPct/);
+  assert.match(body,/manualPct/);
+  assert.doesNotMatch(body,/const pedPct=Math\.min\(Math\.round\(activos\/20/);
+});
+test('el piloto reserva antes de encolar y deja estado recuperable ante error',()=>{
+  const body=functionBlock(SOURCE,'adsAutopilotDecide');
+  const reserve=body.indexOf("Estado:'Procesando'");
+  const queue=body.indexOf('_adsQueueMutation');
+  const complete=body.indexOf("Estado:'Completado'");
+  assert.ok(reserve>=0&&queue>reserve&&complete>queue);
+  assert.match(body,/Requiere conciliación/);
+  assert.match(body,/no la apruebes de nuevo/);
+  assert.doesNotMatch(body,/catch\(e\)\{\}/);
+});

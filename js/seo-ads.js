@@ -168,6 +168,27 @@ function seoCopyIAReport(){
 
 // ── GOOGLE ADS AGENT ─────────────────────────────────────
 // ── Snapshot histórico ──────────────────────────────────
+function _adsClientIsAttributed(client){
+  const f=client?.fields||{},origin=String(f['Origen lead']?.name||f['Origen lead']||'').toLowerCase();
+  return !!(String(f.GCLID||'').trim()||String(f['Campaña Ads']||'').trim()||origin==='google_ads');
+}
+function _adsAttributedCrm(days){
+  const cutoff=new Date(Date.now()-days*86400000),clients=new Map((state.clientes||[]).map(c=>[c.id,c]));
+  let totalRevenue=0,adsRevenue=0,totalOrders=0,adsOrders=0;
+  const byCampaign=new Map();
+  for(const p of state.pedidos||[]){
+    const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')continue;
+    const d=p.createdTime?new Date(p.createdTime):null;if(!d||d<cutoff)continue;
+    const net=Math.round((f['Monto total (CLP)']||0)/1.19);totalRevenue+=net;totalOrders++;
+    const cid=Array.isArray(f.Cliente)?f.Cliente[0]:f.Cliente,client=cid?clients.get(cid):null;
+    if(!_adsClientIsAttributed(client))continue;
+    adsRevenue+=net;adsOrders++;
+    const campaign=String(client?.fields?.['Campaña Ads']||'').trim();
+    if(campaign)byCampaign.set(campaign,(byCampaign.get(campaign)||0)+net);
+  }
+  return{totalRevenue,adsRevenue,totalOrders,adsOrders,
+    coverage:totalOrders?adsOrders/totalOrders:0,byCampaign};
+}
 function adsSaveSnapshot(data,days){
   let snaps;try{snaps=JSON.parse(localStorage.getItem('ads_snapshots')||'[]');}catch(e){snaps=[];}
   const today=hoyCL();
@@ -175,17 +196,21 @@ function adsSaveSnapshot(data,days){
   const conv=data.conversiones||0;
   const ctr=imp>0?(clics/imp*100):0;
   const roas=gasto>0&&(data.valor_conversion||0)>0?data.valor_conversion/gasto:0;
-  // Verdad CRM: ingresos netos + leads del mismo período, para que el agente vea la dirección REAL
-  let ingresoCRM=0,leads=0;
+  // El revenue Ads sólo incluye pedidos cuyo Cliente conserva evidencia de
+  // atribución (GCLID, Campaña Ads u origen google_ads). El revenue CRM total
+  // queda separado para contexto, nunca presentado como ROAS.
+  let ingresoCRM=0,ingresoAdsCRM=0,adsOrders=0,leads=0,atribCoverage=0;
   try{
+    const attr=_adsAttributedCrm(days);ingresoCRM=attr.totalRevenue;ingresoAdsCRM=attr.adsRevenue;
+    adsOrders=attr.adsOrders;atribCoverage=attr.coverage;
     const cutoff=new Date(Date.now()-days*86400000);
-    ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const dd=p.createdTime?new Date(p.createdTime):null;return dd&&dd>=cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
     leads=(state.clientes||[]).filter(c=>{const dd=c.createdTime?new Date(c.createdTime):null;return dd&&dd>=cutoff;}).length;
   }catch(e){}
-  const roasReal=gasto>0?ingresoCRM/gasto:0;
+  const roasAtribuido=gasto>0&&ingresoAdsCRM>0?ingresoAdsCRM/gasto:0;
   // Huella por campaña (id→gasto/conv) para detectar anomalías a nivel campaña
   const camps={};(data.campanas||[]).forEach(c=>{if(c&&c.id!=null)camps[c.id]={gasto:c.gasto||0,conv:c.conversiones||0};});
-  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days,ingresoCRM,leads,roasReal,camps};
+  const snap={date:today,ts:new Date().toISOString(),gasto,clics,conv,roas,imp,ctr,days,
+    ingresoCRM,ingresoAdsCRM,adsOrders,atribCoverage,leads,roasAtribuido,camps};
   const idx=snaps.findIndex(s=>s.date===today);
   if(idx>=0) snaps[idx]=snap; else snaps.push(snap);
   snaps.sort((a,b)=>a.date.localeCompare(b.date));
@@ -219,8 +244,20 @@ function adsLastSyncStr(){
 const ADS_DEFAULT_URL='https://thelab.solutions';
 // Webhook de Make que crea el "cascarón" de campaña vía la API real de Google
 // Ads (con la declaración de anuncios políticos UE que el CSV no puede setear).
-// El Script 2 completa la campaña (keywords/RSA/negativas) en su próxima corrida.
-const ADS_MAKE_SHELL={url:'https://hook.us2.make.com/4lvyro1ddp3nkqbiwteb1wmg5442dspk',clave:'tl-cascaron-9f27c4a1'};
+// El cascarón real se solicita al airtable-proxy. La URL y clave de Make viven
+// únicamente como secretos del Worker; nunca en el bundle público.
+async function _adsCreateShellServer(mutation){
+  const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!px?.url||!px?.key)throw new Error('Proxy seguro no configurado');
+  const url=px.url.replace(/\/$/,'')+'/ads/campaign-shell';
+  const res=await fetch(url,{method:'POST',credentials:typeof _proxyCredentials==='function'?_proxyCredentials(url):'same-origin',
+    headers:{'X-App-Key':px.key,'Content-Type':'application/json'},
+    body:JSON.stringify({mutationId:mutation.timestamp,nombre:mutation.data?.nombre,
+      presupuesto:mutation.data?.presupuesto})});
+  const body=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(body.error||('Proxy Ads HTTP '+res.status));
+  return body;
+}
 // id === slug de la landing /servicios/<slug>. finalUrl se arma en openCreateCampaignByLineaId.
 const ADS_LINEAS=[
   {id:'activaciones',slug:'activaciones',label:'Activaciones',campañaSugerida:'Búsqueda - Activaciones de Marca',tipo:'SEARCH',presupuesto:6000,
@@ -303,8 +340,34 @@ function getCapacidadLineas(){
   }catch(e){}
   const fdmS=calcSlots(fdmSmallIds);
   const fdmL=calcSlots(fdmLargeIds);
-  const activos=(state.pedidos||[]).filter(p=>{const e=(p.fields||{})['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(e);}).length;
-  const pedPct=Math.min(Math.round(activos/20*100),100);
+  const activos=(state.pedidos||[]).filter(p=>{const e=(p.fields||{})['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(e);});
+  const lineText=p=>{
+    const f=p.fields||{},parts=[f['Notas pedido'],f['Instrucciones fabricación'],f['Ficha Tecnica'],f.Material];
+    for(const qid of (Array.isArray(f.Cotizaciones)?f.Cotizaciones:[])){
+      const q=(state.cotizaciones||[]).find(c=>c.id===qid);
+      if(q)parts.push(q.fields?.['Detalle productos'],q.fields?.['Solicitud cliente (texto libre)'],q.fields?.['Alias / Título']);
+    }
+    return parts.filter(Boolean).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  };
+  const classify=p=>{
+    const t=lineText(p),set=new Set();
+    if(/3d|pla|petg|tpu|impres|prototip|figura|funko/.test(t))set.add('impresion-3d');
+    if(/cartel|senal|letrero|acril|alucobond|neon|laser|grabado|placa/.test(t))set.add('carteleria');
+    if(/trofeo|medalla|galvano|premi/.test(t))set.add('premiaciones');
+    if(/merch|regalo|corporativ|llavero|posavaso/.test(t))set.add('merchandising');
+    if(/papel|papeler|tarjeta|credencial|sticker|adhesiv/.test(t))set.add('papeleria');
+    if(/activacion|evento|btL|stand/.test(t))set.add('activaciones');
+    if(/caja|packaging|empaque/.test(t))set.add('cajas-personalizadas');
+    if(/volumetric|corporeo|letra 3d/.test(t))set.add('volumetricos');
+    if(/nfc|rfid|chip/.test(t))set.add('chip-the-lab');
+    return set;
+  };
+  const lineCount=id=>activos.filter(p=>classify(p).has(id)).length;
+  const laserCount=lineCount('carteleria');
+  const manualIds=['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab'];
+  const manualCount=activos.filter(p=>manualIds.some(id=>classify(p).has(id))).length;
+  const laserPct=Math.min(Math.round(laserCount/8*100),100);
+  const manualPct=Math.min(Math.round(manualCount/12*100),100);
   const sem=pct=>{
     if(pct>=85) return{s:'🔴',a:'PAUSAR',m:'Línea saturada — considera pausar campañas para no colapsar producción',c:'var(--danger)'};
     if(pct>=65) return{s:'🟡',a:'REDUCIR',m:'Carga alta — reduce el presupuesto ~30% para controlar el flujo de pedidos',c:'var(--warn)'};
@@ -315,8 +378,8 @@ function getCapacidadLineas(){
   return[
     mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['impresion-3d']),
     mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['impresion-3d']),
-    mkRow('laser','Láser / Cartelería',pedPct,activos+' pedidos activos en cola',['carteleria']),
-    mkRow('manual','Manual (Premiaciones · Merch · Papelería · otros)',pedPct,activos+' pedidos activos en cola',['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab']),
+    mkRow('laser','Láser / Cartelería',laserPct,laserCount+' pedidos clasificados de cartelería/láser',['carteleria']),
+    mkRow('manual','Manual (Premiaciones · Merch · Papelería · otros)',manualPct,manualCount+' pedidos clasificados en líneas manuales',manualIds),
   ];
 }
 function renderAdsCapacidad(data){
@@ -478,48 +541,43 @@ function adsHealthScore(c){
 async function syncAdsToAirtable(data,days){
   if(_adsIsReadOnly()||data?.demo)return;
   let cfg;try{cfg=_airtableConfig();}catch(e){return;}
-  const today=hoyCL();
-  const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0;
-  const conv=data.conversiones||0,valConv=data.valor_conversion||0;
-  const ctr=imp>0?clics/imp:0;
-  const cpc=clics>0?Math.round(gasto/clics):0;
-  const cpa=conv>0?Math.round(gasto/conv):0;
-  const roas=gasto>0?Math.round(valConv/gasto*100)/100:0;
-  const adsCfg=getAdsConfig();
-  const base=cfg.base+'/'+BASE_ID;
-  const headers={...cfg.headers,'Content-Type':'application/json'};
-  // KPI record
-  await airtableHttp(base+'/Google_Ads_KPIs',{method:'POST',headers,body:JSON.stringify({records:[{fields:{
-    'Período':today+' · '+days+'d',
-    'Fecha':today,'Días período':days,
-    'Gasto (CLP)':gasto,'Impresiones':imp,'Clics':clics,
-    'CTR (%)':ctr,'CPC Promedio (CLP)':cpc,
-    'Conversiones':conv,'Valor Conversiones (CLP)':valConv,
-    'CPA (CLP)':cpa,'ROAS':roas,
-    'Customer ID':adsCfg.customerId||'','Fuente':'real'
-  }}],typecast:true})});
-  // Campaign records (batch 10)
+  const today=hoyCL(),adsCfg=getAdsConfig(),customer=adsCfg.customerId||'';
+  const gasto=data.gasto||0,imp=data.impresiones||0,clics=data.clics||0,conv=data.conversiones||0,valConv=data.valor_conversion||0;
+  const ctr=imp>0?clics/imp:0,cpc=clics>0?Math.round(gasto/clics):0,cpa=conv>0?Math.round(gasto/conv):0,roas=gasto>0?Math.round(valConv/gasto*100)/100:0;
+  const base=cfg.base+'/'+BASE_ID,headers={...cfg.headers,'Content-Type':'application/json'};
+  const list=async(table,formula)=>{
+    const r=await airtableHttp(base+'/'+encodeURIComponent(table)+'?maxRecords=100&filterByFormula='+encodeURIComponent(formula),{headers:cfg.headers});
+    if(!r.ok)throw new Error('No se pudo leer '+table+' para upsert');
+    return (await r.json()).records||[];
+  };
+  const write=async(table,records)=>{
+    if(!records.length)return;
+    for(let i=0;i<records.length;i+=10){
+      const batch=records.slice(i,i+10),updates=batch.filter(x=>x.id),creates=batch.filter(x=>!x.id);
+      if(updates.length)await airtableHttp(base+'/'+encodeURIComponent(table),{method:'PATCH',headers,
+        body:JSON.stringify({records:updates.map(x=>({id:x.id,fields:x.fields})),typecast:true})});
+      if(creates.length)await airtableHttp(base+'/'+encodeURIComponent(table),{method:'POST',headers,
+        body:JSON.stringify({records:creates.map(x=>({fields:x.fields})),typecast:true})});
+    }
+  };
+  const kFormula=`AND({Fecha}='${today}',{Días período}=${Number(days)||0},{Customer ID}='${String(customer).replace(/'/g,"\\'")}')`;
+  const existingK=await list('Google_Ads_KPIs',kFormula);
+  const kFields={'Período':today+' · '+days+'d','Fecha':today,'Días período':days,'Gasto (CLP)':gasto,
+    'Impresiones':imp,'Clics':clics,'CTR (%)':ctr,'CPC Promedio (CLP)':cpc,'Conversiones':conv,
+    'Valor Conversiones (CLP)':valConv,'CPA (CLP)':cpa,'ROAS':roas,'Customer ID':customer,'Fuente':'real'};
+  await write('Google_Ads_KPIs',[{id:existingK[0]?.id,fields:kFields}]);
+
   const camps=data.campanas||[];
   if(camps.length){
-    const recs=camps.map(c=>{
-      const ct=c.impresiones>0?c.clics/c.impresiones:0;
-      const cp=c.clics>0?Math.round(c.gasto/c.clics):0;
-      const ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0;
-      const ro=c.gasto>0&&(c.valor_conversion||0)>0?Math.round(c.valor_conversion/c.gasto*100)/100:0;
-      return{fields:{
-        'Campaña':c.nombre||String(c.id),
-        'Campaign ID':String(c.id||''),
-        'Fecha snapshot':today,'Estado':c.estado||'ENABLED',
-        'Presupuesto diario (CLP)':c.presupuesto||0,'Gasto (CLP)':c.gasto||0,
-        'Impresiones':c.impresiones||0,'Clics':c.clics||0,
-        'CTR (%)':ct,'CPC (CLP)':cp,
-        'Conversiones':c.conversiones||0,'CPA (CLP)':ca,'ROAS':ro,
-        'Score salud':adsHealthScore(c).score,'Período (días)':days
-      }};
-    });
-    for(let i=0;i<recs.length;i+=10){
-      await airtableHttp(base+'/Google_Ads_Campanas',{method:'POST',headers,body:JSON.stringify({records:recs.slice(i,i+10),typecast:true})});
-    }
+    const cFormula=`AND({Fecha snapshot}='${today}',{Período (días)}=${Number(days)||0})`;
+    const existing=await list('Google_Ads_Campanas',cFormula),byId=new Map(existing.map(r=>[String(r.fields?.['Campaign ID']||''),r.id]));
+    const recs=camps.map(c=>{const ct=c.impresiones>0?c.clics/c.impresiones:0,cp=c.clics>0?Math.round(c.gasto/c.clics):0,
+      ca=c.conversiones>0?Math.round(c.gasto/c.conversiones):0,ro=c.gasto>0&&(c.valor_conversion||0)>0?Math.round(c.valor_conversion/c.gasto*100)/100:0;
+      const cid=String(c.id||'');return{id:byId.get(cid),fields:{'Campaña':c.nombre||cid,'Campaign ID':cid,'Fecha snapshot':today,
+        'Estado':c.estado||'ENABLED','Presupuesto diario (CLP)':c.presupuesto||0,'Gasto (CLP)':c.gasto||0,'Impresiones':c.impresiones||0,
+        'Clics':c.clics||0,'CTR (%)':ct,'CPC (CLP)':cp,'Conversiones':c.conversiones||0,'CPA (CLP)':ca,'ROAS':ro,
+        'Score salud':adsHealthScore(c).score,'Período (días)':days}};});
+    await write('Google_Ads_Campanas',recs);
   }
 }
 async function loadAdsSnapshotsFromAirtable(){
@@ -830,6 +888,7 @@ function _adsQueueMutation(mutation){
   sendAdsMutation(mutation);
   renderPendingMutations();
   _startAdsMutationPoll();
+  return true;
 }
 
 function saveCampaignMutation(){
@@ -887,17 +946,16 @@ function saveCampaignMutation(){
       return;
     }
   }
-  // Cascarón automático vía Make: crea la campaña real en Google Ads (pausada,
-  // con la declaración UE); el Script 2 la completará al procesar esta orden.
-  if(op==='create'&&ADS_MAKE_SHELL.url&&!window._DEMO_MODE){
-    const qs='?clave='+encodeURIComponent(ADS_MAKE_SHELL.clave)+'&nombre='+encodeURIComponent(data.nombre)+'&presupuesto='+(data.presupuesto||1000);
-    fetch(ADS_MAKE_SHELL.url+qs,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({clave:ADS_MAKE_SHELL.clave,nombre:data.nombre,presupuesto:data.presupuesto||1000})})
-      .then(r=>{if(r.ok)toast('✓ Cascarón pedido a Make — el Script 2 completará la campaña en su próxima corrida','success');else toast('Make respondió '+r.status+' al pedir el cascarón — si la campaña no aparece, créala a mano','info');})
-      .catch(()=>toast('No se pudo contactar el webhook de Make — crea el cascarón a mano si no existe','info'));
-  }
   const mutation={op,id,data,timestamp:new Date().toISOString(),status:'pending'};
   closeAdsCampaignModal();
-  _adsQueueMutation(mutation);
+  // La orden local se persiste primero. Solo después se solicita el cascarón
+  // servidor, que es idempotente por mutationId.
+  if(!_adsQueueMutation(mutation))return;
+  if(op==='create'){
+    _adsCreateShellServer(mutation)
+      .then(r=>toast(r.reused?'Cascarón ya estaba reservado; no se duplicó':'✓ Cascarón solicitado de forma segura','success'))
+      .catch(e=>toast('Orden guardada, pero el cascarón quedó pendiente: '+e.message,'info'));
+  }
 }
 
 // ─── Generador de campañas con IA ───────────────────────────
@@ -1089,15 +1147,39 @@ async function adsAutopilotDecide(i,aprobar){
     const cfg=_airtableConfig();
     const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue/${p.id}`,{headers:cfg.headers});
     if(r.ok){const rec=await r.json();if((rec.fields?.Estado||'')!=='Pendiente'){toast('Esta propuesta ya fue procesada ('+(rec.fields?.Estado||'—')+')','info');renderAdsAutopilot();return;}}
-  }catch(e){}
+  }catch(e){
+    toast('No se pudo revalidar la propuesta; no se aplicó ningún cambio','error');
+    return;
+  }
   if(aprobar){
     if(!confirm(`¿Aprobar ${p.mutaciones.length} cambio(s) del piloto? Se aplicarán en Google Ads en la próxima corrida del Script 2.`)) return;
-    p.mutaciones.forEach(m=>_adsQueueMutation({...m,timestamp:m.timestamp||new Date().toISOString(),status:'pending'}));
-    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Completado','Fecha ejecución':new Date().toISOString(),'Accion sugerida':`Aprobado desde dashboard: ${p.mutaciones.length} mutaciones encoladas`});}catch(e){}
-    toast('✓ '+p.mutaciones.length+' cambio(s) del piloto encolados','success');
+    // Reserva primero. Si el cierre posterior falla queda Procesando y una
+    // segunda aprobación no vuelve a encolar la propuesta.
+    try{
+      await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Procesando',
+        'Accion sugerida':'Reserva dashboard Ads · '+new Date().toISOString()});
+    }catch(e){toast('No se pudo reservar la propuesta; no se encoló ningún cambio','error');return;}
+    let queued=0;
+    try{
+      for(const m of p.mutaciones){
+        if(_adsQueueMutation({...m,timestamp:m.timestamp||new Date().toISOString(),status:'pending'}))queued++;
+      }
+      if(queued!==p.mutaciones.length)throw new Error('No se pudo persistir toda la cola');
+      await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Completado',
+        'Fecha ejecución':new Date().toISOString(),
+        'Accion sugerida':`Aprobado desde dashboard: ${queued} mutaciones encoladas`});
+      toast('✓ '+queued+' cambio(s) del piloto encolados','success');
+    }catch(e){
+      try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Procesando',
+        Error:'Requiere conciliación: '+String(e.message||e).slice(0,300)});}catch(_){}
+      toast('La propuesta quedó reservada para conciliación; no la apruebes de nuevo','error');
+    }
   }else{
-    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Error',Error:'Rechazado desde el dashboard ('+new Date().toISOString().slice(0,16)+')'});}catch(e){}
-    toast('Propuesta del piloto rechazada','info');
+    try{
+      await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Error',
+        Error:'Rechazado desde el dashboard ('+new Date().toISOString().slice(0,16)+')'});
+      toast('Propuesta del piloto rechazada','info');
+    }catch(e){toast('No se pudo registrar el rechazo; vuelve a cargar antes de reintentar','error');}
   }
   renderAdsAutopilot();
 }

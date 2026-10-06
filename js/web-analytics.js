@@ -245,20 +245,18 @@ function renderAdsCampaigns(data){
     return;
   }
   _adsCampActions=[];
-  // ROAS-real estimado por campaña: el CRM no atribuye qué pedido vino de qué campaña,
-  // así que repartimos el ingreso CRM del período por participación en conversiones (proxy honesto).
   const _adsDays=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
-  const _cutoff=new Date(Date.now()-_adsDays*86400000);
-  const _ingresoCRM=(state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=_cutoff;}).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-  const _totalConv=camps.reduce((s,c)=>s+(c.conversiones||0),0);
+  let _attr={adsRevenue:0,totalRevenue:0,adsOrders:0,totalOrders:0,coverage:0,byCampaign:new Map()};
+  try{if(typeof _adsAttributedCrm==='function')_attr=_adsAttributedCrm(_adsDays);}catch(e){}
+  const norm=v=>String(v||'').trim().toLowerCase();
   const rows=camps.map(c=>{
     const ctr=c.impresiones>0?(c.clics/c.impresiones*100):0;
     const cpc=c.clics>0?(c.gasto/c.clics):0;
     const cpa=c.conversiones>0?(c.gasto/c.conversiones):0;
-    const estIng=_totalConv>0?_ingresoCRM*((c.conversiones||0)/_totalConv):0;
-    const rrEst=(c.gasto||0)>0&&estIng>0?estIng/c.gasto:0;
-    const rrColor=rrEst>=2?'var(--success)':rrEst>=1?'var(--warn)':rrEst>0?'var(--danger)':'var(--text3)';
-    const convShare=_totalConv>0?Math.round((c.conversiones||0)/_totalConv*100):0;
+    let attributed=0;
+    for(const [key,value] of _attr.byCampaign||[])if(norm(key)===norm(c.nombre)||norm(key)===norm(c.id))attributed+=Number(value)||0;
+    const roasAttr=(c.gasto||0)>0&&attributed>0?attributed/c.gasto:null;
+    const rrColor=roasAttr==null?'var(--text3)':roasAttr>=2?'var(--success)':roasAttr>=1?'var(--warn)':'var(--danger)';
     const activa=c.estado==='ENABLED';
     const estadoBadge=activa
       ?'<span style="background:rgba(0,212,170,0.15);color:var(--accent3);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:1px 7px;font-size:9px;font-weight:600">Activa</span>'
@@ -266,7 +264,6 @@ function renderAdsCampaigns(data){
     const ctrColor=ctr>=5?'var(--success)':ctr>=2?'var(--text)':'var(--danger)';
     const hs=adsHealthScore(c);
     const hsBadge=`<span style="display:inline-block;min-width:28px;text-align:center;color:${hs.color};border:1px solid ${hs.color};border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;opacity:0.9" title="Score de salud: ${hs.label} (CTR + Conv. + ROAS)">${hs.score}</span>`;
-    // Índices a _adsCampActions para evitar problemas de escape de comillas en onclick
     const ei=_adsCampActions.push({type:'edit',id:c.id,nombre:c.nombre||'',estado:c.estado,presupuesto:c.presupuesto||0})-1;
     const di=_adsCampActions.push({type:'delete',id:c.id,nombre:c.nombre||''})-1;
     const ci=_adsCampActions.push({type:'copy',nombre:c.nombre||'',estado:c.estado||'',gasto:c.gasto||0,clics:c.clics||0,conv:c.conversiones||0,ctr:ctr.toFixed(2),cpc:c.clics>0?Math.round(c.gasto/c.clics):0})-1;
@@ -288,19 +285,20 @@ function renderAdsCampaigns(data){
       <td style="text-align:right">${fmtMoney(cpc)}</td>
       <td style="text-align:right;color:var(--success)">${c.conversiones>0?Number(c.conversiones).toFixed(0):'—'}</td>
       <td style="text-align:right">${c.conversiones>0?fmtMoney(cpa):'—'}</td>
-      <td style="text-align:right;color:${rrColor}" title="ROAS-real estimado: ingreso CRM del período repartido por participación en conversiones (esta campaña = ${convShare}% de las conversiones). No es atribución exacta.">${rrEst>0?rrEst.toFixed(2)+'x':'—'}</td>
+      <td style="text-align:right;color:${rrColor}" title="${roasAttr==null?'Sin pedido CRM atribuible a esta campaña':'Revenue CRM atribuible: '+fmtMoney(attributed)}">${roasAttr==null?'—':roasAttr.toFixed(2)+'x'}</td>
     </tr>`;
   }).join('');
   const demoBanner=data.demo?`<div style="background:rgba(255,200,0,0.08);border-bottom:1px solid rgba(255,200,0,0.2);padding:7px 16px;font-size:10px;color:#ffc107;display:flex;align-items:center;gap:6px"><span>⚠</span><span>Datos de demostración — <button onclick="toggleAdsConfig()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:10px;padding:0;text-decoration:underline">configura tu endpoint</button> para ver datos reales</span></div>`:'';
+  const coveragePct=Math.round((_attr.coverage||0)*100);
   document.getElementById('adsCampaignsArea').innerHTML=`
     <div class="card">
       <div class="card-header"><span class="card-title">Campañas</span><div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:var(--text3)">${camps.length} campaña${camps.length!==1?'s':''}</span><button onclick="adsExportCSV()" style="background:rgba(0,212,204,0.06);border:1px solid rgba(0,212,204,0.2);color:var(--text2);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer" title="Descargar tabla como CSV">⬇ CSV</button><button onclick="openCreateCampaign()" style="background:rgba(0,212,204,0.1);border:1px solid rgba(0,212,204,0.3);color:var(--accent);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer;font-weight:600">+ Nueva</button></div></div>
       ${demoBanner}
       <div class="table-wrap"><table>
-        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:center" title="Score de salud 0–100 (CTR + Conv. + ROAS)">Score</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th><th style="text-align:right" title="ROAS-real estimado por participación en conversiones (no atribución exacta)">ROAS-real*</th></tr></thead>
+        <thead><tr><th>Campaña</th><th>Estado</th><th style="text-align:center">Score</th><th style="text-align:right">Gasto</th><th style="text-align:right">Impres.</th><th style="text-align:right">Clics</th><th style="text-align:right">CTR</th><th style="text-align:right">CPC</th><th style="text-align:right">Conv.</th><th style="text-align:right">CPA</th><th style="text-align:right" title="Solo pedidos CRM con Campaña Ads/GCLID/origen Ads verificable">ROAS atrib.*</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
-      <div style="font-size:10px;color:var(--text3);padding:8px 16px 12px;line-height:1.5">* ROAS-real estimado: el ingreso del CRM del período (${fmtMoney(_ingresoCRM)}) repartido entre campañas según su participación en conversiones. Es una aproximación —el CRM no registra de qué campaña vino cada pedido—, pero refleja mejor la ganancia que el ROAS que reporta Google.</div>
+      <div style="font-size:10px;color:var(--text3);padding:8px 16px 12px;line-height:1.5">* Solo se muestra ROAS por campaña cuando el CRM identifica esa campaña en el cliente. Revenue atribuible a Ads del período: ${fmtMoney(_attr.adsRevenue||0)} de ${fmtMoney(_attr.totalRevenue||0)} totales · cobertura de pedidos: ${coveragePct}%. No se reparte revenue orgánico entre campañas.</div>
     </div>`;
 }
 function renderAdsAgent(data){
