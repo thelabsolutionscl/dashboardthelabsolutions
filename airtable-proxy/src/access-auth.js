@@ -251,6 +251,7 @@ function accessAllows(identity,method,path){
   if(path==='/shared/simulation')return (admin||identity.email==='marketing@thelab.solutions')&&
     ['GET','PUT'].includes(method);
   if(path==='/shared/finance')return (finance||admin)&&['GET','PUT'].includes(method);
+  if(path==='/visual-ai/rpc')return ['sales','operator','finance','admin'].includes(identity.role)&&method==='POST';
   // Sales reads remain owner-scoped. The sole write shape admitted by RBAC
   // is a single-record PATCH on an approved commercial table; the Worker
   // applies a *separate opt-in switch*, field allowlist, optimistic precondition
