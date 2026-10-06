@@ -1,5 +1,23 @@
 # Auditoría de VISUAL AI
 
+## Actualización 2026-10-06 — cierre operacional de #102
+
+Se reabrió el cierre de Visual AI después del PR #430 porque aún faltaban acciones exigidas por el criterio de aceptación y la cuota previa no mostraba consumo real.
+
+**Cerrado en esta pasada:**
+
+- la consulta de cuota ahora lee el contador real del Durable Object sin reservar ni consumir una generación y devuelve usadas, límite y restantes;
+- cuando MuAPI no expone una tarifa previa fiable, la interfaz lo dice explícitamente como **costo previo no disponible** en lugar de inventar una estimación;
+- **Drive** guarda el archivo remoto real dentro de una carpeta `Visual AI`; exige HTTPS, descarga sin credenciales, rechaza redirects, limita a 25 MB y valida MIME antes de subir;
+- si el asset remoto no puede descargarse (por ejemplo, CORS/host no compatible), Drive falla de forma visible y no declara un guardado ficticio;
+- **Referencia visual/producto** usa la tabla editorial real `Contenido`, verificada contra Airtable, y crea una fila en estado `Idea` con `Título post`, `Sugerencia visual` y trazabilidad del job/modelo;
+- **Redes Sociales** crea únicamente un registro `Social_Posts` en estado `Borrador`; Visual AI nunca marca un resultado como publicado;
+- Cliente, Cotización y Pedido conservan la vinculación directa incorporada en #430;
+- `Contenido` entra al catálogo Access como tabla admin-only hasta que exista un alcance por registro/campo específico;
+- el historial sigue siendo deliberadamente **de esta sesión** y así se informa en la interfaz, cumpliendo la alternativa segura definida por la auditoría.
+
+Con esto, el flujo funcional cubre Drive + Cliente + Cotización + Pedido + referencia editorial/producto + borrador de Redes. La única dependencia externa restante es la configuración productiva final de `MUAPI_KEY` y el smoke real de hosts/CORS de assets, agrupados con el cutover de seguridad.
+
 ## Actualización 2026-10-06 — cierre de seguridad e integración
 
 Se revalidó Visual AI contra el dashboard actual y OpenGen Studio. La integración
@@ -82,7 +100,10 @@ OpenGen:
 - `tests/opengen-wiring.test.js`
 - `.github/workflows/opengen-audit.yml`
 
-## Hallazgos pendientes
+## Hallazgos originales de la auditoría (histórico)
+
+> Esta lista conserva el diagnóstico inicial. Las correcciones vigentes están documentadas en las actualizaciones superiores y no debe leerse como estado actual de `main`.
+
 
 ### 1. Credenciales y contenido pasan por un proxy público
 
