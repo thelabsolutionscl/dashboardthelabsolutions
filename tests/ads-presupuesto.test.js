@@ -164,11 +164,12 @@ test('el tope se puede cambiar desde la pantalla de Ads', () => {
 
 // ── Lo que ya estaba bien no se pierde ──────────────────────────────────
 
-test('la mutación viaja firmada y su fallo se ve', () => {
-  const fn = bloque('function sendAdsMutation(');
-  assert.match(fn, /if\(!cfg\.secret\)/, 'sin secreto no se envía');
+test('la mutación sale por el Proxy firmado y nunca lleva el secreto en el navegador', () => {
+  const fn = bloque('async function sendAdsMutation(');
+  assert.match(fn, /_adsProxyFetch\('\/ads\/mutation'/);
+  assert.doesNotMatch(fn, /cfg\.secret|ADS_MUTATION_SECRET|secret\s*:/);
   assert.match(fn, /mutation\.status='error'/, 'un rechazo del servidor queda marcado');
-  assert.match(fn, /catch\(\(\)=>\{[\s\S]*status='error'/, 'y un corte de red también');
+  assert.match(fn, /catch\(e\)/, 'y un corte de red también queda visible');
 });
 
 test('pausar y activar no necesitan freno de monto', () => {
