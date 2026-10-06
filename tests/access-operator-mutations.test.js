@@ -61,6 +61,11 @@ function harness(options={}){
         'Costo real total (CLP)':210000,'Condiciones de pago':'private terms'}});
       return Response.json({id,fields:structuredClone(rows.get(id).fields)});
     }
+    if(method==='DELETE'){
+      if(!id)return Response.json({error:'NOT_FOUND'},{status:404});
+      rows.delete(id);
+      return Response.json({id,deleted:true});
+    }
     if(method==='PATCH'){
       const body=JSON.parse(opts.body);
       const items=body.records||[{id,fields:body.fields}];
@@ -91,14 +96,17 @@ function harness(options={}){
   const run=request=>worker.fetch(request,env,{waitUntil:()=>{}});
   return {env,guard,rows,calls,make,run};
 }
-test('operator has no destructive CRM or machine permission, and unreviewed mutation tables are denied',()=>{
+test('operator has no destructive CRM or machine permission; Equipo delete is narrowly reviewed',()=>{
   for(const table of ['Clientes','Cotizaciones','Pedidos','Proveedores','Maquinas',
-      'Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor%20Sistema','Inventario'])
+      'Maquinas_Eventos','Maquinas_Mant','Monitor%20Sistema','Inventario'])
     assert.equal(accessAllows({role:'operator'},'DELETE',root+table+'/'+rec),false,table);
-  for(const table of ['Monitor%20Sistema','Equipo_Eventos','Inventario']){
+  for(const table of ['Monitor%20Sistema','Inventario']){
     assert.equal(accessAllows({role:'operator'},'POST',root+table),false);
     assert.equal(accessAllows({role:'operator'},'PATCH',root+table+'/'+rec),false);
   }
+  assert.equal(accessAllows({role:'operator'},'POST',root+'Equipo_Eventos'),true);
+  assert.equal(accessAllows({role:'operator'},'PATCH',root+'Equipo_Eventos/'+rec),true);
+  assert.equal(accessAllows({role:'operator'},'DELETE',root+'Equipo_Eventos/'+rec),true);
   assert.equal(accessAllows({role:'admin'},'DELETE',root+'Clientes/'+rec),true);
 });
 test('operator mutations are strict opt-in fields by verified table and type',()=>{
@@ -359,3 +367,57 @@ test('signed operator machine mutations are filtered before and after Airtable',
     assert.equal(h.calls.filter(c=>['POST','PATCH','DELETE'].includes(c.method)).length,0);
   }
 });
+
+test('operator Equipo event writes are schema-scoped and identity/date are immutable',()=>{
+  assert.equal(operatorWritePayloadAllowed('Equipo_Eventos','POST',{fields:{
+    persona_id:'gustavo',fecha:'2026-10-06',tipo:'remoto',
+    desc:'Trabajo desde casa',hora_inicio:'09:00',hora_fin:'18:00'
+  }}),true);
+  assert.equal(operatorWritePayloadAllowed('Equipo_Eventos','PATCH',{fields:{
+    tipo:'reunion',desc:'Reunión cliente',hora_inicio:'10:30',hora_fin:'11:30'
+  }}),true);
+
+  for(const [method,fields] of [
+    ['POST',{persona_id:'desconocido',fecha:'2026-10-06',tipo:'remoto'}],
+    ['POST',{persona_id:'gustavo',fecha:'2026-10-06',tipo:'hack'}],
+    ['POST',{persona_id:'gustavo',fecha:'2026-13-40',tipo:'remoto'}],
+    ['POST',{persona_id:'gustavo',fecha:'2026-10-06',tipo:'remoto',hora_inicio:'25:00'}],
+    ['POST',{persona_id:'gustavo',fecha:'2026-10-06',tipo:'remoto',FutureSecret:'x'}],
+    ['PATCH',{persona_id:'nicanor'}],
+    ['PATCH',{fecha:'2026-10-07'}]
+  ]){
+    assert.equal(operatorWritePayloadAllowed('Equipo_Eventos',method,{fields}),false,
+      method+' '+JSON.stringify(fields));
+  }
+});
+
+test('signed operator can create, edit and delete only reviewed Equipo events',async()=>{
+  const h=harness();
+  let res=await h.run(h.make('Equipo_Eventos','POST',{fields:{
+    persona_id:'gustavo',fecha:'2026-10-06',tipo:'remoto',
+    desc:'Casa',hora_inicio:'09:00',hora_fin:'18:00'
+  }}));
+  assert.equal(res.status,200,await res.clone().text());
+  let body=await res.json();
+  assert.equal(body.fields.persona_id,'gustavo');
+  assert.equal(body.fields.FutureSecret,undefined);
+
+  res=await h.run(h.make('Equipo_Eventos','PATCH',{fields:{
+    tipo:'reunion',desc:'Cliente',hora_inicio:'10:00',hora_fin:'11:00'
+  }}));
+  assert.equal(res.status,200,await res.clone().text());
+
+  res=await h.run(h.make('Equipo_Eventos','DELETE',null));
+  assert.equal(res.status,200,await res.clone().text());
+  body=await res.json();
+  assert.deepEqual(body,{id:rec,deleted:true});
+  assert.equal(res.headers.get('Cache-Control'),'private, no-store');
+
+  const blocked=harness();
+  const bad=await blocked.run(blocked.make('Equipo_Eventos','POST',{fields:{
+    persona_id:'gustavo',fecha:'2026-10-06',tipo:'remoto',Secret:'x'
+  }}));
+  assert.equal(bad.status,422);
+  assert.equal(blocked.calls.filter(c=>['POST','PATCH','DELETE'].includes(c.method)).length,0);
+});
+
