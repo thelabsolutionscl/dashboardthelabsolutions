@@ -146,6 +146,8 @@ test('DTE materializado conserva abonos y saldo real del pedido',()=>{
   assert.match(dte,/Monto Pagado/);
   assert.match(dte,/Saldo Pendiente/);
   assert.match(dte,/pagoFactura\.estado/);
+  assert.match(PROXY,/Monto Pagado/);
+  assert.match(PROXY,/Saldo Pendiente/);
 });
 
 test('plazo de cobranza se persiste en Finanzas compartidas',()=>{
