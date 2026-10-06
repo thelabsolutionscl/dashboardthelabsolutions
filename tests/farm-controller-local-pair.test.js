@@ -58,3 +58,17 @@ test('script de emparejamiento conserva sintaxis bash válida',()=>{
   const result=spawnSync('bash',['-n',path.join(ROOT,'printer-bridge','pair-dashboard.sh')],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr||result.stdout||'bash -n falló');
 });
+
+
+test('pairing autorepara cloudflared usando el servicio oficial de usuario',()=>{
+  assert.match(PAIR,/function repair_public_tunnel\(\)/);
+  assert.match(PAIR,/cloudflared/);
+  assert.match(PAIR,/\.cloudflared\/config\.yml/);
+  assert.match(PAIR,/hostname: printers\.thelab\.solutions/);
+  assert.match(PAIR,/service:\[\[:space:\]\]\*http:\/\/(localhost\|127\\\.0\\\.0\\\.1):8347/);
+  assert.match(PAIR,/service install/,'debe usar el instalador oficial de cloudflared');
+  assert.doesNotMatch(PAIR,/sudo[[:space:]]+cloudflared[[:space:]]+service[[:space:]]+install/,'config en HOME debe instalar LaunchAgent de usuario');
+  assert.match(PAIR,/launchctl kickstart -k "\$label"/);
+  assert.match(PAIR,/if repair_public_tunnel; then/,'un fallo público debe intentar recuperación antes de rendirse');
+  assert.match(PAIR,/530\/1033/,'el mensaje debe distinguir la caída real del conector');
+});
