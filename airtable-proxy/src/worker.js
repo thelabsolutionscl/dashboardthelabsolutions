@@ -2797,10 +2797,14 @@ export class CrmMutationGuard {
       if(!make||makeKey.length<16)
         throw Object.assign(new Error('Ads create is queued, but Make shell backend is not configured'),{
           code:'ADS_SHELL_CONFIG',status:503,queued:true});
+      const shellUrl=new URL(make.href);
+      shellUrl.searchParams.set('clave',makeKey);
+      shellUrl.searchParams.set('nombre',String(mutation.data.nombre||'').slice(0,300));
+      shellUrl.searchParams.set('presupuesto',String(Math.round(Number(mutation.data.presupuesto)||1000)));
       const body=JSON.stringify({clave:makeKey,nombre:String(mutation.data.nombre||'').slice(0,300),
         presupuesto:Math.round(Number(mutation.data.presupuesto)||1000),mutation_id:key});
       let response;
-      try{response=await fetch(make.href,{method:'POST',headers:{'Content-Type':'text/plain'},body});}
+      try{response=await fetch(shellUrl.href,{method:'POST',headers:{'Content-Type':'text/plain'},body});}
       catch(_){
         await this.state.storage.put(key,{...marker,shell:true,uncertain:true,at:new Date().toISOString()});
         throw Object.assign(new Error('Make shell outcome uncertain; do not retry blindly'),{
