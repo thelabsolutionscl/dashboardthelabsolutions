@@ -310,6 +310,40 @@ function adsCopyAllKw(lineaId){
   if(!l||!l.palabrasClave) return;
   navigator.clipboard.writeText(l.palabrasClave.join('\n')).then(()=>toast('✓ '+l.palabrasClave.length+' palabras clave copiadas','success')).catch(()=>{});
 }
+function _adsTextNorm(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
+function _adsOrderLineIds(order){
+  const f=order?.fields||{},parts=[
+    f['Notas pedido'],f['Material'],f['FT Material'],f['Ficha Tecnica'],f['Instrucciones fabricación']
+  ];
+  const quoteIds=(Array.isArray(f.Cotizaciones)?f.Cotizaciones:(f.Cotizaciones?[f.Cotizaciones]:[]))
+    .map(v=>String(v?.id||v));
+  const qIndex=new Map((state.cotizaciones||[]).map(q=>[String(q.id),q]));
+  for(const qid of quoteIds){
+    const q=(state.cotizacionesById&&state.cotizacionesById[qid])||qIndex.get(qid);
+    const qf=q?.fields||{};
+    parts.push(qf['Solicitud cliente (texto libre)'],qf['Detalle productos'],qf['Detalle JSON'],qf['Alias / Título']);
+  }
+  const clientIds=(Array.isArray(f.Cliente)?f.Cliente:(f.Cliente?[f.Cliente]:[])).map(v=>String(v?.id||v));
+  const cIndex=new Map((state.clientes||[]).map(c=>[String(c.id),c]));
+  for(const cid of clientIds){
+    const c=(state.clientesByIdRec&&state.clientesByIdRec[cid])||cIndex.get(cid);
+    parts.push(c?.fields?.['Servicio interés']);
+  }
+  const text=_adsTextNorm(parts.filter(Boolean).join(' | ')),ids=new Set();
+  const hit=(id,re)=>{if(re.test(text))ids.add(id);};
+  hit('chip-the-lab',/\bnfc\b|tarjeta inteligente|chip the lab/);
+  hit('premiaciones',/trofeo|medalla|galvano|premiaci|reconocimiento|placa premio/);
+  hit('cajas-personalizadas',/\bcaja\b|\bcajas\b|packaging|empaque|estuche/);
+  hit('activaciones',/activacion|\bbtl\b|stand\b|montaje evento|produccion de evento/);
+  hit('papeleria',/papeleria|tarjeta de presentacion|membrete|carpeta corporativa|folleto|imprenta/);
+  hit('volumetricos',/volumetric|letra corporea|logo corporeo|neon|estructura corpore/);
+  hit('carteleria',/carteleria|senaletica|letrero|rotulo|corte laser|grabado laser|placa acril/);
+  hit('impresion-3d',/impresion 3d|\b3d\b|\bpla\b|\brpla\b|\bpetg\b|\babs\b|resina|prototipo 3d|funko/);
+  hit('merchandising',/merchandising|regalo corporativo|promocional|llavero|\bbolsa\b|kit corporativo/);
+  return [...ids];
+}
 function getCapacidadLineas(){
   const today=new Date();today.setHours(0,0,0,0);
   const dow=today.getDay();
@@ -321,9 +355,9 @@ function getCapacidadLineas(){
       const gMant=getMaquinaEstadoGlobal(id)==='mantencion';
       dias.forEach(ds=>{
         total++;
-        const ev=(maquinaState.eventos||{})[`${id}_${ds}`];
-        if(gMant||ev?.tipo==='mantencion') enMant++;
-        else if(ev?.tipo==='uso') enUso++;
+        const ev=(maquinaState.eventos||{})[id+'_'+ds];
+        if(gMant||ev?.tipo==='mantencion')enMant++;
+        else if(ev?.tipo==='uso')enUso++;
       });
     });
     const disp=Math.max(total-enMant,1);
@@ -334,24 +368,32 @@ function getCapacidadLineas(){
     fdmSmallIds=MAQUINAS.filter(m=>['K1','K2','K2 Plus','Ender-5 Max'].includes(m.modelo)).map(m=>m.id);
     fdmLargeIds=MAQUINAS.filter(m=>m.modelo==='Giga').map(m=>m.id);
   }catch(e){}
-  const fdmS=calcSlots(fdmSmallIds);
-  const fdmL=calcSlots(fdmLargeIds);
-  const activos=(state.pedidos||[]).filter(p=>{const e=(p.fields||{})['Estado pedido']||'';return!['Despachado','Completado','Cancelado'].includes(e);}).length;
-  const pedPct=Math.min(Math.round(activos/20*100),100);
-  const sem=pct=>{
-    if(pct>=85) return{s:'🔴',a:'PAUSAR',m:'Línea saturada — considera pausar campañas para no colapsar producción',c:'var(--danger)'};
-    if(pct>=65) return{s:'🟡',a:'REDUCIR',m:'Carga alta — reduce el presupuesto ~30% para controlar el flujo de pedidos',c:'var(--warn)'};
-    if(pct<40)  return{s:'🟢',a:'ACTIVAR',m:'Capacidad disponible — activa o aumenta el presupuesto para captar más demanda',c:'var(--success)'};
+  const fdmS=calcSlots(fdmSmallIds),fdmL=calcSlots(fdmLargeIds);
+  const active=(state.pedidos||[]).filter(p=>{
+    const e=(p.fields||{})['Estado pedido']||'';
+    return!['Despachado','Completado','Cancelado'].includes(e);
+  });
+  const classified=new Map(active.map(p=>[p.id,_adsOrderLineIds(p)]));
+  const unknown=active.filter(p=>!(classified.get(p.id)||[]).length);
+  const countAny=ids=>active.filter(p=>(classified.get(p.id)||[]).some(id=>ids.includes(id))).length;
+  const pct=n=>Math.min(Math.round(n/20*100),100);
+  const sem=value=>{
+    if(value>=85)return{s:'🔴',a:'PAUSAR',m:'Línea saturada — considera pausar campañas para no colapsar producción',c:'var(--danger)'};
+    if(value>=65)return{s:'🟡',a:'REDUCIR',m:'Carga alta — reduce el presupuesto ~30% para controlar el flujo de pedidos',c:'var(--warn)'};
+    if(value<40)return{s:'🟢',a:'ACTIVAR',m:'Capacidad disponible — activa o aumenta el presupuesto para captar más demanda',c:'var(--success)'};
     return{s:'⚪',a:'MANTENER',m:'Carga moderada — mantén el presupuesto actual',c:'var(--accent)'};
   };
-  const mkRow=(id,label,pct,info,lids)=>({id,label,pct,info,lineasIds:lids,...sem(pct)});
+  const mkRow=(id,label,value,info,lids)=>({id,label,pct:value,info,lineasIds:lids,...sem(value)});
+  const laserIds=['carteleria'],manualIds=['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab'];
+  const laser=countAny(laserIds),manual=countAny(manualIds);
   return[
     mkRow('3d_small','FDM Small (K1/K2/Ender)',fdmS.pct,fdmS.enUso+'/'+fdmS.disp+' slots esta semana',['impresion-3d']),
     mkRow('3d_large','FDM Large (Giga)',fdmL.pct,fdmL.enUso+'/'+fdmL.disp+' slots esta semana',['impresion-3d']),
-    mkRow('laser','Láser / Cartelería',pedPct,activos+' pedidos activos en cola',['carteleria']),
-    mkRow('manual','Manual (Premiaciones · Merch · Papelería · otros)',pedPct,activos+' pedidos activos en cola',['premiaciones','merchandising','papeleria','activaciones','cajas-personalizadas','volumetricos','chip-the-lab']),
+    mkRow('laser','Láser / Cartelería',pct(laser),laser+' pedido'+(laser!==1?'s':'')+' de esta línea',laserIds),
+    mkRow('manual','Manual (Premiaciones · Merch · Papelería · otros)',pct(manual),manual+' pedido'+(manual!==1?'s':'')+' de estas líneas'+(unknown.length?' · '+unknown.length+' sin clasificar':''),manualIds),
   ];
 }
+
 function renderAdsCapacidad(data){
   const box=document.getElementById('adsCapacidadBox');
   const list=document.getElementById('adsCapacidadList');
@@ -1112,23 +1154,26 @@ async function renderAdsAutopilot(){
 }
 async function adsAutopilotDecide(i,aprobar){
   if(!_adsRequireLive())return;
-  const p=_adsAutopilotProps[i]; if(!p) return;
-  // Re-verifica el estado justo antes (pudo aprobarse por email hace un momento):
-  // evita encolar dos veces las mismas mutaciones (un "create" duplicaría la campaña).
+  const p=_adsAutopilotProps[i];if(!p)return;
+  if(aprobar&&!confirm(`¿Aprobar ${p.mutaciones.length} cambio(s) del piloto? El servidor reservará la propuesta antes de encolar.`))return;
+  const mutations=(p.mutaciones||[]).map((m,j)=>({
+    ...m,timestamp:m.timestamp||new Date(Date.now()+j).toISOString(),status:'pending'
+  }));
   try{
-    const cfg=_airtableConfig();
-    const r=await airtableHttp(`${cfg.base}/${BASE_ID}/Agent_Queue/${p.id}`,{headers:cfg.headers});
-    if(r.ok){const rec=await r.json();if((rec.fields?.Estado||'')!=='Pendiente'){toast('Esta propuesta ya fue procesada ('+(rec.fields?.Estado||'—')+')','info');renderAdsAutopilot();return;}}
-  }catch(e){}
-  if(aprobar){
-    if(!confirm(`¿Aprobar ${p.mutaciones.length} cambio(s) del piloto? Se aplicarán en Google Ads en la próxima corrida del Script 2.`)) return;
-    p.mutaciones.forEach(m=>_adsQueueMutation({...m,timestamp:m.timestamp||new Date().toISOString(),status:'pending'}));
-    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Completado','Fecha ejecución':new Date().toISOString(),'Accion sugerida':`Aprobado desde dashboard: ${p.mutaciones.length} mutaciones encoladas`});}catch(e){}
-    toast('✓ '+p.mutaciones.length+' cambio(s) del piloto encolados','success');
-  }else{
-    try{await airtableWriteTolerant('Agent_Queue','PATCH',p.id,{Estado:'Error',Error:'Rechazado desde el dashboard ('+new Date().toISOString().slice(0,16)+')'});}catch(e){}
-    toast('Propuesta del piloto rechazada','info');
-  }
+    const result=await _adsProxyFetch('/ads/autopilot/decision',{method:'POST',
+      body:JSON.stringify({recordId:p.id,approve:!!aprobar,mutations})});
+    if(aprobar){
+      const keyOf=m=>m.op+'|'+(m.id||'')+'|'+(m.op==='create'?((m.data&&m.data.nombre)||''):
+        (m.op==='negative'||m.op==='pause_keyword')?((m.data&&m.data.termino)||'')+'|'+((m.data&&m.data.campana)||''):'');
+      for(const m of mutations){
+        const key=keyOf(m);
+        _adsPendingMutations=_adsPendingMutations.filter(x=>x.status==='aplicado'||keyOf(x)!==key);
+        _adsPendingMutations.push({...m,status:'enviado',error:''});
+      }
+      savePendingToStorage();renderPendingMutations();_startAdsMutationPoll();
+      toast(result.reused?'La propuesta ya estaba procesada':'✓ '+mutations.length+' cambio(s) reservados y encolados','success');
+    }else toast('Propuesta del piloto rechazada','info');
+  }catch(e){toast('Piloto no aplicado: '+e.message,'error');}
   renderAdsAutopilot();
 }
 
