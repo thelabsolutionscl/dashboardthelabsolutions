@@ -2659,6 +2659,8 @@ async function emitirDTE(){
           // que ya fue pagada ni pisar el vencimiento renegociado por cobranza.
           const updateFields={...facturaFields};
           delete updateFields['Estado Pago'];
+          delete updateFields['Monto Pagado'];
+          delete updateFields['Saldo Pendiente'];
           delete updateFields['Fecha Vencimiento'];
           await airtableWrite('Facturas','PATCH',facturaExistente.id,updateFields);
         }else if(resp.replayed){
