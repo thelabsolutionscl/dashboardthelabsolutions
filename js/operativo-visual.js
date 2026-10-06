@@ -758,8 +758,9 @@
   }
   global.visualAiRetry=vaiRetry;
   global.visualAiLastAsset=()=>vaiLastAsset;
-  global.addEventListener('message',vaiOnMessage);
-  document.addEventListener('DOMContentLoaded',()=>{vaiConfigureFrame();vaiWatchTab();});
+  if(typeof global.addEventListener==='function')global.addEventListener('message',vaiOnMessage);
+  if(typeof document!=='undefined'&&typeof document.addEventListener==='function')
+    document.addEventListener('DOMContentLoaded',()=>{vaiConfigureFrame();vaiWatchTab();});
 
   global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,quoteWorkItems,quoteWorkDetail,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
   // Los botones de pago en Vista Tarjetas viven dentro de <details> y pueden
