@@ -5,10 +5,13 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+const dateStart=html.indexOf('function _cotizacionFechaComercial(');
+const dateEnd=html.indexOf('function prefillReporte(){',dateStart);
 const start=html.indexOf('function _origenAdquisicion(');
 const end=html.indexOf('function renderCacCanal(){',start);
-assert.ok(start>=0&&end>start,'Source attribution functions must exist');
-const source=html.slice(start,end);
+assert.ok(dateStart>=0&&dateEnd>dateStart&&start>=0&&end>start,
+  'Source attribution/date functions must exist');
+const source=html.slice(dateStart,dateEnd)+'\n'+html.slice(start,end);
 const first='2026-09-02T12:00:00Z',later='2026-09-21T12:00:00Z',old='2026-08-05T12:00:00Z';
 function quote(id,cid,channel,date,status='Enviada',amount=119000){
   return {id,createdTime:date,fields:{Cliente:cid?[cid]:[],

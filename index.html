@@ -6282,7 +6282,7 @@ function _restoreUIState(){try{const s=JSON.parse(localStorage.getItem('ui_state
 function _applySortIndicators(){[['#tab-clientes',clientesSort,/sortClientes\('(\w+)'\)/],['#tab-cotizaciones',cotizacionesSort,/sortCotizaciones\('(\w+)'\)/],['#tab-proveedores',proveedoresSort,/sortProveedores\('(\w+)'\)/]].forEach(([sel,sort,re])=>{document.querySelectorAll(sel+' .sort-th').forEach(th=>{const k=(th.getAttribute('onclick')||'').match(re)?.[1];th.classList.remove('asc','desc');if(sort.key&&k===sort.key)th.classList.add(sort.dir===1?'asc':'desc');});});}
 // ── Sparklines en KPI cards ──
 // Agrupa registros en las últimas N semanas (0=esta semana) y suma getVal por bucket.
-function _weeklySeries(records,getDate,getVal,weeks){weeks=weeks||8;const today=new Date();today.setHours(0,0,0,0);const ws=new Date(today);ws.setDate(today.getDate()-today.getDay());ws.setHours(0,0,0,0);const b=new Array(weeks).fill(0);(records||[]).forEach(r=>{const dv=getDate(r);if(!dv)return;const dt=new Date(dv);if(isNaN(dt))return;const dx=new Date(dt);dx.setHours(0,0,0,0);const dxs=new Date(dx);dxs.setDate(dx.getDate()-dx.getDay());dxs.setHours(0,0,0,0);const wAgo=Math.round((ws-dxs)/(7*86400000));const idx=weeks-1-wAgo;if(idx>=0&&idx<weeks)b[idx]+=(getVal?getVal(r):1);});return b;}
+function _weeklySeries(records,getDate,getVal,weeks){weeks=weeks||8;const today=new Date();today.setHours(0,0,0,0);const ws=_reportWeekStart(today);const b=new Array(weeks).fill(0);(records||[]).forEach(r=>{const dv=getDate(r);if(!dv)return;const dt=new Date(dv);if(isNaN(dt))return;const dx=new Date(dt);dx.setHours(0,0,0,0);const dxs=_reportWeekStart(dx);const wAgo=Math.round((ws-dxs)/(7*86400000));const idx=weeks-1-wAgo;if(idx>=0&&idx<weeks)b[idx]+=(getVal?getVal(r):1);});return b;}
 function _sparkline(vals,color){vals=(vals||[]).map(v=>+v||0);if(vals.length<2||vals.every(v=>v===vals[0]))return '';const w=72,h=18,max=Math.max(...vals),min=Math.min(...vals),rng=(max-min)||1;const pts=vals.map((v,i)=>`${(i/(vals.length-1)*w).toFixed(1)},${(h-1-((v-min)/rng)*(h-2)).toFixed(1)}`).join(' ');return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="margin-top:6px;display:block;opacity:.8"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;}
 // ── Personalizar overview: mostrar/ocultar secciones (persistido en localStorage) ──
 const OV_SECTIONS=[{id:'equipoSnapshot',label:'Disponibilidad equipo'},{id:'accionesHoyCard',label:'Acciones de hoy'},{id:'ovSecComercial',label:'Pipeline + Cotizaciones'},{id:'ovFunnelCard',label:'Embudo de conversión'},{id:'ovSecAlertas',label:'Alertas del sistema'},{id:'ovCeoCard',label:'Reporte ejecutivo CEO'},{id:'ovSecCharts',label:'Gráficos (estados / revenue)'},{id:'ovSecSnapshots',label:'Snapshots (Finanzas / Web / Ads)'}];
@@ -9393,7 +9393,7 @@ function renderEquipoSnapshot(){
 }
 function renderKPIs(){
   const today=new Date();today.setHours(0,0,0,0);
-  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
+  const weekStart=_reportWeekStart(today),weekEnd=_reportWeekEnd(today);
   const prevWeekStart=new Date(weekStart);prevWeekStart.setDate(weekStart.getDate()-7);
   const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
   const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
@@ -9413,7 +9413,7 @@ function renderKPIs(){
     if(!cancel)revTotal+=neto;   // los cancelados no son ingreso (igual que semana/mes)
     const d=p.createdTime?new Date(p.createdTime):null;
     if(d){
-      if(d>=weekStart){pedNuevosSem++;if(!cancel)revSemana+=neto;}
+      if(d>=weekStart&&d<weekEnd){pedNuevosSem++;if(!cancel)revSemana+=neto;}
       else if(d>=prevWeekStart&&d<weekStart){pedNuevosPrev++;if(!cancel)revAnterior+=neto;}
     }
     if(!despCanc)pedActivos++;
@@ -9427,7 +9427,7 @@ function renderKPIs(){
   for(const c of _cli){
     _cliById[c.id]=c;
     const d=c.createdTime?new Date(c.createdTime):null;
-    if(d){if(d>=weekStart)clientesNuevos++;else if(d>=prevWeekStart&&d<weekStart)clientesPrev++;}
+    if(d){if(d>=weekStart&&d<weekEnd)clientesNuevos++;else if(d>=prevWeekStart&&d<weekStart)clientesPrev++;}
     if((c.fields['Facturas vencidas']||0)>=2)_aFacVenc++;
   }
   // Cotizaciones (pendientes, nuevas, alertas dependientes de cliente y márgenes)
@@ -9437,8 +9437,8 @@ function renderKPIs(){
     const f=c.fields,est=f['Estado cotización']||'';
     const envSol=est==='Enviada'||est==='Solicitada';
     if(envSol)cotPend++;
-    const d=c.createdTime?new Date(c.createdTime):null;
-    const inSem=!!(d&&d>=weekStart),inPrev=!!(d&&d>=prevWeekStart&&d<weekStart);
+    const d=_cotizacionFechaComercial(c);
+    const inSem=!!(d&&d>=weekStart&&d<weekEnd),inPrev=!!(d&&d>=prevWeekStart&&d<weekStart);
     if(inSem)cotNuevosSem++;else if(inPrev)cotNuevosPrev++;
     if(envSol){const v=f['Fecha vencimiento'];if(v&&new Date(v+'T00:00:00')<today)_aCotVenc++;}
     if(est==='Solicitada'&&d&&d<ago48h)_aCotSolic++;
@@ -9754,7 +9754,7 @@ function renderCharts(){
   else{const size=130,r=46,sw=16,cx=65,cy=65,circ=2*Math.PI*r;let offset=0,segs='';estados.forEach(e=>{const c=counts[e];if(!c) return;const len=(c/total)*circ;segs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colores[e]}" stroke-width="${sw}" stroke-dasharray="${len} ${circ-len}" stroke-dashoffset="-${offset}" transform="rotate(-90 ${cx} ${cy})"></circle>`;offset+=len;});const legend=estados.filter(e=>counts[e]>0).map(e=>`<div class="donut-legend-item"><span class="donut-legend-dot" style="background:${colores[e]}"></span><span style="flex:1">${e}</span><span class="mono text-muted">${counts[e]}</span></div>`).join('');elE.innerHTML=`<div class="donut-wrap"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface3)" stroke-width="${sw}"></circle>${segs}<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" style="font-family:'Bebas Neue';font-size:22px;fill:var(--text)">${total}</text><text x="${cx}" y="${cy+16}" text-anchor="middle" dominant-baseline="middle" style="font-size:9px;fill:var(--text3)">PEDIDOS</text></svg><div class="donut-legend">${legend}</div></div>`;}
   const today=new Date(),weeks=[];
   for(let i=3;i>=0;i--){
-    const s=new Date(today);s.setDate(today.getDate()-today.getDay()-(i*7));s.setHours(0,0,0,0);
+    const s=_reportWeekStart(today);s.setDate(s.getDate()-(i*7));
     const e2=new Date(s);e2.setDate(s.getDate()+7);
     let rev=0;
     _ped.forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return;const monto=f['Monto total (CLP)']||0;if(!monto) return;const d=p.createdTime?new Date(p.createdTime):null;if(d&&d>=s&&d<e2) rev+=Math.round(monto/1.19);});
@@ -14677,9 +14677,33 @@ function _pedDespachadoEnSemana(f,weekStart){
   const d=(f&&(f['Fecha despacho']||f['Fecha entrega']))||'';
   return !!d&&new Date(d+'T00:00:00')>=weekStart;
 }
+function _reportWeekStart(value){
+  const d=value?new Date(value):new Date();
+  d.setHours(0,0,0,0);
+  const start=new Date(d);
+  start.setDate(d.getDate()-((d.getDay()+6)%7));
+  start.setHours(0,0,0,0);
+  return start;
+}
+function _reportWeekEnd(value){
+  const end=_reportWeekStart(value);
+  end.setDate(end.getDate()+7);
+  return end;
+}
+function _cotizacionFechaComercial(record){
+  const raw=String(record?.fields?.['Fecha cotización']||'').slice(0,10);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+    const d=new Date(raw+'T12:00:00');
+    const y=Number(raw.slice(0,4)),m=Number(raw.slice(5,7)),day=Number(raw.slice(8,10));
+    if(!Number.isNaN(d.getTime())&&d.getFullYear()===y&&d.getMonth()+1===m&&d.getDate()===day)
+      return d;
+  }
+  const created=record?.createdTime?new Date(record.createdTime):null;
+  return created&&!Number.isNaN(created.getTime())?created:null;
+}
 function prefillReporte(){
   const today=new Date();today.setHours(0,0,0,0);
-  const weekStart=new Date(today);weekStart.setDate(today.getDate()-((today.getDay()+6)%7));weekStart.setHours(0,0,0,0);
+  const weekStart=_reportWeekStart(today),weekEnd=_reportWeekEnd(today);
   // La clave ISO YYYY-Www identifica unívocamente la semana (lunes a domingo).
   document.getElementById('rep-semana').value=_isoWeekKey(today);
   // Revenue semanal = venta contratada neta de IVA: pedidos creados esta semana,
@@ -14687,11 +14711,11 @@ function prefillReporte(){
   const revSemana=state.pedidos.reduce((s,p)=>{
     const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')return s;
     const d=p.createdTime?new Date(p.createdTime):null;
-    return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;
+    return d&&d>=weekStart&&d<weekEnd?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;
   },0);
   document.getElementById('rep-revenue').value=revSemana;
   // Cotizaciones creadas esta semana
-  const cotSem=state.cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart);
+  const cotSem=state.cotizaciones.filter(c=>{const d=_cotizacionFechaComercial(c);return d&&d>=weekStart&&d<weekEnd;});
   document.getElementById('rep-cot-env').value=cotSem.length;
   document.getElementById('rep-cot-apr').value=cotSem.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
   // Pedidos activos y despachados esta semana
@@ -15350,19 +15374,25 @@ function ovRenderUltimoReporteCEO(){
   // desactualizado si el negocio cambió después de generar el reporte; en ese
   // caso se marca como tal y no se vuelve a presentar como si fuera actual.
   const today=new Date();today.setHours(0,0,0,0);
-  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
+  const weekStart=_reportWeekStart(today),weekEnd=_reportWeekEnd(today);
   const monthStart=new Date(today.getFullYear(),today.getMonth(),1);
   const pedidos=state.pedidos||[],cotizaciones=state.cotizaciones||[];
-  const liveRevSemana=pedidos.reduce((s,p)=>{const pf=p.fields||{};if((pf['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((pf['Monto total (CLP)']||0)/1.19):s;},0);
+  const liveRevSemana=pedidos.reduce((s,p)=>{const pf=p.fields||{};if((pf['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart&&d<weekEnd?s+Math.round((pf['Monto total (CLP)']||0)/1.19):s;},0);
   const liveRevMes=pedidos.reduce((s,p)=>{const pf=p.fields||{};if((pf['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?s+Math.round((pf['Monto total (CLP)']||0)/1.19):s;},0);
   const reportRev=Number(f['Revenue semana (CLP)'])||0;
   const staleRevenue=reportRev!==liveRevSemana;
 
-  const cotSem=cotizaciones.filter(c=>c.createdTime&&new Date(c.createdTime)>=weekStart);
+  const cotSem=cotizaciones.filter(c=>{const d=_cotizacionFechaComercial(c);return d&&d>=weekStart&&d<weekEnd;});
   const env=cotSem.length,apr=cotSem.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
   const conv=env>0?apr/env*100:0,prevConv=_ceoOverviewPct(prev['Tasa conversión (%)']);
   const activos=pedidos.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||'')).length;
   const desp=pedidos.filter(p=>_pedDespachadoEnSemana(p.fields,weekStart)).length;
+  const staleMetrics=(Number(f['Cotizaciones enviadas'])||0)!==env||
+    (Number(f['Cotizaciones aprobadas'])||0)!==apr||
+    (Number(f['Pedidos activos'])||0)!==activos||
+    (Number(f['Pedidos despachados'])||0)!==desp;
+  const staleWeek=_reporteSemanaDeRegistro(r)!==_isoWeekKey(today);
+  const staleReport=staleWeek||staleRevenue||staleMetrics;
   const margenSem=cotSem.map(c=>getMargenCot(c.fields)).filter(v=>v!==null&&Number.isFinite(v));
   const marg=margenSem.length?margenSem.reduce((s,v)=>s+v,0)/margenSem.length:0;
 
@@ -15373,17 +15403,17 @@ function ovRenderUltimoReporteCEO(){
   const savedPriorities=_ceoOverviewItems(raw,/(qu[eé] har[ií]a|prioridad|acci[oó]n|pr[oó]xim|siguiente|plan)/i,3);
   const savedOpportunity=_ceoOverviewItems(raw,/(oportunidad|insight)/i,1)[0]||'';
 
-  const summary=staleRevenue
+  const summary=staleReport
     ?`Los datos cambiaron desde que se generó este análisis. En vivo, la semana lleva ${formatCLP(liveRevSemana)} y el mes acumula ${formatCLP(liveRevMes)}. Regenera el informe para actualizar también las prioridades y alertas con estas cifras.`
     :(savedSummary||'Reporte listo. Revisa los indicadores y las prioridades de esta semana.');
-  const alerts=staleRevenue
+  const alerts=staleReport
     ?['El análisis de texto corresponde a una fotografía anterior. Los KPI de arriba ya muestran los datos actuales.']
     :savedAlerts;
-  const priorities=staleRevenue
+  const priorities=staleReport
     ?['Regenerar el informe ejecutivo para recalcular prioridades, alertas y proyección con los datos actuales.']
     :savedPriorities;
-  const opportunity=staleRevenue?'':savedOpportunity;
-  const status=staleRevenue?{level:'amber',icon:'↻',label:'Análisis desactualizado'}:_ceoOverviewStatus(raw);
+  const opportunity=staleReport?'':savedOpportunity;
+  const status=staleReport?{level:'amber',icon:'↻',label:'Análisis desactualizado'}:_ceoOverviewStatus(raw);
 
   const metrics=[
     {label:'Revenue semana',value:formatCLP(liveRevSemana),note:_ceoOverviewDelta(liveRevSemana,prevRev)||'Venta neta contratada esta semana',tone:prevRev&&liveRevSemana<prevRev?'down':'up'},
@@ -15409,7 +15439,7 @@ function ovRenderUltimoReporteCEO(){
       <section class="ceo-panel ceo-panel-watch"><div class="ceo-panel-title"><span>02</span><div><b>Ojo con esto</b><small>Solo lo que realmente merece atención</small></div></div><div class="ceo-watches">${alertsHtml}</div></section>
     </div>
     ${opportunity?`<div class="ceo-opportunity"><span>💡 OPORTUNIDAD</span><p>${escapeHtml(_kaiSimpleClip(opportunity,260))}</p></div>`:''}
-    <details class="ceo-full-report"><summary>${staleRevenue?'Ver informe anterior':'Ver informe completo'}</summary><div class="ceo-full-report-body">${formatCeoReport(raw)}</div></details>
+    <details class="ceo-full-report"><summary>${staleReport?'Ver informe anterior':'Ver informe completo'}</summary><div class="ceo-full-report-body">${formatCeoReport(raw)}</div></details>
   </div>`;
 }
 async function ovGenerarReporteCEO(){
@@ -16035,11 +16065,12 @@ function _marketingSpendRow(off){
 }
 function _gastoCanalVisible(off=0){
   const row=_marketingSpendRow(off);
-  return row?.status==='shared'?{...row.channels}:_gastoCanal(off);
+  return ['shared','stale_shared'].includes(row?.status)?{...row.channels}:_gastoCanal(off);
 }
 function _marketingSpendLabel(off){
   const row=_marketingSpendRow(off);
   if(row?.status==='shared')return '✓ Datos compartidos · versión '+row.revision;
+  if(row?.status==='stale_shared')return '⚠ Últimos datos compartidos · versión '+row.revision+' · sin actualizar: '+(row.message||'error de sincronización');
   if(row?.status==='loading')return 'Comprobando datos compartidos…';
   if(row?.status==='error')return '⚠ Sin sincronización: '+row.message;
   return '⚠ Datos locales de este navegador · NO sincronizados';
@@ -16056,7 +16087,8 @@ async function _marketingSpendLoad(off=0,force=false){
   }
   // Keep verified shared figures visible while refreshing. Never overwrite
   // them with a stale localStorage copy during network errors.
-  if(!old||old.status!=='shared')
+  const hadShared=old&&['shared','stale_shared'].includes(old.status);
+  if(!hadShared)
     _marketingSpendCache[month]={status:'loading',loadedAt:Date.now()};
   try{
     const url=px.url.replace(/\/$/,'')+'/marketing/spend?month='+encodeURIComponent(month);
@@ -16067,8 +16099,8 @@ async function _marketingSpendLoad(off=0,force=false){
       const msg=res.status===503?'Cloudflare Access aún no está habilitado':
         res.status===401?'Inicia sesión con Cloudflare Access':
         res.status===403?'Tu rol no puede consultar gastos':'Error '+res.status;
-      _marketingSpendCache[month]=old?.status==='shared'
-        ?{...old,loadedAt:Date.now(),message:msg}
+      _marketingSpendCache[month]=hadShared
+        ?{...old,status:'stale_shared',loadedAt:Date.now(),message:msg}
         :{status:'error',loadedAt:Date.now(),message:msg};
       if(typeof renderCacCanal==='function')try{renderCacCanal();}catch(e){}
       return _marketingSpendCache[month];
@@ -16079,8 +16111,8 @@ async function _marketingSpendLoad(off=0,force=false){
     _marketingSpendCache[month]={status:'shared',channels:{...data.channels},
       revision:data.revision,loadedAt:Date.now()};
   }catch(e){
-    _marketingSpendCache[month]=old?.status==='shared'
-      ?{...old,loadedAt:Date.now(),message:e.message}
+    _marketingSpendCache[month]=hadShared
+      ?{...old,status:'stale_shared',loadedAt:Date.now(),message:e.message||'Error de conexión'}
       :{status:'error',loadedAt:Date.now(),message:e.message||'Error de conexión'};
   }
   if(typeof renderCacCanal==='function')try{renderCacCanal();}catch(e){}
@@ -16133,6 +16165,8 @@ async function setGastoCanal(){
   const row=_marketingSpendRow(off);
   if(row?.status==='loading')
     return toast('Se está verificando el gasto compartido; vuelve a intentarlo','info');
+  if(row?.status==='stale_shared')
+    return toast('Los últimos datos compartidos siguen visibles, pero no están actualizados. Pulsa Sincronizar antes de editar.','error');
   const canal=(prompt('¿Para qué canal registras el gasto de '+period.label+
     '? (ej: Google Ads, Instagram, WhatsApp)')||'').trim();
   if(!canal)return;
@@ -16183,7 +16217,7 @@ function _canalStats(off){
   const clients=new Map((state.clientes||[]).map(c=>[c.id,c]));
   const primero=new Map();
   (state.cotizaciones||[]).forEach(c=>{
-    const cid=_cid(c.fields||{}),t=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    const cid=_cid(c.fields||{}),d=_cotizacionFechaComercial(c),t=d?d.getTime():NaN;
     if(!cid||!Number.isFinite(t))return;
     const prev=primero.get(cid);
     if(!prev||t<prev.t||(t===prev.t&&String(c.id)<String(prev.id)))
@@ -16204,7 +16238,7 @@ function _canalStats(off){
   });
   const by=new Map(),seenClients=new Set(),sourceKnown=new Set(),dateKnown=new Set();
   (state.cotizaciones||[]).forEach(c=>{
-    const f=c.fields||{},t=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    const f=c.fields||{},d=_cotizacionFechaComercial(c),t=d?d.getTime():NaN;
     if(!(t>=ini&&t<fin))return;
     const cid=_cid(f),cliente=cid?clients.get(cid):null;
     const canal=_origenAdquisicion(cliente);
@@ -16245,7 +16279,7 @@ function _canalStats(off){
 function _canalesSolicitud(off){
   const range=_mesRango(off||0),counts=new Map();
   (state.cotizaciones||[]).forEach(c=>{
-    const date=c.createdTime?new Date(c.createdTime).getTime():NaN;
+    const d=_cotizacionFechaComercial(c),date=d?d.getTime():NaN;
     if(!(date>=range.ini.getTime()&&date<range.fin.getTime()))return;
     const f=c.fields||{};
     const label=String(f['Canal solicitud']||'Sin canal').trim()||'Sin canal';
@@ -16467,7 +16501,16 @@ function renderReportes(){
     const fa=a.fields?.['Fecha generación']||'',fb=b.fields?.['Fecha generación']||'';
     return String(fb).localeCompare(String(fa))||String(b.createdTime||'').localeCompare(String(a.createdTime||''));
   });
-  tbody.innerHTML=ordenados.map((r,i)=>{
+  const weekCounts=new Map();
+  for(const r of ordenados){
+    const key=_reporteSemanaDeRegistro(r);
+    if(key)weekCounts.set(key,(weekCounts.get(key)||0)+1);
+  }
+  const duplicateWeeks=[...weekCounts.entries()].filter(([,count])=>count>1);
+  const duplicateWarning=duplicateWeeks.length
+    ?`<tr><td colspan="7" style="padding:10px 12px;background:rgba(255,170,0,.08);color:var(--warn);font-size:11px">⚠ Historial heredado con semanas duplicadas: ${duplicateWeeks.map(([week,count])=>escapeHtml(week)+' ×'+count).join(' · ')}. Se usa solo el registro más reciente para tendencias; no se borran filas automáticamente.</td></tr>`
+    :'';
+  tbody.innerHTML=duplicateWarning+ordenados.map((r,i)=>{
     const f=r.fields;
     const mp=f['Margen promedio semana (%)']||0,m=mp<=1?mp*100:mp;
     const cp=f['Tasa conversión (%)']||0,cv=cp<=1?cp*100:cp;
@@ -16532,11 +16575,11 @@ function openMetaModal(){
   document.getElementById('metaInput').value=localStorage.getItem('revMetaSemanal')||'';
   const inputM=document.getElementById('metaInputMensual');if(inputM) inputM.value=localStorage.getItem('revMetaMensual')||'';
   const today=new Date();today.setHours(0,0,0,0);
-  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());
+  const weekStart=_reportWeekStart(today),weekEnd=_reportWeekEnd(today);
   const monthStart=new Date(today.getFullYear(),today.getMonth(),1);
-  const revSem=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const revSem=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart&&d<weekEnd?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const revMes=state.pedidos.reduce((s,p)=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado') return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=monthStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
-  const dLeft=6-today.getDay();
+  const dLeft=6-((today.getDay()+6)%7);
   const el=document.getElementById('metaContext');
   if(el) el.innerHTML=`Esta semana: <strong>${formatCLP(revSem)}</strong> &nbsp;·&nbsp; Faltan <strong>${dLeft} día${dLeft!==1?'s':''}</strong><br>Este mes: <strong>${formatCLP(revMes)}</strong>`;
   document.getElementById('metaModal').style.display='flex';
@@ -17411,7 +17454,7 @@ function renderProveedoresAnalytics(){
 // ── AGENTES ───────────────────────────────────────────────────
 function buildAgentContext(id){
   const today=new Date();today.setHours(0,0,0,0);
-  const weekStart=new Date(today);weekStart.setDate(today.getDate()-today.getDay());weekStart.setHours(0,0,0,0);
+  const weekStart=_reportWeekStart(today),weekEnd=_reportWeekEnd(today);
   const fmtCLP=n=>'$'+Math.round(n).toLocaleString('es-CL');
   const lines=['=== DATOS EN TIEMPO REAL — THE LAB SOLUTIONS ===',`Fecha: ${today.toLocaleDateString('es-CL')}`];
 
@@ -17425,9 +17468,10 @@ function buildAgentContext(id){
   const pedActivos=P.filter(p=>!['Despachado','Completado','Cancelado'].includes(p.fields['Estado pedido']||''));
   const pedAtrasados=pedActivos.filter(p=>p.fields['Fecha entrega']&&new Date(p.fields['Fecha entrega']+'T00:00:00')<today);
   const cotAbiertas=C.filter(c=>['Enviada','Solicitada'].includes(c.fields['Estado cotización']||''));
+  const cotSemana=C.filter(c=>{const d=_cotizacionFechaComercial(c);return d&&d>=weekStart&&d<weekEnd;});
   // Revenue semanal = pedidos creados/confirmados en la semana, netos de IVA.
   // No usar fecha de despacho/entrega: eso mide operación, no venta contratada.
-  const revSemana=P.reduce((s,p)=>{const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
+  const revSemana=P.reduce((s,p)=>{const f=p.fields||{};if((f['Estado pedido']||'')==='Cancelado')return s;const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=weekStart&&d<weekEnd?s+Math.round((f['Monto total (CLP)']||0)/1.19):s;},0);
   const revTotal=P.reduce((s,p)=>(p.fields['Estado pedido']||'')==='Cancelado'?s:s+(p.fields['Monto total (CLP)']||0)/1.19,0);
 
   if(['CEO','FINANCE','SALES','PRODUCTION','FOLLOWUP','QA','REPCLIENTE'].includes(id)){
@@ -17444,8 +17488,8 @@ function buildAgentContext(id){
     const fv=CL.filter(c=>(c.fields['Facturas vencidas']||0)>=2);
     const cotM=C.filter(c=>getMargenCot(c.fields)!==null);
     const avgM=cotM.length?cotM.reduce((s,c)=>s+getMargenCot(c.fields),0)/cotM.length:0;
-    const aprobadas=C.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
-    const enviadas=C.filter(c=>c.fields['Estado cotización']==='Enviada').length;
+    const aprobadas=cotSemana.filter(c=>c.fields['Estado cotización']==='Aprobada').length;
+    const enviadas=cotSemana.length;
     lines.push('\nALERTAS:');
     lines.push(`- Pedidos sin pago: ${sinPago.length} | Clientes con fact. vencidas: ${fv.length}`);
     lines.push('\nFINANCIERO:');
@@ -18176,8 +18220,7 @@ function openClienteWinbackPicker(){
 </script>
 <script src="js/maquinas.js?v=%%BUILD%%"></script>
 <script src="js/maquinas-led.js?v=%%BUILD%%"></script>
-<script src="js/maquinas-operaciones.js?v=%%BUILD%%"></script>
-<script src="js/maquinas-informe-tecnico.js?v=%%BUILD%%"></script>
+<script src="js/maquinas-operaciones.js?v=%%BUILD%%"></script>\n<script src="js/maquinas-informe-tecnico.js?v=%%BUILD%%"></script>
 <script>
 </script>
 <script src="js/proveedores.js?v=%%BUILD%%"></script>

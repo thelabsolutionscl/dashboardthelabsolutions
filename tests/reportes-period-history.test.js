@@ -45,7 +45,7 @@ test('visible executive report history is sorted newest first with createdTime t
   {id:'first',createdTime:'2026-09-27T12:00:00Z',fields:{Semana:'NEW_FIRST','Fecha generación':'2026-09-27'}},
   {id:'latest',createdTime:'2026-09-27T18:00:00Z',fields:{Semana:'NEW_LATEST','Fecha generación':'2026-09-27'}}
  ]};
- const render=new Function('window','renderEstacionalidad','renderCacCanal','document','state','formatCLP','estadoBadge','escapeHtml','formatCeoReport',section('function renderReportes(){','function toggleReporteDetalle(')+'return renderReportes;')({},()=>{},()=>{},{getElementById:()=>tbody},state,String,String,String,String);
+ const render=new Function('window','renderEstacionalidad','renderCacCanal','renderCrmAcquisitionAudit','_reporteSemanaDeRegistro','document','state','formatCLP','estadoBadge','escapeHtml','formatCeoReport',section('function renderReportes(){','function toggleReporteDetalle(')+'return renderReportes;')({},()=>{},()=>{},()=>{},()=>null,{getElementById:()=>tbody},state,String,String,String,String);
  render();
  assert.ok(tbody.innerHTML.indexOf('NEW_LATEST')<tbody.innerHTML.indexOf('NEW_FIRST'));
  assert.ok(tbody.innerHTML.indexOf('NEW_FIRST')<tbody.innerHTML.indexOf('OLDER'));
