@@ -99,6 +99,24 @@ test('allowlist y payload fallan cerrados',()=>{
   assert.equal(visualAiActorAllowed({role:'viewer',email:'v@x.cl'}),false);
 });
 
+
+test('quota previa lee uso real sin reservar ni contactar al proveedor',async()=>{
+  const h=harness({limit:2});
+  let res=await h.req({action:'quota'});
+  assert.equal(res.status,200,await res.clone().text());
+  let q=await res.json();
+  assert.equal(q.daily_limit,2);assert.equal(q.used,0);assert.equal(q.remaining,2);
+  assert.equal(q.estimated_cost_usd,null);
+  assert.equal(h.calls.length,0);
+  res=await h.req({action:'generate',endpoint:'flux-schnell-image',payload:{prompt:'a'},jobId:'job_quota_view_01'});
+  assert.equal(res.status,200,await res.clone().text());
+  const before=h.calls.length;
+  res=await h.req({action:'quota'});
+  q=await res.json();
+  assert.equal(q.used,1);assert.equal(q.remaining,1);
+  assert.equal(h.calls.length,before,'consultar cuota no debe llamar a MuAPI');
+});
+
 test('generate usa secreto server-side, guarda receipt e informa cuota',async()=>{
   const h=harness();
   const res=await h.req({action:'generate',endpoint:'flux-schnell-image',payload:{prompt:'trofeo',aspect_ratio:'1:1'},jobId:'job_1234567890'});
