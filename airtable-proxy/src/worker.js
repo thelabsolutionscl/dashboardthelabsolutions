@@ -73,6 +73,10 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
   Maquinas_Mant:Object.freeze({
     'maquina_id':'machine-id','tipo':'maintenance-type','notas':'notes',
     'print_hours':'machine-hours','fecha':'date','ts':'timestamp-ms'
+  }),
+  Equipo_Eventos:Object.freeze({
+    'persona_id':'team-person','fecha':'date','tipo':'team-event-type',
+    'desc':'short-text','hora_inicio':'clock','hora_fin':'clock'
   })
 });
 const OPERATOR_WRITE_METHODS=Object.freeze({
@@ -82,7 +86,8 @@ const OPERATOR_WRITE_METHODS=Object.freeze({
   Proveedores:new Set(['POST','PATCH']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
-  Maquinas_Mant:new Set(['POST'])
+  Maquinas_Mant:new Set(['POST']),
+  Equipo_Eventos:new Set(['POST','PATCH','DELETE'])
 });
 function operatorFieldValueAllowed(kind,value,key){
   if(value===null)return !['N° Pedido','N° Cotización','Empresa','Nombre',
@@ -116,6 +121,12 @@ function operatorFieldValueAllowed(kind,value,key){
     new Set(['uso','mantencion']).has(value);
   if(kind==='maintenance-type')return typeof value==='string'&&
     new Set(['nozzle','lubrication','belt','extruder','bed','sensors','general']).has(value);
+  if(kind==='team-person')return typeof value==='string'&&
+    new Set(['gustavo','nicanor','florencia']).has(value);
+  if(kind==='team-event-type')return typeof value==='string'&&
+    new Set(['ocupado','reunion','remoto','ausente','vacaciones']).has(value);
+  if(kind==='clock')return typeof value==='string'&&
+    (value===''||/^([01]\d|2[0-3]):[0-5]\d$/.test(value));
   if(kind==='private-ip'){
     if(value==='')return true;
     if(typeof value!=='string')return false;
@@ -162,14 +173,15 @@ function operatorWritePayloadAllowed(table,method,payload){
     if(!fields||typeof fields!=='object'||Array.isArray(fields))return false;
     const keys=Object.keys(fields);
     if(!keys.length||keys.length>40||keys.some(k=>!Object.hasOwn(catalog,k)||
-       (!creating&&['N° Pedido','N° Cotización','maquina_id'].includes(k))||
+       (!creating&&['N° Pedido','N° Cotización','maquina_id','persona_id','fecha'].includes(k))||
        !operatorFieldValueAllowed(catalog[k],fields[k],k)))return false;
     if(creating){
       const required={
         Clientes:['Empresa'],Cotizaciones:['N° Cotización'],
         Pedidos:['N° Pedido'],Proveedores:['Nombre'],
         Maquinas_Eventos:['maquina_id','fecha','tipo'],
-        Maquinas_Mant:['maquina_id','tipo','fecha','ts']
+        Maquinas_Mant:['maquina_id','tipo','fecha','ts'],
+        Equipo_Eventos:['persona_id','fecha','tipo']
       }[table];
       if(!required||required.some(k=>!Object.hasOwn(fields,k)||
          fields[k]===null||fields[k]===''||
@@ -223,7 +235,7 @@ async function operatorSafeMutationResponse(upstream,table,CORS){
   return json(projected,upstream.status,{...CORS,'Cache-Control':'private, no-store'});
 }
 async function operatorScopedWrite(request,url,identity,env,CORS){
-  if(!['POST','PATCH'].includes(request.method))
+  if(!['POST','PATCH','DELETE'].includes(request.method))
     return json({error:'Operator mutation denied'},403,CORS);
   const prefix='/v0/app1YtD74AqiPWQhy/';
   const path=url.pathname.startsWith('/v0/')?url.pathname:'/v0'+url.pathname;
@@ -237,9 +249,33 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
      parts[0]!==encodeURIComponent(table)||
      (request.method==='POST'&&parts.length!==1)||
      (request.method==='PATCH'&&(parts.length>2||
-       parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1]))))
+       parts.length===2&&!/^rec[A-Za-z0-9]{14}$/.test(parts[1])))||
+     (request.method==='DELETE'&&(table!=='Equipo_Eventos'||parts.length!==2||
+       !/^rec[A-Za-z0-9]{14}$/.test(parts[1]))))
     return json({error:'Operator mutation route denied'},403,CORS);
   if(!env.AIRTABLE_TOKEN)return json({error:'CRM unavailable'},503,CORS);
+  if(request.method==='DELETE'){
+    if(Number(request.headers.get('Content-Length')||0)>0)
+      return json({error:'Operator delete body denied'},422,CORS);
+    try{
+      const upstream=await fetch(AIRTABLE_BASE+path,{
+        method:'DELETE',redirect:'manual',
+        headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+      });
+      if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+        return json({error:'Operational delete rejected',code:'OPERATOR_WRITE_REJECTED'},
+          [400,401,403,404,409,422].includes(upstream.status)?upstream.status:503,CORS);
+      const body=await upstream.json().catch(()=>null);
+      if(!body||body.id!==parts[1]||body.deleted!==true)
+        return json({error:'Operational delete outcome uncertain',
+          code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);
+      return json({id:body.id,deleted:true},200,
+        {...CORS,'Cache-Control':'private, no-store'});
+    }catch(_){
+      return json({error:'Operational delete outcome uncertain; reread before retrying',
+        code:'OPERATOR_WRITE_UNCERTAIN'},503,CORS);
+    }
+  }
   if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
      Number(request.headers.get('Content-Length')||0)>131072)
     return json({error:'Operator mutation expects bounded JSON'},415,CORS);
@@ -1254,7 +1290,8 @@ const OPERATOR_READ_FIELDS=Object.freeze({
   ]),
   Maquinas:new Set([...VIEWER_READ_FIELDS.Maquinas,'ip','cam']),
   Maquinas_Eventos:new Set([...VIEWER_READ_FIELDS.Maquinas_Eventos,'desc','pedido_id']),
-  Maquinas_Mant:new Set([...VIEWER_READ_FIELDS.Maquinas_Mant,'notas','ts'])
+  Maquinas_Mant:new Set([...VIEWER_READ_FIELDS.Maquinas_Mant,'notas','ts']),
+  Equipo_Eventos:new Set(['persona_id','fecha','tipo','desc','hora_inicio','hora_fin'])
 });
 
 
