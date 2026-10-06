@@ -202,3 +202,82 @@ El historial del gasto en Reportes cuenta ahora con una tarjeta plegable justo b
 La interfaz no ofrece funciones de escritura y no genera un historial ficticio a partir de `localStorage`. Solo ofrece la consulta a los roles `finance/admin`; el backend conserva su comprobación independiente de Cloudflare Access. El navegador únicamente envía la clave de compatibilidad al origen exacto `https://proxy.thelab.solutions`, con cookies de sesión y solicitudes GET; no sigue redirecciones a sitios externos. Informa por separado falta de autorización, infraestructura pendiente, fallos de red e integridad de auditoría, sin presentar estos últimos como una tabla vacía. La carga se hace mediante un módulo versionado enlazado desde el archivo de Reportes ya publicado y sobrevive al repintado de los KPI y a los cambios de mes.
 
 Las pruebas `tests/reportes-marketing-history-ui.test.js` cubren 205 movimientos, escrituras concurrentes entre páginas, cambio de mes, respuesta obsoleta, reintentos, cursor malformado, revisiones duplicadas, restricciones de red y permisos. **Activación real diferida:** el dominio del proxy y las sesiones de Cloudflare Access siguen pendientes de la ventana única de configuración al final de la auditoría completa.
+
+## 2026-10-06 — consistencia temporal, frescura CEO y gasto compartido
+
+La reauditoría encontró cuatro desviaciones adicionales en el código vigente.
+
+### 1. Semana ISO inconsistente dentro del propio dashboard
+
+El formulario de Reportes ya usaba lunes–domingo, pero `buildAgentContext('CEO')`,
+el panel CEO del Overview, los KPI semanales, el modal de metas, series semanales
+y un gráfico de cuatro semanas todavía arrancaban el domingo.
+
+Esto permitía que el valor mostrado en `rep-revenue` y el contexto entregado a
+CEO_AGENT describieran ventanas distintas. Se centralizó el límite en
+`_reportWeekStart()` / `_reportWeekEnd()`, siempre lunes inclusivo a lunes
+exclusivo.
+
+### 2. Cotizaciones atribuidas por fecha de importación
+
+CAC/ROAS, canal de solicitud y varias métricas semanales usaban `createdTime`
+aunque la tabla tiene `Fecha cotización`, que representa la fecha comercial.
+La lectura de Airtable del 6 de octubre de 2026 encontró:
+
+- 72 cotizaciones;
+- las 72 tienen `Fecha cotización`;
+- 29 difieren de `createdTime`;
+- 13 caen en una semana ISO distinta;
+- 5 caen incluso en otro mes;
+- una cotización aprobada por $523.600 bruto (aprox. $440.000 neto) estaba
+  entrando en agosto por `createdTime` aunque su `Fecha cotización` es
+  2026-07-31.
+
+`_cotizacionFechaComercial()` usa ahora `Fecha cotización` válida y recurre
+a `createdTime` únicamente si falta o es inválida. La misma fuente alimenta
+prefill semanal, contexto CEO, Overview, CAC/ROAS y desglose de canal de
+solicitud.
+
+### 3. Informe CEO podía parecer vigente con otros KPI modificados
+
+El Overview marcaba el análisis como desactualizado solo si cambiaba el revenue.
+Ahora también compara cotizaciones enviadas/aprobadas, pedidos
+activos/despachados y la semana ISO del informe. Un informe de una semana
+anterior no vuelve a presentarse como lectura actual aunque casualmente tenga
+el mismo revenue.
+
+### 4. Fallo de sincronización de gasto compartido parecía éxito
+
+Después de haber cargado una versión compartida, un error posterior de red o
+Access conservaba correctamente los últimos importes, pero el estado seguía
+siendo `shared`: la UI mostraba ✓ y permitía intentar editar con una revisión
+que no había podido refrescarse.
+
+Se añadió `stale_shared`: conserva la última versión verificada para lectura,
+la etiqueta como no actualizada y bloquea edición/importación hasta una
+sincronización exitosa. Nunca cae silenciosamente a localStorage mientras hay
+una versión compartida conocida.
+
+### Historial heredado duplicado
+
+La lectura actual de `Reportes` encontró 17 filas y dos semanas ISO con
+duplicados heredados: 2026-W39 (7 filas) y 2026-W24 (2 filas). No se borran ni
+fusionan automáticamente. La tabla de Reportes muestra ahora una advertencia
+visible; tendencias continúan deduplicando de forma determinista usando la fila
+más reciente de cada semana.
+
+### Cobertura
+
+Se añadió `tests/reportes-temporal-consistency.test.js` para proteger:
+
+- límites ISO incluso en domingo;
+- prioridad de `Fecha cotización` sobre `createdTime`;
+- atribución mensual del caso migrado;
+- coherencia entre prefill, CEO_AGENT y Overview;
+- frescura del informe por todos los KPI guardados;
+- advertencia de duplicados históricos;
+- estado `stale_shared` y bloqueo de escritura obsoleta.
+
+La conciliación documental de datos históricos y la activación real de
+Cloudflare Access siguen siendo tareas operativas deliberadamente diferidas;
+esta corrección no modifica registros de Airtable.
