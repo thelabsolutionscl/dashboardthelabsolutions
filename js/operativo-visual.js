@@ -706,8 +706,26 @@
   async function vaiAssetLinkPrompt(asset){
     if(!asset||typeof asset.url!=='string')return;
     vaiLastAsset=asset;
-    const kind=(prompt('Usar resultado Visual AI en: cliente, cotizacion, pedido, drive o redes\n(Cancelar = dejarlo solo como resultado)')||'').trim().toLowerCase();
-    if(!['cliente','cotizacion','pedido','drive','redes'].includes(kind))return;
+    const kind=(prompt('Usar resultado Visual AI en: cliente, cotizacion, pedido, referencia, drive o redes\n(Cancelar = dejarlo solo como resultado)')||'').trim().toLowerCase();
+    if(!['cliente','cotizacion','pedido','referencia','drive','redes'].includes(kind))return;
+
+    if(kind==='referencia'){
+      const title=(prompt('Nombre de la referencia visual/producto:','Referencia Visual AI')||'').trim();
+      if(!title)return;
+      const note=(prompt('Notas opcionales para esta referencia:','')||'').trim();
+      const fields={
+        'Título post':title,
+        'Sugerencia visual':asset.url,
+        'Estado publicación':'Idea',
+        'Notas internas':'[Visual AI] '+(asset.model||'modelo no informado')+
+          (asset.jobId?' · job '+asset.jobId:'')+(note?'\n'+note:'')
+      };
+      try{
+        await airtableWriteTolerant('Contenido','POST',null,fields);
+        toast('✓ Referencia visual guardada como Idea en Contenido','success');
+      }catch(e){toast('No se pudo guardar la referencia visual: '+String(e?.message||e),'error');}
+      return;
+    }
 
     if(kind==='drive'){
       if(typeof _driveUploadRemoteAsset!=='function'||typeof _driveGetOrCreateFolder!=='function'){
@@ -777,7 +795,7 @@
     if(!msg||msg.source!=='opengen'||msg.version!==VAI_PROTOCOL_VERSION||typeof msg.type!=='string')return;
     if(msg.type==='ready'){
       vaiReady=true;clearTimeout(vaiTimer);vaiStatus('OpenGen Studio — canal seguro activo','ok');vaiFallback(false);
-      vaiPost(frame,{type:'host-ready',capabilities:['secure-rpc','crm-link','drive-save','social-draft'],session:'dashboard'});
+      vaiPost(frame,{type:'host-ready',capabilities:['secure-rpc','crm-link','visual-reference','drive-save','social-draft'],session:'dashboard'});
       return;
     }
     if(msg.type==='rpc'){void vaiHandleRpc(frame,msg);return;}
