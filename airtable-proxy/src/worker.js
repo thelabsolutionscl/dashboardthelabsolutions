@@ -60,10 +60,33 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
     'Sitio Web':'url','Comuna':'text','Región':'text',
     'Reputación':'number','Estado':'text','Plazo de entrega (días)':'number',
     'Productos':'notes','WhatsApp':'phone','Estado postulación':'select'
+  }),
+  // Machine tables are operational, but they are no longer a generic Airtable
+  // write tunnel for signed operators. Identity/config fields stay immutable.
+  Maquinas:Object.freeze({
+    'estado':'machine-state','ip':'private-ip','cam':'printer-url'
+  }),
+  Maquinas_Eventos:Object.freeze({
+    'maquina_id':'machine-id','fecha':'date','tipo':'machine-event-type',
+    'desc':'short-text','tiempo':'machine-hours','pedido_id':'record-ref'
+  }),
+  Maquinas_Mant:Object.freeze({
+    'maquina_id':'machine-id','tipo':'maintenance-type','notas':'notes',
+    'print_hours':'machine-hours','fecha':'date','ts':'timestamp-ms'
   })
 });
+const OPERATOR_WRITE_METHODS=Object.freeze({
+  Clientes:new Set(['POST','PATCH']),
+  Cotizaciones:new Set(['POST','PATCH']),
+  Pedidos:new Set(['POST','PATCH']),
+  Proveedores:new Set(['POST','PATCH']),
+  Maquinas:new Set(['PATCH']),
+  Maquinas_Eventos:new Set(['POST','PATCH']),
+  Maquinas_Mant:new Set(['POST'])
+});
 function operatorFieldValueAllowed(kind,value,key){
-  if(value===null)return !['N° Pedido','N° Cotización','Empresa','Nombre'].includes(key);
+  if(value===null)return !['N° Pedido','N° Cotización','Empresa','Nombre',
+    'maquina_id','tipo','fecha','ts','estado'].includes(key);
   if(kind==='flag')return typeof value==='boolean';
   if(kind==='number'||kind==='money')
     return typeof value==='number'&&Number.isFinite(value)&&value>=0&&
@@ -78,6 +101,38 @@ function operatorFieldValueAllowed(kind,value,key){
   if(kind==='choices')return Array.isArray(value)&&value.length<=12&&
     value.every(v=>typeof v==='string'&&v.length>0&&v.length<=120)&&
     new Set(value).size===value.length;
+  if(kind==='machine-hours')return typeof value==='number'&&Number.isFinite(value)&&
+    value>=0&&value<=100000;
+  if(kind==='timestamp-ms')return Number.isSafeInteger(value)&&
+    value>=946684800000&&value<=4102444800000;
+  if(kind==='machine-id')return typeof value==='string'&&
+    /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
+  if(kind==='record-ref')return typeof value==='string'&&
+    (!value||/^rec[A-Za-z0-9]{14}$/.test(value));
+  if(kind==='machine-state')return typeof value==='string'&&
+    new Set(['disponible','reservada','calibrando','limpieza','mantencion',
+      'esperando_repuesto','fuera_servicio']).has(value);
+  if(kind==='machine-event-type')return typeof value==='string'&&
+    new Set(['uso','mantencion']).has(value);
+  if(kind==='maintenance-type')return typeof value==='string'&&
+    new Set(['nozzle','lubrication','belt','extruder','bed','sensors','general']).has(value);
+  if(kind==='private-ip'){
+    if(value==='')return true;
+    if(typeof value!=='string')return false;
+    const m=value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if(!m)return false;
+    const o=m.slice(1).map(Number);
+    return !o.some(v=>v<0||v>255)&&
+      (o[0]===10||(o[0]===172&&o[1]>=16&&o[1]<=31)||(o[0]===192&&o[1]===168));
+  }
+  if(kind==='printer-url'){
+    if(value==='')return true;
+    if(typeof value!=='string'||value.length>1024)return false;
+    try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&
+      !u.username&&!u.password;}catch(_){return false;}
+  }
+  if(kind==='short-text')return typeof value==='string'&&value.length<=2000&&
+    !/[\r\n\x00-\x08\x0b\x0e-\x1f]/.test(value);
   if(typeof value!=='string'||/[\x00-\x08\x0b\x0e-\x1f]/.test(value))return false;
   if(kind==='notes')return value.length<=20000;
   if(kind==='date'){
@@ -98,7 +153,7 @@ function operatorFieldValueAllowed(kind,value,key){
 }
 function operatorWritePayloadAllowed(table,method,payload){
   const catalog=OPERATOR_WRITE_FIELDS[table];
-  if(!catalog||!['POST','PATCH'].includes(method)||!payload||
+  if(!catalog||!OPERATOR_WRITE_METHODS[table]?.has(method)||!payload||
      typeof payload!=='object'||Array.isArray(payload))return false;
   const keys=Object.keys(payload);
   if(keys.some(k=>!['fields','records','typecast'].includes(k))||
@@ -107,13 +162,18 @@ function operatorWritePayloadAllowed(table,method,payload){
     if(!fields||typeof fields!=='object'||Array.isArray(fields))return false;
     const keys=Object.keys(fields);
     if(!keys.length||keys.length>40||keys.some(k=>!Object.hasOwn(catalog,k)||
-       (!creating&&['N° Pedido','N° Cotización'].includes(k))||
+       (!creating&&['N° Pedido','N° Cotización','maquina_id'].includes(k))||
        !operatorFieldValueAllowed(catalog[k],fields[k],k)))return false;
     if(creating){
-      const required={Clientes:'Empresa',Cotizaciones:'N° Cotización',
-        Pedidos:'N° Pedido',Proveedores:'Nombre'}[table];
-      if(!required||typeof fields[required]!=='string'||
-         !fields[required].trim())return false;
+      const required={
+        Clientes:['Empresa'],Cotizaciones:['N° Cotización'],
+        Pedidos:['N° Pedido'],Proveedores:['Nombre'],
+        Maquinas_Eventos:['maquina_id','fecha','tipo'],
+        Maquinas_Mant:['maquina_id','tipo','fecha','ts']
+      }[table];
+      if(!required||required.some(k=>!Object.hasOwn(fields,k)||
+         fields[k]===null||fields[k]===''||
+         (typeof fields[k]==='string'&&!fields[k].trim())))return false;
     }
     return true;
   };
@@ -173,6 +233,7 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
   let table;
   try{table=decodeURIComponent(parts[0]);}catch(_){}
   if(!Object.hasOwn(OPERATOR_WRITE_FIELDS,table||'')||
+     !OPERATOR_WRITE_METHODS[table]?.has(request.method)||
      parts[0]!==encodeURIComponent(table)||
      (request.method==='POST'&&parts.length!==1)||
      (request.method==='PATCH'&&(parts.length>2||
@@ -191,13 +252,14 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
      (request.method==='PATCH'&&
        (parts.length===1)!==Object.hasOwn(body,'records')))
     return json({error:'Unapproved operator fields or mutation shape'},422,CORS);
-  const guarded=table==='Cotizaciones'||table==='Pedidos';
-  if((guarded||request.method==='PATCH'&&table==='Clientes')&&
+  const guardedCreate=table==='Cotizaciones'||table==='Pedidos';
+  const guardedPatch=['Clientes','Cotizaciones','Pedidos'].includes(table);
+  if((guardedCreate&&request.method==='POST'||guardedPatch&&request.method==='PATCH')&&
      !env.CRM_MUTATION_GUARD)return json({error:'CRM write guard unavailable'},503,CORS);
   const headers={'Content-Type':'application/json'};
   const actor={email:identity.email,role:'operator'};
   try{
-    if(guarded&&request.method==='POST'){
+    if(guardedCreate&&request.method==='POST'){
       const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-crm-global'));
       const upstream=await stub.fetch('https://crm-write.internal/create',{
         method:'POST',headers,
@@ -205,7 +267,7 @@ async function operatorScopedWrite(request,url,identity,env,CORS){
       });
       return operatorSafeMutationResponse(upstream,table,CORS);
     }
-    if(request.method==='PATCH'&&table!=='Proveedores'){
+    if(request.method==='PATCH'&&guardedPatch){
       const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-crm-global'));
       const upstream=await stub.fetch('https://crm-write.internal/scoped-patch',{
         method:'POST',headers,
@@ -1058,7 +1120,10 @@ const OPERATOR_READ_FIELDS=Object.freeze({
   ]),
   Proveedores:new Set([...VIEWER_READ_FIELDS.Proveedores,
     'WhatsApp','Estado postulación','Productos'
-  ])
+  ]),
+  Maquinas:new Set([...VIEWER_READ_FIELDS.Maquinas,'ip','cam']),
+  Maquinas_Eventos:new Set([...VIEWER_READ_FIELDS.Maquinas_Eventos,'desc','pedido_id']),
+  Maquinas_Mant:new Set([...VIEWER_READ_FIELDS.Maquinas_Mant,'notas','ts'])
 });
 
 
