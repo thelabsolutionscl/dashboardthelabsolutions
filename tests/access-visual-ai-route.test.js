@@ -55,11 +55,12 @@ function harness({limit=40}={}){
       return Response.json({url:'https://cdn.muapi.ai/upload.png'});
     throw Error('unexpected upstream '+url);
   };
-  function req(body,{role='operator',method='POST',query=''}={}){
+  function req(body,{role='operator',method='POST',query='',origin='https://dashboard.thelab.solutions',withKey=true}={}){
     identity={email:role+'@example.com',role};
+    const headers={Origin:origin,'Content-Type':'application/json'};
+    if(withKey)headers['X-App-Key']=ENV.APP_KEY;
     return worker.fetch(new Request('https://proxy.example.com/visual-ai/rpc'+query,{
-      method,
-      headers:{Origin:'https://dashboard.thelab.solutions','X-App-Key':ENV.APP_KEY,'Content-Type':'application/json'},
+      method,headers,
       ...(method==='POST'?{body:JSON.stringify(body)}:{})
     }),ENV,{waitUntil(){}});
   }
@@ -71,6 +72,20 @@ test('RBAC Visual AI permite usuarios operativos firmados y niega viewer',()=>{
     assert.equal(accessAllows({role,email:role+'@x.cl'},'POST','/visual-ai/rpc'),true);
   assert.equal(accessAllows({role:'viewer',email:'v@x.cl'},'POST','/visual-ai/rpc'),false);
   assert.equal(accessAllows({role:'admin',email:'a@x.cl'},'GET','/visual-ai/rpc'),false);
+});
+
+test('OpenGen standalone puede usar el proxy sin APP_KEY pero solo con Access firmado y origen permitido',async()=>{
+  const h=harness();
+  let r=await h.req({action:'quota'},{origin:'https://thelabsolutionscl.github.io',withKey:false,role:'operator'});
+  assert.equal(r.status,200,await r.clone().text());
+  identity=null;
+  global.accessAuthorize=async()=>({legacy:true});
+  r=await worker.fetch(new Request('https://proxy.example.com/visual-ai/rpc',{
+    method:'POST',headers:{Origin:'https://thelabsolutionscl.github.io','Content-Type':'application/json'},
+    body:JSON.stringify({action:'quota'})
+  }),h.ENV,{waitUntil(){}});
+  assert.equal(r.status,403);
+  global.accessAuthorize=async()=>identity?{identity}:{legacy:true};
 });
 
 test('allowlist y payload fallan cerrados',()=>{
