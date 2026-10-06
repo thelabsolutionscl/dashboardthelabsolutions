@@ -133,8 +133,9 @@ Google Ads, donde la declaración sí se setea.
 **Flujo automático (el normal):**
 
 1. Dashboard → **✨ Crear con IA** → Pausada → **💾 Guardar**. Al guardar, el
-   dashboard llama al **webhook de Make** (constante `ADS_MAKE_SHELL` en
-   `index.html`), que crea la campaña por la API: Pausada · Search · declaración
+   dashboard persiste primero la orden y llama al puente seguro
+   `/ads/campaign-shell` del airtable-proxy. El Worker conserva en secreto el
+   webhook de Make y crea la campaña por la API: Pausada · Search · declaración
    UE "no contiene" · solo búsqueda de Google · **geo RM por Presencia** ·
    idioma español · presupuesto. Es **idempotente**: si la campaña ya existe
    (por nombre), no la duplica.
@@ -146,8 +147,9 @@ Google Ads, donde la declaración sí se setea.
 
 Piezas Make (team 259748): escenario **5582952** «The Lab — Cascarón campaña
 Google Ads (webhook)» · webhook **2541454** · conexión Google Ads **9770114**
-(cuenta 7577812099). El webhook exige la clave compartida (`clave`) — misma
-que `ADS_MAKE_SHELL.clave` en el dashboard.
+(cuenta 7577812099). El webhook y su clave compartida existen únicamente como
+`ADS_MAKE_SHELL_URL` y `ADS_MAKE_SHELL_KEY` en el Worker; Pages no recibe
+ninguno de esos valores.
 
 **Fallback manual** (si Make fallara): crear el cascarón a mano en la UI
 (Búsqueda, nombre exacto, redes OFF, RM+Presencia, UE "No contiene", vacío,
