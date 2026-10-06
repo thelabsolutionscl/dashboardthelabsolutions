@@ -1,5 +1,50 @@
 # Auditoría de VISUAL AI
 
+## Actualización 2026-10-06 — cierre de seguridad e integración
+
+Se revalidó Visual AI contra el dashboard actual y OpenGen Studio. La integración
+seguía activa, pero conservaba los riesgos principales de la auditoría original.
+
+**Corregido en esta pasada:**
+
+- OpenGen elimina `corsproxy.io` y cualquier API key de MuAPI del navegador;
+- `MUAPI_KEY` queda exclusivamente en el Worker/proxy TLS;
+- nueva ruta `POST /visual-ai/rpc`, protegida por Cloudflare Access y RBAC;
+- OpenGen embebido usa un contrato `postMessage` versionado con origen exacto,
+  source validado y handshake `ready/host-ready`;
+- OpenGen abierto en nueva pestaña puede usar el mismo proxy directamente, sin
+  `APP_KEY`, pero únicamente con identidad Cloudflare Access firmada;
+- Durable Object reserva cada `jobId`, evita duplicados/resultados inciertos y
+  aplica cuota diaria antes de contactar al proveedor;
+- endpoint/modelo, payload, uploads y URLs de resultado tienen allowlists y
+  validación fail-closed;
+- archivos locales validan MIME, extensión, firma, tamaño y dimensiones antes de
+  leer/subir el contenido;
+- jobs congelan sección/modelo/parámetros, usan `AbortController`, backoff,
+  timeout total y reintento limitado de errores transitorios;
+- errores, resultados e historial construyen DOM con `textContent/createElement`
+  y validan URLs HTTPS;
+- video/audio requieren confirmación adicional y toda generación exige confirmar
+  derechos/autorización sobre material, rostro o voz;
+- historial queda rotulado explícitamente como **de esta sesión**;
+- se muestran cuota, duración y costo real cuando MuAPI lo informa; si no existe
+  costo en la respuesta se declara expresamente;
+- iframe se endurece antes de cargar el remoto: sandbox mínimo, no-referrer,
+  permisos reducidos, timeout/retry y descarga al abandonar la sección;
+- resultados pueden vincularse desde OpenGen a Cliente, Cotización o Pedido sin
+  descarga/re-subida manual;
+- OpenGen aplica CSP, Referrer-Policy y Permissions-Policy.
+
+**Configuración productiva pendiente:** crear/rotar `MUAPI_KEY` como secreto del
+proxy y realizar un smoke real contra MuAPI para confirmar hosts de assets. La
+allowlist de URLs de resultado falla cerrada ante dominios no reconocidos.
+
+**Pruebas activas:**
+
+- `tests/visual-ai-wiring.test.js`;
+- `tests/access-visual-ai-route.test.js`;
+- `Open-Generative-AI/tests/opengen-wiring.test.js`.
+
 Fecha: 2026-08-02
 
 ## Alcance
