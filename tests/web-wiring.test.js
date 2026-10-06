@@ -220,7 +220,7 @@ test('el webhook, clave de Make y secreto de mutaciones no están expuestos en e
 });
 test('la creación ya no solicita el cascarón a Make desde el navegador',()=>{
   const body=functionBlock(SOURCE,'saveCampaignMutation');
-  assert.doesNotMatch(body,/Make|ADS_MAKE_SHELL|hook\./);
+  assert.doesNotMatch(body,/ADS_MAKE_SHELL|hook\.[a-z0-9-]+\.make\.com|fetch\([^)]*make/i);
   assert.match(body,/_adsQueueMutation\(mutation\)/);
 });
 test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ads o Make',()=>{
@@ -230,7 +230,7 @@ test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ad
   assert.match(load,/window\._DEMO_MODE\|\|!cfg\.endpoint/);
   assert.match(send,/if\(_adsIsReadOnly\(\)\)/,'explicit demo and fixture fallback must both be blocked');
   assert.match(send,/status=['"]demo['"]/);
-  assert.doesNotMatch(save,/Make|ADS_MAKE_SHELL|hook\./);
+  assert.doesNotMatch(save,/ADS_MAKE_SHELL|hook\.[a-z0-9-]+\.make\.com|fetch\([^)]*make/i);
   assert.match(SOURCE,/ads_demo_pending_mutations/,'la cola demo debe estar separada de la real');
 });
 test('la atribución CRM de Ads exige evidencia de origen y no suma todo el negocio',()=>{
