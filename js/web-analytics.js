@@ -136,33 +136,26 @@ function renderAdsKPIs(data,days){
 function renderAdsCRMPanel(data,days){
   const el=document.getElementById('adsCRMPanel');if(!el)return;
   el.style.display='';
-  const gasto=data.gasto||0;
-  const cutoff=new Date(Date.now()-days*86400000);
-  const ingresoCRM=(state.pedidos||[]).filter(p=>{
-    const f=p.fields;
-    if((f['Estado pedido']||'')==='Cancelado') return false;
-    const d=p.createdTime?new Date(p.createdTime):null;
-    return d&&d>=cutoff;
-  }).reduce((s,p)=>s+Math.round((p.fields['Monto total (CLP)']||0)/1.19),0);
-  const pedCount=(state.pedidos||[]).filter(p=>{const d=p.createdTime?new Date(p.createdTime):null;return d&&d>=cutoff&&(p.fields['Estado pedido']||'')!=='Cancelado';}).length;
-  const leads=(state.clientes||[]).filter(c=>{const d=c.createdTime?new Date(c.createdTime):null;return d&&d>=cutoff;}).length;
-  const roasReal=gasto>0?ingresoCRM/gasto:0;
-  const cpl=leads>0&&gasto>0?Math.round(gasto/leads):0;
+  const gasto=Number(data.gasto)||0;
+  const crm=typeof _adsCrmAttribution==='function'
+    ?_adsCrmAttribution(days):{revenueAds:0,ordersAds:0,leadsAds:0,attributedClients:0};
+  const roasCRM=gasto>0?crm.revenueAds/gasto:0;
+  const cpl=crm.leadsAds>0&&gasto>0?Math.round(gasto/crm.leadsAds):0;
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   set('crm-ads-gasto',fmtMoney(gasto));
-  set('crm-ads-ingresos',fmtMoney(ingresoCRM));
-  set('crm-ads-ingresos-sub',`${pedCount} pedido${pedCount!==1?'s':''}`);
-  set('crm-ads-roas',roasReal>0?roasReal.toFixed(2)+'x':'—');
+  set('crm-ads-ingresos',fmtMoney(crm.revenueAds));
+  set('crm-ads-ingresos-sub',crm.ordersAds+' pedido'+(crm.ordersAds!==1?'s':'')+' con origen Ads');
+  set('crm-ads-roas',roasCRM>0?roasCRM.toFixed(2)+'x':'—');
   set('crm-ads-cpl',cpl>0?fmtMoney(cpl):'—');
-  set('crm-ads-cpl-sub',leads>0?`${leads} lead${leads!==1?'s':''} nuevos`:'sin leads');
-  set('adsCRMPeriodo',`últimos ${days} días`);
+  set('crm-ads-cpl-sub',crm.leadsAds>0?crm.leadsAds+' lead'+(crm.leadsAds!==1?'s':'')+' Ads nuevos':'sin leads Ads atribuidos');
+  set('adsCRMPeriodo','últimos '+days+' días · atribución CRM');
   const bar=document.getElementById('crm-ads-bar');
   if(bar){
-    const total=Math.max(gasto,ingresoCRM)||1;
-    const gp=Math.round(gasto/total*100),ip=Math.round(ingresoCRM/total*100);
+    const total=Math.max(gasto,crm.revenueAds)||1;
+    const gp=Math.round(gasto/total*100),ip=Math.round(crm.revenueAds/total*100);
     bar.innerHTML=`<div style="height:100%;width:${gp}%;background:var(--danger);display:inline-block"></div><div style="height:100%;width:${ip}%;background:var(--success);display:inline-block"></div>`;
   }
-  set('crm-ads-bar-label',roasReal>=1?`✓ ROAS ${roasReal.toFixed(1)}x — rentable`:`⚠ ROAS ${roasReal>0?roasReal.toFixed(2)+'x':'sin datos'}`);
+  set('crm-ads-bar-label',roasCRM>=1?'✓ ROAS CRM '+roasCRM.toFixed(1)+'x':'⚠ ROAS CRM '+(roasCRM>0?roasCRM.toFixed(2)+'x':'sin datos'));
 }
 let _adsKwActions=[];
 let _adsKwSort='gasto',_adsKwFilter='all';
