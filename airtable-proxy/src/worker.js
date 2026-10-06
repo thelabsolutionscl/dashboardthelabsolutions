@@ -3510,7 +3510,9 @@ export default {
         const rawUrl=d.url||d.outputs?.[0]||d.output?.[0]||'';
         const asset=rawUrl?visualAiResultUrl(rawUrl):null;
         if(rawUrl&&!asset)return json({error:'Visual provider returned an untrusted asset URL'},502,headers);
-        return json({ok:true,status,url:asset||null,error:typeof d.error==='string'?d.error.slice(0,500):null},200,headers);
+        const costRaw=Number(d.cost_usd??d.cost??d.usage?.cost_usd);
+        const costUsd=Number.isFinite(costRaw)&&costRaw>=0&&costRaw<=100?costRaw:null;
+        return json({ok:true,status,url:asset||null,error:typeof d.error==='string'?d.error.slice(0,500):null,cost_usd:costUsd},200,headers);
       }
       return json({error:'Unknown Visual AI action'},404,headers);
     }
