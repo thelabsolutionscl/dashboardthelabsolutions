@@ -82,7 +82,7 @@ const FIN_PRESTAMOS = [
   {fecha:'09/02/26',prestamo:3689000,devolucion:null,deuda:11374894,obs:'BOLSAS'},
   {fecha:'24/02/26',prestamo:1200000,devolucion:null,deuda:12574894,obs:''},
   {fecha:'04/03/26',prestamo:361364,devolucion:null,deuda:12936258,obs:''},
-  {fecha:'13/03/25',prestamo:null,devolucion:1500000,deuda:11436258,obs:'Devolución'},
+  {fecha:'13/03/26',prestamo:null,devolucion:1500000,deuda:11436258,obs:'Devolución'},
   {fecha:'13/03/26',prestamo:1500980,devolucion:null,deuda:12937238,obs:'2 ENDER 5 MAX TARJETA DE CRÉDITO'},
   {fecha:'16/03/26',prestamo:1500980,devolucion:null,deuda:14438218,obs:'2 ENDER 5 MAX TARJETA DE CRÉDITO'},
   {fecha:'27/03/26',prestamo:300000,devolucion:null,deuda:14738218,obs:''},
@@ -95,6 +95,16 @@ const FIN_PRESTAMOS = [
   {fecha:'24/04/26',prestamo:1337431,devolucion:null,deuda:21571220,obs:''},
   {fecha:'06/05/26',prestamo:1500000,devolucion:null,deuda:23071220,obs:'PAGOS FACTURAS'},
 ];
+
+function _finParseFechaPrestamo(fecha){
+  const m=String(fecha||'').match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
+  if(!m)return 0;
+  const year=m[3].length===2?2000+Number(m[3]):Number(m[3]);
+  return new Date(year,Number(m[2])-1,Number(m[1]),12,0,0).getTime()||0;
+}
+function _finPrestamosOrdenados(){
+  return [...FIN_PRESTAMOS].sort((a,b)=>_finParseFechaPrestamo(a.fecha)-_finParseFechaPrestamo(b.fecha));
+}
 
 /* ── Estado global finanzas ── */
 let finCurrentTab = 'resumen';
@@ -897,19 +907,20 @@ function finExportAgingCSV(){
 function finRenderPrestamos(){
   const tb=document.getElementById('fin-prestamos-body');
   if(!tb)return;
-  const maxDeuda=Math.max(...FIN_PRESTAMOS.map(r=>r.deuda));
+  const rows=_finPrestamosOrdenados();
+  const maxDeuda=Math.max(...rows.map(r=>r.deuda),1);
   let html='';
-  FIN_PRESTAMOS.forEach(r=>{
+  rows.forEach(r=>{
     const esDev=!r.prestamo&&r.devolucion;
     const pct=Math.round((r.deuda/maxDeuda)*100);
     const barColor=esDev?'var(--accent3)':'var(--danger)';
     html+=`<tr>
-      <td data-label="Fecha" style="font-family:monospace;font-size:11px">${r.fecha}</td>
+      <td data-label="Fecha" style="font-family:monospace;font-size:11px">${escapeHtml(r.fecha)}</td>
       <td data-label="Préstamo" style="color:${r.prestamo?'var(--danger)':'var(--text3)'};font-weight:${r.prestamo?700:400}">${r.prestamo?clp(r.prestamo):'—'}</td>
       <td data-label="Devolución" style="color:${esDev?'var(--accent3)':'var(--text3)'};font-weight:${esDev?700:400}">${r.devolucion?clp(r.devolucion):'—'}</td>
       <td data-label="Deuda" style="font-weight:700;color:var(--accent)">${clp(r.deuda)}</td>
       <td data-label="Progreso" style="min-width:80px"><div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .3s"></div></div></td>
-      <td data-label="Obs." style="font-size:11px;color:var(--text3)">${r.obs||''}</td>
+      <td data-label="Obs." style="font-size:11px;color:var(--text3)">${escapeHtml(r.obs||'')}</td>
     </tr>`;
   });
   tb.innerHTML=html;
@@ -1167,11 +1178,16 @@ function finDrawCanalDonut(){
   const ctx=canvas.getContext('2d');
   const w=160,h=160,cx=80,cy=80,r=60,ri=38;
   ctx.clearRect(0,0,w,h);
-  const facts2026=finGetAllFacturas().filter(r=>String(r.year)==='2026');
+  const year=new Date().getFullYear();
+  const facts=finGetAllFacturas().filter(r=>Number(r.year)===year);
   const totByCanal={};
-  facts2026.forEach(r=>{const amt=r.pago!=null?r.pago:r.valor*r.cant;totByCanal[r.canal]=(totByCanal[r.canal]||0)+amt;});
+  facts.forEach(r=>{
+    const amt=Number(r._neto!=null?r._neto:(Number(r.valor)||0)*(Number(r.cant)||1))||0;
+    const canal=r.canal||'Sin canal';
+    totByCanal[canal]=(totByCanal[canal]||0)+amt;
+  });
   const entries=Object.entries(totByCanal).sort((a,b)=>b[1]-a[1]);
-  const total=entries.reduce((s,[,v])=>s+v,0)||1;
+  const total=entries.reduce((sum,[,v])=>sum+v,0)||1;
   const colors=['#00d4cc','#a78bfa','#ffaa00','#ff6b35','#00d4aa','#ff4444'];
   let angle=-Math.PI/2;
   entries.forEach(([canal,val],i)=>{
@@ -1183,11 +1199,10 @@ function finDrawCanalDonut(){
     angle+=sweep;
   });
   ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='bold 11px DM Sans';ctx.textAlign='center';
-  ctx.fillText('Canal',cx,cy-5);ctx.fillText('2026',cx,cy+10);
-  // leyenda
+  ctx.fillText('Canal',cx,cy-5);ctx.fillText(String(year),cx,cy+10);
   const legend=document.getElementById('fin-donut-legend');
   if(legend){
-    legend.innerHTML=entries.map(([canal,val],i)=>`<div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:2px;background:${colors[i%colors.length]};flex-shrink:0"></div><span style="flex:1;color:var(--text2)">${canal}</span><span style="color:var(--text1);font-weight:600">${Math.round(val/1e6*10)/10}M</span></div>`).join('');
+    legend.innerHTML=entries.map(([canal,val],i)=>`<div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:2px;background:${colors[i%colors.length]};flex-shrink:0"></div><span style="flex:1;color:var(--text2)">${escapeHtml(canal)}</span><span style="color:var(--text1);font-weight:600">${Math.round(val/1e6*10)/10}M neto</span></div>`).join('');
   }
 }
 
@@ -1207,33 +1222,31 @@ function finRenderResumenAnual(){
 
 /* ── Top clientes ── */
 function finRenderTopClientes(year){
-  if(year===undefined)year=2026;
+  const currentYear=new Date().getFullYear();
+  if(year===undefined)year=currentYear;
   const tb=document.getElementById('fin-top-clientes-body');
   if(!tb)return;
-  // Botón activo
-  ['all',2022,2023,2024,2025,2026].forEach(y=>{
+  [...new Set(['all',2022,2023,2024,2025,2026,currentYear])].forEach(y=>{
     const btn=document.getElementById('ftc-'+y);
     if(!btn)return;
     const active=String(y)===String(year);
     btn.style.background=active?'rgba(0,212,204,0.18)':'';
     btn.style.color=active?'var(--accent)':'';
   });
-  // Título
   const title=document.getElementById('fin-topclientes-title');
-  if(title)title.textContent='Top Clientes '+(year==='all'?'— Todos los años':year);
-  // Datos
+  if(title)title.textContent='Top Clientes · venta neta '+(year==='all'?'— Todos los años':year);
   const all=finGetAllFacturas();
   const filtered=year==='all'?all:all.filter(r=>String(r.year)===String(year));
   const byCliente={};
   filtered.forEach(r=>{
     const key=(r.empresa&&r.empresa!=='—')?r.empresa:r.nombre;
-    const amt=r.pago!=null?r.pago:r.valor*r.cant;
+    const amt=Number(r._neto!=null?r._neto:(Number(r.valor)||0)*(Number(r.cant)||1))||0;
     byCliente[key]=(byCliente[key]||0)+amt;
   });
   const total=Object.values(byCliente).reduce((a,b)=>a+b,0)||1;
   const sorted=Object.entries(byCliente).sort((a,b)=>b[1]-a[1]).slice(0,8);
   tb.innerHTML=sorted.length?sorted.map(([nombre,val])=>`<tr>
-    <td style="font-size:11px">${nombre}</td>
+    <td style="font-size:11px">${escapeHtml(nombre)}</td>
     <td style="font-weight:600">${clp(val)}</td>
     <td style="font-size:11px;color:var(--accent)">${Math.round(val/total*100)}%</td>
   </tr>`).join(''):'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Sin datos para este período</td></tr>';
@@ -1247,14 +1260,13 @@ function finDrawDeudaTimeline(){
   const w=canvas.offsetWidth||canvas.parentElement?.clientWidth||600;
   canvas.width=w;canvas.height=120;
   ctx.clearRect(0,0,w,120);
-  const data=FIN_PRESTAMOS.map(r=>r.deuda);
-  const labels=FIN_PRESTAMOS.map(r=>r.fecha);
+  const rows=_finPrestamosOrdenados();
+  const data=rows.map(r=>r.deuda);
+  const labels=rows.map(r=>r.fecha);
+  if(!data.length)return;
   const maxV=Math.max(...data)||1;
   const pad={t:10,r:10,b:24,l:70};
-  const ch=120-pad.t-pad.b;
-  const cw=w-pad.l-pad.r;
-  const n=data.length;
-  // grid
+  const ch=120-pad.t-pad.b,cw=w-pad.l-pad.r,n=data.length;
   ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;
   for(let i=0;i<=3;i++){
     const y2=pad.t+ch*(1-i/3);
@@ -1262,29 +1274,15 @@ function finDrawDeudaTimeline(){
     ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='8px DM Sans';ctx.textAlign='right';
     ctx.fillText(clp(Math.round(maxV*i/3)),pad.l-3,y2+3);
   }
-  // gradient fill
   const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+ch);
-  grad.addColorStop(0,'rgba(255,68,68,0.35)');
-  grad.addColorStop(1,'rgba(255,68,68,0)');
+  grad.addColorStop(0,'rgba(255,68,68,0.35)');grad.addColorStop(1,'rgba(255,68,68,0)');
   const pts=data.map((v,i)=>[pad.l+i*(cw/(n-1||1)),pad.t+ch*(1-v/maxV)]);
-  ctx.beginPath();
-  pts.forEach(([x,y2],i)=>i===0?ctx.moveTo(x,y2):ctx.lineTo(x,y2));
-  ctx.lineTo(pts[pts.length-1][0],pad.t+ch);
-  ctx.lineTo(pts[0][0],pad.t+ch);
-  ctx.closePath();ctx.fillStyle=grad;ctx.fill();
-  // line
-  ctx.beginPath();
-  pts.forEach(([x,y2],i)=>i===0?ctx.moveTo(x,y2):ctx.lineTo(x,y2));
-  ctx.strokeStyle='rgba(255,68,68,0.9)';ctx.lineWidth=2;ctx.stroke();
-  // dots at key points
+  ctx.beginPath();pts.forEach(([x,y2],i)=>i===0?ctx.moveTo(x,y2):ctx.lineTo(x,y2));
+  ctx.lineTo(pts[pts.length-1][0],pad.t+ch);ctx.lineTo(pts[0][0],pad.t+ch);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  ctx.beginPath();pts.forEach(([x,y2],i)=>i===0?ctx.moveTo(x,y2):ctx.lineTo(x,y2));ctx.strokeStyle='rgba(255,68,68,0.9)';ctx.lineWidth=2;ctx.stroke();
   [0,Math.floor(n/2),n-1].forEach(i=>{
-    ctx.beginPath();ctx.arc(pts[i][0],pts[i][1],3,0,2*Math.PI);
-    ctx.fillStyle='#ff4444';ctx.fill();
-    if(i===0||i===n-1){
-      ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='8px DM Sans';
-      ctx.textAlign=i===0?'left':'right';
-      ctx.fillText(labels[i],pts[i][0]+(i===0?2:-2),pad.t+ch+14);
-    }
+    ctx.beginPath();ctx.arc(pts[i][0],pts[i][1],3,0,2*Math.PI);ctx.fillStyle='#ff4444';ctx.fill();
+    if(i===0||i===n-1){ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='8px DM Sans';ctx.textAlign=i===0?'left':'right';ctx.fillText(labels[i],pts[i][0]+(i===0?2:-2),pad.t+ch+14);}
   });
 }
 
@@ -2854,8 +2852,10 @@ function _margenContribucion(){
   return 40;
 }
 function _ventaNetaMes(){
-  try{const now=new Date();const ini=new Date(now.getFullYear(),now.getMonth(),1).getTime();
-    return (state.pedidos||[]).filter(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return false;const d=p.createdTime?new Date(p.createdTime).getTime():0;return d>=ini;}).reduce((s,p)=>s+(p.fields['Monto total (CLP)']||0)/1.19,0);
+  try{
+    const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1;
+    return finGetAllFacturas().filter(r=>Number(r.year)===y&&Number(r.mes)===m)
+      .reduce((sum,r)=>sum+(Number(r._neto!=null?r._neto:(Number(r.valor)||0)*(Number(r.cant)||1))||0),0);
   }catch(e){return 0;}
 }
 function _puntoEquilibrio(){
@@ -2868,30 +2868,24 @@ function renderBreakEven(){
   const el=document.getElementById('breakEvenCard');if(!el)return;
   const e=_puntoEquilibrio();
   if(!e.fijos){el.innerHTML=`<div class="card" style="padding:11px 16px;display:flex;align-items:center;gap:10px"><span style="font-size:15px">⚖️</span><span style="font-size:12px;color:var(--text2)">Define tus costos fijos mensuales para calcular el punto de equilibrio</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="setCostosFijos()">Definir costos fijos</button></div>`;return;}
-  // Con margen de contribución ≤0 el equilibrio es inalcanzable (be=fijos/0=∞): no
-  // se puede declarar "cubierto" aunque haya ventas. Se muestra alerta, no verde.
-  const sinMargen=e.margen<=0;
-  const cubierto=!sinMargen&&e.venta>=e.be;
-  const utilProy=Math.round((e.venta*e.margen/100)-e.fijos);
+  const sinMargen=e.margen<=0,cubierto=!sinMargen&&e.venta>=e.be,utilProy=Math.round((e.venta*e.margen/100)-e.fijos);
   const borde=cubierto?'rgba(0,212,170,0.3)':sinMargen?'rgba(255,90,90,0.35)':'rgba(255,170,0,0.3)';
   const barra=cubierto?'var(--accent3)':sinMargen?'var(--danger)':'var(--warn)';
   el.innerHTML=`<div class="card" style="border-color:${borde}">
-    <div class="card-header"><span class="card-title">⚖️ Punto de equilibrio</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="setCostosFijos()">⚙️ Costos fijos</button></div>
+    <div class="card-header"><span class="card-title">⚖️ Punto de equilibrio · facturación emitida</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="setCostosFijos()">⚙️ Costos fijos</button></div>
     <div style="padding:14px 16px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Costos fijos/mes</span><span class="fac-kpi-val">${formatCLP(e.fijos)}</span></div>
         <div class="fac-kpi" style="flex:1;min-width:110px"><span class="fac-kpi-lbl">Margen contrib.</span><span class="fac-kpi-val"${sinMargen?' style="color:var(--danger)"':''}>${e.margen.toFixed(0)}%</span></div>
         <div class="fac-kpi" style="flex:1;min-width:130px"><span class="fac-kpi-lbl">Punto de equilibrio</span><span class="fac-kpi-val" style="color:var(--accent2)">${sinMargen?'—':formatCLP(Math.round(e.be))}</span></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Venta del mes: ${formatCLP(Math.round(e.venta))}</span><span>${sinMargen?'':e.pct+'% del equilibrio'}</span></div>
-      <div style="height:12px;background:var(--surface3);border-radius:5px;overflow:hidden;position:relative">
-        <div style="height:100%;width:${sinMargen?100:Math.min(100,e.pct)}%;background:${barra};border-radius:5px"></div>
-      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Facturación neta emitida del mes: ${formatCLP(Math.round(e.venta))}</span><span>${sinMargen?'':e.pct+'% del equilibrio'}</span></div>
+      <div style="height:12px;background:var(--surface3);border-radius:5px;overflow:hidden;position:relative"><div style="height:100%;width:${sinMargen?100:Math.min(100,e.pct)}%;background:${barra};border-radius:5px"></div></div>
       <div style="margin-top:10px;font-size:12px;color:var(--text2)">${sinMargen
-        ?`⚠️ Con el margen de contribución actual (${e.margen.toFixed(0)}%) no cubres los costos fijos: cada venta aporta $0 o menos al equilibrio. Revisa costos reales o precios. Utilidad proyectada del mes: <b style="color:var(--danger)">${formatCLP(utilProy)}</b>.`
+        ?`⚠️ Con el margen de contribución actual (${e.margen.toFixed(0)}%) no cubres los costos fijos. Resultado proyectado sobre facturación emitida: <b style="color:var(--danger)">${formatCLP(utilProy)}</b>.`
         :cubierto
-        ?`✅ Equilibrio cubierto. Utilidad proyectada del mes: <b style="color:var(--accent3)">${formatCLP(utilProy)}</b>.`
-        :`Faltan <b style="color:var(--warn)">${formatCLP(Math.round(e.falta))}</b> de venta neta para cubrir los costos fijos${e.margen>0?` (≈ ${formatCLP(Math.round(e.falta/(e.margen/100)))} en ventas al margen actual)`:''}.`}</div>
+        ?`✅ Equilibrio cubierto sobre facturación emitida. Resultado proyectado: <b style="color:var(--accent3)">${formatCLP(utilProy)}</b>.`
+        :`Faltan <b style="color:var(--warn)">${formatCLP(Math.round(e.falta))}</b> de facturación neta emitida para cubrir los costos fijos.`}</div>
     </div>
   </div>`;
 }
@@ -2919,7 +2913,12 @@ function presExportCSV(){
   const mes=parseInt(document.getElementById('pres-mes')?.value||new Date().getMonth()+1);
   const key=presKey(anio,mes);const data=presGetData();const periodoData=data[key]||{};
   const cats=periodoData.cats||PRES_CATS_DEFAULT.map(c=>({...c,budget:0,ejecutado:0}));
-  const rows=[['Categoría','Presupuesto','Ejecutado','Disponible','% Ejecución'],...cats.map(c=>[c.label,c.budget,c.ejecutado,c.budget-c.ejecutado,c.budget>0?Math.round(c.ejecutado/c.budget*100)+'%':'—'])];
+  const real=_presEjecutadoReal(anio,mes);
+  const rows=[['Categoría','Presupuesto','Ejecutado usado','Ejecutado real Libro Diario','Disponible','% Ejecución'],
+    ...cats.map(c=>{
+      const ejecutado=(Number(c.ejecutado)||0)>0?Number(c.ejecutado):Number(real[c.id]||0);
+      return [c.label,Number(c.budget)||0,ejecutado,Number(real[c.id]||0),(Number(c.budget)||0)-ejecutado,(Number(c.budget)||0)>0?Math.round(ejecutado/(Number(c.budget)||0)*100)+'%':'—'];
+    })];
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);a.download=`presupuesto_${key}.csv`;a.click();
 }
@@ -3348,36 +3347,41 @@ function guardarArqueo(){
 // exentos típicos (sueldos/honorarios) no dan crédito fiscal.
 const _IVA_EXENTAS=new Set(['Sueldos y honorarios','Cuota préstamo','Contabilidad y legal']);
 function _ivaMes(off){
-  const now=new Date();const y=now.getFullYear(),m=now.getMonth()+(off||0);
-  const ini=new Date(y,m,1).getTime(),fin=new Date(y,m+1,1).getTime();
-  const label=(typeof _MES_NOMBRES!=='undefined'?_MES_NOMBRES[((m%12)+12)%12]:'')+' '+new Date(y,m,1).getFullYear();
-  // Débito: IVA de las ventas del mes (pedidos no cancelados creados en el mes)
+  const now=new Date();const ref=new Date(now.getFullYear(),now.getMonth()+(off||0),1);
+  const y=ref.getFullYear(),m=ref.getMonth();
+  const label=(typeof _MES_NOMBRES!=='undefined'?_MES_NOMBRES[m]:'')+' '+y;
   let ventaNeta=0,debito=0;
-  (state.pedidos||[]).forEach(p=>{const f=p.fields;if((f['Estado pedido']||'')==='Cancelado')return;const d=p.createdTime?new Date(p.createdTime).getTime():0;if(!(d>=ini&&d<fin))return;const total=f['Monto total (CLP)']||0;if(total<=0)return;const neto=total/1.19;ventaNeta+=neto;debito+=total-neto;});
-  // Crédito: IVA de los gastos afectos del mes (Libro Diario), montos brutos
-  let compraAfecta=0,credito=0;const pref=(typeof presKey==='function')?presKey(new Date(y,m,1).getFullYear(),((m%12)+12)%12+1):'';
-  (typeof ldGetAll==='function'?ldGetAll():[]).forEach(e=>{if(e.tipo!=='gasto')return;if(pref&&!String(e.fecha||'').startsWith(pref))return;if(_IVA_EXENTAS.has(e.categoria))return;const monto=+e.monto||0;compraAfecta+=monto;credito+=monto-monto/1.19;});
-  return {label,ventaNeta,debito:Math.round(debito),compraAfecta,credito:Math.round(credito),aPagar:Math.round(debito-credito)};
+  finGetAllFacturas().forEach(r=>{
+    if(Number(r.year)!==y||Number(r.mes)!==m+1)return;
+    if(r._source!=='airtable')return; // solo DTE vivos/conciliados
+    const tipo=String(r.tipoDTE||r.item||'').toLowerCase();
+    const signo=/^(61|nota de cr)/.test(tipo)?-1:1;
+    const neto=Number(r._neto)||0, iva=Number(r._iva)||0;
+    ventaNeta+=signo*neto;debito+=signo*iva;
+  });
+  let compraAfecta=0,credito=0;const pref=presKey(y,m+1);
+  (typeof ldGetAll==='function'?ldGetAll():[]).forEach(e=>{
+    if(e.tipo!=='gasto'||!String(e.fecha||'').startsWith(pref)||_IVA_EXENTAS.has(e.categoria))return;
+    if(!(e.documentoTributario===true||e.dteCompra===true))return;
+    const monto=+e.monto||0;compraAfecta+=monto;credito+=monto-monto/1.19;
+  });
+  return {label,ventaNeta,debito:Math.round(debito),compraAfecta,credito:Math.round(credito),aPagar:Math.round(debito-credito),proyeccion:true};
 }
 function renderIvaMensual(){
   const el=document.getElementById('ivaMensualCard');if(!el)return;
-  const off=parseInt(el.dataset.off||'0');
-  const v=_ivaMes(off);
-  const pagar=v.aPagar>=0;
+  const off=parseInt(el.dataset.off||'0'),v=_ivaMes(off),pagar=v.aPagar>=0;
   el.innerHTML=`<div class="card">
     <div class="card-header"><span class="card-title">🧾 IVA de ${escapeHtml(v.label)}</span>
-      <div style="display:flex;gap:4px;margin-left:auto">
-        <button class="btn-mini${off===-1?' btn-mini-yellow':''}" onclick="_ivaSetOff(-1)">Mes cerrado</button>
-        <button class="btn-mini${off===0?' btn-mini-yellow':''}" onclick="_ivaSetOff(0)">Mes en curso</button>
-      </div>
+      <div style="display:flex;gap:4px;margin-left:auto"><button class="btn-mini${off===-1?' btn-mini-yellow':''}" onclick="_ivaSetOff(-1)">Mes cerrado</button><button class="btn-mini${off===0?' btn-mini-yellow':''}" onclick="_ivaSetOff(0)">Mes en curso</button></div>
     </div>
     <div style="padding:14px 16px">
+      <div style="padding:8px 10px;margin-bottom:10px;border:1px solid rgba(255,170,0,.35);border-radius:7px;color:var(--warn);font-size:11px;font-weight:700">PROYECCIÓN INTERNA — NO USAR PARA DECLARAR F29</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <div class="fac-kpi" style="flex:1;min-width:120px"><span class="fac-kpi-lbl">IVA débito (ventas)</span><span class="fac-kpi-val" style="color:var(--accent3)">${formatCLP(v.debito)}</span></div>
-        <div class="fac-kpi" style="flex:1;min-width:120px"><span class="fac-kpi-lbl">IVA crédito (compras)</span><span class="fac-kpi-val" style="color:var(--warn)">${formatCLP(v.credito)}</span></div>
-        <div class="fac-kpi ${pagar&&v.aPagar>0?'fac-kpi-danger':''}" style="flex:1;min-width:140px"><span class="fac-kpi-lbl">${pagar?'IVA a pagar':'Remanente a favor'}</span><span class="fac-kpi-val"${!pagar?' style="color:var(--accent3)"':''}>${formatCLP(Math.abs(v.aPagar))}</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:120px"><span class="fac-kpi-lbl">IVA débito · DTE emitidos</span><span class="fac-kpi-val" style="color:var(--accent3)">${formatCLP(v.debito)}</span></div>
+        <div class="fac-kpi" style="flex:1;min-width:120px"><span class="fac-kpi-lbl">IVA crédito · compras documentadas</span><span class="fac-kpi-val" style="color:var(--warn)">${formatCLP(v.credito)}</span></div>
+        <div class="fac-kpi ${pagar&&v.aPagar>0?'fac-kpi-danger':''}" style="flex:1;min-width:140px"><span class="fac-kpi-lbl">${pagar?'Provisión IVA':'Crédito proyectado'}</span><span class="fac-kpi-val"${!pagar?' style="color:var(--accent3)"':''}>${formatCLP(Math.abs(v.aPagar))}</span></div>
       </div>
-      <div style="font-size:10.5px;color:var(--text3);line-height:1.5">Débito = 19% de tus ventas del mes (${formatCLP(Math.round(v.ventaNeta))} neto). Crédito = IVA de gastos afectos del Libro Diario (${formatCLP(v.compraAfecta)} bruto; se excluyen sueldos/honorarios, préstamos y honorarios contables). ${pagar?`Provisiona <b style="color:var(--danger)">${formatCLP(v.aPagar)}</b> para el F29.`:`Tienes crédito fiscal a favor para el próximo mes.`}</div>
+      <div style="font-size:10.5px;color:var(--text3);line-height:1.5">Débito calculado solo desde DTE vivos de Facturas/Airtable, restando notas de crédito. El crédito solo considera gastos del Libro Diario marcados explícitamente como compra con documento tributario. Valida siempre contra los libros y el F29 del SII.</div>
     </div>
   </div>`;
 }
