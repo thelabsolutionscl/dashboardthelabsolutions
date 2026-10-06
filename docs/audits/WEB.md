@@ -126,3 +126,101 @@ primer enlace sea legítimo. Regresión automatizada: `tests/seo-proxy-ssrf.test
 ## 2026-09-29 — Retiro de componentes sin uso
 
 Se eliminó íntegramente la integración anterior del CMS, sus modales, rutas de escritura, fixtures de modo demo, KPI huérfanos y pruebas obsoletas. El auditor SEO del sitio Next.js y Google Ads se mantienen y son los únicos flujos web vigentes.
+
+## 2026-10-06 — cierre de seguridad, idempotencia y atribución de Google Ads
+
+La reauditoría del código vigente confirmó que varios pendientes del 29 de
+septiembre seguían activos y que algunos ya tenían impacto real sobre los datos.
+
+### Credenciales y frontera de confianza
+
+- Se retiraron del bundle público la URL/clave de `ADS_MAKE_SHELL`.
+- El secreto de mutaciones de Google Ads ya no se migra a `sessionStorage`:
+  cualquier copia heredada de `ads_mutation_secret` se elimina al cargar.
+- El formulario deja de pedir o mostrar el secreto. El navegador conserva
+  solamente la URL de lectura y el Customer ID.
+- Las escrituras pasan por rutas firmadas del Proxy Worker:
+  `POST /ads/mutation`, `GET|PUT /ads/mutations`,
+  `POST /ads/snapshot` y `POST /ads/autopilot/decision`.
+- Todas requieren una identidad individual de Cloudflare Access con rol
+  `admin`; la APP_KEY compartida por sí sola no autoriza ningún cambio Ads.
+
+Las credenciales reales se leen exclusivamente del entorno del Worker:
+`ADS_MUTATION_URL`, `ADS_MUTATION_SECRET`, `ADS_MAKE_SHELL_URL` y
+`ADS_MAKE_SHELL_KEY`.
+
+### Creación de campañas e idempotencia
+
+Una creación ya no llama a Make desde el navegador. El guard serializado:
+
+1. reserva la mutación;
+2. confirma que Script 1 la aceptó;
+3. recién entonces solicita el cascarón a Make;
+4. guarda un marcador persistente para impedir un segundo envío.
+
+Si se pierde la respuesta del Apps Script o de Make, el resultado queda como
+reconciliación pendiente y se bloquea el reintento ciego. Un doble clic o dos
+sesiones con la misma mutación no deben crear dos órdenes ni dos cascarones.
+
+### Snapshots sin nuevos duplicados
+
+La lectura de Airtable del 6 de octubre de 2026 confirmó duplicados históricos:
+hay claves KPI diarias repetidas (una de ellas hasta 14 veces) y snapshots de
+campaña repetidos (hasta 7 veces en una misma clave observada).
+
+El nuevo guard usa upsert por:
+
+- KPI: `Customer ID + Fecha + Días período`;
+- campaña: `Campaign ID + Fecha snapshot + Período (días)`.
+
+Si ya existe una fila, actualiza de forma determinista la más reciente; si hay
+duplicados heredados, devuelve su cantidad pero **no los elimina**. Si un POST
+nuevo tiene resultado incierto, deja una reserva persistente y no crea otro.
+
+### ROAS CRM con atribución
+
+Se eliminó la métrica engañosa que dividía todo el revenue de la empresa por el
+gasto de Google Ads. El panel y los snapshots locales ahora suman solo clientes
+con evidencia de origen Ads: GCLID, Campaña Ads u origen explícito
+`google_ads` / `Google Ads`. Un origen genérico “Google” no se convierte en
+pauta pagada.
+
+Los nombres visibles pasan a “Ingresos atribuidos Ads”, “ROAS CRM atribuido” y
+“Costo por Lead Ads”. La métrica sigue siendo una atribución CRM basada en la
+evidencia disponible, no una reconciliación contable de caja.
+
+### Capacidad por línea
+
+Cartelería/Láser y líneas manuales ya no heredan el porcentaje de todos los
+pedidos activos. Los pedidos se clasifican usando notas y ficha del pedido,
+texto/detalle de la cotización vinculada y, como respaldo, `Servicio interés`
+del cliente. Los pedidos no clasificables se muestran como tales y no se
+cargan artificialmente a todas las líneas.
+
+FDM conserva la capacidad basada en slots reales de impresoras y mantenimiento.
+
+### Piloto automático
+
+La decisión de aprobar/rechazar sale del navegador como una única operación
+firmada. El servidor vuelve a leer `Agent_Queue`, marca la propuesta
+`Procesando` antes de encolar, reutiliza el mismo guard idempotente de
+mutaciones y solo marca `Completado` después de confirmar todas. Ante una
+falla parcial vuelve a `Pendiente` con un error recuperable; los envíos ya
+confirmados son idempotentes al reintentar.
+
+### Pendiente operativo deliberadamente diferido
+
+No se reintroducen secretos al cliente para activar el flujo. En la ventana
+manual final de la auditoría general se debe:
+
+- configurar los cuatro secretos Ads del Worker;
+- activar/verificar Cloudflare Access y el rol admin;
+- rotar el antiguo secreto de mutaciones y la antigua clave del webhook de
+  Make, porque estuvieron expuestos históricamente en el bundle;
+- revisar el historial de ejecuciones de Make por uso inesperado;
+- validar con dos sesiones que un admin puede operar y otros roles quedan
+  bloqueados;
+- conciliar, si se desea, los duplicados históricos ya existentes en Airtable.
+
+Hasta ese corte el nuevo flujo de escritura falla cerrado; la lectura/demostración
+no debe volver a publicar secretos para “mantener compatibilidad”.
