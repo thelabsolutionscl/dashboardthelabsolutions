@@ -732,7 +732,8 @@
         toast('Google Drive no está disponible en esta sesión','error');return;
       }
       const ext=asset.type==='video'?'mp4':asset.type==='audio'?'mp3':'png';
-      const suggested='visual-ai-'+new Date().toISOString().slice(0,10)+'-'+String(asset.jobId||Date.now()).slice(-12)+'.'+ext;
+      const dayKey=typeof hoyCL==='function'?hoyCL():new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      const suggested='visual-ai-'+dayKey+'-'+String(asset.jobId||Date.now()).slice(-12)+'.'+ext;
       const filename=(prompt('Nombre del archivo en Drive:',suggested)||'').trim();
       if(!filename)return;
       try{
