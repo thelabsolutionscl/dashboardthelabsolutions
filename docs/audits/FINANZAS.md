@@ -1,5 +1,23 @@
 # Auditoría de FINANZAS
 
+## Actualización 2026-10-06 — cierre funcional parcial de #101
+
+Se revalidó Finanzas contra `main` después del cierre de WEB (#100). La issue #101 estaba parcialmente desactualizada: varias correcciones críticas ya estaban presentes (revenue dinámico, identidad DTE, aging, pagos parciales, confirmación WhatsApp, guard durable SII y proxy RBAC).
+
+**Corregido en esta pasada:**
+
+- donut por canal y Top Clientes usan **venta neta**, sin mezclar pagos brutos con netos;
+- ambos dejan de quedar fijados a 2026 cuando corresponde usar el año actual;
+- CSV de presupuesto exporta el mismo ejecutado que muestra la pantalla, incluyendo el ejecutado real del Libro Diario cuando no hay ajuste manual;
+- préstamos se ordenan por fecha parseada y se corrige la devolución `13/03/25` a `13/03/26`;
+- IVA pasa a ser una **proyección interna — no usar para declarar F29**;
+- débito IVA usa DTE vivos de Facturas/Airtable y resta notas de crédito;
+- crédito IVA solo considera gastos marcados explícitamente como compra documentada;
+- punto de equilibrio deja de tratar pedidos creados como venta del mes y usa facturación neta emitida;
+- los `test.todo` de estos puntos pasan a pruebas activas.
+
+**Pendiente para cierre total:** migrar Libro Diario/presupuesto/caja/pagos programados/préstamos/ventas manuales desde `localStorage` a una fuente compartida con rollback remoto. La ruta SII segura e idempotente ya existe en código, pero su activación productiva y prueba real con credenciales/CAF sigue siendo parte de la configuración manual final.
+
 ## Actualización 2026-09-30 — cobranza histórica falsa
 
 Se auditó específicamente **Finanzas → Por cobrar** después de detectar dos cobros
