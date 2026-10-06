@@ -19,6 +19,20 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate remote-update code before touching the office
+        run: |
+          set -euo pipefail
+          node --check js/maquinas.js
+          node --test tests/printer-access-tickets.test.js tests/farm-remote-update-workflow.test.js
+
       - name: Validate farm credential
         env:
           FARM_TOKEN: ${{ secrets.PRINTER_ADMIN_TOKEN || secrets.PRINTER_TUNNEL_TOKEN }}
