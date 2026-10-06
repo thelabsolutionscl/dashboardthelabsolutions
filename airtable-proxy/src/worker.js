@@ -1231,7 +1231,7 @@ const SHARED_FINANCE_VERSION=1;
 const SHARED_FINANCE_TOP_KEYS=new Set([
   'version','updatedAt','journal','budget','scheduledPayments','saldoInicial',
   'arqueos','cajaFondo','manualSales','loans','cobranza','costosFijos',
-  'comisionCfg','metasVendedor'
+  'comisionCfg','metasVendedor','plazoDefault'
 ]);
 function sharedFinancePlainObject(v){
   return !!v&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype;
@@ -1333,14 +1333,15 @@ function sharedFinanceDocumentAllowed(doc){
      !sharedFinanceFinite(doc.costosFijos,{min:0,max:1e11})||
      !sharedFinancePlainObject(doc.comisionCfg)||!sharedFinanceFinite(Number(doc.comisionCfg.rate),{min:0,max:100})||
      !['venta','utilidad'].includes(doc.comisionCfg.base)||
-     !sharedFinanceMapAllowed(doc.metasVendedor,{maxKeys:100,maxArray:1,maxText:200}))
+     !sharedFinanceMapAllowed(doc.metasVendedor,{maxKeys:100,maxArray:1,maxText:200})||
+     !sharedFinanceFinite(Number(doc.plazoDefault),{min:0,max:365}))
     return false;
   try{return JSON.stringify(doc).length<=95000;}catch(_){return false;}
 }
 function sharedFinanceEmpty(){
   return {version:1,updatedAt:0,journal:[],budget:{},scheduledPayments:[],saldoInicial:0,
     arqueos:{},cajaFondo:0,manualSales:[],loans:[],cobranza:{},costosFijos:0,
-    comisionCfg:{rate:5,base:'venta'},metasVendedor:{}};
+    comisionCfg:{rate:5,base:'venta'},metasVendedor:{},plazoDefault:30};
 }
 async function sharedFinanceLoad(env){
   if(!env.AIRTABLE_TOKEN)return {error:'invalid-config'};
@@ -2081,6 +2082,7 @@ const SCHEMA_BOOTSTRAP_FIELDS = Object.freeze({
   "print_hours": ["number"],
   "Punto de reorden": ["number"],
   "repuestos": ["multilineText"],
+  "Saldo Pendiente": ["number"],
   "Stock actual": ["number"],
   "SUBTOTAL": ["currency"],
   "tiempo": ["number"],
