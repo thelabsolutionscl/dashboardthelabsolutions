@@ -67,6 +67,30 @@ async function _driveGetOrCreateFolder(name,parentId){
   return created.id;
 }
 
+async function _driveUploadRemoteAsset(filename,assetUrl,folderId){
+  let url;try{url=new URL(String(assetUrl||''));}catch(_){throw new Error('URL Visual AI inválida');}
+  if(url.protocol!=='https:')throw new Error('Drive solo acepta assets Visual AI por HTTPS');
+  const r=await fetch(url.href,{method:'GET',credentials:'omit',redirect:'error'});
+  if(!r.ok)throw new Error('No se pudo descargar el asset Visual AI ('+r.status+')');
+  const len=Number(r.headers.get('Content-Length')||0);
+  if(len>25*1024*1024)throw new Error('El asset supera 25 MB');
+  const blob=await r.blob();
+  if(blob.size>25*1024*1024)throw new Error('El asset supera 25 MB');
+  const allowed=new Set(['image/jpeg','image/png','image/webp','video/mp4','audio/mpeg','audio/wav']);
+  if(!allowed.has(blob.type))throw new Error('Tipo de asset no permitido para Drive: '+(blob.type||'desconocido'));
+  const token=await _driveGetToken();
+  const safe=String(filename||'visual-ai').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,120)||'visual-ai';
+  const meta={name:safe};if(folderId)meta.parents=[folderId];
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',blob,safe);
+  const out=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{
+    method:'POST',headers:{Authorization:'Bearer '+token},body:form
+  });
+  if(!out.ok){const e=await out.json().catch(()=>({}));throw new Error(e.error?.message||out.statusText);}
+  return out.json();
+}
+
 async function _driveUploadDataUrl(filename,dataUrl,folderId){
   const token=await _driveGetToken();
   const res=await fetch(dataUrl);const blob=await res.blob();

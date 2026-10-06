@@ -46,7 +46,7 @@ const ACCESS_ALLOWED_TABLES=new Set([
   // Explicitly observed dashboard tables: admin needs these at Access cutover.
   // Do not automatically widen reader/operator/finance access to campaign,
   // notification or operational logs, which can contain personal information.
-  'Automations','Agent_Queue','Agent_Log','Social_Posts',
+  'Automations','Agent_Queue','Agent_Log','Contenido','Social_Posts',
   'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);
@@ -55,7 +55,7 @@ const ACCESS_ADMIN_ONLY_TABLES=new Set([
   // machine safety/cost configuration, mail signatures, jobs and calendars.
   // Read/write requires admin until a per-record scoped service exists.
   'Monitor Sistema',
-  'Automations','Agent_Queue','Agent_Log','Social_Posts',
+  'Automations','Agent_Queue','Agent_Log','Contenido','Social_Posts',
   'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);

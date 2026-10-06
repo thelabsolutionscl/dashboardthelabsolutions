@@ -9,7 +9,8 @@ const path=require('node:path');
 const ROOT=path.join(__dirname,'..');
 const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
 const VISUAL=fs.readFileSync(path.join(ROOT,'js','operativo-visual.js'),'utf8');
-const SOURCE=INDEX+'\n'+VISUAL;
+const DRIVE=fs.readFileSync(path.join(ROOT,'js','drive.js'),'utf8');
+const SOURCE=INDEX+'\n'+VISUAL+'\n'+DRIVE;
 const OPENGEN='https://thelabsolutionscl.github.io/Open-Generative-AI/';
 
 function count(re,text=SOURCE){return(text.match(re)||[]).length;}
@@ -100,16 +101,41 @@ test('contrato de eventos cubre ciclo completo y selección de resultado',()=>{
   assert.match(msg,/vaiAssetLinkPrompt/);
 });
 
-test('resultado puede vincularse sin descarga a Cliente, Cotización o Pedido',()=>{
+test('resultado puede vincularse a CRM, referencia editorial, Drive o borrador de Redes',()=>{
   const link=functionBlock('vaiAssetLinkPrompt');
-  assert.match(link,/cliente.*cotizacion.*pedido/s);
+  assert.match(link,/cliente.*cotizacion.*pedido.*referencia.*drive.*redes/s);
   assert.match(link,/state\.clientes/);
   assert.match(link,/state\.cotizaciones/);
   assert.match(link,/state\.pedidos/);
-  assert.match(link,/airtableWriteTolerant/);
   assert.match(link,/Notas internas/);
   assert.match(link,/Notas cotización/);
   assert.match(link,/Notas pedido/);
+  assert.match(link,/airtableWriteTolerant\(['"]Contenido['"],['"]POST['"]/);
+  assert.match(link,/['"]Estado publicación['"]\s*:\s*['"]Idea['"]/);
+  assert.match(link,/['"]Sugerencia visual['"]\s*:\s*asset\.url/);
+  assert.match(link,/Social_Posts/);
+  assert.match(link,/Estado:['"]Borrador['"]/);
+  assert.doesNotMatch(link,/Estado:['"]Publicado['"]/);
+  assert.match(link,/_driveGetOrCreateFolder\(['"]Visual AI['"]\)/);
+  assert.match(link,/_driveUploadRemoteAsset/);
+  assert.match(VISUAL,/visual-reference/);
+  assert.match(VISUAL,/drive-save/);
+  assert.match(VISUAL,/social-draft/);
+});
+
+test('Drive descarga y valida el asset real antes de subirlo',()=>{
+  assert.match(DRIVE,/async function _driveUploadRemoteAsset\(/);
+  const start=DRIVE.indexOf('async function _driveUploadRemoteAsset(');
+  const end=DRIVE.indexOf('\nasync function ',start+10);
+  const body=DRIVE.slice(start,end>start?end:DRIVE.length);
+  assert.match(body,/protocol!==['"]https:['"]/);
+  assert.match(body,/credentials:['"]omit['"]/);
+  assert.match(body,/redirect:['"]error['"]/);
+  assert.match(body,/25\*1024\*1024/);
+  assert.match(body,/image\/jpeg/);
+  assert.match(body,/video\/mp4/);
+  assert.match(body,/audio\/mpeg/);
+  assert.match(body,/googleapis\.com\/upload\/drive/);
 });
 
 test('panel conserva fallback y enlaces externos se protegen',()=>{
