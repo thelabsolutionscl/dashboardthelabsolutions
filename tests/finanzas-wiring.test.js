@@ -16,6 +16,7 @@ const SOURCE=`${INDEX}\n${MODULES}`;
 const FIN=fs.readFileSync(path.join(ROOT,'js','finanzas.js'),'utf8');
 const PROXY=fs.readFileSync(path.join(ROOT,'airtable-proxy','src','worker.js'),'utf8');
 const SII_GUARD=fs.readFileSync(path.join(ROOT,'sii-worker','src','folio-guard.js'),'utf8');
+const ACCESS_AUTH=fs.readFileSync(path.join(ROOT,'airtable-proxy','src','access-auth.js'),'utf8');
 
 function count(pattern,text=SOURCE){return(text.match(pattern)||[]).length;}
 function esc(value){return String(value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
@@ -304,8 +305,10 @@ test('CAF y emisión SII tienen vía protegida por proxy y RBAC',()=>{
   const dte=functionBlock(FIN,'emitirDTE');
   assert.match(caf,/_siiRequest\('\/caf'/);
   assert.match(dte,/_siiRequest\('\/emit'/);
-  assert.match(PROXY,/url\.pathname==='\/sii\/emit'/);
-  assert.match(PROXY,/url\.pathname==='\/sii\/caf'/);
+  assert.match(PROXY,/route==='\/emit'&&request\.method==='POST'/);
+  assert.match(PROXY,/route==='\/caf'&&request\.method==='PUT'/);
+  assert.match(ACCESS_AUTH,/path==='\/sii\/emit'\)return method==='POST'&&\(finance\|\|admin\)/);
+  assert.match(ACCESS_AUTH,/path==='\/sii\/caf'\)return method==='PUT'&&admin/);
   assert.match(PROXY,/SII proxy route not allowed/);
   assert.match(SOURCE,/function\s+_siiAccessMode\s*\(/);
 });
