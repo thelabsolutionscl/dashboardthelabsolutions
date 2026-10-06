@@ -21,7 +21,8 @@
 
 $_origins = ['https://thelabsolutionscl.github.io', 'https://dashboard.thelab.solutions'];
 $_origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
-header('Access-Control-Allow-Origin: ' . (in_array($_origin, $_origins, true) ? $_origin : $_origins[0]));
+$_origin_allowed = in_array($_origin, $_origins, true);
+if ($_origin_allowed) header('Access-Control-Allow-Origin: ' . $_origin);
 header('Vary: Origin');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -93,22 +94,36 @@ set_exception_handler(function ($ex) {
     exit;
 });
 
+if (!$_origin_allowed) {
+    http_response_code(403);
+    echo json_out(['error' => 'Origen no autorizado', 'build' => MAIL_API_BUILD]);
+    exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit(0); }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST, OPTIONS');
+    echo json_out(['error' => 'Método no permitido', 'build' => MAIL_API_BUILD]);
+    exit;
+}
 
 $user   = trim($_POST['user']   ?? '');
 $pass   =      $_POST['pass']   ?? '';
 $action = trim($_POST['action'] ?? '');
 
 if (!$user || !$pass) {
-    // Al abrir la URL en el navegador (sin credenciales) mostramos un diagnóstico:
-    //  resend=true  → se detectó la API key (el envío saldrá por Resend)
-    //  cfg=true     → existe un archivo de config junto a este script
     echo json_out([
         'error'  => 'Credenciales requeridas',
         'build'  => MAIL_API_BUILD,
         'resend' => resend_api_key() ? true : false,
         'cfg'    => resend_cfg_exists(),
     ]);
+    exit;
+}
+if (!filter_var($user, FILTER_VALIDATE_EMAIL) ||
+    !preg_match('/@thelab\.solutions$/i', $user) || strlen($user) > 254) {
+    http_response_code(403);
+    echo json_out(['error' => 'Casilla no autorizada', 'build' => MAIL_API_BUILD]);
     exit;
 }
 
@@ -142,6 +157,78 @@ function open_imap($user, $pass, $folder = 'INBOX') {
         return ['error' => $last];
     }
     return $conn;
+}
+
+// Valida listas RFC822 en el servidor. El frontend es una ayuda de UX, nunca
+// la autoridad: aquí se eliminan nombres/cabeceras y se conserva sólo email.
+function mail_recipient_list($raw, $required = false, $max = 50) {
+    $raw = trim((string)$raw);
+    if ($raw === '') {
+        return $required ? ['error' => 'Destinatario requerido'] :
+            ['value' => '', 'count' => 0, 'emails' => []];
+    }
+    if (strlen($raw) > 8192 || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $raw)) {
+        return ['error' => 'Lista de destinatarios inválida'];
+    }
+    $prepared = preg_replace('/[;\r\n]+/', ',', $raw);
+    $parsed = @imap_rfc822_parse_adrlist($prepared, '');
+    if (!is_array($parsed) || !$parsed) return ['error' => 'Lista de destinatarios inválida'];
+    $emails = [];
+    foreach ($parsed as $addr) {
+        $mailbox = (string)($addr->mailbox ?? '');
+        $host = (string)($addr->host ?? '');
+        if ($mailbox === '' || $host === '' || strtoupper($mailbox) === 'INVALID_ADDRESS') {
+            return ['error' => 'Dirección de correo inválida'];
+        }
+        $email = strtolower($mailbox . '@' . $host);
+        if (strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['error' => 'Dirección de correo inválida'];
+        }
+        if (!in_array($email, $emails, true)) $emails[] = $email;
+    }
+    if (!$emails && $required) return ['error' => 'Destinatario requerido'];
+    if (count($emails) > $max) return ['error' => 'Demasiados destinatarios'];
+    return ['value' => implode(',', $emails), 'count' => count($emails), 'emails' => $emails];
+}
+
+// Adjuntos de salida: JSON estricto, máximo 10 archivos y 20 MiB reales
+// decodificados. No se confía en MIME, tamaño ni base64 declarados por JS.
+function mail_parse_outgoing_attachments($raw) {
+    if ($raw === null || $raw === '') return ['attachments' => [], 'bytes' => 0];
+    if (!is_string($raw) || strlen($raw) > 30 * 1024 * 1024)
+        return ['error' => 'Adjuntos superan el límite permitido'];
+    $parsed = json_decode($raw, true);
+    if (!is_array($parsed) || json_last_error() !== JSON_ERROR_NONE)
+        return ['error' => 'Adjuntos inválidos'];
+    if (count($parsed) > 10) return ['error' => 'Máximo 10 adjuntos por correo'];
+    $attachments = [];
+    $total = 0;
+    foreach ($parsed as $a) {
+        if (!is_array($a) || !isset($a['name'], $a['data']) ||
+            !is_string($a['name']) || !is_string($a['data']))
+            return ['error' => 'Adjunto inválido'];
+        $name = trim($a['name']);
+        if ($name === '' || strlen($name) > 200 ||
+            preg_match('/[\x00-\x1f\x7f\\\/]/', $name))
+            return ['error' => 'Nombre de adjunto inválido'];
+        if (strlen($a['data']) > 28 * 1024 * 1024)
+            return ['error' => 'Adjunto supera 20 MB'];
+        $bin = base64_decode($a['data'], true);
+        if ($bin === false) return ['error' => 'Adjunto base64 inválido'];
+        $size = strlen($bin);
+        $total += $size;
+        if ($total > 20 * 1024 * 1024) return ['error' => 'Adjuntos superan 20 MB'];
+        $type = isset($a['type']) && is_string($a['type']) ? strtolower(trim($a['type'])) : '';
+        if ($type !== '' && (strlen($type) > 100 ||
+            !preg_match('~^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$~i', $type)))
+            return ['error' => 'Tipo de adjunto inválido'];
+        $attachments[] = [
+            'name' => $name,
+            'type' => $type ?: 'application/octet-stream',
+            'data' => base64_encode($bin),
+        ];
+    }
+    return ['attachments' => $attachments, 'bytes' => $total];
 }
 
 function decode_str($str) {
@@ -915,23 +1002,50 @@ case 'send':
     $body_html = repair_mojibake_utf8($_POST['body'] ?? '');
     $from_name = repair_mojibake_utf8(trim($_POST['from_name'] ?? ''));
 
-    if (!$to)      { echo json_out(['error' => 'Destinatario requerido']); exit; }
-    if (!$subject) { echo json_out(['error' => 'Asunto requerido']); exit; }
-
-    // Adjuntos: JSON [{name, type, data(base64)}] — máx 20 MB decodificado
-    $attachments = [];
-    if (!empty($_POST['atts'])) {
-        $parsed = json_decode($_POST['atts'], true);
-        if (is_array($parsed)) {
-            $total = 0;
-            foreach ($parsed as $a) {
-                if (empty($a['data']) || empty($a['name'])) continue;
-                $total += strlen($a['data']) * 0.75;
-                if ($total > 20 * 1024 * 1024) { echo json_out(['error' => 'Adjuntos superan 20 MB']); exit; }
-                $attachments[] = $a;
-            }
+    $toCheck = mail_recipient_list($to, true, 50);
+    $ccCheck = mail_recipient_list($cc, false, 50);
+    $bccCheck = mail_recipient_list($bcc, false, 50);
+    foreach ([$toCheck, $ccCheck, $bccCheck] as $check) {
+        if (!empty($check['error'])) {
+            http_response_code(422);
+            echo json_out(['error' => $check['error']]);
+            exit;
         }
     }
+    if (($toCheck['count'] + $ccCheck['count'] + $bccCheck['count']) > 50) {
+        http_response_code(422);
+        echo json_out(['error' => 'Máximo 50 destinatarios por correo']);
+        exit;
+    }
+    $to = $toCheck['value'];
+    $cc = $ccCheck['value'];
+    $bcc = $bccCheck['value'];
+
+    if ($subject === '' || strlen($subject) > 250 ||
+        preg_match('/[\r\n\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $subject)) {
+        http_response_code(422);
+        echo json_out(['error' => $subject === '' ? 'Asunto requerido' : 'Asunto inválido o demasiado largo']);
+        exit;
+    }
+    if (strlen($body_html) > 2 * 1024 * 1024) {
+        http_response_code(413);
+        echo json_out(['error' => 'Cuerpo del correo supera 2 MB']);
+        exit;
+    }
+    if (strlen($from_name) > 120 ||
+        preg_match('/[\r\n\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/', $from_name)) {
+        http_response_code(422);
+        echo json_out(['error' => 'Nombre de remitente inválido']);
+        exit;
+    }
+
+    $attachmentCheck = mail_parse_outgoing_attachments($_POST['atts'] ?? '');
+    if (!empty($attachmentCheck['error'])) {
+        http_response_code(422);
+        echo json_out(['error' => $attachmentCheck['error']]);
+        exit;
+    }
+    $attachments = $attachmentCheck['attachments'];
 
     // Salida exclusivamente por Resend. El SMTP compartido de SilverHost fue
     // suspendido por volumen y no puede actuar como fallback: si falta la key,
@@ -1176,9 +1290,13 @@ case 'search':
 case 'attachment':
     $folder = $_POST['folder'] ?? 'INBOX';
     $uid    = (int)($_POST['uid'] ?? 0);
-    $part   = $_POST['part'] ?? '';
+    $part   = trim($_POST['part'] ?? '');
 
-    if (!$part) { echo json_out(['error' => 'Parte requerida']); exit; }
+    if ($uid < 1 || !preg_match('/^\d+(?:\.\d+)*$/', $part)) {
+        http_response_code(422);
+        echo json_out(['error' => 'Adjunto solicitado inválido']);
+        exit;
+    }
 
     $conn = open_imap($user, $pass, $folder);
     if (is_array($conn)) { echo json_out($conn); exit; }
@@ -1194,15 +1312,36 @@ case 'attachment':
         if (!isset($target->parts[$i])) { echo json_out(['error' => 'Parte no encontrada']); imap_close($conn); exit; }
         $target = $target->parts[$i];
     }
+    // BODYSTRUCTURE expone bytes antes de descargar la parte: cortar temprano
+    // cuando el servidor ya declara un adjunto demasiado grande.
+    if (isset($target->bytes) && (int)$target->bytes > 28 * 1024 * 1024) {
+        imap_close($conn);
+        http_response_code(413);
+        echo json_out(['error' => 'Adjunto supera 20 MB']);
+        exit;
+    }
 
     $raw = imap_fetchbody($conn, $msgno, $part, FT_PEEK);
     imap_close($conn);
+    if (!is_string($raw) || strlen($raw) > 28 * 1024 * 1024) {
+        http_response_code(413);
+        echo json_out(['error' => 'Adjunto supera 20 MB']);
+        exit;
+    }
 
-    // Decodificar según encoding original y re-codificar a base64 limpio
+    // Decodificar según encoding original y re-codificar a base64 limpio.
     switch ((int)$target->encoding) {
-        case 3: $bin = base64_decode($raw); break;
+        case 3:
+            $bin = base64_decode($raw, true);
+            if ($bin === false) { http_response_code(422); echo json_out(['error' => 'Adjunto base64 inválido']); exit; }
+            break;
         case 4: $bin = quoted_printable_decode($raw); break;
         default: $bin = $raw;
+    }
+    if (strlen($bin) > 20 * 1024 * 1024) {
+        http_response_code(413);
+        echo json_out(['error' => 'Adjunto supera 20 MB']);
+        exit;
     }
 
     $fname = 'archivo';
@@ -1214,6 +1353,10 @@ case 'attachment':
             if (strtolower($p->attribute) === 'name') { $fname = decode_str($p->value); break; }
         }
     }
+
+    $fname = preg_replace('/[\x00-\x1f\x7f\\\/]/', '_', (string)$fname);
+    $fname = mb_substr(trim($fname), 0, 200);
+    if ($fname === '') $fname = 'archivo';
 
     $type_names = [0=>'text',1=>'multipart',2=>'message',3=>'application',4=>'audio',5=>'image',6=>'video',7=>'other'];
     $mime = ($type_names[(int)$target->type] ?? 'application') . '/' . strtolower($target->subtype ?? 'octet-stream');
