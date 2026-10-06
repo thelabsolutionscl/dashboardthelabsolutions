@@ -30,8 +30,10 @@ test('VISUAL AI conserva sección y navegación escritorio/móvil',()=>{
   assert.equal(count(/id=["']tab-visual["']/g,INDEX),1);
   assert.match(INDEX,/switchTab\(\s*['"]visual['"]\s*\)/);
   assert.match(INDEX,/switchTabMobile\(\s*['"]visual['"]\s*\)/);
-  for(const id of ['vaiFrame','vaiFallback','vaiStatus','vaiDot','vaiStatusTxt'])
-    assert.equal(count(new RegExp('id=["\\\']'+id+'["\\\']','g'),INDEX),1,id);
+  for(const id of ['vaiFrame','vaiFallback','vaiStatus','vaiDot','vaiStatusTxt']){
+    const n=(INDEX.match(new RegExp('id=(?:"|\\x27)'+id+'(?:"|\\x27)','g'))||[]).length;
+    assert.equal(n,1,id);
+  }
 });
 
 test('iframe parte descargado y apunta a un único origen fijo HTTPS',()=>{
