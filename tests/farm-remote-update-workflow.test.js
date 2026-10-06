@@ -5,6 +5,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const root=path.join(__dirname,'..');
+// Regression: remote update must be verifiable before we depend on it away from the office.
 const wf=fs.readFileSync(path.join(root,'.github/workflows/update-farm-controller.yml'),'utf8');
 
 test('workflow remoto actualiza el Controller sin exponer la credencial',()=>{
