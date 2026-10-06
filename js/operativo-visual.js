@@ -703,11 +703,51 @@
         data:{error:err?.name==='AbortError'?'Tiempo de espera del proxy agotado':String(err?.message||err)}});
     }
   }
-  function vaiAssetLinkPrompt(asset){
+  async function vaiAssetLinkPrompt(asset){
     if(!asset||typeof asset.url!=='string')return;
     vaiLastAsset=asset;
-    const kind=(prompt('Vincular resultado Visual AI a: cliente, cotizacion o pedido\n(Cancelar = dejarlo solo como resultado)')||'').trim().toLowerCase();
-    if(!['cliente','cotizacion','pedido'].includes(kind))return;
+    const kind=(prompt('Usar resultado Visual AI en: cliente, cotizacion, pedido, drive o redes\n(Cancelar = dejarlo solo como resultado)')||'').trim().toLowerCase();
+    if(!['cliente','cotizacion','pedido','drive','redes'].includes(kind))return;
+
+    if(kind==='drive'){
+      if(typeof _driveUploadRemoteAsset!=='function'||typeof _driveGetOrCreateFolder!=='function'){
+        toast('Google Drive no está disponible en esta sesión','error');return;
+      }
+      const ext=asset.type==='video'?'mp4':asset.type==='audio'?'mp3':'png';
+      const suggested='visual-ai-'+new Date().toISOString().slice(0,10)+'-'+String(asset.jobId||Date.now()).slice(-12)+'.'+ext;
+      const filename=(prompt('Nombre del archivo en Drive:',suggested)||'').trim();
+      if(!filename)return;
+      try{
+        const folder=await _driveGetOrCreateFolder('Visual AI');
+        const saved=await _driveUploadRemoteAsset(filename,asset.url,folder);
+        toast('✓ Resultado Visual AI guardado en Drive','success');
+        if(saved?.webViewLink&&confirm('¿Abrir el archivo guardado en Drive?'))window.open(saved.webViewLink,'_blank','noopener,noreferrer');
+      }catch(e){toast('No se pudo guardar en Drive: '+String(e?.message||e),'error');}
+      return;
+    }
+
+    if(kind==='redes'){
+      const red=(prompt('Red del borrador: Instagram, LinkedIn, TikTok o Facebook','Instagram')||'').trim();
+      if(!['Instagram','LinkedIn','TikTok','Facebook'].includes(red)){
+        toast('Selecciona una red válida','error');return;
+      }
+      const copy=(prompt('Copy inicial del borrador (puedes editarlo después):','Resultado creado con Visual AI')||'').trim();
+      if(!copy)return;
+      try{
+        const fields={Copy:copy,Red:red,Estado:'Borrador','Media URL':asset.url,
+          Objetivo:'Referencia Visual AI',Agente:'VISUAL_AI'};
+        const saved=typeof _redesWrite==='function'
+          ?await _redesWrite('Social_Posts','POST',null,fields)
+          :await airtableWriteTolerant('Social_Posts','POST',null,fields);
+        if(saved?.id&&Array.isArray(state.socialPosts)){
+          state.socialPosts.unshift({id:saved.id,fields:{...fields,...(saved.fields||{})}});
+          try{renderRedesPosts();renderRedesKpis();}catch(_){}
+        }
+        toast('✓ Borrador creado en Redes Sociales; no se publicó automáticamente','success');
+      }catch(e){toast('No se pudo crear el borrador en Redes: '+String(e?.message||e),'error');}
+      return;
+    }
+
     const query=(prompt('Escribe nombre de cliente o número de cotización/pedido:')||'').trim().toLowerCase();
     if(!query)return;
     let row=null,table='',field='';
@@ -723,11 +763,12 @@
     }
     if(!row){toast('No encontré el registro para vincular el resultado','error');return;}
     const prev=String(row.fields?.[field]||'');
-    const note='[Visual AI] '+asset.url+(asset.model?' · '+asset.model:'');
-    airtableWriteTolerant(table,'PATCH',row.id,{[field]:prev+(prev?'\n':'')+note}).then(()=>{
+    const note='[Visual AI] '+asset.url+(asset.model?' · '+asset.model:'')+(asset.jobId?' · '+asset.jobId:'');
+    try{
+      await airtableWriteTolerant(table,'PATCH',row.id,{[field]:prev+(prev?'\n':'')+note});
       row.fields[field]=prev+(prev?'\n':'')+note;
       toast('✓ Resultado Visual AI vinculado a '+kind,'success');
-    }).catch(e=>toast('No se pudo vincular el resultado: '+e.message,'error'));
+    }catch(e){toast('No se pudo vincular el resultado: '+e.message,'error');}
   }
   function vaiOnMessage(event){
     const frame=vaiFrame();
@@ -736,7 +777,7 @@
     if(!msg||msg.source!=='opengen'||msg.version!==VAI_PROTOCOL_VERSION||typeof msg.type!=='string')return;
     if(msg.type==='ready'){
       vaiReady=true;clearTimeout(vaiTimer);vaiStatus('OpenGen Studio — canal seguro activo','ok');vaiFallback(false);
-      vaiPost(frame,{type:'host-ready',capabilities:['secure-rpc','crm-link'],session:'dashboard'});
+      vaiPost(frame,{type:'host-ready',capabilities:['secure-rpc','crm-link','drive-save','social-draft'],session:'dashboard'});
       return;
     }
     if(msg.type==='rpc'){void vaiHandleRpc(frame,msg);return;}
