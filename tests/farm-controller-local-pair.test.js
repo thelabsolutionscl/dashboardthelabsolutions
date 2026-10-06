@@ -65,7 +65,7 @@ test('pairing autorepara cloudflared usando el servicio oficial de usuario',()=>
   assert.match(PAIR,/cloudflared/);
   assert.match(PAIR,/\.cloudflared\/config\.yml/);
   assert.match(PAIR,/hostname: printers\.thelab\.solutions/);
-  assert.match(PAIR,/service:\[\[:space:\]\]\*http:\/\/(localhost\|127\\\.0\\\.0\\\.1):8347/);
+  assert.ok(PAIR.includes("service:[[:space:]]*http://(localhost|127\\.0\\.0\\.1):8347"),'debe validar que el origen local sea :8347');
   assert.match(PAIR,/service install/,'debe usar el instalador oficial de cloudflared');
   assert.doesNotMatch(PAIR,/sudo\\s+cloudflared\\s+service\\s+install/,'config en HOME debe instalar LaunchAgent de usuario');
   assert.match(PAIR,/launchctl kickstart -k "\$label"/);
