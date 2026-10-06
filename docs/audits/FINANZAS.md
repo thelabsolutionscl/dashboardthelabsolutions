@@ -1,5 +1,37 @@
 # Auditoría de FINANZAS
 
+## Actualización 2026-10-06 — persistencia financiera compartida
+
+Se migró el estado financiero operativo que seguía ligado al navegador a un documento
+revisionado **`FINANZAS_V2`** accesible por **`GET/PUT /shared/finance`**.
+
+**Áreas incluidas:**
+
+- Libro Diario;
+- presupuesto;
+- pagos programados y saldo inicial;
+- caja y arqueos;
+- ventas manuales;
+- préstamos;
+- historial de cobranza;
+- costos fijos;
+- metas por vendedor;
+- configuración de comisión almacenada como caché del documento compartido.
+
+La ruta está limitada por Cloudflare Access a roles **finance/admin**. Las escrituras
+usan CAS por revisión y pasan por `CrmMutationGuard` / Durable Object. El cliente
+confirma la escritura remota antes de reemplazar la caché local; ante 409 relee y
+reintenta una sola vez. Timeout, 5xx o resultado incierto no aplican cambios locales.
+
+Mientras Access todavía no esté activado en producción, se conserva el fallback
+local para no interrumpir el dashboard durante el rollout. Cuando Access esté activo,
+la fuente autoritativa es `FINANZAS_V2`.
+
+Pruebas:
+
+- `tests/access-finance-shared-route.test.js`;
+- `tests/finanzas-wiring.test.js`.
+
 ## Actualización 2026-10-06 — cierre funcional parcial de #101
 
 Se revalidó Finanzas contra `main` después del cierre de WEB (#100). La issue #101 estaba parcialmente desactualizada: varias correcciones críticas ya estaban presentes (revenue dinámico, identidad DTE, aging, pagos parciales, confirmación WhatsApp, guard durable SII y proxy RBAC).

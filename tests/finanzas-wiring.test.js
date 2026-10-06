@@ -108,7 +108,7 @@ test('el Libro Diario valida movimientos y alimenta presupuesto, IVA y arqueo',(
   assert.match(save,/monto\s*<=\s*0/);
   assert.match(save,/fecha/);
   assert.match(save,/descripcion/);
-  assert.match(save,/ldSaveAll\s*\(/);
+  assert.match(save,/_finSharedMutate\s*\(/);
   assert.match(budget,/ldGetAll\s*\(/);
   assert.match(budget,/e\.tipo\s*!==\s*['"]gasto['"]/);
   assert.match(iva,/ldGetAll\s*\(/);
@@ -224,21 +224,32 @@ test('aging separa por vencer de mora y vencimiento usa fecha real de emisión',
   assert.match(venc,/r&&r\.fecha/);
   assert.match(venc,/emision/);
 });
-test('ventas manuales no llaman persistencia inexistente y fallan sin corromper la UI',()=>{
-  const setLocal=functionBlock(FIN,'_finSetLocalVentas');
+test('ventas manuales usan persistencia compartida y no escriben primero en localStorage',()=>{
   const save=functionBlock(FIN,'nvGuardar');
   const del=functionBlock(FIN,'nvEliminar');
   const clear=functionBlock(FIN,'nvLimpiarTodas');
-  assert.doesNotMatch(FIN,/saveFinVentasAirtable\s*\(/,'no debe quedar una llamada a una función inexistente');
-  assert.match(setLocal,/try\s*\{/);
-  assert.match(setLocal,/localStorage\.setItem\(['"]fin_ventas['"]/);
-  assert.match(setLocal,/return false/);
-  assert.match(save,/if\(!_finSetLocalVentas\(existing\)\) return/);
-  assert.match(del,/if\(!_finSetLocalVentas\(data\)\) return/);
-  assert.match(clear,/if\(!_finSetLocalVentas\(\[\]\)\) return/);
+  for(const body of [save,del,clear]){
+    assert.match(body,/await\s+_finSharedMutate\s*\(/);
+    assert.doesNotMatch(body,/localStorage\.setItem/);
+  }
+  assert.doesNotMatch(FIN,/saveFinVentasAirtable\s*\(/);
 });
-test.todo('ventas manuales deben migrar desde almacenamiento local a una fuente compartida, auditable y con rollback remoto');
-test.todo('Libro Diario, presupuesto, caja, pagos programados y préstamos deben persistirse en una fuente compartida y no solo localStorage');
+test('estado financiero local migra a documento compartido revisionado con rollback',()=>{
+  const hydrate=functionBlock(FIN,'_finSharedHydrateRemote');
+  const mutate=functionBlock(FIN,'_finSharedMutate');
+  const request=functionBlock(FIN,'_finSharedRequest');
+  assert.match(request,/\/shared\/finance/);
+  assert.match(request,/credentials:\s*['"]include['"]/);
+  assert.match(mutate,/FINANCE_REVISION_CONFLICT/);
+  assert.match(mutate,/No se aplicaron cambios locales/);
+  assert.match(hydrate,/_finSharedSnapshotLocal/);
+  for(const name of ['ldGuardar','ldEliminar','presGuardar','addPagoProgramado','delPagoProgramado',
+    'setFinSaldoInicial','setCajaFondo','guardarArqueo','cobRegistrar','setCostosFijos','setMetaVendedores']){
+    assert.match(functionBlock(FIN,name),/_finSharedMutate\s*\(/,name+' debe persistir compartido');
+  }
+  const loans=functionBlock(FIN,'_finPrestamosOrdenados');
+  assert.match(loans,/FIN_LOANS_KEY/);
+});
 test('_ivaMes usa DTE emitidos, resta notas de crédito y exige compras documentadas',()=>{
   const iva=functionBlock(FIN,'_ivaMes');
   const card=functionBlock(FIN,'renderIvaMensual');

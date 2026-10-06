@@ -1225,6 +1225,154 @@ function sharedSimulationActorAllowed(actor){
       (actor.role==='admin'||actor.email==='marketing@thelab.solutions'));
 }
 
+
+const SHARED_FINANCE_NAME='FINANZAS_V2';
+const SHARED_FINANCE_VERSION=1;
+const SHARED_FINANCE_TOP_KEYS=new Set([
+  'version','updatedAt','journal','budget','scheduledPayments','saldoInicial',
+  'arqueos','cajaFondo','manualSales','loans','cobranza','costosFijos',
+  'comisionCfg','metasVendedor'
+]);
+function sharedFinancePlainObject(v){
+  return !!v&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype;
+}
+function sharedFinanceText(v,max=2000){
+  return typeof v==='string'&&v.length<=max&&!/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(v);
+}
+function sharedFinanceFinite(v,{min=-1e12,max=1e12}={}){
+  return typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
+}
+function sharedFinanceJournalAllowed(rows){
+  if(!Array.isArray(rows)||rows.length>1500)return false;
+  const ids=new Set();
+  return rows.every(r=>{
+    if(!sharedFinancePlainObject(r)||Object.keys(r).some(k=>![
+      'id','fecha','tipo','categoria','descripcion','monto','metodo','referencia',
+      'contraparte','documentoTributario','dteCompra'
+    ].includes(k)))return false;
+    if(!sharedFinanceText(r.id,120)||!r.id||ids.has(r.id))return false;ids.add(r.id);
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(r.fecha||''))&&
+      ['ingreso','gasto'].includes(r.tipo)&&sharedFinanceText(r.categoria||'',160)&&
+      sharedFinanceText(r.descripcion||'',3000)&&sharedFinanceFinite(Number(r.monto),{min:0,max:1e11})&&
+      sharedFinanceText(r.metodo||'',160)&&sharedFinanceText(r.referencia||'',500)&&
+      sharedFinanceText(r.contraparte||'',500)&&
+      (r.documentoTributario===undefined||typeof r.documentoTributario==='boolean')&&
+      (r.dteCompra===undefined||typeof r.dteCompra==='boolean');
+  });
+}
+function sharedFinanceBudgetAllowed(v){
+  if(!sharedFinancePlainObject(v)||Object.keys(v).length>120)return false;
+  for(const [period,row] of Object.entries(v)){
+    if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)||!sharedFinancePlainObject(row)||
+       Object.keys(row).some(k=>k!=='cats')||!Array.isArray(row.cats)||row.cats.length>20)return false;
+    const seen=new Set();
+    for(const c of row.cats){
+      if(!sharedFinancePlainObject(c)||!sharedFinanceText(c.id,80)||!c.id||seen.has(c.id)||
+         !sharedFinanceText(c.label||'',200)||!sharedFinanceText(c.color||'',40)||
+         !sharedFinanceText(c.icon||'',1000)||!sharedFinanceFinite(Number(c.budget||0),{min:0,max:1e11})||
+         !sharedFinanceFinite(Number(c.ejecutado||0),{min:0,max:1e11}))return false;
+      seen.add(c.id);
+    }
+  }
+  return true;
+}
+function sharedFinanceScheduledAllowed(rows){
+  if(!Array.isArray(rows)||rows.length>300)return false;
+  const ids=new Set();
+  return rows.every(r=>sharedFinancePlainObject(r)&&
+    Object.keys(r).every(k=>['id','concepto','monto','fecha','recurrente'].includes(k))&&
+    sharedFinanceText(r.id,160)&&!!r.id&&!ids.has(r.id)&&(ids.add(r.id),true)&&
+    sharedFinanceText(r.concepto||'',500)&&/^\d{4}-\d{2}-\d{2}$/.test(String(r.fecha||''))&&
+    sharedFinanceFinite(Number(r.monto),{min:0,max:1e11})&&typeof r.recurrente==='boolean');
+}
+function sharedFinanceManualSalesAllowed(rows){
+  if(!Array.isArray(rows)||rows.length>1000)return false;
+  return rows.every(r=>sharedFinancePlainObject(r)&&
+    Object.keys(r).every(k=>['year','mes','nombre','empresa','item','cant','valor','canal','cat','fact','pago','porCobrar','fechaFact','fechaPago','_manual'].includes(k))&&
+    /^\d{4}$/.test(String(r.year||''))&&/^(0?[1-9]|1[0-2])$/.test(String(r.mes||''))&&
+    sharedFinanceText(r.nombre||'',500)&&sharedFinanceText(r.empresa||'',500)&&sharedFinanceText(r.item||'',1000)&&
+    sharedFinanceFinite(Number(r.cant||0),{min:0,max:1e7})&&sharedFinanceFinite(Number(r.valor||0),{min:-1e11,max:1e11})&&
+    sharedFinanceText(r.canal||'',160)&&sharedFinanceText(r.cat||'',160)&&sharedFinanceText(r.fact||'',160)&&
+    sharedFinanceFinite(Number(r.pago||0),{min:-1e11,max:1e11})&&sharedFinanceFinite(Number(r.porCobrar||0),{min:0,max:1e11})&&
+    sharedFinanceText(r.fechaFact||'',40)&&sharedFinanceText(r.fechaPago||'',40)&&(r._manual===undefined||r._manual===true));
+}
+function sharedFinanceLoansAllowed(rows){
+  if(!Array.isArray(rows)||rows.length>500)return false;
+  return rows.every(r=>sharedFinancePlainObject(r)&&Object.keys(r).every(k=>['fecha','prestamo','devolucion','deuda','obs'].includes(k))&&
+    /^\d{2}\/\d{2}\/\d{2,4}$/.test(String(r.fecha||''))&&
+    (r.prestamo===null||sharedFinanceFinite(Number(r.prestamo),{min:0,max:1e11}))&&
+    (r.devolucion===null||sharedFinanceFinite(Number(r.devolucion),{min:0,max:1e11}))&&
+    sharedFinanceFinite(Number(r.deuda),{min:0,max:1e11})&&sharedFinanceText(r.obs||'',1000));
+}
+function sharedFinanceMapAllowed(v,{maxKeys=600,maxArray=100,maxText=2000}={}){
+  if(!sharedFinancePlainObject(v)||Object.keys(v).length>maxKeys)return false;
+  try{
+    const raw=JSON.stringify(v);
+    if(raw.length>70000)return false;
+  }catch(_){return false;}
+  const walk=x=>{
+    if(x===null||typeof x==='boolean')return true;
+    if(typeof x==='number')return Number.isFinite(x)&&Math.abs(x)<=1e12;
+    if(typeof x==='string')return sharedFinanceText(x,maxText);
+    if(Array.isArray(x))return x.length<=maxArray&&x.every(walk);
+    if(sharedFinancePlainObject(x))return Object.keys(x).length<=80&&Object.entries(x).every(([k,val])=>sharedFinanceText(k,200)&&walk(val));
+    return false;
+  };
+  return walk(v);
+}
+function sharedFinanceDocumentAllowed(doc){
+  if(!sharedFinancePlainObject(doc)||Object.keys(doc).some(k=>!SHARED_FINANCE_TOP_KEYS.has(k))||
+     doc.version!==SHARED_FINANCE_VERSION||!sharedFinanceFinite(doc.updatedAt,{min:0,max:9999999999999})||
+     !sharedFinanceJournalAllowed(doc.journal)||!sharedFinanceBudgetAllowed(doc.budget)||
+     !sharedFinanceScheduledAllowed(doc.scheduledPayments)||
+     !sharedFinanceFinite(doc.saldoInicial,{min:-1e11,max:1e11})||
+     !sharedFinanceMapAllowed(doc.arqueos,{maxKeys:800,maxArray:20,maxText:500})||
+     !sharedFinanceFinite(doc.cajaFondo,{min:-1e11,max:1e11})||
+     !sharedFinanceManualSalesAllowed(doc.manualSales)||!sharedFinanceLoansAllowed(doc.loans)||
+     !sharedFinanceMapAllowed(doc.cobranza,{maxKeys:1000,maxArray:200,maxText:2000})||
+     !sharedFinanceFinite(doc.costosFijos,{min:0,max:1e11})||
+     !sharedFinancePlainObject(doc.comisionCfg)||!sharedFinanceFinite(Number(doc.comisionCfg.rate),{min:0,max:100})||
+     !['venta','utilidad'].includes(doc.comisionCfg.base)||
+     !sharedFinanceMapAllowed(doc.metasVendedor,{maxKeys:100,maxArray:1,maxText:200}))
+    return false;
+  try{return JSON.stringify(doc).length<=95000;}catch(_){return false;}
+}
+function sharedFinanceEmpty(){
+  return {version:1,updatedAt:0,journal:[],budget:{},scheduledPayments:[],saldoInicial:0,
+    arqueos:{},cajaFondo:0,manualSales:[],loans:[],cobranza:{},costosFijos:0,
+    comisionCfg:{rate:5,base:'venta'},metasVendedor:{}};
+}
+async function sharedFinanceLoad(env){
+  if(!env.AIRTABLE_TOKEN)return {error:'invalid-config'};
+  const q=new URLSearchParams();q.set('maxRecords','2');
+  q.set('filterByFormula',"{Name}='"+SHARED_FINANCE_NAME+"'");
+  q.append('fields[]','Name');q.append('fields[]','Notes');
+  let response;
+  try{
+    response=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+'?'+q.toString(),{
+      method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+    });
+  }catch(_){return {error:'network'};}
+  if(!response.ok||response.status>=300&&response.status<400)return {error:'upstream'};
+  let body;try{body=await response.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>1)return {error:'invalid-shape'};
+  if(!body.records.length){
+    const data=sharedFinanceEmpty();
+    return {recordId:'',exists:false,raw:'',data,revision:await sharedCalendarDigest('')};
+  }
+  const rec=body.records[0];
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(rec.id||''))||rec.fields?.Name!==SHARED_FINANCE_NAME||
+     typeof rec.fields?.Notes!=='string')return {error:'invalid-record'};
+  let data;try{data=JSON.parse(rec.fields.Notes);}catch(_){return {error:'invalid-payload'};}
+  if(!sharedFinanceDocumentAllowed(data))return {error:'invalid-payload'};
+  return {recordId:rec.id,exists:true,raw:rec.fields.Notes,data,
+    revision:await sharedCalendarDigest(rec.fields.Notes)};
+}
+function sharedFinanceActorAllowed(actor){
+  return actor&&typeof actor.email==='string'&&['finance','admin'].includes(actor.role);
+}
+
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -2109,7 +2257,8 @@ export class CrmMutationGuard {
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
-                ?this._handleSharedSimulation(request):path==='/scoped-patch'
+                ?this._handleSharedSimulation(request):path==='/shared-finance'
+                  ?this._handleSharedFinance(request):path==='/scoped-patch'
                   ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
@@ -2447,6 +2596,42 @@ export class CrmMutationGuard {
       revisions:Object.fromEntries(Object.entries(verified.revisions).filter(([name])=>wanted.has(name)))},200);
   }
 
+
+  async _handleSharedFinance(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Shared finance guard unavailable'},503);
+    let payload;try{payload=await request.json();}catch(_){
+      return this._json({error:'Invalid shared finance request'},422);
+    }
+    if(!sharedFinanceActorAllowed(payload?.actor)||!sharedFinanceDocumentAllowed(payload?.data)||
+       typeof payload.expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(payload.expectedRevision))
+      return this._json({error:'Shared finance write denied'},403);
+    const current=await sharedFinanceLoad(this.env);
+    if(current.error)return this._json({error:'Shared finance unavailable'},503);
+    if(current.revision!==payload.expectedRevision)
+      return this._json({error:'Finance data changed on another device',
+        code:'FINANCE_REVISION_CONFLICT',revision:current.revision,data:current.data},409);
+    const raw=JSON.stringify(payload.data);
+    const target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+
+      (current.recordId?'/'+current.recordId:'');
+    let upstream;
+    try{
+      upstream=await fetch(target,{method:current.recordId?'PATCH':'POST',redirect:'manual',
+        headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:{Name:SHARED_FINANCE_NAME,Notes:raw}})});
+    }catch(_){return this._json({error:'Finance write outcome uncertain; reread before retrying',
+      code:'FINANCE_WRITE_UNCERTAIN'},503);}
+    if([400,401,403,404,422].includes(upstream.status))
+      return this._json({error:'Finance write rejected',code:'FINANCE_WRITE_REJECTED'},422);
+    if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+      return this._json({error:'Finance write outcome uncertain; reread before retrying',
+        code:'FINANCE_WRITE_UNCERTAIN'},503);
+    const verified=await sharedFinanceLoad(this.env);
+    if(verified.error||verified.raw!==raw)
+      return this._json({error:'Finance write verification uncertain; reread before retrying',
+        code:'FINANCE_WRITE_UNCERTAIN'},503);
+    return this._json({ok:true,revision:verified.revision,data:verified.data},200);
+  }
 
   async _handleSharedSimulation(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
@@ -3050,7 +3235,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3388,6 +3573,47 @@ export default {
       }catch(_){return json({error:'MachineOps write guard unavailable'},503,scopedHeaders);}
     }
 
+
+    // Finance state is a single revisioned document. It contains only the
+    // business finance UI state that previously lived in browser localStorage.
+    // It requires an authenticated finance/admin Access identity.
+    if(url.pathname==='/shared/finance'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(!authorized.identity)
+        return json({error:'Shared finance requires Cloudflare Access',code:'ACCESS_REQUIRED'},503,scopedHeaders);
+      if(!['finance','admin'].includes(authorized.identity.role))
+        return json({error:'Shared finance role denied'},403,scopedHeaders);
+      if(url.search)return json({error:'Finance query parameters not allowed'},422,scopedHeaders);
+      if(request.method==='GET'){
+        const current=await sharedFinanceLoad(env);
+        if(current.error)return json({error:'Shared finance unavailable'},503,scopedHeaders);
+        return json({ok:true,exists:current.exists,revision:current.revision,data:current.data},200,scopedHeaders);
+      }
+      if(request.method!=='PUT')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>100000)
+        return json({error:'Shared finance expects bounded JSON'},415,scopedHeaders);
+      let body;try{
+        const raw=await request.text();if(raw.length>100000)throw Error('large');body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid shared finance JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>!['data','expectedRevision'].includes(k))||
+         !sharedFinanceDocumentAllowed(body.data)||typeof body.expectedRevision!=='string'||
+         !/^[a-f0-9]{64}$/.test(body.expectedRevision))
+        return json({error:'Invalid shared finance document'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)
+        return json({error:'Shared finance guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-shared-finance'));
+        const guarded=await stub.fetch('https://crm-write.internal/shared-finance',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({data:body.data,expectedRevision:body.expectedRevision,
+            actor:{email:authorized.identity.email,role:authorized.identity.role}})
+        });
+        const headers=new Headers(guarded.headers);
+        Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Shared finance guard unavailable'},503,scopedHeaders);}
+    }
 
     // Synthetic demand history gets a dedicated, redacted document endpoint.
     // Only admin or the explicit Marketing identity may use it under Access.

@@ -103,7 +103,9 @@ function _finParseFechaPrestamo(fecha){
   return new Date(year,Number(m[2])-1,Number(m[1]),12,0,0).getTime()||0;
 }
 function _finPrestamosOrdenados(){
-  return [...FIN_PRESTAMOS].sort((a,b)=>_finParseFechaPrestamo(a.fecha)-_finParseFechaPrestamo(b.fecha));
+  const shared=_finJsonLocal(FIN_LOANS_KEY,[]);
+  const rows=Array.isArray(shared)&&shared.length?shared:FIN_PRESTAMOS;
+  return [...rows].sort((a,b)=>_finParseFechaPrestamo(a.fecha)-_finParseFechaPrestamo(b.fecha));
 }
 
 /* ── Estado global finanzas ── */
@@ -112,6 +114,139 @@ let finFactPag = 0;
 const FIN_PAG_SIZE = 20;
 let finFactFiltradas = [];
 let finChartActiveYear = 'all';
+
+const FIN_SHARED_VERSION=1;
+const FIN_LOANS_KEY='thelab_prestamos_v1';
+let _finSharedRevision=null;
+let _finSharedExists=false;
+let _finSharedHydratePromise=null;
+
+function _finJsonLocal(key,fallback){
+  try{const v=JSON.parse(localStorage.getItem(key)||'');return v==null?fallback:v;}catch(_){return fallback;}
+}
+function _finSharedSnapshotLocal(){
+  const cfg=_finJsonLocal(typeof _COMISION_CFG_KEY!=='undefined'?_COMISION_CFG_KEY:'thelab_comision_cfg_v1',{rate:3.5,base:'venta'});
+  return {
+    version:FIN_SHARED_VERSION,updatedAt:Date.now(),
+    journal:Array.isArray(_finJsonLocal(typeof LD_KEY!=='undefined'?LD_KEY:'fin_diario',[]))?_finJsonLocal(typeof LD_KEY!=='undefined'?LD_KEY:'fin_diario',[]):[],
+    budget:_finJsonLocal(typeof PRES_KEY!=='undefined'?PRES_KEY:'fin_presupuesto_v1',{}),
+    scheduledPayments:Array.isArray(_finJsonLocal(typeof _PAGOS_PROG_KEY!=='undefined'?_PAGOS_PROG_KEY:'thelab_pagos_prog_v1',[]))?_finJsonLocal(typeof _PAGOS_PROG_KEY!=='undefined'?_PAGOS_PROG_KEY:'thelab_pagos_prog_v1',[]):[],
+    saldoInicial:Number(localStorage.getItem(typeof _SALDO_INI_KEY!=='undefined'?_SALDO_INI_KEY:'thelab_saldo_inicial_v1'))||0,
+    arqueos:_finJsonLocal(typeof _ARQUEO_KEY!=='undefined'?_ARQUEO_KEY:'thelab_arqueos_v1',{}),
+    cajaFondo:Number(localStorage.getItem(typeof _CAJA_FONDO_KEY!=='undefined'?_CAJA_FONDO_KEY:'thelab_caja_fondo_v1'))||0,
+    manualSales:Array.isArray(_finJsonLocal('fin_ventas',[]))?_finJsonLocal('fin_ventas',[]):[],
+    loans:Array.isArray(_finJsonLocal(FIN_LOANS_KEY,[]))&&_finJsonLocal(FIN_LOANS_KEY,[]).length?_finJsonLocal(FIN_LOANS_KEY,[]):(typeof FIN_PRESTAMOS!=='undefined'?[...FIN_PRESTAMOS]:[]),
+    cobranza:_finJsonLocal(typeof _COB_LOG_KEY!=='undefined'?_COB_LOG_KEY:'thelab_cob_log_v1',{}),
+    costosFijos:Number(localStorage.getItem(typeof _COSTOS_FIJOS_KEY!=='undefined'?_COSTOS_FIJOS_KEY:'thelab_costos_fijos_v1'))||0,
+    comisionCfg:{rate:Number(cfg?.rate)>=0?Number(cfg.rate):3.5,base:cfg?.base==='utilidad'?'utilidad':'venta'},
+    metasVendedor:_finJsonLocal(typeof _META_VEND_KEY!=='undefined'?_META_VEND_KEY:'thelab_meta_vendedor_v1',{})
+  };
+}
+function _finSharedApplyLocal(doc){
+  if(!doc||doc.version!==FIN_SHARED_VERSION)return false;
+  try{
+    localStorage.setItem('fin_diario',JSON.stringify(Array.isArray(doc.journal)?doc.journal:[]));
+    localStorage.setItem('fin_presupuesto_v1',JSON.stringify(doc.budget||{}));
+    localStorage.setItem('thelab_pagos_prog_v1',JSON.stringify(Array.isArray(doc.scheduledPayments)?doc.scheduledPayments:[]));
+    localStorage.setItem('thelab_saldo_inicial_v1',String(Number(doc.saldoInicial)||0));
+    localStorage.setItem('thelab_arqueos_v1',JSON.stringify(doc.arqueos||{}));
+    localStorage.setItem('thelab_caja_fondo_v1',String(Number(doc.cajaFondo)||0));
+    localStorage.setItem('fin_ventas',JSON.stringify(Array.isArray(doc.manualSales)?doc.manualSales:[]));
+    localStorage.setItem(FIN_LOANS_KEY,JSON.stringify(Array.isArray(doc.loans)?doc.loans:[]));
+    localStorage.setItem('thelab_cob_log_v1',JSON.stringify(doc.cobranza||{}));
+    localStorage.setItem('thelab_costos_fijos_v1',String(Number(doc.costosFijos)||0));
+    localStorage.setItem('thelab_comision_cfg_v1',JSON.stringify(doc.comisionCfg||{rate:3.5,base:'venta'}));
+    localStorage.setItem('thelab_meta_vendedor_v1',JSON.stringify(doc.metasVendedor||{}));
+    return true;
+  }catch(_){return false;}
+}
+function _finSharedCanSync(){
+  try{
+    if(typeof window!=='undefined'&&window._DEMO_MODE)return false;
+    const user=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
+    return !!user&&['finance','admin'].includes(user.role)&&!!_finSharedConfig();
+  }catch(_){return false;}
+}
+function _finSharedConfig(){
+  try{
+    const px=typeof _proxyCfg==='function'?_proxyCfg():null;if(!px?.url||!px?.key)return null;
+    const u=new URL(px.url);
+    if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.search||u.hash)return null;
+    if(u.protocol==='http:'&&!['localhost','127.0.0.1'].includes(u.hostname))return null;
+    return{base:u.origin+u.pathname.replace(/\/$/,''),key:px.key};
+  }catch(_){return null;}
+}
+async function _finSharedRequest(method,body){
+  const cfg=_finSharedConfig();if(!cfg)throw new Error('Proxy financiero no configurado');
+  return fetch(cfg.base+'/shared/finance',{
+    method,credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+    ...(body?{body:JSON.stringify(body)}:{})
+  });
+}
+function _finSharedAccept(doc){
+  if(!doc||doc.ok!==true||typeof doc.revision!=='string'||!/^[a-f0-9]{64}$/.test(doc.revision)||
+     !doc.data||doc.data.version!==FIN_SHARED_VERSION)return false;
+  _finSharedRevision=doc.revision;_finSharedExists=doc.exists!==false;return true;
+}
+async function _finSharedReadRemote(){
+  if(!_finSharedCanSync())return null;
+  const r=await _finSharedRequest('GET');if(!r.ok)return null;
+  const doc=await r.json().catch(()=>null);
+  return _finSharedAccept(doc)?doc:null;
+}
+async function _finSharedWriteRemote(next){
+  if(!_finSharedCanSync())return false;
+  if(typeof _finSharedRevision!=='string'){
+    const remote=await _finSharedReadRemote();if(!remote)return false;
+    if(remote.exists)_finSharedApplyLocal(remote.data);
+  }
+  const r=await _finSharedRequest('PUT',{data:next,expectedRevision:_finSharedRevision||''});
+  const doc=await r.json().catch(()=>({}));
+  if(r.ok&&_finSharedAccept(doc)){_finSharedApplyLocal(doc.data);return true;}
+  if(r.status===409&&doc?.code==='FINANCE_REVISION_CONFLICT'&&
+     typeof doc.revision==='string'&&/^[a-f0-9]{64}$/.test(doc.revision)&&doc.data){
+    _finSharedRevision=doc.revision;_finSharedExists=true;_finSharedApplyLocal(doc.data);
+  }
+  return false;
+}
+async function _finSharedHydrateRemote(){
+  if(_finSharedHydratePromise)return _finSharedHydratePromise;
+  if(!_finSharedCanSync())return false;
+  _finSharedHydratePromise=(async()=>{
+    const remote=await _finSharedReadRemote();if(!remote)return false;
+    if(remote.exists){_finSharedApplyLocal(remote.data);return true;}
+    const seed=_finSharedSnapshotLocal();seed.updatedAt=Date.now();
+    return _finSharedWriteRemote(seed);
+  })().catch(()=>false).finally(()=>{_finSharedHydratePromise=null;});
+  return _finSharedHydratePromise;
+}
+async function _finSharedMutate(mutator,{label='cambio financiero'}={}){
+  if(typeof mutator!=='function')return false;
+  if(!_finSharedCanSync()){
+    const local=_finSharedSnapshotLocal();const next=structuredClone(local);
+    mutator(next);next.updatedAt=Date.now();
+    if(!_finSharedApplyLocal(next)){toast('No se pudo guardar '+label,'error');return false;}
+    return true;
+  }
+  let remote=await _finSharedReadRemote();
+  if(!remote){toast('No se pudo leer Finanzas compartidas. No se guardó el cambio.','error');return false;}
+  for(let attempt=0;attempt<2;attempt++){
+    const base=remote.exists?remote.data:_finSharedSnapshotLocal();
+    const next=structuredClone(base);mutator(next);next.version=FIN_SHARED_VERSION;next.updatedAt=Date.now();
+    const r=await _finSharedRequest('PUT',{data:next,expectedRevision:_finSharedRevision});
+    const doc=await r.json().catch(()=>({}));
+    if(r.ok&&_finSharedAccept(doc)){_finSharedApplyLocal(doc.data);return true;}
+    if(r.status===409&&attempt===0&&doc?.code==='FINANCE_REVISION_CONFLICT'&&doc.data&&
+       typeof doc.revision==='string'&&/^[a-f0-9]{64}$/.test(doc.revision)){
+      _finSharedRevision=doc.revision;remote={exists:true,data:doc.data};continue;
+    }
+    toast('No se pudo guardar '+label+' en la fuente compartida. No se aplicaron cambios locales.','error');
+    return false;
+  }
+  return false;
+}
+
 
 /* ── Formateadores ── */
 function clp(n){
@@ -541,29 +676,30 @@ const _SALDO_INI_KEY='thelab_saldo_inicial_v1';
 function _pagosProg(){try{return JSON.parse(localStorage.getItem(_PAGOS_PROG_KEY)||'[]');}catch(e){return[];}}
 function _pagosProgSave(arr){try{localStorage.setItem(_PAGOS_PROG_KEY,JSON.stringify(arr||[]));}catch(e){}}
 function finSaldoInicial(){const v=parseFloat(localStorage.getItem(_SALDO_INI_KEY));return isNaN(v)?0:v;}
-function setFinSaldoInicial(v){const n=parseFloat(v)||0;localStorage.setItem(_SALDO_INI_KEY,String(n));try{finRenderFlujoCaja();}catch(e){}}
+async function setFinSaldoInicial(v){
+  const n=parseFloat(v)||0;
+  const ok=await _finSharedMutate(doc=>{doc.saldoInicial=n;},{label:'saldo inicial'});
+  if(ok)try{finRenderFlujoCaja();}catch(e){}
+}
 // Inicio (lunes 00:00) de la semana que contiene ts
 function _semanaInicio(ts){const d=new Date(ts);d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;/*0=lunes*/d.setDate(d.getDate()-dow);return d.getTime();}
-function addPagoProgramado(){
+async function addPagoProgramado(){
   const concepto=(prompt('Concepto del pago programado (ej: Arriendo, Sueldos, Proveedor filamento):')||'').trim();
   if(!concepto)return;
   const montoRaw=prompt('Monto del pago (CLP):','');if(montoRaw==null)return;
   const monto=Math.round(parseFloat(String(montoRaw).replace(/[^\d.-]/g,''))||0);
   if(!(monto>0)){toast('Monto inválido','error');return;}
-  const hoyISO=hoyCL();
-  const fecha=(prompt('Fecha del pago (AAAA-MM-DD):',hoyISO)||'').trim();
+  const fecha=(prompt('Fecha del pago (AAAA-MM-DD):',hoyCL())||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){toast('Fecha inválida (usa AAAA-MM-DD)','error');return;}
   const recurrente=confirm('¿Es un pago mensual recurrente? (Aceptar = se repite cada mes en las 8 semanas; Cancelar = pago único)');
-  const arr=_pagosProg();
-  arr.push({id:'pp'+_semanaInicio(Date.now())+'_'+arr.length+'_'+concepto.length,concepto,monto,fecha,recurrente:!!recurrente});
-  _pagosProgSave(arr);
-  toast('✓ Pago programado agregado','success');
-  try{finRenderFlujoCaja();}catch(e){}
+  const id='pp'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  const row={id,concepto,monto,fecha,recurrente:!!recurrente};
+  const ok=await _finSharedMutate(doc=>{doc.scheduledPayments=[...(doc.scheduledPayments||[]),row];},{label:'pago programado'});
+  if(!ok)return;toast('✓ Pago programado agregado','success');try{finRenderFlujoCaja();}catch(e){}
 }
-function delPagoProgramado(id){
-  const arr=_pagosProg().filter(p=>p.id!==id);
-  _pagosProgSave(arr);
-  try{finRenderFlujoCaja();}catch(e){}
+async function delPagoProgramado(id){
+  const ok=await _finSharedMutate(doc=>{doc.scheduledPayments=(doc.scheduledPayments||[]).filter(p=>p.id!==id);},{label:'pago programado'});
+  if(ok)try{finRenderFlujoCaja();}catch(e){}
 }
 // Expande un pago recurrente a las ocurrencias que caen dentro del horizonte [ini,fin)
 function _pagoOcurrencias(p,horizIni,horizFin){
@@ -786,18 +922,21 @@ async function cobEmail(empresa,btn){
   finally{if(btn){btn.disabled=false;btn.innerHTML=prev;}}
 }
 async function cobRegistrar(empresa,via,silent){
-  const k=(empresa||'').toLowerCase();
-  const log=_cobLog(); (log[k]=log[k]||[]).push({ts:Date.now(),via:via||'—'});
-  try{localStorage.setItem(_COB_LOG_KEY,JSON.stringify(log));}catch(e){}
-  // Deja constancia en la ficha del cliente (best-effort)
+  const k=(empresa||'').toLowerCase();if(!k)return false;
+  const touch={ts:Date.now(),via:via||'—'};
+  const ok=await _finSharedMutate(doc=>{
+    const log={...(doc.cobranza||{})};log[k]=[...(log[k]||[]),touch];doc.cobranza=log;
+  },{label:'historial de cobranza'});
+  if(!ok)return false;
   const cli=_cobCliente(empresa);
-  if(cli){
-    const nota=`[${hoyCL()}] Recordatorio de cobranza enviado por ${via} (Andrea)`;
-    const nuevo=(cli.fields['Notas internas']?String(cli.fields['Notas internas']).trim()+'\n':'')+nota;
-    try{await airtableWriteTolerant('Clientes','PATCH',cli.id,{'Notas internas':nuevo});cli.fields['Notas internas']=nuevo;}catch(e){}
+  if(cli?.id){
+    const prev=cli.fields['Notas internas']||'';
+    const nota=`[Cobranza ${new Date(touch.ts).toLocaleDateString('es-CL')}] ${touch.via}`;
+    try{await airtableWriteTolerant('Clientes','PATCH',cli.id,{'Notas internas':prev+(prev?'\n':'')+nota});}
+    catch(_){}
   }
-  if(!silent) toast('✓ Gestión de cobro registrada','success');
-  finRenderCobranzaActions();
+  if(!silent){toast('Gestión de cobranza registrada','success');try{finRenderCobranzaActions();}catch(e){}}
+  return true;
 }
 
 // Plan de cobranza con IA: prioriza toda la cartera por mora y monto (FINANCE_AGENT)
@@ -957,7 +1096,7 @@ function _finSetLocalVentas(rows){
     return false;
   }
 }
-function nvGuardar(){
+async function nvGuardar(){
   const cant=parseFloat(document.getElementById('nv-cantidad').value)||1;
   const val=parseFloat(document.getElementById('nv-valor').value)||0;
   const pago=parseFloat(document.getElementById('nv-pago').value)||0;
@@ -965,35 +1104,20 @@ function nvGuardar(){
   const empresa=document.getElementById('nv-empresa').value.trim();
   const item=document.getElementById('nv-item').value.trim();
   if(!nombre||!item||!val){alert('Completa al menos Nombre, Ítem y Valor.');return;}
-  const noto=cant*val;
-  const iva=Math.round(noto*0.19);
-  const tot=noto+iva;
-  const cobrar=Math.max(0,tot-pago);
-  const rec={
-    year:document.getElementById('nv-year').value,
-    mes:document.getElementById('nv-mes').value,
-    nombre,empresa,item,cant,valor:val,
-    canal:document.getElementById('nv-canal').value,
-    cat:document.getElementById('nv-categoria').value,
-    fact:document.getElementById('nv-factura').value,
-    pago:pago,porCobrar:cobrar,
-    fechaFact:document.getElementById('nv-fecha-fact').value,
-    fechaPago:document.getElementById('nv-fecha-pago').value,
-    _manual:true
-  };
-  let existing;try{existing=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){existing=[];}
-  existing.push(rec);
-  if(!_finSetLocalVentas(existing)) return;
-  nvLimpiar();
-  finRenderNuevaLista();
-  toast('Venta guardada en este navegador','success');
-  finInit();
+  const neto=cant*val,iva=Math.round(neto*0.19),tot=neto+iva,cobrar=Math.max(0,tot-pago);
+  const rec={year:document.getElementById('nv-year').value,mes:document.getElementById('nv-mes').value,
+    nombre,empresa,item,cant,valor:val,canal:document.getElementById('nv-canal').value,
+    cat:document.getElementById('nv-categoria').value,fact:document.getElementById('nv-factura').value,
+    pago,porCobrar:cobrar,fechaFact:document.getElementById('nv-fecha-fact').value,
+    fechaPago:document.getElementById('nv-fecha-pago').value,_manual:true};
+  const ok=await _finSharedMutate(doc=>{doc.manualSales=[...(doc.manualSales||[]),rec];},{label:'venta manual'});
+  if(!ok)return;
+  nvLimpiar();finRenderNuevaLista();toast('Venta guardada y sincronizada','success');finInit();
 }
-function nvLimpiarTodas(){
+async function nvLimpiarTodas(){
   if(!confirm('¿Eliminar todas las ventas ingresadas manualmente?'))return;
-  if(!_finSetLocalVentas([])) return;
-  finRenderNuevaLista();
-  finInit();
+  const ok=await _finSharedMutate(doc=>{doc.manualSales=[];},{label:'limpieza de ventas manuales'});
+  if(!ok)return;finRenderNuevaLista();finInit();
 }
 function finRenderNuevaLista(){
   let data;try{data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){data=[];}
@@ -1022,13 +1146,16 @@ function finRenderNuevaLista(){
   const tb=document.getElementById('fin-nueva-lista-body');
   if(tb)tb.innerHTML=html;
 }
-function nvEliminar(idx){
-  let data;try{data=JSON.parse(localStorage.getItem('fin_ventas')||'[]');}catch(e){data=[];}
-  if(idx<0||idx>=data.length)return;
-  data.splice(idx,1);
-  if(!_finSetLocalVentas(data)) return;
-  finRenderNuevaLista();
-  finInit();
+async function nvEliminar(idx){
+  const current=_finJsonLocal('fin_ventas',[]);
+  if(idx<0||idx>=current.length)return;
+  const target=current[idx];
+  const ok=await _finSharedMutate(doc=>{
+    const arr=Array.isArray(doc.manualSales)?doc.manualSales:[];
+    const pos=arr.findIndex(r=>JSON.stringify(r)===JSON.stringify(target));
+    if(pos>=0)arr.splice(pos,1);
+  },{label:'eliminación de venta manual'});
+  if(!ok)return;finRenderNuevaLista();finInit();
 }
 
 /* ── Exportar CSV ── */
@@ -1321,18 +1448,23 @@ function finSetupTooltip(){
 /* ── Init cuando se activa el tab ── */
 function finInit(){
   if(window.OP)OP.finance();
-  finRenderMensual();
-  finInitKPIs();
-  renderOverviewFinanzas();
-  if(finCurrentTab==='facturas') finRenderFacturas();
-  setTimeout(()=>{
-    finDrawChart();
-    finDrawSparklines();
-    finDrawCanalDonut();
-    finRenderResumenAnual();
-    finRenderTopClientes();
-    finSetupTooltip();
-  },120);
+  const render=()=>{
+    finRenderMensual();
+    finInitKPIs();
+    renderOverviewFinanzas();
+    if(finCurrentTab==='facturas')finRenderFacturas();
+    if(finCurrentTab==='cobrar')finRenderCobrar();
+    if(finCurrentTab==='prestamos')finRenderPrestamos();
+    if(finCurrentTab==='diario')ldInit();
+    if(finCurrentTab==='presupuesto')renderPresupuesto();
+    setTimeout(()=>{
+      finDrawChart();finDrawSparklines();finDrawCanalDonut();
+      finRenderResumenAnual();finRenderTopClientes();finSetupTooltip();
+      try{renderIvaMensual();renderBreakEven();renderArqueo();renderComisiones();}catch(_){}
+    },120);
+  };
+  render();
+  _finSharedHydrateRemote().then(ok=>{if(ok)render();}).catch(()=>{});
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1376,7 +1508,7 @@ function ldLimpiar(){
   const mt=document.getElementById('ld-metodo');if(mt)mt.value='Transferencia';
 }
 
-function ldGuardar(){
+async function ldGuardar(){
   const fecha=document.getElementById('ld-fecha')?.value;
   const tipo=document.getElementById('ld-tipo')?.value;
   const categoria=document.getElementById('ld-categoria')?.value||'';
@@ -1388,19 +1520,16 @@ function ldGuardar(){
   if(!fecha){toast('Selecciona una fecha','error');return;}
   if(!descripcion){toast('Ingresa una descripción','error');return;}
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
-  const entry={
-    id:Date.now()+'_'+Math.random().toString(36).slice(2,7),
-    fecha,tipo,categoria,descripcion,monto,metodo,referencia,contraparte
-  };
-  const all=ldGetAll();all.push(entry);ldSaveAll(all);
-  ldLimpiar();ldInit();
-  toast('✓ Registro guardado correctamente','success');
+  const entry={id:Date.now()+'_'+Math.random().toString(36).slice(2,7),fecha,tipo,categoria,descripcion,monto,metodo,referencia,contraparte};
+  const ok=await _finSharedMutate(doc=>{doc.journal=[...(doc.journal||[]),entry];},{label:'movimiento del Libro Diario'});
+  if(!ok)return;
+  ldLimpiar();ldInit();toast('✓ Registro guardado y sincronizado','success');
 }
 
-function ldEliminar(id){
+async function ldEliminar(id){
   if(!confirm('¿Eliminar este registro?'))return;
-  ldSaveAll(ldGetAll().filter(e=>e.id!==id));
-  ldInit();toast('Registro eliminado','success');
+  const ok=await _finSharedMutate(doc=>{doc.journal=(doc.journal||[]).filter(e=>e.id!==id);},{label:'eliminación del Libro Diario'});
+  if(!ok)return;ldInit();toast('Registro eliminado','success');
 }
 
 function ldSort(key){
@@ -2837,11 +2966,12 @@ function _costosFijos(){
   try{const now=new Date();const key=presKey(now.getFullYear(),now.getMonth()+1);const pd=(presGetData()[key]||{}).cats||[];const t=pd.reduce((s,c)=>s+(c.budget||0),0);if(t>0)return t;}catch(e){}
   return 0;
 }
-function setCostosFijos(){
+async function setCostosFijos(){
   const cur=_costosFijos();
   const v=prompt('Costos fijos mensuales (CLP): arriendo, sueldos, servicios, software... (vacío = usar el total del presupuesto)',cur?String(cur):'');
   if(v===null)return;const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
-  if(n>0)localStorage.setItem(_COSTOS_FIJOS_KEY,String(n));else localStorage.removeItem(_COSTOS_FIJOS_KEY);
+  const ok=await _finSharedMutate(doc=>{doc.costosFijos=Math.max(0,n);},{label:'costos fijos'});
+  if(!ok)return;
   toast(n>0?'✓ Costos fijos: '+formatCLP(n):'Costos fijos: se usará el presupuesto','success');
   try{renderBreakEven();}catch(e){}
 }
@@ -2896,14 +3026,13 @@ function presPreviewBar(i){
   const barEl=document.getElementById(`pres-bar-${i}`);
   if(barEl){const inner=barEl.firstElementChild;if(inner)inner.style.width=pct+'%';}
 }
-function presGuardar(){
+async function presGuardar(){
   const anio=parseInt(document.getElementById('pres-anio')?.value||new Date().getFullYear());
   const mes=parseInt(document.getElementById('pres-mes')?.value||new Date().getMonth()+1);
   const key=presKey(anio,mes);
-  const data=presGetData();
   const cats=PRES_CATS_DEFAULT.map((c,i)=>({...c,budget:parseFloat(document.getElementById(`pres-cat-b-${i}`)?.value)||0,ejecutado:parseFloat(document.getElementById(`pres-cat-e-${i}`)?.value)||0}));
-  data[key]={cats};presSetData(data);
-  renderPresupuesto();toast('✓ Presupuesto guardado','success');
+  const ok=await _finSharedMutate(doc=>{doc.budget={...(doc.budget||{}),[key]:{cats}};},{label:'presupuesto'});
+  if(!ok)return;renderPresupuesto();toast('✓ Presupuesto guardado y sincronizado','success');
 }
 function presAddCategoria(){
   toast('Edita las categorías directamente en los campos — próximamente categorías custom','info');
@@ -3166,20 +3295,21 @@ function setComisionCfg(){
   try{renderComisiones();}catch(e){}
 }
 function _metaVendedores(){try{return JSON.parse(localStorage.getItem(_META_VEND_KEY)||'{}');}catch(e){return{};}}
-function setMetaVendedores(){
-  const metas=_metaVendedores();
+async function setMetaVendedores(){
+  const metas={..._metaVendedores()};
   const lista=(typeof PERSONAS!=='undefined'?PERSONAS:[]);
   if(!lista.length){toast('No hay personas configuradas','info');return;}
   let cambios=false;
   for(const p of lista){
     const cur=metas[p.id]||'';
     const v=prompt(`Meta de venta mensual (CLP neto) — ${p.nombre}\n(vacío o 0 = sin meta)`,cur?String(cur):'');
-    if(v===null)continue; // cancelar salta este, sigue con el resto
+    if(v===null)continue;
     const n=Math.round(parseFloat(String(v).replace(/[^\d.-]/g,''))||0);
-    if(n>0)metas[p.id]=n;else delete metas[p.id];
-    cambios=true;
+    if(n>0)metas[p.id]=n;else delete metas[p.id];cambios=true;
   }
-  if(cambios){localStorage.setItem(_META_VEND_KEY,JSON.stringify(metas));toast('✓ Metas por vendedor guardadas','success');try{renderComisiones();}catch(e){}}
+  if(!cambios)return;
+  const ok=await _finSharedMutate(doc=>{doc.metasVendedor=metas;},{label:'metas de vendedores'});
+  if(!ok)return;toast('✓ Metas por vendedor guardadas','success');try{renderComisiones();}catch(e){}
 }
 // Ventas por vendedor en el mes (offset): usa pedidos no cancelados creados en el
 // período; el vendedor viene del pedido o, si falta, de su cotización vinculada.
@@ -3263,7 +3393,11 @@ const _CAJA_FONDO_KEY='thelab_caja_fondo_v1';
 function _arqueos(){try{return JSON.parse(localStorage.getItem(_ARQUEO_KEY)||'{}');}catch(e){return{};}}
 function _arqueosSave(o){try{localStorage.setItem(_ARQUEO_KEY,JSON.stringify(o||{}));}catch(e){}}
 function _cajaFondo(){const v=parseFloat(localStorage.getItem(_CAJA_FONDO_KEY));return isNaN(v)?0:v;}
-function setCajaFondo(v){localStorage.setItem(_CAJA_FONDO_KEY,String(parseFloat(v)||0));try{renderArqueo();}catch(e){}}
+async function setCajaFondo(v){
+  const n=parseFloat(v)||0;
+  const ok=await _finSharedMutate(doc=>{doc.cajaFondo=n;},{label:'fondo de caja'});
+  if(ok)try{renderArqueo();}catch(e){}
+}
 function _esEfectivo(m){return /efec|caja|contado/i.test(String(m||''));}
 function _arqueoDia(fecha){
   const items=(typeof ldGetAll==='function'?ldGetAll():[]).filter(e=>String(e.fecha||'')===fecha);
@@ -3327,17 +3461,15 @@ function _arqueoSetContado(v){const el=document.getElementById('arqueoCard');if(
   d.style.color=Math.abs(dif)<1?'var(--accent3)':dif>0?'var(--warn)':'var(--danger)';
   d.textContent=dif===0?'✓ Cuadra':(dif>0?'sobra ':'falta ')+formatCLP(Math.abs(dif));
 }
-function guardarArqueo(){
+async function guardarArqueo(){
   const el=document.getElementById('arqueoCard');if(!el)return;
   const fecha=el.dataset.fecha||hoyCL();
-  const contadoRaw=document.getElementById('arqueoContado')?.value;
-  const contado=parseFloat(contadoRaw);
+  const contado=parseFloat(document.getElementById('arqueoContado')?.value);
   if(isNaN(contado)){toast('Ingresa el efectivo contado','error');return;}
-  const a=_arqueoDia(fecha);
-  const o=_arqueos();o[fecha]={contado,esperado:a.efectivoEsperado,dif:contado-a.efectivoEsperado,ts:Date.now()};
-  _arqueosSave(o);
-  const d=contado-a.efectivoEsperado;
-  toast(Math.abs(d)<1?'✓ Caja cuadrada':`Arqueo guardado · ${d>0?'sobran ':'faltan '}${formatCLP(Math.abs(d))}`, Math.abs(d)<1?'success':'info');
+  const a=_arqueoDia(fecha),row={contado,esperado:a.efectivoEsperado,dif:contado-a.efectivoEsperado,ts:Date.now()};
+  const ok=await _finSharedMutate(doc=>{doc.arqueos={...(doc.arqueos||{}),[fecha]:row};},{label:'arqueo de caja'});
+  if(!ok)return;
+  const d=row.dif;toast(Math.abs(d)<1?'✓ Caja cuadrada':`Arqueo guardado · ${d>0?'sobran ':'faltan '}${formatCLP(Math.abs(d))}`,Math.abs(d)<1?'success':'info');
   renderArqueo();
 }
 
