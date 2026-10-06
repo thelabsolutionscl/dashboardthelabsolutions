@@ -247,10 +247,13 @@ function getPrinterFleetForDrift(){
   }catch(_){return[];}
 }
 async function _refreshPrinterAccessTicket(force=false){
-  // Purge legacy values from this browser at the first protected operation.
-  // The master key remains ONLY in the Cloudflare proxy.
-  try{localStorage.removeItem('printer_tunnel_token');sessionStorage.removeItem('printer_tunnel_token');}
-  catch(_){}
+  // En modo Access estricto, purga cualquier secreto legado del navegador.
+  // En modo híbrido/legacy NO los borra: un intento oportunista de Access
+  // jamás debe destruir un pairing/manual override que todavía funciona.
+  if(_printerAccessMode()){
+    try{localStorage.removeItem('printer_tunnel_token');sessionStorage.removeItem('printer_tunnel_token');}
+    catch(_){}
+  }
   const now=Date.now();
   if(_printerTunnelSessionSync)return _printerTunnelSessionSync;
   if(!force&&_printerTunnelSessionToken&&now<_printerTunnelSessionExpires-120000)return true;
@@ -288,26 +291,37 @@ async function refreshPrinterTunnelSession(force=false){
   if(_printerAccessMode())return _refreshPrinterAccessTicket(force);
   if(window._DEMO_MODE)return false;
   const longToken=_getPrinterTunnelLongToken(),base=getPrinterTunnel(),now=Date.now();
-  if(!longToken||!base)return false;
+
+  // Navegador nuevo (p.ej. casa): antes devolvía false inmediatamente porque
+  // no tenía pairing local. Ahora intenta el ticket server-side de Access; si
+  // Access aún no está configurado, falla cerrado y el modo legado queda intacto.
+  if(!longToken||!base)return _refreshPrinterAccessTicket(force);
+
   if(_printerTunnelSessionSync)return _printerTunnelSessionSync;
   if(!force&&_printerTunnelSessionToken&&now<_printerTunnelSessionExpires-120000)return true;
   if(!force&&now-_printerTunnelSessionLastTry<30000)return false;
   _printerTunnelSessionLastTry=now;
-  _printerTunnelSessionSync=(async()=>{
+
+  const legacyPromise=(async()=>{
     try{
       const r=await fetch(base+'/farm/session',{method:'POST',headers:{'X-Bridge-Token':longToken},signal:AbortSignal.timeout(6000),cache:'no-store'});
       if(!r.ok)throw new Error('HTTP '+r.status);
       const d=await r.json();
       if(!d?.token||!Number(d.expiresAt))throw new Error('sesión inválida');
       _printerTunnelSessionToken=String(d.token);_printerTunnelSessionExpires=Number(d.expiresAt);_printerTunnelSessionRole=['viewer','operator','admin'].includes(d.role)?d.role:'admin';
-      // Los sockets existentes siguen autenticados; los nuevos y las cámaras usan desde ahora el ticket breve.
       return true;
     }catch(e){
-      // Compatibilidad: si el túnel móvil bloquea el preflight, seguimos con el token largo.
       return false;
     }finally{_printerTunnelSessionSync=null;}
   })();
-  return _printerTunnelSessionSync;
+  _printerTunnelSessionSync=legacyPromise;
+  const legacyOk=await legacyPromise;
+  if(legacyOk)return true;
+
+  // Si el secreto horneado/local quedó obsoleto, probar identidad firmada antes
+  // de rendirse. El force=true evita que el intento legado comparta el throttle
+  // de 30 s con este segundo camino.
+  return _refreshPrinterAccessTicket(true);
 }
 // Media/WebSocket siguen necesitando autenticación en URL, pero el dashboard intenta
 // canjear el secreto largo por un ticket efímero del Controller. Si una red móvil
@@ -317,7 +331,7 @@ function _appendBridgeToken(u){if(/[?&]bt=/.test(u))return u;const tk=getPrinter
 // Diagnóstico del túnel/bridge desde el propio dashboard (Mi cuenta → Túnel Impresoras)
 async function testPrinterBridge(statusId){
   const el=document.getElementById(statusId);
-  if(_printerAccessMode())await refreshPrinterTunnelSession(false);
+  if(_printerUsesRemoteTunnel())await refreshPrinterTunnelSession(false);
   const url=getPrinterTunnel(),tk=getPrinterTunnelToken();
   const set=(c,t)=>{if(el){el.style.color=c;el.textContent=t;}};
   set('var(--text3)',`Probando ${url} …`);

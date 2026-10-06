@@ -112,3 +112,17 @@ test('legacy printer mode prefers an explicit session override and settings inva
   assert.match(settings,/refreshPrinterTunnelSession\(changedToken\)/,'Guardar debe renovar sesión inmediatamente');
   assert.match(m,/r\.status===401\|\|r\.status===403/,'el diagnóstico debe reconocer 403 del Farm Controller como fallo de token');
 });
+
+test('legacy mode intenta Access sin borrar pairing u override local',()=>{
+  const m=fs.readFileSync(path.join(root,'js/maquinas.js'),'utf8');
+  const access=m.slice(m.indexOf('async function _refreshPrinterAccessTicket'),m.indexOf('async function refreshPrinterTunnelSession'));
+  const refresh=m.slice(m.indexOf('async function refreshPrinterTunnelSession'),m.indexOf('// Media/WebSocket'));
+  assert.match(access,/if\(_printerAccessMode\(\)\)\{[\s\S]*?localStorage\.removeItem\('printer_tunnel_token'\)/,
+    'la limpieza de secretos sólo debe ocurrir en Access estricto');
+  assert.match(refresh,/if\(!longToken\|\|!base\)return _refreshPrinterAccessTicket\(force\)/,
+    'un navegador nuevo debe intentar ticket por identidad');
+  assert.match(refresh,/if\(legacyOk\)return true;[\s\S]*?return _refreshPrinterAccessTicket\(true\)/,
+    'si el token legado está obsoleto debe intentar Access antes de rendirse');
+  assert.match(m,/if\(_printerUsesRemoteTunnel\(\)\)await refreshPrinterTunnelSession\(false\)/,
+    'el diagnóstico remoto debe intentar renovar también en modo híbrido');
+});

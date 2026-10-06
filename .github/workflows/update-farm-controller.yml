@@ -1,0 +1,78 @@
+name: Update Farm Controller
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'printer-bridge/**'
+      - '.github/workflows/update-farm-controller.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: farm-controller-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate remote-update code before touching the office
+        run: |
+          set -euo pipefail
+          node --check js/maquinas.js
+          node --test tests/printer-access-tickets.test.js tests/farm-remote-update-workflow.test.js
+
+      - name: Validate farm credential
+        env:
+          FARM_TOKEN: ${{ secrets.PRINTER_ADMIN_TOKEN || secrets.PRINTER_TUNNEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FARM_TOKEN}" ]; then
+            echo "::error::No hay PRINTER_ADMIN_TOKEN ni PRINTER_TUNNEL_TOKEN configurado."
+            exit 1
+          fi
+
+      - name: Ask office Farm Controller to update itself
+        env:
+          FARM_TOKEN: ${{ secrets.PRINTER_ADMIN_TOKEN || secrets.PRINTER_TUNNEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          body="$(mktemp)"
+          code="$(curl -sS --max-time 15 -o "$body" -w '%{http_code}' \
+            -X POST 'https://printers.thelab.solutions/update' \
+            -H "X-Bridge-Token: ${FARM_TOKEN}" \
+            -H 'Accept: application/json')"
+          sed -E 's/("token"|"secret"|"key")[[:space:]]*:[[:space:]]*"[^"]+"/\1:"[REDACTED]"/gi' "$body"
+          if [ "$code" != "200" ] || ! grep -q '"ok":true' "$body"; then
+            echo "::error::Farm Controller rechazó /update (HTTP $code)."
+            exit 1
+          fi
+
+      - name: Verify restarted revision and internal bridge
+        env:
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          short="${EXPECTED:0:12}"
+          for i in $(seq 1 30); do
+            body="$(curl -fsS --max-time 5 'https://printers.thelab.solutions/healthz' 2>/dev/null || true)"
+            if printf '%s' "$body" | grep -q '"legacyReady":true' &&
+               printf '%s' "$body" | grep -q "\"revision\":\"$short\""; then
+              echo "Farm Controller actualizado: $short · bridge interno autenticado."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::El Farm Controller no confirmó la revisión $short con legacyReady=true."
+          exit 1
