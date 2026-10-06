@@ -173,7 +173,7 @@ test('método/query/endpoint desconocido y secreto ausente fallan cerrados',asyn
   const h=harness();
   let r=await h.req({action:'generate',endpoint:'evil',payload:{},jobId:'job_bad_123456'});
   assert.equal(r.status,422);
-  r=await h.req({action:'quota'},{method:'GET'});assert.equal(r.status,403);
+  r=await h.req({action:'quota'},{method:'GET'});assert.equal(r.status,405);
   r=await h.req({action:'quota'},{query:'?x=1'});assert.equal(r.status,405);
   const noSecret={...h.ENV,MUAPI_KEY:''};
   identity={email:'operator@example.com',role:'operator'};
