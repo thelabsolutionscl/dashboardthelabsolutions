@@ -44,8 +44,8 @@ test('las funciones críticas de WEB existen sin redefiniciones',()=>{
   [
     'runSeoAudit','_seoAnalyze','seoOptimizeIA',
     'getAdsConfig','saveAdsConfig','loadAdsData','renderAdsKPIs','renderAdsCampaigns','renderAdsAgent','getAdsDemoData',
-    'syncAdsToAirtable','loadAdsSnapshotsFromAirtable','_adsQueueMutation','sendAdsMutation','syncMutationStatuses','renderPendingMutations','retryMutation','retryAllErrors',
-    'getCapacidadLineas','renderAdsCapacidad','renderAdsSugerencias','renderAdsAutopilot','adsAutopilotDecide',
+    'syncAdsToAirtable','loadAdsSnapshotsFromAirtable','_adsCrmAttribution','_adsQueueMutation','sendAdsMutation','syncMutationStatuses','renderPendingMutations','retryMutation','retryAllErrors',
+    '_adsOrderLineIds','getCapacidadLineas','renderAdsCapacidad','renderAdsSugerencias','renderAdsAutopilot','adsAutopilotDecide',
     'loadWebStats','renderWebStats','getWebDemoData','adsExportOfflineConversions'
   ].forEach(assertUniqueFunction);
 });
@@ -153,15 +153,16 @@ test('la cola deduplica, persiste, envía y activa conciliación',()=>{
   const render=queue.search(/renderPendingMutations\s*\(/);
   const poll=queue.search(/_startAdsMutationPoll\s*\(/);
   assert.ok(save>=0&&dispatch>save&&render>dispatch&&poll>render,'debe persistir antes de enviar y después mostrar/conciliar');
-  assert.match(send,/Content-Type['"]?\s*:\s*['"]text\/plain['"]/,'debe evitar preflight de Apps Script');
-  assert.match(send,/secret\s*:\s*cfg\.secret/);
+  assert.match(send,/_adsProxyFetch\(\s*['"]\/ads\/mutation['"]/,'la escritura debe salir por el Proxy firmado');
+  assert.doesNotMatch(send,/cfg\.secret|ADS_MUTATION_SECRET|text\/plain/,'el navegador no debe portar credenciales del Apps Script');
   assert.match(send,/status\s*=\s*['"]enviado['"]/);
   assert.match(send,/status\s*=\s*['"]error['"]/);
 });
 
 test('la conciliación remota elimina aplicadas y conserva errores visibles',()=>{
   const body=functionBlock(SOURCE,'syncMutationStatuses');
-  assert.match(body,/action=mutations/);
+  assert.match(body,/_adsProxyFetch\(\s*['"]\/ads\/mutations['"]/,'debe conciliar mediante el Proxy firmado');
+  assert.doesNotMatch(body,/action=mutations|script\.google\.com/,'no debe consultar el Apps Script directamente');
   assert.match(body,/timestamp\s*===\s*m\.timestamp/,'debe reconciliar por identificador estable');
   assert.match(body,/status\s*!==\s*['"]aplicado['"]/,'las aplicadas deben salir de la cola local');
   assert.match(body,/renderPendingMutations\s*\(/);
@@ -177,16 +178,17 @@ test('capacidad enlaza máquinas, mantenimiento y pedidos activos con campañas'
   assert.match(body,/impresion-3d/);
   assert.match(body,/carteleria/);
   assert.match(body,/premiaciones/);
+  assert.match(body,/_adsOrderLineIds/,'los pedidos no 3D deben clasificarse por su línea real');
+  assert.doesNotMatch(body,/const\s+pedPct\s*=.*activos\/20/,'láser/manual no pueden reutilizar el backlog global');
 });
 
-test('el piloto automático revalida Airtable y exige aprobación humana',()=>{
+test('el piloto automático exige aprobación humana y reserva la propuesta en servidor',()=>{
   const body=functionBlock(SOURCE,'adsAutopilotDecide');
-  assert.match(body,/Agent_Queue/);
-  assert.match(body,/Estado/);
-  assert.match(body,/Pendiente/);
   assert.match(body,/confirm\s*\(/,'debe pedir confirmación antes de aplicar');
-  assert.match(body,/_adsQueueMutation\s*\(/);
-  assert.match(body,/airtableWriteTolerant\(\s*['"]Agent_Queue['"]\s*,\s*['"]PATCH['"]/);
+  assert.match(body,/_adsProxyFetch\(\s*['"]\/ads\/autopilot\/decision['"]/);
+  assert.doesNotMatch(body,/airtableWriteTolerant|airtableHttp|_adsQueueMutation\s*\(/,
+    'la decisión no puede hacer check-then-write ni encolar por separado en el navegador');
+  assert.match(body,/status:'enviado'/,'solo refleja localmente la cola ya confirmada por servidor');
 });
 
 test('conversiones offline conectan CRM, GCLID, ventas netas y horario Chile',()=>{
@@ -200,17 +202,27 @@ test('conversiones offline conectan CRM, GCLID, ventas netas y horario Chile',()
   assert.match(SOURCE,/America\/Santiago/);
 });
 
-test('los snapshots de Ads se escriben en Airtable con lotes acotados',()=>{
+test('los snapshots de Ads se entregan al guard server-side para upsert autoritativo',()=>{
   const body=functionBlock(SOURCE,'syncAdsToAirtable');
-  assert.match(body,/Google_Ads_KPIs/);
-  assert.match(body,/Google_Ads_Campanas/);
-  assert.match(body,/typecast\s*:\s*true/);
-  assert.match(body,/i\s*\+=\s*10/,'las campañas deben enviarse en lotes de 10');
+  assert.match(body,/_adsProxyFetch\(\s*['"]\/ads\/snapshot['"]/);
   assert.match(body,/adsHealthScore/);
+  assert.doesNotMatch(body,/airtableHttp|Google_Ads_KPIs|Google_Ads_Campanas/,
+    'el navegador no debe ejecutar POST directos de snapshots');
 });
 
-test.todo('el webhook y la clave de Make no deben estar expuestos en el bundle público');
-test.todo('la creación debe confirmar primero la cola y después solicitar el cascarón a Make');
+test('el webhook, clave de Make y secreto de mutaciones no están expuestos en el bundle público',()=>{
+  const live=fs.readFileSync(path.join(JS_DIR,'seo-ads.js'),'utf8');
+  assert.doesNotMatch(live,/ADS_MAKE_SHELL\s*=|hook\.us2\.make\.com|tl-cascaron-/);
+  assert.doesNotMatch(INDEX,/id=["']ads-secret["']/);
+  const send=functionBlock(SOURCE,'sendAdsMutation');
+  assert.doesNotMatch(send,/cfg\.secret|secret\s*:/);
+  assert.match(functionBlock(SOURCE,'getAdsConfig'),/removeItem\(['"]ads_mutation_secret['"]\)/);
+});
+test('la creación ya no solicita el cascarón a Make desde el navegador',()=>{
+  const body=functionBlock(SOURCE,'saveCampaignMutation');
+  assert.doesNotMatch(body,/Make|ADS_MAKE_SHELL|hook\./);
+  assert.match(body,/_adsQueueMutation\(mutation\)/);
+});
 test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ads o Make',()=>{
   const load=functionBlock(SOURCE,'loadAdsData');
   const send=functionBlock(SOURCE,'sendAdsMutation');
@@ -218,10 +230,31 @@ test('el modo demo usa métricas ficticias y nunca envía mutaciones a Google Ad
   assert.match(load,/window\._DEMO_MODE\|\|!cfg\.endpoint/);
   assert.match(send,/if\(_adsIsReadOnly\(\)\)/,'explicit demo and fixture fallback must both be blocked');
   assert.match(send,/status=['"]demo['"]/);
-  assert.match(save,/ADS_MAKE_SHELL\.url&&!window\._DEMO_MODE/);
+  assert.doesNotMatch(save,/Make|ADS_MAKE_SHELL|hook\./);
   assert.match(SOURCE,/ads_demo_pending_mutations/,'la cola demo debe estar separada de la real');
 });
-test.todo('syncAdsToAirtable debe hacer upsert por fecha/campaña y no duplicar snapshots al refrescar');
-test.todo('ROAS real debe usar ingresos atribuibles a Google Ads, no todo el revenue del CRM');
-test.todo('la carga de líneas manuales y láser debe usar pedidos de su propia línea, no el total global');
-test.todo('el piloto debe reservar o cerrar la propuesta antes de encolar para evitar una segunda aprobación si falla Airtable');
+test('la atribución CRM de Ads exige evidencia de origen y no suma todo el negocio',()=>{
+  const body=functionBlock(SOURCE,'_adsCrmAttribution');
+  const attr=functionBlock(SOURCE,'_adsClientAttributed');
+  assert.match(attr,/GCLID/);
+  assert.match(attr,/Campaña Ads/);
+  assert.match(attr,/google_ads/);
+  assert.doesNotMatch(attr,/origin===['"]google['"]/,'Google orgánico no se inventa como Ads');
+  assert.match(body,/adsIds/);
+  assert.match(body,/Monto total \(CLP\)/);
+  assert.match(body,/Cancelado/);
+  assert.match(body,/revenueAds/);
+});
+test('la carga de líneas manuales y láser usa pedidos clasificados, no el total global',()=>{
+  const classifier=functionBlock(SOURCE,'_adsOrderLineIds');
+  const capacity=functionBlock(SOURCE,'getCapacidadLineas');
+  for(const signal of ['Detalle productos','Detalle JSON','Solicitud cliente (texto libre)','Servicio interés'])
+    assert.match(classifier,new RegExp(esc(signal)));
+  assert.match(capacity,/countAny/);
+  assert.doesNotMatch(capacity,/const\s+pedPct\s*=/);
+});
+test('el cliente del piloto delega la reserva y cierre al guard server-side',()=>{
+  const body=functionBlock(SOURCE,'adsAutopilotDecide');
+  assert.match(body,/\/ads\/autopilot\/decision/);
+  assert.doesNotMatch(body,/Agent_Queue|airtableWriteTolerant|airtableHttp/);
+});
