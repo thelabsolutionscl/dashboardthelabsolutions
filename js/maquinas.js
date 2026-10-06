@@ -3685,32 +3685,157 @@ function renderEquipoDetalleSemana(dias){
     return`<div class="card"><div class="card-header"><div style="display:flex;align-items:center;gap:9px">${_avHtml(p,30)}<div><div style="font-size:12px;font-weight:700">${escapeHtml(p.nombre)}</div><div style="font-size:10.5px;color:var(--text3)">${p.rol}</div></div></div><div style="text-align:right"><div style="font-size:16px;font-family:'Bebas Neue';color:${barColor}">${dispDias}/7</div><div style="font-size:10px;color:var(--text3)">días disp.</div>${statHtml}</div></div><div style="padding:0 14px 6px"><div style="height:3px;background:var(--surface3);border-radius:2px;margin-bottom:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px"></div></div>${eventosHtml}</div></div>`;
   }).join('');
 }
-async function quickToggleEquipo(personaId,dateStr){const key=`${personaId}_${dateStr}`,ev=equipoState.eventos[key];if(ev&&ev.tipo!=='disponible'){delete equipoState.eventos[key];renderEquipoCalendar();await saveEquipoEventosAirtable();toast('✓ Disponible','success');}else openEquipoModal(personaId,PERSONAS.find(p=>p.id===personaId)?.nombre||'',dateStr);}
+function _cloneEquipoEventos(){
+  try{return typeof structuredClone==='function'
+    ?structuredClone(equipoState.eventos||{})
+    :JSON.parse(JSON.stringify(equipoState.eventos||{}));}
+  catch(_){return {...(equipoState.eventos||{})};}
+}
+function _restoreEquipoEventos(previous){
+  equipoState.eventos=previous||{};
+  renderEquipoCalendar();
+}
+function _equipoPersistError(action,error){
+  try{console.warn('[Equipo] '+action,error);}catch(_){}
+  toast('No se pudo '+action+' en Airtable. Se restauró el estado anterior.','error');
+}
+async function quickToggleEquipo(personaId,dateStr){
+  const key=`${personaId}_${dateStr}`,ev=equipoState.eventos[key];
+  if(ev&&ev.tipo!=='disponible'){
+    const previous=_cloneEquipoEventos();
+    delete equipoState.eventos[key];
+    renderEquipoCalendar();
+    try{
+      await saveEquipoEventosAirtable([{type:'delete',key}]);
+      toast('✓ Disponible','success');
+    }catch(e){
+      _restoreEquipoEventos(previous);
+      _equipoPersistError('marcar disponibilidad',e);
+    }
+  }else openEquipoModal(personaId,PERSONAS.find(p=>p.id===personaId)?.nombre||'',dateStr);
+}
 function openEquipoModal(personaId,nombre,dateStr){document.getElementById('equipoModalPersonaId').value=personaId;document.getElementById('equipoModalDate').value=dateStr;const p=PERSONAS.find(x=>x.id===personaId);document.getElementById('equipoModalTitle').innerHTML=`<span style="display:flex;align-items:center;gap:8px">${_avHtml(p,28)}📅 ${escapeHtml(nombre)} — ${dateStr}</span>`;document.getElementById('equipoModalDesc').value='';document.getElementById('equipoModalFechaInicio').value=dateStr;document.getElementById('equipoModalFechaFin').value=dateStr;document.getElementById('equipoModalHoraInicio').value='09:00';document.getElementById('equipoModalHoraFin').value='18:00';document.getElementById('equipoModalTipo').value='ocupado';onEquipoModalTipoChange();document.getElementById('equipoEventModal').style.display='flex';}
 function closeEquipoModal(){document.getElementById('equipoEventModal').style.display='none';}
 function onEquipoModalTipoChange(){const tipo=document.getElementById('equipoModalTipo').value;const showDesc=!['vacaciones','ausente','disponible'].includes(tipo);const showHoras=['ocupado','reunion','remoto'].includes(tipo);document.getElementById('equipoModalDescGroup').style.display=showDesc?'flex':'none';document.getElementById('equipoModalHorasGroup').style.display=showHoras?'flex':'none';}
 async function saveEquipoEvento(){
-  const pId=document.getElementById('equipoModalPersonaId').value,tipo=document.getElementById('equipoModalTipo').value,desc=document.getElementById('equipoModalDesc').value,fi=document.getElementById('equipoModalFechaInicio').value,ff=document.getElementById('equipoModalFechaFin').value,horaInicio=document.getElementById('equipoModalHoraInicio').value,horaFin=document.getElementById('equipoModalHoraFin').value;
+  const pId=document.getElementById('equipoModalPersonaId').value,
+    tipo=document.getElementById('equipoModalTipo').value,
+    desc=(document.getElementById('equipoModalDesc').value||'').trim(),
+    fi=document.getElementById('equipoModalFechaInicio').value,
+    ff=document.getElementById('equipoModalFechaFin').value,
+    horaInicio=document.getElementById('equipoModalHoraInicio').value,
+    horaFin=document.getElementById('equipoModalHoraFin').value;
   if(!fi||!ff){toast('Ingresa las fechas','error');return;}
-  const start=new Date(fi+'T00:00:00'),end=new Date(ff+'T00:00:00');let count=0;
-  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){const key=`${pId}_${fmtDate(new Date(d))}`;if(tipo==='disponible') delete equipoState.eventos[key];else equipoState.eventos[key]={tipo,desc,horaInicio,horaFin};count++;}
-  const p=PERSONAS.find(x=>x.id===pId);closeEquipoModal();renderEquipoCalendar();
-  toast(`✓ ${count} día${count>1?'s':''} → ${p?.nombre} — guardando...`,'info');
-  await saveEquipoEventosAirtable();toast('✓ Guardado en Airtable','success');
-}
-async function deleteEquipoEvento(pId,dateStr){delete equipoState.eventos[`${pId}_${dateStr}`];renderEquipoCalendar();await saveEquipoEventosAirtable();toast('Evento eliminado','info');}
-async function syncGcalEquipo(){
-  const btn=document.getElementById('gcalEquipoSyncBtn');btn.disabled=true;btn.textContent='⏳ Sync...';
-  const lunes=getEquipoSemanaLunes();const dias=[];for(let i=0;i<7;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);dias.push(d);}
-  const timeMin=encodeURIComponent(dias[0].toISOString()),timeMax=encodeURIComponent(new Date(dias[6].getTime()+86400000).toISOString());let total=0;
-  for(const p of PERSONAS){const gcalId=sessionStorage.getItem('gcal_persona_'+p.id);const apiKey=sessionStorage.getItem('gcal_api_key');if(!gcalId||!apiKey) continue;
-    try{const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(gcalId)}/events?key=${apiKey}&timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=50`);if(!r.ok) continue;const data=await r.json();
-      (data.items||[]).forEach(ev=>{const sd=(ev.start?.date||ev.start?.dateTime||'').slice(0,10);if(!sd) return;const title=(ev.summary||'').toLowerCase();let tipo='ocupado';if(title.includes('vacacion')) tipo='vacaciones';else if(title.includes('ausente')) tipo='ausente';else if(title.includes('remoto')) tipo='remoto';else if(title.includes('reuni')) tipo='reunion';
-        const s=new Date(sd+'T00:00:00'),e2=new Date((ev.end?.date||ev.end?.dateTime||sd).slice(0,10)+'T00:00:00');
-        for(let d=new Date(s);d<=e2;d.setDate(d.getDate()+1)){const ds=fmtDate(new Date(d));if(dias.some(x=>fmtDate(x)===ds)){equipoState.eventos[`${p.id}_${ds}`]={tipo,desc:ev.summary,horaInicio:'',horaFin:''};total++;}}});
-    }catch(e){toast(`Error sync ${p.nombre}`,'error');}
+  if(!PERSONAS.some(p=>p.id===pId)||!Object.hasOwn(EQUIPO_TIPOS,tipo)){
+    toast('Persona o tipo de disponibilidad inválido','error');return;
   }
-  toast(`✓ ${total} eventos importados`,'success');await saveEquipoEventosAirtable();renderEquipoCalendar();btn.disabled=false;btn.textContent='🔄 Sync';
+  const start=new Date(fi+'T00:00:00'),end=new Date(ff+'T00:00:00');
+  if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())){
+    toast('Las fechas ingresadas no son válidas','error');return;
+  }
+  if(end<start){
+    toast('La fecha final no puede ser anterior a la fecha inicial','error');return;
+  }
+  const previous=_cloneEquipoEventos(),ops=[];let count=0;
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    const key=`${pId}_${fmtDate(new Date(d))}`;
+    if(tipo==='disponible'){
+      delete equipoState.eventos[key];
+      ops.push({type:'delete',key});
+    }else{
+      const value={tipo,desc:desc.slice(0,2000),horaInicio,horaFin};
+      equipoState.eventos[key]=value;
+      ops.push({type:'set',key,value});
+    }
+    count++;
+  }
+  const p=PERSONAS.find(x=>x.id===pId);
+  try{
+    await saveEquipoEventosAirtable(ops);
+    closeEquipoModal();
+    renderEquipoCalendar();
+    toast(`✓ ${count} día${count>1?'s':''} guardado${count>1?'s':''} → ${p?.nombre||pId}`,'success');
+  }catch(e){
+    _restoreEquipoEventos(previous);
+    _equipoPersistError('guardar la disponibilidad',e);
+  }
+}
+async function deleteEquipoEvento(pId,dateStr){
+  const key=`${pId}_${dateStr}`,previous=_cloneEquipoEventos();
+  delete equipoState.eventos[key];
+  renderEquipoCalendar();
+  try{
+    await saveEquipoEventosAirtable([{type:'delete',key}]);
+    toast('Evento eliminado','info');
+  }catch(e){
+    _restoreEquipoEventos(previous);
+    _equipoPersistError('eliminar el evento',e);
+  }
+}
+async function syncGcalEquipo(){
+  const btn=document.getElementById('gcalEquipoSyncBtn');
+  if(!btn)return;
+  const previousLabel=btn.textContent||'🔄 Sync';
+  btn.disabled=true;btn.textContent='⏳ Sync...';
+  const previous=_cloneEquipoEventos(),ops=[];
+  let total=0,failedCalendars=0;
+  try{
+    const lunes=getEquipoSemanaLunes(),dias=[];
+    for(let i=0;i<7;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);dias.push(d);}
+    const visibleDays=new Set(dias.map(fmtDate));
+    const timeMin=encodeURIComponent(dias[0].toISOString()),
+      timeMax=encodeURIComponent(new Date(dias[6].getTime()+86400000).toISOString());
+    for(const p of PERSONAS){
+      const gcalId=sessionStorage.getItem('gcal_persona_'+p.id),
+        apiKey=sessionStorage.getItem('gcal_api_key');
+      if(!gcalId||!apiKey)continue;
+      try{
+        const r=await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(gcalId)}/events?key=${apiKey}&timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=50`);
+        if(!r.ok)throw new Error('Google Calendar HTTP '+r.status);
+        const data=await r.json();
+        for(const ev of (data.items||[])){
+          const sd=(ev.start?.date||ev.start?.dateTime||'').slice(0,10);
+          if(!sd)continue;
+          const title=(ev.summary||'').toLowerCase();let tipo='ocupado';
+          if(title.includes('vacacion'))tipo='vacaciones';
+          else if(title.includes('ausente'))tipo='ausente';
+          else if(title.includes('remoto'))tipo='remoto';
+          else if(title.includes('reuni'))tipo='reunion';
+          const start=new Date(sd+'T00:00:00');
+          let endText=(ev.end?.date||ev.end?.dateTime||sd).slice(0,10);
+          let end=new Date(endText+'T00:00:00');
+          // Google Calendar define end.date como límite EXCLUSIVO para all-day.
+          // end.dateTime, en cambio, conserva su semántica temporal y no se ajusta.
+          if(ev.end?.date)end.setDate(end.getDate()-1);
+          if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime()))continue;
+          if(end<start)end=new Date(start);
+          for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+            const ds=fmtDate(new Date(d));
+            if(!visibleDays.has(ds))continue;
+            const key=`${p.id}_${ds}`,
+              value={tipo,desc:String(ev.summary||'').slice(0,2000),horaInicio:'',horaFin:''};
+            equipoState.eventos[key]=value;
+            ops.push({type:'set',key,value});
+            total++;
+          }
+        }
+      }catch(e){
+        failedCalendars++;
+        toast(`Error sync ${p.nombre}`,'error');
+      }
+    }
+    if(ops.length)await saveEquipoEventosAirtable(ops);
+    renderEquipoCalendar();
+    if(total)toast(`✓ ${total} día${total===1?'':'s'} importado${total===1?'':'s'} desde Google Calendar`,'success');
+    else if(!failedCalendars)toast('Sin eventos nuevos en la semana visible','info');
+    if(failedCalendars)toast(`${failedCalendars} calendario${failedCalendars===1?'':'s'} no se pudo${failedCalendars===1?'':'ieron'} sincronizar`,'warning');
+  }catch(e){
+    _restoreEquipoEventos(previous);
+    _equipoPersistError('respaldar la sincronización de Google Calendar',e);
+  }finally{
+    btn.disabled=false;
+    btn.textContent=previousLabel;
+  }
 }
 
 // ── SOLICITUD ITEMS ───────────────────────────────────────────
