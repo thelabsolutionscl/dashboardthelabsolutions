@@ -115,9 +115,9 @@ test('respuesta perdida del Apps Script deja reconciliación persistente y nunca
 
 function airtableHarness(seed={}){
   const records={
-    Google_Ads_KPIs:(seed.Google_Ads_KPIs||[]).map(structuredClone),
-    Google_Ads_Campanas:(seed.Google_Ads_Campanas||[]).map(structuredClone),
-    Agent_Queue:(seed.Agent_Queue||[]).map(structuredClone)
+    Google_Ads_KPIs:(seed.Google_Ads_KPIs||[]).map(x=>structuredClone(x)),
+    Google_Ads_Campanas:(seed.Google_Ads_Campanas||[]).map(x=>structuredClone(x)),
+    Agent_Queue:(seed.Agent_Queue||[]).map(x=>structuredClone(x))
   };
   let seq=1;const calls=[],original=global.fetch;
   global.fetch=async(url,opts={})=>{
@@ -189,7 +189,7 @@ test('duplicados históricos se detectan pero no se borran automáticamente',asy
 
 test('piloto marca Procesando antes de mutar y Completado solo después de todas las confirmaciones',async()=>{
   const h=airtableHarness({Agent_Queue:[{
-    id:'recQUEUE00000001',createdTime:'2026-10-06T18:00:00Z',
+    id:'recQUEUE000000001',createdTime:'2026-10-06T18:00:00Z',
     fields:{Agente:'ADS_AUTOPILOT',Estado:'Pendiente'}
   }]});
   const st=storage(),events=[];
@@ -204,7 +204,7 @@ test('piloto marca Procesando antes de mutar y Completado solo después de todas
   const guard=new CrmMutationGuard({storage:st.api},env);
   try{
     const res=await invoke(guard,'/ads-autopilot',{
-      actor,recordId:'recQUEUE00000001',approve:true,mutations:[editMutation()]
+      actor,recordId:'recQUEUE000000001',approve:true,mutations:[editMutation()]
     });
     assert.equal(res.status,200);
     assert.equal(h.records.Agent_Queue[0].fields.Estado,'Completado');
@@ -216,7 +216,7 @@ test('piloto marca Procesando antes de mutar y Completado solo después de todas
 
 test('si una mutación del piloto falla, la propuesta vuelve a Pendiente y nunca se marca Completada',async()=>{
   const h=airtableHarness({Agent_Queue:[{
-    id:'recQUEUE00000001',createdTime:'2026-10-06T18:00:00Z',
+    id:'recQUEUE000000001',createdTime:'2026-10-06T18:00:00Z',
     fields:{Agente:'ADS_AUTOPILOT',Estado:'Pendiente'}
   }]});
   const env={AIRTABLE_TOKEN:'pat',CRM_MUTATION_GUARD:{
@@ -226,7 +226,7 @@ test('si una mutación del piloto falla, la propuesta vuelve a Pendiente y nunca
   const guard=new CrmMutationGuard({storage:storage().api},env);
   try{
     const res=await invoke(guard,'/ads-autopilot',{
-      actor,recordId:'recQUEUE00000001',approve:true,mutations:[editMutation()]
+      actor,recordId:'recQUEUE000000001',approve:true,mutations:[editMutation()]
     });
     assert.equal(res.status,503);
     assert.equal(h.records.Agent_Queue[0].fields.Estado,'Pendiente');
