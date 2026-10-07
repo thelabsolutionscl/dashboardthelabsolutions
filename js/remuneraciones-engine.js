@@ -113,11 +113,16 @@ function deriveOrder(order,doc=shared){
   if(auth&&STATUS.includes(auth.status))return {...auth,authoritative:true,record:order};
   const rule=resolveRule({seller,sellerEmail,date:date||todayKey(),product:String(f['Detalle productos']||'')},doc);
   const base=taxNet(f);
-  const ratio=paidRatio(f);
+  const ratio=paidRatio(f),invoiced=hasInvoice(f),reversed=isReversed(f);
+  let eligibleBase=base.amount;
+  if(rule.basis==='net_paid')eligibleBase=Math.round(base.amount*ratio);
+  if(rule.basis==='net_invoiced'&&!invoiced)eligibleBase=0;
   let status='estimated';
-  if(isReversed(f))status='reversed';
-  else if(base.verified&&hasInvoice(f))status=ratio>=1?'paid':'accrued';
-  const eligible=status==='reversed'?-base.amount:base.amount;
+  if(reversed)status='reversed';
+  else if(base.verified&&invoiced)status=ratio>=1?'paid':'accrued';
+  const explicitReverse=num(f['Monto nota crédito neto (CLP)']||f['Monto nota credito neto (CLP)']||
+    f['Monto devolución neto (CLP)']||f['Monto devolucion neto (CLP)']||f['Monto reversado neto (CLP)']);
+  const eligible=status==='reversed'?-Math.min(base.amount,explicitReverse>0?explicitReverse:base.amount):eligibleBase;
   return {
     id:'live:'+String(order?.id||''),sourceId:String(order?.id||''),order:String(f['N° Pedido']||''),
     seller,sellerEmail,period:(date||todayKey()).slice(0,7),date,eligibleNet:eligible,
