@@ -41,6 +41,7 @@ jobs:
 
           probe "token-verify" "$api/user/tokens/verify"
           probe "account-workers" "$api/accounts/$CF_ACCOUNT/workers/services"
+          probe "worker-domains" "$api/accounts/$CF_ACCOUNT/workers/domains"
           probe "account-access-apps" "$api/accounts/$CF_ACCOUNT/access/apps"
 
           code=$(curl -sS -o /tmp/cf-zones.json -w '%{http_code}' "${auth[@]}" "$api/zones?name=thelab.solutions")
