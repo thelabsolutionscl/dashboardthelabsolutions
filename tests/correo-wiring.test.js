@@ -294,7 +294,7 @@ test('mail-api publica build en todas las respuestas para detectar despliegues d
   assert.match(PHP,/array_key_exists\('build', \$data\)/);
 });
 test('envíos usan idempotency key autoritativa de servidor',()=>{
-  assert.match(methodBlock('sendCompose'),/idempotency_key:crypto\.randomUUID\(\)/);
+  assert.match(methodBlock('sendCompose'),/idempotency_key:this\._cmpIdempotencyKey\|\|crypto\.randomUUID\(\)/);
   assert.match(PHP,/function mail_idempotency_begin\(/);
   assert.match(PHP,/mail_idempotency_finish\(/);
   assert.match(PHP,/duplicate.*response/s);
@@ -331,6 +331,20 @@ test('firmas y plantillas compartidas conservan scope y sanitización',()=>{
   assert.match(methodBlock('setSig'),/_sanitizarFirma\(html\)/);
 });
 
+
+test('Correo conserva idempotencia de OC y ejecuta callback solo después del envío confirmado',()=>{
+  const open=methodBlock('openCompose'),send=methodBlock('sendCompose'),close=methodBlock('closeCompose');
+  assert.match(open,/_cmpSupplierPoId=opts\._supplierPoId\|\|null/);
+  assert.match(open,/_cmpIdempotencyKey=opts\._idempotencyKey\|\|null/);
+  assert.match(send,/if\(this\._cmpSupplierPoId\)/);
+  assert.match(send,/supplierPoMarkSent/);
+  assert.match(send,/data\.provider_id/);
+  const successAt=send.indexOf("if(data.error)");
+  const callbackAt=send.indexOf("supplierPoMarkSent");
+  assert.ok(callbackAt>successAt,'la OC solo puede avanzar después de respuesta exitosa');
+  assert.match(close,/_cmpSupplierPoId=null/);
+  assert.match(close,/_cmpIdempotencyKey=null/);
+});
 
 test('las cuentas de correo quedan visibles y ordenadas en la columna izquierda',()=>{
   const render=methodBlock('renderAccounts');
