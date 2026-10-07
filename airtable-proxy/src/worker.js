@@ -3624,6 +3624,29 @@ export default {
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
+    if(url.pathname==='/social/lead'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search||request.method!=='POST')return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||(authorized.identity.role!=='admin'&&authorized.identity.email!=='marketing@thelab.solutions'))
+        return json({error:'Social lead role denied'},403,headers);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>1000)
+        return json({error:'Social lead expects bounded JSON'},415,headers);
+      let body;try{body=JSON.parse(await request.text());}catch(_){return json({error:'Invalid social lead JSON'},422,headers);}
+      if(!body||Object.keys(body).some(k=>k!=='interactionId')||
+         typeof body.interactionId!=='string'||!/^rec[A-Za-z0-9]{14}$/.test(body.interactionId))
+        return json({error:'Invalid social interaction'},422,headers);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Social lead guard unavailable'},503,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-social-leads'));
+        const guarded=await stub.fetch('https://crm-write.internal/social-lead',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({interactionId:body.interactionId,
+            actor:{email:authorized.identity.email,role:authorized.identity.role}})});
+        const h=new Headers(guarded.headers);Object.entries(headers).forEach(([k,v])=>h.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers:h});
+      }catch(_){return json({error:'Social lead guard unavailable'},503,headers);}
+    }
+
     if(url.pathname==='/newsletter/send'){
       const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
       if(url.search)return json({error:'Newsletter query parameters not allowed'},422,scopedHeaders);
