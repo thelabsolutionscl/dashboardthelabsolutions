@@ -1091,31 +1091,59 @@ function nlDestRenderList(){
   el.innerHTML=html;_nlDestUpdCount();
 }
 function nlDestToggle(id,checked){if(!_nlDest)return;if(checked)_nlDest.exclude.delete(id);else _nlDest.exclude.add(id);_nlDestUpdCount();}
-function nlDestAddExtra(){if(!_nlDest)return;const inp=document.getElementById('nlDestExtraEmail');const em=(inp.value||'').trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Email inválido','error');return;}if(_nlDest.extra.some(e=>e.email.toLowerCase()===em.toLowerCase())){toast('Ya está en la lista','info');inp.value='';return;}_nlDest.extra.push({nombre:em,email:em});inp.value='';nlDestRenderList();}
+function nlDestAddExtra(){if(!_nlDest)return;const inp=document.getElementById('nlDestExtraEmail');const em=(inp.value||'').trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Email inválido','error');return;}const cli=(state.clientes||[]).find(r=>String(r.fields?.Email||'').trim().toLowerCase()===em.toLowerCase());if(!cli||cli.fields?.['Suscrito newsletter']!==true||cli.fields?.['Baja newsletter']===true||cli.fields?.['Email válido']!==true){toast('Ese email no tiene opt-in válido en Clientes','error');return;}if(_nlDest.extra.some(e=>e.email.toLowerCase()===em.toLowerCase())){toast('Ya está en la lista','info');inp.value='';return;}_nlDest.extra.push({id:cli.id,nombre:cli.fields?.Empresa||cli.fields?.Contacto||em,email:em});inp.value='';nlDestRenderList();}
 function nlDestRemoveExtra(i){if(!_nlDest)return;_nlDest.extra.splice(i,1);nlDestRenderList();}
-function nlDestSave(close){if(!_nlDest)return;try{localStorage.setItem(_nlDestKey(_nlDest.campId),JSON.stringify({seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra,noResend:_nlDest.noResend}));}catch(_){}
-  toast('Selección de destinatarios guardada ✓','success');renderNlCampaigns();if(close)document.getElementById('nlDestModal').style.display='none';}
+async function nlDestSave(close){if(!_nlDest)return;const c=(state.nlCampaigns||[]).find(x=>x.id===_nlDest.campId);if(!c)return;const snapshot={version:1,seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra.map(e=>({id:e.id||'',email:e.email})),noResend:!!_nlDest.noResend,savedAt:new Date().toISOString(),savedBy:(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||''};const marker='[AUDIENCIA NEWSLETTER] '+JSON.stringify(snapshot);const notes=String(c.fields?.Notas||'').replace(/\n?\[AUDIENCIA NEWSLETTER\][^\n]*/g,'').trim();try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Segmento objetivo':String(_nlDest.seg||'Todos'),'Notas':(notes?notes+'\n':'')+marker});c.fields['Segmento objetivo']=String(_nlDest.seg||'Todos');c.fields.Notas=(notes?notes+'\n':'')+marker;toast('Selección de destinatarios guardada en la campaña ✓','success');renderNlCampaigns();if(close)document.getElementById('nlDestModal').style.display='none';}catch(e){toast('No se pudo guardar la audiencia: '+e.message,'error');throw e;}}
+function _nlEnvioKey(campId,item){return campId+'_'+(item.id||String(item.email||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_')).slice(0,90);}
+function _nlFindEnvioByKey(key){return(state.nlEnvios||[]).find(e=>String(e.fields?.['Envío']||'')===key)||null;}
+async function _nlReserveEnvio(c,item){
+  const key=_nlEnvioKey(c.id,item),existing=_nlFindEnvioByKey(key);
+  if(existing&&['Enviado','Entregado','Abierto','Click'].includes(existing.fields?.Estado||''))return{record:existing,skip:true};
+  if(existing)return{record:existing,skip:false};
+  const fields={'Envío':key,'Campaña':[c.id],'Email':item.email,'Notas':'Reservado por dashboard antes del transporte'};
+  if(item.id)fields.Cliente=[item.id];
+  const created=await _redesWrite('Newsletter_Envios','POST',null,fields);
+  const row={id:created.id,fields:{...fields,...(created.fields||{})}};state.nlEnvios=state.nlEnvios||[];state.nlEnvios.push(row);
+  return{record:row,skip:false};
+}
 async function nlDestSend(){
   if(!_nlDest)return;const list=_nlDestWorking();
   if(!list.length){toast('No hay destinatarios seleccionados','error');return;}
   if(typeof MAIL==='undefined'||!MAIL.post){toast('Correo no disponible','error');return;}
   const c=(state.nlCampaigns||[]).find(x=>x.id===_nlDest.campId);if(!c)return;const f=c.fields;
-  if(!confirm(`¿Enviar esta campaña a ${list.length} destinatario(s) REALES ahora?\n\nAsunto: ${f['Asunto']||f['Campaña']||'(sin asunto)'}\n\nCada uno recibe el correo por separado.`))return;
-  nlDestSave(false);
+  if(!confirm(`¿Enviar esta campaña a ${list.length} destinatario(s) REALES ahora?\n\nAsunto: ${f['Asunto']||f['Campaña']||'(sin asunto)'}\n\nCada envío queda reservado y trazado antes del transporte.`))return;
+  await nlDestSave(false);
   const btn=document.getElementById('nlDestSendBtn');const prev=btn.textContent;btn.disabled=true;
-  const body=_nlEmailHtml(f),subject=f['Asunto']||f['Campaña']||'Newsletter';
-  let ok=0,fail=0;const enviados=[];
+  const subject=f['Asunto']||f['Campaña']||'Newsletter';
+  let ok=0,fail=0,skipped=0;const enviados=[];
   for(let i=0;i<list.length;i++){
     btn.textContent=`Enviando ${i+1}/${list.length}…`;
-    try{const r=await MAIL.post({action:'send',to:list[i].email,subject,body,from_name:'The Lab Solutions'});if(r&&!r.error){ok++;enviados.push(list[i].email);}else fail++;}catch(_){fail++;}
+    let slot;
+    try{slot=await _nlReserveEnvio(c,list[i]);if(slot.skip){skipped++;continue;}}catch(e){fail++;continue;}
+    try{
+      const body=_nlEmailHtml(f);
+      const r=await MAIL.post({action:'send',to:list[i].email,subject,body,from_name:'The Lab Solutions'});
+      if(r&&!r.error){
+        ok++;enviados.push(list[i].email);
+        const fields={Estado:'Enviado','Fecha envío':new Date().toISOString(),'Notas':'Transportado por dashboard'+(r.id?' · id externo '+r.id:'')};
+        await _redesWrite('Newsletter_Envios','PATCH',slot.record.id,fields);
+        Object.assign(slot.record.fields,fields);
+      }else{
+        fail++;await _redesWrite('Newsletter_Envios','PATCH',slot.record.id,{Notas:'ERROR transporte: '+String(r?.error||'respuesta inválida').slice(0,500)});
+      }
+    }catch(e){
+      fail++;try{await _redesWrite('Newsletter_Envios','PATCH',slot.record.id,{Notas:'ERROR transporte: '+String(e?.message||e).slice(0,500)});}catch(_){}
+    }
     await new Promise(r=>setTimeout(r,120));
   }
-  // Se registra a quién SÍ le llegó, para que "no reenviar" funcione la próxima
-  // vez aunque Make no escriba la fila en Newsletter_Envios.
   _nlRecordSent(enviados);
   btn.disabled=false;btn.textContent=prev;
-  try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Estado':'Enviada','Enviados':ok,'Fecha envío':c.fields['Fecha envío']||hoyCL()});Object.assign(c.fields,{'Estado':'Enviada','Enviados':ok});}catch(_){}
-  toast(`✓ Enviado a ${ok}${fail?` · ${fail} con error`:''}`,fail?'info':'success');
+  const finalState=fail?'Pausada':'Enviada';
+  try{
+    const fields={'Estado':finalState,'Enviados':ok+skipped,'Fecha envío':c.fields['Fecha envío']||hoyCL()};
+    await _redesWrite('Newsletter_Campañas','PATCH',c.id,fields);Object.assign(c.fields,fields);
+  }catch(e){toast('Los envíos terminaron, pero no se pudo cerrar la campaña: '+e.message,'error');}
+  toast(`✓ ${ok} enviados${skipped?` · ${skipped} ya enviados omitidos`:''}${fail?` · ${fail} con error; campaña pausada`:''}`,fail?'info':'success');
   document.getElementById('nlDestModal').style.display='none';renderNlKpis();renderNlCampaigns();
 }
 function _nlEstBadge(e){return `<span class="badge ${NL_ESTADO_BADGE[e]||'badge-gray'}">${escapeHtml(e||'Borrador')}</span>`;}
@@ -1141,7 +1169,7 @@ function renderNlCampaigns(){
     if(est==='Borrador') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSetEstado('${c.id}','En revisión')">Pasar a revisión</button>`);
     if(est==='Borrador'||est==='En revisión') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Programar</button>`);
     if(est==='Programada') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSchedule('${c.id}')">📅 Reprogramar</button>`);
-    if(est!=='Enviada') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSetEstado('${c.id}','Enviada')">Marcar enviada ✓</button>`);
+    if(est!=='Enviada') btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSetEstado('${c.id}','Pausada')">Cerrar administrativamente</button>`);
     btns.push(`<button class="btn btn-ghost btn-sm" onclick="nlSendTest('${c.id}')">✉ Enviar prueba</button>`);
     const ta=_nlPct(f['Tasa apertura (%)']), tc=_nlPct(f['Tasa click (%)']);
     const metrics = est==='Enviada' ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--text3)">
@@ -1171,7 +1199,7 @@ async function nlSetEstado(id,estado){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
   try{
     const fields={'Estado':estado};
-    if(estado==='Enviada'&&!c.fields['Fecha envío']) fields['Fecha envío']=hoyCL();
+    if(estado==='Enviada'){toast('El estado Enviada solo lo establece un transporte con evidencia','error');return;} if(estado==='Pausada')fields['Notas']=(String(c.fields['Notas']||'')+'\n[Cierre administrativo] '+new Date().toISOString()).trim();
     await _redesWrite('Newsletter_Campañas','PATCH',id,fields);
     Object.assign(c.fields,fields);
     toast('Estado: '+estado+' ✓','success'); renderNlKpis(); renderNlCampaigns();
@@ -1275,7 +1303,7 @@ function _nlEmailHtml(f){
 function _nlShowPreview(html){
   const m=document.getElementById('nlPreviewModal'), fr=document.getElementById('nlPreviewFrame');
   if(!m||!fr) return;
-  fr.srcdoc=html; m.style.display='flex';
+  fr.setAttribute('sandbox','');fr.setAttribute('referrerpolicy','no-referrer');fr.srcdoc=html; m.style.display='flex';
 }
 function nlPreview(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c){toast('Campaña no encontrada','error');return;}
