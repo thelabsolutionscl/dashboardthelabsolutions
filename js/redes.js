@@ -1104,7 +1104,7 @@ function nlDestRenderList(){
 function nlDestToggle(id,checked){if(!_nlDest)return;if(checked)_nlDest.exclude.delete(id);else _nlDest.exclude.add(id);_nlDestUpdCount();}
 function nlDestAddExtra(){if(!_nlDest)return;const inp=document.getElementById('nlDestExtraEmail');const em=(inp.value||'').trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Email inválido','error');return;}const cli=(state.clientes||[]).find(r=>String(r.fields?.Email||'').trim().toLowerCase()===em.toLowerCase());if(!cli||cli.fields?.['Suscrito newsletter']!==true||cli.fields?.['Baja newsletter']===true||cli.fields?.['Email válido']!==true){toast('Ese email no tiene opt-in válido en Clientes','error');return;}if(_nlDest.extra.some(e=>e.email.toLowerCase()===em.toLowerCase())){toast('Ya está en la lista','info');inp.value='';return;}_nlDest.extra.push({id:cli.id,nombre:cli.fields?.Empresa||cli.fields?.Contacto||em,email:em});inp.value='';nlDestRenderList();}
 function nlDestRemoveExtra(i){if(!_nlDest)return;_nlDest.extra.splice(i,1);nlDestRenderList();}
-async function nlDestSave(close){if(!_nlDest)return;const c=(state.nlCampaigns||[]).find(x=>x.id===_nlDest.campId);if(!c)return;const snapshot={version:1,seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra.map(e=>({id:e.id||'',email:e.email})),noResend:!!_nlDest.noResend,savedAt:new Date().toISOString(),savedBy:(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||''};const marker='[AUDIENCIA NEWSLETTER] '+JSON.stringify(snapshot);const notes=String(c.fields?.Notas||'').replace(/\n?\[AUDIENCIA NEWSLETTER\][^\n]*/g,'').trim();try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Segmento objetivo':String(_nlDest.seg||'Todos'),'Notas':(notes?notes+'\n':'')+marker});c.fields['Segmento objetivo']=String(_nlDest.seg||'Todos');c.fields.Notas=(notes?notes+'\n':'')+marker;toast('Selección de destinatarios guardada en la campaña ✓','success');renderNlCampaigns();if(close)document.getElementById('nlDestModal').style.display='none';}catch(e){toast('No se pudo guardar la audiencia: '+e.message,'error');throw e;}}
+async function nlDestSave(close){if(!_nlDest)return;const c=(state.nlCampaigns||[]).find(x=>x.id===_nlDest.campId);if(!c)return;const approved=_nlDestWorking().map(e=>({id:e.id||'',email:String(e.email||'').trim().toLowerCase()}));const snapshot={version:1,seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra.map(e=>({id:e.id||'',email:e.email})),noResend:!!_nlDest.noResend,approved,savedAt:new Date().toISOString(),savedBy:(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||''};const marker='[AUDIENCIA NEWSLETTER] '+JSON.stringify(snapshot);const notes=String(c.fields?.Notas||'').replace(/\n?\[AUDIENCIA NEWSLETTER\][^\n]*/g,'').trim();try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Segmento objetivo':String(_nlDest.seg||'Todos'),'Notas':(notes?notes+'\n':'')+marker});c.fields['Segmento objetivo']=String(_nlDest.seg||'Todos');c.fields.Notas=(notes?notes+'\n':'')+marker;toast('Selección de destinatarios guardada en la campaña ✓','success');renderNlCampaigns();if(close)document.getElementById('nlDestModal').style.display='none';}catch(e){toast('No se pudo guardar la audiencia: '+e.message,'error');throw e;}}
 function _nlEnvioKey(campId,item){return campId+'_'+(item.id||String(item.email||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_')).slice(0,90);}
 function _nlFindEnvioByKey(key){return(state.nlEnvios||[]).find(e=>String(e.fields?.['Envío']||'')===key)||null;}
 async function _nlReserveEnvio(c,item){
@@ -1120,42 +1120,22 @@ async function _nlReserveEnvio(c,item){
 async function nlDestSend(){
   if(!_nlDest)return;const list=_nlDestWorking();
   if(!list.length){toast('No hay destinatarios seleccionados','error');return;}
-  if(typeof MAIL==='undefined'||!MAIL.post){toast('Correo no disponible','error');return;}
   const c=(state.nlCampaigns||[]).find(x=>x.id===_nlDest.campId);if(!c)return;const f=c.fields;
-  if(!confirm(`¿Enviar esta campaña a ${list.length} destinatario(s) REALES ahora?\n\nAsunto: ${f['Asunto']||f['Campaña']||'(sin asunto)'}\n\nCada envío queda reservado y trazado antes del transporte.`))return;
+  if(!confirm(`¿Enviar esta campaña a ${list.length} destinatario(s) REALES ahora?\n\nAsunto: ${f['Asunto']||f['Campaña']||'(sin asunto)'}\n\nEl servidor revalidará consentimiento, supresiones e idempotencia.`))return;
   await nlDestSave(false);
-  const btn=document.getElementById('nlDestSendBtn');const prev=btn.textContent;btn.disabled=true;
-  const subject=f['Asunto']||f['Campaña']||'Newsletter';
-  let ok=0,fail=0,skipped=0;const enviados=[];
-  for(let i=0;i<list.length;i++){
-    btn.textContent=`Enviando ${i+1}/${list.length}…`;
-    let slot;
-    try{slot=await _nlReserveEnvio(c,list[i]);if(slot.skip){skipped++;continue;}}catch(e){fail++;continue;}
-    try{
-      const body=_nlEmailHtml(f);
-      const r=await MAIL.post({action:'send',to:list[i].email,subject,body,from_name:'The Lab Solutions'});
-      if(r&&!r.error){
-        ok++;enviados.push(list[i].email);
-        const fields={Estado:'Enviado','Fecha envío':new Date().toISOString(),'Notas':'Transportado por dashboard'+(r.id?' · id externo '+r.id:'')};
-        await _redesWrite('Newsletter_Envios','PATCH',slot.record.id,fields);
-        Object.assign(slot.record.fields,fields);
-      }else{
-        fail++;await _redesWrite('Newsletter_Envios','PATCH',slot.record.id,{Notas:'ERROR transporte: '+String(r?.error||'respuesta inválida').slice(0,500)});
-      }
-    }catch(e){
-      fail++;try{await _redesWrite('Newsletter_Envios','PATCH',slot.record.id,{Notas:'ERROR transporte: '+String(e?.message||e).slice(0,500)});}catch(_){}
-    }
-    await new Promise(r=>setTimeout(r,120));
-  }
-  _nlRecordSent(enviados);
-  btn.disabled=false;btn.textContent=prev;
-  const finalState=fail?'Pausada':'Enviada';
+  const cfg=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!cfg?.url||!cfg?.key){toast('Proxy seguro no configurado','error');return;}
+  const btn=document.getElementById('nlDestSendBtn');const prev=btn.textContent;btn.disabled=true;btn.textContent='Enviando desde servidor…';
   try{
-    const fields={'Estado':finalState,'Enviados':ok+skipped,'Fecha envío':c.fields['Fecha envío']||hoyCL()};
-    await _redesWrite('Newsletter_Campañas','PATCH',c.id,fields);Object.assign(c.fields,fields);
-  }catch(e){toast('Los envíos terminaron, pero no se pudo cerrar la campaña: '+e.message,'error');}
-  toast(`✓ ${ok} enviados${skipped?` · ${skipped} ya enviados omitidos`:''}${fail?` · ${fail} con error; campaña pausada`:''}`,fail?'info':'success');
-  document.getElementById('nlDestModal').style.display='none';renderNlKpis();renderNlCampaigns();
+    const resp=await fetch(cfg.url.replace(/\/$/,'')+'/newsletter/send',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify({campaignId:c.id})});
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok&&resp.status!==207)throw new Error(data.error||('HTTP '+resp.status));
+    toast(`✓ ${data.sent||0} enviados${data.skipped?` · ${data.skipped} ya enviados`:''}${data.suppressed?` · ${data.suppressed} suprimidos`:''}${data.failed?` · ${data.failed} con error`:''}`,data.failed||data.suppressed?'info':'success');
+    await nlLoad(true);
+    document.getElementById('nlDestModal').style.display='none';
+  }catch(e){toast('No se pudo completar el envío: '+String(e?.message||e),'error');}
+  finally{btn.disabled=false;btn.textContent=prev;}
 }
 function _nlEstBadge(e){return `<span class="badge ${NL_ESTADO_BADGE[e]||'badge-gray'}">${escapeHtml(e||'Borrador')}</span>`;}
 function _nlFmtFecha(d){if(!d)return '—';const dt=new Date(d);if(isNaN(dt))return escapeHtml(String(d));return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'});}
