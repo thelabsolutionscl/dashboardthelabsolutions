@@ -24,7 +24,7 @@ test('el webhook social usa una instancia estable por red + external_event_id',(
 });
 
 test('SocialEventGuard persiste resultado y replay para el mismo evento',()=>{
-  const g=block(WORKER,'export class SocialEventGuard','// Detección simple de queja');
+  const g=block(WORKER,'export class SocialEventGuard','/* ════════════════════════════════════════════════════════════════════════\n * NÚCLEO: crear Cliente');
   assert.match(g,/storage\.get\("result"\)/);
   assert.match(g,/storage\.put\("result",result\)/);
   assert.match(g,/replayed:true/);
@@ -32,8 +32,8 @@ test('SocialEventGuard persiste resultado y replay para el mismo evento',()=>{
 
 test('la publicación exige reserva, lease e idempotency key antes del commit',()=>{
   const reserve=block(WORKER,'async function handleSocialPublishReserve(','async function handleSocialPublish(');
-  const publish=block(WORKER,'async function handleSocialPublish(','// Detección simple de queja');
-  const guard=block(WORKER,'export class SocialEventGuard','// Detección simple de queja');
+  const publish=block(WORKER,'async function handleSocialPublish(','/* ════════════════════════════════════════════════════════════════════════\n * NÚCLEO: crear Cliente');
+  const guard=block(WORKER,'export class SocialEventGuard','/* ════════════════════════════════════════════════════════════════════════\n * NÚCLEO: crear Cliente');
   assert.match(reserve,/Estado!=="Programado"/);
   assert.match(reserve,/approval\?\.status!=="approved"/);
   assert.match(reserve,/Idempotency key/);
@@ -60,7 +60,7 @@ test('la conversión manual a lead usa un guard global y dedup social',()=>{
 
 test('métricas usan upsert y publicación confirmada crea heartbeats',()=>{
   const metrics=block(WORKER,'async function handleSocialMetrics(','async function handleSocialPublishReserve');
-  const publish=block(WORKER,'async function handleSocialPublish(','// Detección simple de queja');
+  const publish=block(WORKER,'async function handleSocialPublish(','/* ════════════════════════════════════════════════════════════════════════\n * NÚCLEO: crear Cliente');
   assert.match(metrics,/socialFindOne\(env,"Social_Metrics"/);
   assert.match(metrics,/airtableUpdateTolerant\(env,"Social_Metrics"/);
   assert.match(metrics,/socialHeartbeat\(env,"social-metrics"/);
