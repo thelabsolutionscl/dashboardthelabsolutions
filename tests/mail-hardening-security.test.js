@@ -13,25 +13,23 @@ function block(start,end){
 }
 test('sender identity never falls back to a different active inbox',()=>{
  const postAs=block('async postAs(fromEmail,params){','async init(){');
- assert.match(postAs,/if\(!pass\)\{[\s\S]*return \{error:/);
+ assert.match(postAs,/if\(!pass\)\s*(?:\{|)\s*return \{error:/);
  assert.doesNotMatch(postAs,/return this\.post\(params\)/);
 });
-test('mailbox passwords move from persistent local storage to tab scope',()=>{
- const src=block('getMailPassFor(email){','getMailPass(){');
- const code='function '+src.trim().replace(/,\s*$/,'');
- const store=()=>{const data=new Map();return {getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}};
- const persistent=store(),tab=store();
- persistent.setItem('thelab_mail_pass_sales@example.test','old-pass');
- const get=new Function('sessionStorage','localStorage',code+';return getMailPassFor;')(tab,persistent);
- assert.equal(get('sales@example.test'),'old-pass');
- assert.equal(persistent.getItem('thelab_mail_pass_sales@example.test'),null);
- assert.equal(tab.getItem('thelab_mail_pass_sales@example.test'),'old-pass');
- assert.equal(get('sales@example.test'),'old-pass');
- assert.equal(get('missing@example.test'),'');
+test('mailbox passwords leave Web Storage and secure mode uses backend session',()=>{
+ assert.match(js,/_legacyPassByAccount:\{\}/);
+ const getter=block('getMailPassFor(email){','getMailPass(){');
+ assert.match(getter,/_legacyPassByAccount/);
+ assert.doesNotMatch(getter,/localStorage|sessionStorage/);
+ const purge=block('_purgeLegacyMailPasswords(){','getMailPassFor(email){');
+ assert.match(purge,/localStorage\.removeItem\(k\)/);
+ assert.match(purge,/sessionStorage\.removeItem\(k\)/);
  const pass=block('setMailPass(p){','auth(){');
- assert.match(pass,/sessionStorage\.setItem\(k,p\)/);
- assert.match(pass,/localStorage\.removeItem\(k\)/);
- assert.doesNotMatch(pass,/localStorage\.setItem\(k,p\)/);
+ assert.match(pass,/_legacyPassByAccount/);
+ assert.doesNotMatch(pass,/localStorage\.setItem|sessionStorage\.setItem/);
+ assert.match(js,/_secureMailSession\(account,password\)/);
+ assert.match(js,/\/mail\/session/);
+ assert.match(js,/\/mail\/rpc/);
  assert.match(notify,/MAIL\.getMailPassFor\(email\)/);
 });
 test('correo recibido y firmas usan saneadores separados con allowlists',()=>{
