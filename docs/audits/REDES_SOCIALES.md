@@ -1,5 +1,66 @@
 # Auditoría de REDES SOCIALES
 
+## Actualización 2026-10-07 — cierre funcional de #104
+
+La arquitectura social fue endurecida para separar claramente **edición, transporte, evidencia de plataforma e ingesta**.
+
+### Ingesta e idempotencia
+
+- `POST /webhooks/social` exige `SOCIAL_WEBHOOK_KEY` exclusivo.
+- Cada payload debe incluir `external_event_id`, `platform_user_id`, red y timestamp original.
+- El evento se serializa en el Durable Object `SOCIAL_EVENT_GUARD` usando `red + external_event_id`.
+- `Social_Interactions` conserva `External event ID`, `Platform user ID` y `Platform post ID`.
+- El resultado queda persistido en el guard; un reintento devuelve el mismo resultado y no crea una segunda interacción.
+- Los leads se deduplican además por `Clientes.Social identity key = red:platform_user_id`.
+- La interacción queda enlazada con `Cliente ID` y `Agent Queue ID`.
+
+### Conversión manual a lead
+
+El navegador ya no crea `Clientes` y `Agent_Queue` directamente. `redesInteractionToLead()` llama a
+`POST /social/lead`, protegido por Cloudflare Access y serializado por `CRM_MUTATION_GUARD`.
+La operación recupera Cliente/tarea existentes antes de crear y solo después marca `Lead creado`.
+
+### Publicación y aprobación editorial
+
+- El piloto y el auto-programador generan contenido en **En revisión**.
+- El paso humano a `Programado` guarda una aprobación editorial versionada, zona `America/Santiago`,
+  fecha sugerida/aprobada y `Idempotency key = social-post/<recordId>`.
+- `Publicado` no puede establecerse localmente sin `External Post ID`, permalink HTTPS y fecha real.
+- El contrato de publicación es:
+  1. `POST /webhooks/social/publish/reserve`
+  2. publicar en la plataforma usando la misma idempotency key
+  3. `POST /webhooks/social/publish` con `external_post_id`, permalink, timestamp e idempotency key.
+- La reserva usa un lease de 10 minutos en `SOCIAL_EVENT_GUARD`; dos workers no reciben dos reservas activas.
+- Los intentos y errores quedan en `Social_Posts`.
+
+### Inbox y servicio
+
+- `Respondido` requiere canal, fecha e ID externo de respuesta.
+- Las quejas crean ticket operacional con estado, responsable y SLA inicial de 4 horas.
+- La sugerencia IA continúa separada de la confirmación de respuesta enviada.
+
+### Métricas y healthchecks
+
+- `POST /webhooks/social/metrics` hace upsert por `Período = fecha · red`.
+- El panel automático lee heartbeats reales de `Automations`: `social-listen`, `social-metrics` y
+  `social-publish`. Ya no infiere que Make está activo por encontrar registros recientes.
+- Las cargas sociales elevan sus límites a 2000/2000/5000 y el core de Airtable mantiene la paginación
+  controlada para cargas completas.
+- El mejor día usa engagement/alcance o promedio, no suma bruta.
+- El reporte semanal usa una ventana cerrada `[hoy-7d, hoy]` y no mezcla publicaciones futuras.
+
+### Seguridad y procedencia
+
+- `Media URL` y `Link` deben ser HTTPS antes de aprobación.
+- El contenido IA guarda agente, versión de prompt, modelo/proxy, timestamp y aprobador.
+- DELETE sigue pasando por `_redesWrite`, preservando el aislamiento demo.
+
+### Dependencias de cutover
+
+No se publicó nada en redes durante esta auditoría. Para producción, Make/conectores deben adoptar el
+nuevo contrato de webhook, reserva de publicación, confirmación de plataforma y snapshots métricos.
+No se debe marcar `Publicado` ni `Respondido` desde automatizaciones antiguas sin la evidencia requerida.
+
 Fecha: 2026-08-02
 
 ## Alcance
@@ -40,7 +101,10 @@ Se revisaron conjuntamente:
 - Existe RBAC específico para que marketing escriba únicamente en las tablas necesarias.
 - Ya existen pruebas puras para parser por red, sentimiento y mejor día.
 
-## Hallazgos
+## Hallazgos originales (histórico)
+
+> Se conserva el diagnóstico inicial como evidencia; el bloque superior describe el estado corregido.
+
 
 ### Críticos
 
