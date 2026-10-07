@@ -115,19 +115,21 @@ test('el modo demo intercepta escrituras productivas', () => {
   assert.match(seed, /Nada se guarda|no se guardan/i);
 });
 
-test('el ciclo editorial exige fecha al programar y conserva revisión', () => {
-  const render = fn('renderRedesPosts');
-  for (const state of ['Borrador', 'En revisión', 'Programado', 'Publicado']) {
-    assert.match(REDES, new RegExp(esc(state)), `falta estado ${state}`);
-  }
-  assert.match(render, /redesSchedule/);
-  assert.match(render, /A revisión/);
-  assert.match(render, /Aprobar y programar/);
-  const schedule = fn('redesSchedule');
-  assert.match(schedule, /redesDatePicker/);
-  assert.match(schedule, /Estado['"]?\s*:\s*['"]Programado['"]/);
-  assert.match(schedule, /Fecha programada/);
-  assert.match(schedule, /_redesWrite\(['"]Social_Posts['"],\s*['"]PATCH['"]/);
+test('el ciclo editorial exige aprobación y fecha al programar', () => {
+  const render=fn('renderRedesPosts');
+  for (const state of ['Borrador','En revisión','Programado','Publicado'])
+    assert.match(REDES,new RegExp(esc(state)),`falta estado ${state}`);
+  assert.match(render,/redesSchedule/);
+  assert.match(render,/A revisión/);
+  assert.match(render,/Aprobar y programar/);
+  const i=REDES.indexOf('async function redesSchedule('),j=REDES.indexOf('function redesCopyPost',i);
+  const schedule=REDES.slice(i,j);
+  assert.match(schedule,/redesDatePicker/);
+  assert.match(schedule,/Estado':['"]Programado['"]/);
+  assert.match(schedule,/Fecha programada/);
+  assert.match(schedule,/Aprobación editorial/);
+  assert.match(schedule,/Idempotency key/);
+  assert.match(schedule,/_redesWrite\(['"]Social_Posts['"],\s*['"]PATCH['"]/);
 });
 
 test('la generación puede usar producción real y guarda posts trazables', () => {
