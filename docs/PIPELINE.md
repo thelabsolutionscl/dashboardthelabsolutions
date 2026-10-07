@@ -242,3 +242,31 @@ curl -s -X POST https://thelab.solutions/api/lead \
 
 > Un lead que llegó solo por email es un lead **perdido a medias**: nadie lo
 > sigue, no tiene scoring y no cuenta en los reportes de conversión.
+
+
+---
+
+## 8. Pipeline LinkedIn v2
+
+El pipeline LinkedIn ya tiene dos puertas inbound:
+
+1. **Compatibilidad:** Make/Zapier → `POST /webhooks/linkedin` con
+   `LINKEDIN_WEBHOOK_KEY`.
+2. **Oficial:** LinkedIn Lead Sync → `GET|POST /webhooks/linkedin/official`.
+
+La ruta oficial valida el challenge de propiedad con HMAC-SHA256, valida cada POST con
+`X-LI-Signature` usando el body sin reserializar, deduplica por la identidad de la
+notificación y luego obtiene el Lead Form Response desde la Marketing API. El resultado
+reutiliza exactamente el mismo `createLeadAndQueue` que los demás orígenes.
+
+### Outbound → CRM
+
+La conversión de `LinkedIn_Prospects` ya no ocurre en el navegador. El proxy ejecuta el
+comando dentro de `CRM_MUTATION_GUARD`, busca nuevamente duplicados contra Airtable y
+reserva la intención antes de crear el Cliente. Por eso dos computadores no pueden ejecutar
+simultáneamente el mismo prospecto dentro de este sistema.
+
+### Observabilidad
+
+`LinkedIn_Events` es el event log del embudo. Los KPI del panel se calculan server-side y
+no reconstruyen tiempos a partir de la etapa actual.
