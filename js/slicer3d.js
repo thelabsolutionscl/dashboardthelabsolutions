@@ -339,9 +339,9 @@ const SL3D=(function(){
         paint=shade(f.over,d,s);
       }
       ctx.fillStyle=paint;ctx.fill();
-      // Sólo una costura subpíxel para tapar grietas de antialiasing sin
-      // remarcar los límites triangulares.
-      ctx.strokeStyle=paint;ctx.lineWidth=0.35;ctx.lineJoin='round';ctx.stroke();
+      // Canvas 2D deja microgrietas antialias entre triángulos contiguos.
+      // Un solape fino del mismo paint las tapa sin dibujar una arista distinta.
+      ctx.strokeStyle=paint;ctx.lineWidth=1.25;ctx.lineJoin='round';ctx.lineCap='round';ctx.stroke();
     }
     // ── Columnas de soporte (palitos verticales bajo los voladizos) ──
     if(S.showSupports){
