@@ -1,115 +1,137 @@
 # Auditoría de REMUNERACIONES
 
-## Alcance
+## Estado
 
-La pestaña `remuneraciones` está implementada dentro de `index.html`. El módulo actualmente combina:
+Auditoría funcional #106 cerrada en código.
 
-- comisiones comerciales sobre pedidos despachados/completados;
-- pipeline potencial desde cotizaciones solicitadas/enviadas;
-- pedidos en proceso;
-- una interfaz de sueldo base y “liquidación”.
+El módulo deja de tratar todo pedido despachado como una “comisión ganada” y separa explícitamente:
 
-No es todavía un sistema de nómina o liquidación legal. La parte funcional comprobable es el cálculo comercial de comisiones.
+- estimación comercial;
+- comisión devengada;
+- comisión aprobada;
+- comisión pagada;
+- reversas;
+- pipeline ponderado.
 
-## Hallazgos críticos
+La vista histórica en `index.html` permanece como compatibilidad, pero el cálculo autoritativo se instala desde `js/remuneraciones-engine.js` al cargar `js/finanzas.js`.
 
-### 1. La sección de liquidación está rota
+## Motor de cálculo
 
-`renderRemuneraciones()` invoca `remRenderLiquidacion(totalNeto,totalComision)`, pero no existe una definición de `remRenderLiquidacion` en `index.html` ni en los módulos JavaScript cargados.
+### Reglas versionadas
 
-La interfaz también llama a `remToggleSueldos()` y `remSaveSueldos()`, sin definiciones encontradas. En consecuencia, abrir la pestaña puede lanzar un `ReferenceError` antes de completar las tablas, y los controles de sueldo base no son operativos.
+La regla estándar queda representada como una entidad versionada con:
 
-### 2. “Comisión ganada” no tiene estado financiero autoritativo
+- `id`;
+- `version`;
+- vendedor/email;
+- tasa;
+- base (`net_tax_document`, `net_paid` o `net_invoiced`);
+- vigencia desde/hasta;
+- contrato;
+- producto.
 
-La comisión se considera ganada cuando un pedido está `Despachado` o `Completado`. No se verifica:
+La tasa ya no es una constante repetida dentro del motor autoritativo.
 
-- factura emitida o válida;
-- pago recibido y conciliado;
-- pago parcial;
-- nota de crédito, devolución o anulación;
-- aprobación de la comisión;
-- fecha real de devengo o pago.
+### Base tributaria
 
-El resultado es una estimación comercial, no una obligación de pago cerrada.
+El motor no transforma un bruto en neto dividiendo siempre por 1,19.
 
-### 3. Tasa y base de cálculo rígidas
+Acepta únicamente una base tributaria explícita:
 
-La tasa `0.035` está repetida directamente en render y exportación. No hay vigencia, contrato, vendedor, producto, tramo, meta ni excepción.
+- neto/subtotal neto; o
+- bruto menos IVA explícito.
 
-El neto se calcula siempre como `bruto / 1.19`. Esto supone que todo el monto está afecto al IVA chileno de 19 % y que el total no contiene conceptos exentos, descuentos, propinas, retenciones, monedas distintas o ajustes tributarios.
+Si no existe esa evidencia, la base queda como no verificada y la cifra se mantiene en estado estimado.
 
-### 4. Pipeline potencial sobreestimado
+### Cobro, pagos parciales y reversas
 
-El pipeline incluye todas las cotizaciones `Solicitada` o `Enviada`, aunque estén vencidas. La fecha vencida solo se colorea; no se excluye ni se reduce su probabilidad.
+- una factura/DTE con base tributaria puede devengar comisión;
+- una regla `net_paid` prorratea por el porcentaje realmente pagado;
+- un pago total cambia el evento a `paid`;
+- notas de crédito, devoluciones, anulaciones o reversas generan monto negativo;
+- si existe un monto neto explícito de reversa parcial se usa ese monto y no el total del pedido.
 
-Tampoco hay probabilidad por etapa, fecha esperada de cierre, confianza, duplicados, moneda ni regla de expiración. El KPI debe rotularse como estimación bruta o incorporar un modelo de pipeline ponderado.
+## Pipeline
 
-### 5. Seguridad y privacidad dependen del navegador
+Las cotizaciones vencidas ya no aportan potencial pleno.
 
-`vendorOwnsRecord()` filtra pedidos y cotizaciones en cliente. Ese filtro mejora la vista, pero no sustituye autorización en el origen de datos.
+Ponderación vigente:
 
-Además, `demo` incluye la pestaña en RBAC y `vendorOwnsRecord()` devuelve `true` para cualquier rol no comercial. Si un usuario demo recibe datos reales, podría visualizar comisiones de todos los vendedores. La API/proxy debe limitar filas y campos antes de entregarlos al navegador.
+- Solicitada: 35 %;
+- Enviada: 65 %;
+- Aprobada: 90 %;
+- vencida: 0 %.
 
-### 6. No hay cierre, aprobación ni trazabilidad
+La interfaz lo rotula como **Pipeline ponderado**, no como remuneración ganada.
 
-No existe entidad de período de comisiones con estados como borrador, revisado, aprobado, pagado o reabierto. Tampoco hay historial de ajustes, responsable, motivo, evidencia de pago ni bloqueo de meses cerrados.
+## Períodos compartidos
 
-Recalcular desde pedidos vivos permite que una edición histórica cambie retroactivamente la cifra mostrada.
+Se incorpora `/shared/remunerations`, respaldado por el documento revisionado `REMUNERACIONES_V2`.
 
-## Hallazgos importantes
+El documento contiene:
 
-### Períodos y fechas
+- `rules`;
+- `events`;
+- `periods`;
+- `adjustments`;
+- `baseSalaries`;
+- `audit`.
 
-- El filtro usa `Fecha entrega`, no una fecha de devengo/cobro de comisión.
-- “Esta semana” comienza el domingo por `Date#getDay()`.
-- Las comparaciones dependen de la zona horaria del navegador, no de una política explícita `America/Santiago`.
-- El período predeterminado es `todo`, lo que mezcla años y puede mostrar una suma histórica como si fuera saldo actual.
+Estados de período:
 
-### Exportación CSV
+- `draft`;
+- `review`;
+- `approved`;
+- `closed`;
+- `paid`;
+- `reopened`.
 
-`exportRemCSV()` concatena valores con comas sin escape RFC 4180. Un cliente con coma, comillas o salto de línea puede romper columnas. Faltan BOM UTF-8, período, vendedor, fecha de generación, tasa aplicada y una protección contra fórmulas de spreadsheet.
+Las escrituras usan CAS y un Durable Object. Un período `closed` o `paid` no puede reescribir silenciosamente eventos ni ajustes. Solo un administrador puede pasarlo explícitamente a `reopened`, conservando el snapshot congelado en esa transición.
 
-### Semántica de interfaz
+## Seguridad y privacidad
 
-La pantalla mezcla conceptos distintos:
+- `finance` y `admin` pueden leer/escribir el documento completo;
+- `sales` solo puede leer;
+- la lectura de `sales` es filtrada en el Worker por su email firmado de Cloudflare Access;
+- reglas globales pueden llegar al vendedor, pero eventos, períodos, ajustes y sueldo base de otros vendedores no;
+- demo no consulta la fuente compartida;
+- las lecturas y exportaciones se registran mediante `Oficina_Auditoria`.
 
-- sueldo base;
-- comisión estimada de pipeline;
-- comisión calculada por despacho;
-- remuneración o liquidación.
+El filtrado visual del navegador deja de ser la única barrera de privacidad.
 
-Deben mostrarse estados separados: estimada, devengada, aprobada, pagada y revertida. Hasta existir un motor de nómina, no conviene llamar “liquidación” a un cálculo local incompleto.
+## Períodos y zona horaria
 
-## Recomendación de modelo
+El motor fija `America/Santiago`.
 
-Crear entidades autoritativas:
+La semana empresarial comienza el lunes. Los filtros mensuales y anuales se calculan con claves de fecha de Chile en vez de depender de la zona horaria local del navegador.
 
-1. `CommissionRules`: vendedor, tasa, base, vigencia, condiciones y versión.
-2. `CommissionEvents`: pedido/factura/pago, monto elegible, estado y reversa.
-3. `CommissionPeriods`: período, vendedor, borrador, aprobación, cierre y pago.
-4. `CommissionAdjustments`: monto, motivo, responsable y evidencia.
-5. `Payroll`: solo si se implementará nómina real, separada del módulo comercial.
+## Exportación CSV
 
-La comisión debe derivarse de eventos financieros idempotentes y quedar congelada al cerrar el período. Los cambios posteriores deben generar ajustes, no reescribir silenciosamente la historia.
+La exportación:
 
-## Cobertura agregada
+- incluye BOM UTF-8;
+- usa escape RFC 4180;
+- neutraliza valores que podrían convertirse en fórmulas de spreadsheet;
+- incluye período, vendedor, estado, regla, versión, tasa, base tributaria y fecha de generación;
+- usa un nombre de archivo asociado al período;
+- registra el evento de exportación en backend.
 
-- `tests/remuneraciones-wiring.test.js`
-- `.github/workflows/remuneraciones-audit.yml`
+## Semántica de interfaz
 
-Las pruebas activas protegen el cableado existente. Los defectos confirmados permanecen como `test.todo` hasta que exista una implementación verificable.
+El panel se presenta como **resumen comercial auditable** y declara expresamente que no constituye una liquidación legal de remuneraciones. Se eliminan del motor autoritativo las deducciones previsionales simuladas fijas que podían dar una falsa apariencia de liquidación laboral válida.
 
-## Criterios de aceptación
+## Cobertura
 
-1. La pestaña abre sin errores y todos sus botones tienen funciones definidas.
-2. La tasa y base de comisión provienen de una regla versionada.
-3. Una comisión distingue estimada, devengada, aprobada, pagada y revertida.
-4. Notas de crédito, anulaciones, devoluciones y pagos parciales ajustan el cálculo.
-5. Los períodos cerrados son inmutables y auditables.
-6. El backend entrega a cada vendedor únicamente sus registros autorizados.
-7. El rol demo nunca recibe remuneraciones reales.
-8. Pipeline vencido no se presenta como potencial pleno.
-9. Fechas y semanas siguen una política explícita de Chile.
-10. CSV es seguro, trazable y compatible con datos que contienen comas/comillas.
-11. “Liquidación” se usa solo para un cálculo de nómina completo y validado.
-12. Los `TODO` del test se convierten gradualmente en pruebas obligatorias.
+Pruebas obligatorias:
+
+- `tests/remuneraciones-wiring.test.js`;
+- `tests/remuneraciones-engine.test.js`;
+- `tests/remuneraciones-dias.test.js`;
+- `tests/remuneraciones-personas.test.js`;
+- integración con Finanzas y smoke global desde `.github/workflows/remuneraciones-audit.yml`.
+
+Los antiguos `test.todo` de los hallazgos críticos fueron convertidos en assertions obligatorias.
+
+## Pendiente externo
+
+La lógica queda lista en repositorio. Igual que las auditorías anteriores, el despliegue productivo del proxy/Cloudflare Access continúa agrupado en el cierre final de #306; hasta ese cutover no debe considerarse validada la identidad productiva del Worker.

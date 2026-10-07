@@ -1374,6 +1374,208 @@ function sharedFinanceActorAllowed(actor){
 }
 
 
+const SHARED_REM_NAME='REMUNERACIONES_V2';
+const SHARED_REM_VERSION=2;
+const REM_PERIOD_STATES=new Set(['draft','review','approved','closed','paid','reopened']);
+const REM_EVENT_STATES=new Set(['estimated','accrued','approved','paid','reversed']);
+function sharedRemEmail(v){return typeof v==='string'&&v.length<=254&&(/^\*$/.test(v)||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));}
+function sharedRemDate(v){return v===null||v===''||/^\d{4}-\d{2}-\d{2}$/.test(String(v));}
+function sharedRemPeriod(v){return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(v||''));}
+function sharedRemId(v,max=160){return typeof v==='string'&&v.length>0&&v.length<=max&&!/[\x00-\x1f]/.test(v);}
+function sharedRemMoney(v){return typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1e11;}
+function sharedRemRule(r){
+  return sharedFinancePlainObject(r)&&Object.keys(r).every(k=>[
+    'id','version','sellerEmail','seller','rate','basis','validFrom','validTo','contract','product'
+  ].includes(k))&&sharedRemId(r.id)&&Number.isInteger(r.version)&&r.version>0&&r.version<10000&&
+    sharedRemEmail(r.sellerEmail||'*')&&sharedFinanceText(r.seller||'*',250)&&
+    typeof r.rate==='number'&&Number.isFinite(r.rate)&&r.rate>=0&&r.rate<=1&&
+    ['net_tax_document','net_paid','net_invoiced'].includes(r.basis)&&
+    sharedRemDate(r.validFrom)&&sharedRemDate(r.validTo)&&sharedFinanceText(r.contract||'',300)&&
+    sharedFinanceText(r.product||'*',300);
+}
+function sharedRemEvent(e){
+  return sharedFinancePlainObject(e)&&Object.keys(e).every(k=>[
+    'id','sourceId','order','sellerEmail','seller','period','date','eligibleNet','commission',
+    'status','ruleId','ruleVersion','ruleRate','basis','verifiedBase','paymentRatio','eventAt',
+    'updatedAt','reversalOf','reason','invoice','payment'
+  ].includes(k))&&sharedRemId(e.id)&&sharedRemId(e.sourceId)&&sharedRemPeriod(e.period)&&
+    sharedRemEmail(e.sellerEmail||'*')&&sharedFinanceText(e.seller||'',250)&&sharedRemDate(e.date)&&
+    sharedRemMoney(e.eligibleNet)&&sharedRemMoney(e.commission)&&REM_EVENT_STATES.has(e.status)&&
+    sharedRemId(e.ruleId)&&Number.isInteger(e.ruleVersion)&&e.ruleVersion>0&&
+    typeof e.ruleRate==='number'&&Number.isFinite(e.ruleRate)&&e.ruleRate>=0&&e.ruleRate<=1&&
+    sharedFinanceText(e.basis||'',250)&&typeof e.verifiedBase==='boolean'&&
+    typeof e.paymentRatio==='number'&&Number.isFinite(e.paymentRatio)&&e.paymentRatio>=0&&e.paymentRatio<=1&&
+    sharedFinanceText(e.eventAt||'',60)&&sharedFinanceText(e.updatedAt||'',60)&&
+    sharedFinanceText(e.reversalOf||'',160)&&sharedFinanceText(e.reason||'',1000)&&
+    sharedFinanceText(e.order||'',160)&&sharedFinanceText(e.invoice||'',160)&&sharedFinanceText(e.payment||'',160);
+}
+function sharedRemPeriodRow(p){
+  return sharedFinancePlainObject(p)&&Object.keys(p).every(k=>[
+    'id','period','sellerEmail','seller','status','snapshotTotal','closedAt','paidAt',
+    'reopenedAt','updatedAt','ruleVersions','note'
+  ].includes(k))&&sharedRemId(p.id)&&sharedRemPeriod(p.period)&&sharedRemEmail(p.sellerEmail||'*')&&
+    sharedFinanceText(p.seller||'',250)&&REM_PERIOD_STATES.has(p.status)&&sharedRemMoney(p.snapshotTotal)&&
+    sharedFinanceText(p.closedAt||'',60)&&sharedFinanceText(p.paidAt||'',60)&&
+    sharedFinanceText(p.reopenedAt||'',60)&&sharedFinanceText(p.updatedAt||'',60)&&
+    Array.isArray(p.ruleVersions)&&p.ruleVersions.length<=50&&p.ruleVersions.every(v=>sharedRemId(v,160))&&
+    sharedFinanceText(p.note||'',1000);
+}
+function sharedRemAdjustment(a){
+  return sharedFinancePlainObject(a)&&Object.keys(a).every(k=>[
+    'id','period','sellerEmail','seller','amount','reason','actor','evidence','createdAt','reversalOf'
+  ].includes(k))&&sharedRemId(a.id)&&sharedRemPeriod(a.period)&&sharedRemEmail(a.sellerEmail||'*')&&
+    sharedFinanceText(a.seller||'',250)&&sharedRemMoney(a.amount)&&sharedFinanceText(a.reason||'',1000)&&
+    sharedFinanceText(a.actor||'',254)&&sharedFinanceText(a.evidence||'',1000)&&
+    sharedFinanceText(a.createdAt||'',60)&&sharedFinanceText(a.reversalOf||'',160);
+}
+function sharedRemSalary(a){
+  return sharedFinancePlainObject(a)&&Object.keys(a).every(k=>[
+    'sellerEmail','seller','amount','validFrom','validTo'
+  ].includes(k))&&sharedRemEmail(a.sellerEmail||'*')&&sharedFinanceText(a.seller||'',250)&&
+    sharedRemMoney(a.amount)&&a.amount>=0&&sharedRemDate(a.validFrom)&&sharedRemDate(a.validTo);
+}
+function sharedRemAudit(a){
+  return sharedFinancePlainObject(a)&&Object.keys(a).every(k=>[
+    'id','at','actor','role','action','period','detail'
+  ].includes(k))&&sharedRemId(a.id)&&sharedFinanceText(a.at||'',60)&&sharedFinanceText(a.actor||'',254)&&
+    ['finance','admin'].includes(a.role)&&['write','close','reopen','pay','adjust'].includes(a.action)&&
+    sharedFinanceText(a.period||'',20)&&sharedFinanceText(a.detail||'',1000);
+}
+function sharedRemDocumentAllowed(doc){
+  if(!sharedFinancePlainObject(doc)||doc.version!==SHARED_REM_VERSION||
+     Object.keys(doc).some(k=>!['version','updatedAt','rules','events','periods','adjustments','baseSalaries','audit'].includes(k))||
+     !sharedFinanceFinite(doc.updatedAt,{min:0,max:9999999999999}))return false;
+  const sets=[
+    [doc.rules,300,sharedRemRule],[doc.events,2500,sharedRemEvent],[doc.periods,500,sharedRemPeriodRow],
+    [doc.adjustments,1000,sharedRemAdjustment],[doc.baseSalaries,300,sharedRemSalary],[doc.audit,600,sharedRemAudit]
+  ];
+  for(const [rows,max,fn] of sets)if(!Array.isArray(rows)||rows.length>max||!rows.every(fn))return false;
+  const uniq=(rows)=>new Set(rows.map(x=>x.id)).size===rows.length;
+  if(!uniq(doc.rules)||!uniq(doc.events)||!uniq(doc.periods)||!uniq(doc.adjustments)||!uniq(doc.audit))return false;
+  try{return JSON.stringify(doc).length<=150000;}catch(_){return false;}
+}
+function sharedRemEmpty(){
+  return {version:2,updatedAt:0,rules:[{
+    id:'commission-standard',version:1,sellerEmail:'*',seller:'*',rate:0.035,
+    basis:'net_tax_document',validFrom:'2026-01-01',validTo:null,contract:'standard',product:'*'
+  }],events:[],periods:[],adjustments:[],baseSalaries:[],audit:[]};
+}
+async function sharedRemLoad(env){
+  if(!env.AIRTABLE_TOKEN)return {error:'invalid-config'};
+  const q=new URLSearchParams();q.set('maxRecords','2');
+  q.set('filterByFormula',"{Name}='"+SHARED_REM_NAME+"'");
+  q.append('fields[]','Name');q.append('fields[]','Notes');
+  let response;
+  try{response=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+'?'+q.toString(),{
+    method:'GET',redirect:'manual',headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}
+  });}catch(_){return {error:'network'};}
+  if(!response.ok||response.status>=300&&response.status<400)return {error:'upstream'};
+  let body;try{body=await response.json();}catch(_){return {error:'invalid-json'};}
+  if(!body||!Array.isArray(body.records)||body.records.length>1)return {error:'invalid-shape'};
+  if(!body.records.length){
+    const data=sharedRemEmpty();return {recordId:'',exists:false,raw:'',data,revision:await sharedCalendarDigest('')};
+  }
+  const rec=body.records[0];
+  if(!/^rec[A-Za-z0-9]{14}$/.test(String(rec.id||''))||rec.fields?.Name!==SHARED_REM_NAME||
+     typeof rec.fields?.Notes!=='string')return {error:'invalid-record'};
+  let data;try{data=JSON.parse(rec.fields.Notes);}catch(_){return {error:'invalid-payload'};}
+  if(!sharedRemDocumentAllowed(data))return {error:'invalid-payload'};
+  return {recordId:rec.id,exists:true,raw:rec.fields.Notes,data,
+    revision:await sharedCalendarDigest(rec.fields.Notes)};
+}
+function sharedRemScope(data,identity){
+  if(!identity||identity.role!=='sales')return data;
+  const email=String(identity.email||'').toLowerCase();
+  return {...data,
+    rules:data.rules.filter(r=>r.sellerEmail==='*'||String(r.sellerEmail).toLowerCase()===email),
+    events:data.events.filter(r=>String(r.sellerEmail).toLowerCase()===email),
+    periods:data.periods.filter(r=>String(r.sellerEmail).toLowerCase()===email),
+    adjustments:data.adjustments.filter(r=>String(r.sellerEmail).toLowerCase()===email),
+    baseSalaries:data.baseSalaries.filter(r=>String(r.sellerEmail).toLowerCase()===email),audit:[]};
+}
+function sharedRemPeriodSlice(doc,p){
+  const key=x=>x.period===p.period&&String(x.sellerEmail).toLowerCase()===String(p.sellerEmail).toLowerCase();
+  return {
+    period:p,
+    events:doc.events.filter(key).sort((a,b)=>a.id.localeCompare(b.id)),
+    adjustments:doc.adjustments.filter(key).sort((a,b)=>a.id.localeCompare(b.id))
+  };
+}
+function sharedRemEconomicEvent(e){
+  const x={...e};delete x.status;delete x.updatedAt;return x;
+}
+function sharedRemPeriodsTransitionAllowed(current,next,actor){
+  const allowed={
+    draft:new Set(['draft','review']),review:new Set(['review','draft','approved']),
+    approved:new Set(['approved','review','closed']),closed:new Set(['closed','paid','reopened']),
+    paid:new Set(['paid','reopened']),reopened:new Set(['reopened','review','approved','closed'])
+  };
+  for(const p of next.periods){
+    const old=current.periods.find(x=>x.id===p.id);
+    if(!old){if(p.status!=='draft')return false;continue;}
+    if(!allowed[old.status]?.has(p.status))return false;
+    if(p.status==='reopened'&&old.status!==p.status&&actor?.role!=='admin')return false;
+  }
+  return current.periods.every(old=>next.periods.some(p=>p.id===old.id));
+}
+function sharedRemClosedTotalsValid(doc){
+  for(const p of doc.periods){
+    if(!['closed','paid'].includes(p.status))continue;
+    const key=x=>x.period===p.period&&String(x.sellerEmail).toLowerCase()===String(p.sellerEmail).toLowerCase();
+    const events=doc.events.filter(key);
+    if(events.some(e=>!['approved','paid','reversed'].includes(e.status)))return false;
+    const total=Math.round(events.reduce((n,e)=>n+Number(e.commission||0),0)+
+      doc.adjustments.filter(key).reduce((n,a)=>n+Number(a.amount||0),0));
+    if(Math.round(Number(p.snapshotTotal||0))!==total)return false;
+  }
+  return true;
+}
+function sharedRemProtected(current,next,actor){
+  for(const old of current.periods){
+    if(!['closed','paid'].includes(old.status))continue;
+    const newer=next.periods.find(p=>p.id===old.id);
+    if(!newer)return false;
+    const before=sharedRemPeriodSlice(current,old),after=sharedRemPeriodSlice(next,newer);
+    const sameAdjustments=JSON.stringify(before.adjustments)===JSON.stringify(after.adjustments);
+    const immutablePeriod=(p)=>({
+      id:p.id,period:p.period,sellerEmail:p.sellerEmail,seller:p.seller,
+      snapshotTotal:p.snapshotTotal,closedAt:p.closedAt,ruleVersions:p.ruleVersions
+    });
+    if(JSON.stringify(immutablePeriod(old))!==JSON.stringify(immutablePeriod(newer))||!sameAdjustments)return false;
+    if(newer.status==='reopened'&&actor?.role==='admin'){
+      if(JSON.stringify(before.events)!==JSON.stringify(after.events))return false;
+      continue;
+    }
+    if(old.status==='closed'&&newer.status==='paid'){
+      if(before.events.length!==after.events.length)return false;
+      const afterById=new Map(after.events.map(e=>[e.id,e]));
+      for(const ev of before.events){
+        const ne=afterById.get(ev.id);if(!ne)return false;
+        if(JSON.stringify(sharedRemEconomicEvent(ev))!==JSON.stringify(sharedRemEconomicEvent(ne)))return false;
+        if(ev.status==='approved'&&ne.status!=='paid')return false;
+        if(ev.status==='reversed'&&ne.status!=='reversed')return false;
+        if(ev.status==='paid'&&ne.status!=='paid')return false;
+      }
+      continue;
+    }
+    if(JSON.stringify(before)!==JSON.stringify(after))return false;
+  }
+  return true;
+}
+function sharedRemAction(current,next){
+  for(const p of next.periods){
+    const old=current.periods.find(x=>x.id===p.id);
+    if(old?.status!==p.status){
+      if(p.status==='closed')return {action:'close',period:p.period};
+      if(p.status==='paid')return {action:'pay',period:p.period};
+      if(p.status==='reopened')return {action:'reopen',period:p.period};
+    }
+  }
+  if(next.adjustments.length!==current.adjustments.length)return {action:'adjust',period:next.adjustments.at(-1)?.period||''};
+  return {action:'write',period:''};
+}
+
+
 const SELLER_SCOPE_TABLES=new Set(['Clientes','Cotizaciones','Pedidos']);
 
 /* Signed, non-financial viewer field scope. These names were checked against
@@ -2390,7 +2592,8 @@ export class CrmMutationGuard {
             ?this._handleSharedMail(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
-                  ?this._handleSharedFinance(request):path==='/visual-ai-guard'
+                  ?this._handleSharedFinance(request):path==='/shared-remunerations'
+                    ?this._handleSharedRemunerations(request):path==='/visual-ai-guard'
                     ?this._handleVisualAiGuard(request):path==='/newsletter-send'
                       ?this._handleNewsletterSend(request):path==='/social-lead'
                         ?this._handleSocialLead(request):path==='/scoped-patch'
@@ -2968,6 +3171,59 @@ export class CrmMutationGuard {
       return this._json({ok:true},200);
     }
     return this._json({error:'Unknown visual guard operation'},404);
+  }
+
+  async _handleSharedRemunerations(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Shared remunerations guard unavailable'},503);
+    let payload;try{payload=await request.json();}catch(_){
+      return this._json({error:'Invalid shared remunerations request'},422);
+    }
+    const actor=payload?.actor;
+    if(!actor||typeof actor.email!=='string'||!['finance','admin'].includes(actor.role)||
+       !sharedRemDocumentAllowed(payload?.data)||typeof payload.expectedRevision!=='string'||
+       !/^[a-f0-9]{64}$/.test(payload.expectedRevision))
+      return this._json({error:'Shared remunerations write denied'},403);
+    const current=await sharedRemLoad(this.env);
+    if(current.error)return this._json({error:'Shared remunerations unavailable'},503);
+    if(current.revision!==payload.expectedRevision)
+      return this._json({error:'Remunerations changed on another device',
+        code:'REMUNERATIONS_REVISION_CONFLICT',revision:current.revision,data:current.data},409);
+    if(!sharedRemPeriodsTransitionAllowed(current.data,payload.data,actor))
+      return this._json({error:'Invalid remuneration period transition',
+        code:'REMUNERATIONS_TRANSITION_DENIED'},409);
+    if(!sharedRemClosedTotalsValid(payload.data))
+      return this._json({error:'Closed remuneration snapshot does not reconcile',
+        code:'REMUNERATIONS_SNAPSHOT_MISMATCH'},409);
+    if(!sharedRemProtected(current.data,payload.data,actor))
+      return this._json({error:'Closed remuneration period is immutable',
+        code:'REMUNERATIONS_PERIOD_LOCKED'},409);
+    const transition=sharedRemAction(current.data,payload.data);
+    const next=structuredClone(payload.data);
+    next.updatedAt=Date.now();
+    next.audit=[...(current.data.audit||[]),{
+      id:'rem-audit-'+crypto.randomUUID(),at:new Date().toISOString(),actor:actor.email,role:actor.role,
+      action:transition.action,period:transition.period,detail:'Cambio serializado por proxy'
+    }].slice(-600);
+    if(!sharedRemDocumentAllowed(next))return this._json({error:'Remunerations document invalid after audit'},422);
+    const raw=JSON.stringify(next),target=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+encodeURIComponent('Monitor Sistema')+
+      (current.recordId?'/'+current.recordId:'');
+    let upstream;
+    try{upstream=await fetch(target,{method:current.recordId?'PATCH':'POST',redirect:'manual',
+      headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({fields:{Name:SHARED_REM_NAME,Notes:raw}})});
+    }catch(_){return this._json({error:'Remunerations write outcome uncertain; reread before retrying',
+      code:'REMUNERATIONS_WRITE_UNCERTAIN'},503);}
+    if([400,401,403,404,422].includes(upstream.status))
+      return this._json({error:'Remunerations write rejected',code:'REMUNERATIONS_WRITE_REJECTED'},422);
+    if(!upstream.ok||upstream.status>=300&&upstream.status<400)
+      return this._json({error:'Remunerations write outcome uncertain; reread before retrying',
+        code:'REMUNERATIONS_WRITE_UNCERTAIN'},503);
+    const verified=await sharedRemLoad(this.env);
+    if(verified.error||verified.raw!==raw)
+      return this._json({error:'Remunerations verification uncertain; reread before retrying',
+        code:'REMUNERATIONS_WRITE_UNCERTAIN'},503);
+    return this._json({ok:true,exists:true,revision:verified.revision,data:verified.data},200);
   }
 
   async _handleSharedFinance(request){
@@ -3801,7 +4057,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -4360,6 +4616,58 @@ export default {
       }catch(_){return json({error:'MachineOps write guard unavailable'},503,scopedHeaders);}
     }
 
+
+    // Remuneraciones: documento revisionado, con lectura backend-scoped por vendedor.
+    if(url.pathname==='/shared/remunerations'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(!authorized.identity)return json({error:'Remunerations require Cloudflare Access'},403,scopedHeaders);
+      if(!['sales','finance','admin'].includes(authorized.identity.role))
+        return json({error:'Remunerations role denied'},403,scopedHeaders);
+      if(url.search)return json({error:'Remunerations query parameters not allowed'},422,scopedHeaders);
+      if(request.method==='GET'){
+        const current=await sharedRemLoad(env);
+        if(current.error)return json({error:'Shared remunerations unavailable'},503,scopedHeaders);
+        try{await officeAudit(env,authorized.identity,'view','remuneraciones','','Lectura de remuneraciones');}catch(_){}
+        return json({ok:true,exists:current.exists,revision:current.revision,
+          data:sharedRemScope(current.data,authorized.identity)},200,scopedHeaders);
+      }
+      if(request.method!=='PUT')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!['finance','admin'].includes(authorized.identity.role))
+        return json({error:'Remunerations write role denied'},403,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>160000)
+        return json({error:'Shared remunerations expects bounded JSON'},415,scopedHeaders);
+      let body;try{const raw=await request.text();if(raw.length>160000)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid shared remunerations JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>!['data','expectedRevision'].includes(k))||
+         !sharedRemDocumentAllowed(body.data)||typeof body.expectedRevision!=='string'||
+         !/^[a-f0-9]{64}$/.test(body.expectedRevision))
+        return json({error:'Invalid shared remunerations document'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Shared remunerations guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-shared-remunerations'));
+        const guarded=await stub.fetch('https://crm-write.internal/shared-remunerations',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({data:body.data,expectedRevision:body.expectedRevision,
+            actor:{email:authorized.identity.email,role:authorized.identity.role}})
+        });
+        const headers=new Headers(guarded.headers);Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Shared remunerations guard unavailable'},503,scopedHeaders);}
+    }
+    if(url.pathname==='/shared/remunerations/audit'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||!authorized.identity||
+         !['sales','finance','admin'].includes(authorized.identity.role))
+        return json({error:'Remunerations audit denied'},403,scopedHeaders);
+      let body;try{body=await request.json();}catch(_){return json({error:'Invalid audit JSON'},422,scopedHeaders);}
+      if(!body||body.action!=='export'||typeof body.period!=='string'||body.period.length>30||
+         !Number.isInteger(body.count)||body.count<0||body.count>10000)
+        return json({error:'Invalid remuneration audit event'},422,scopedHeaders);
+      try{await officeAudit(env,authorized.identity,'export','remuneraciones',body.period,'Filas: '+body.count);
+        return json({ok:true},201,scopedHeaders);}
+      catch(_){return json({error:'Remunerations audit unavailable'},503,scopedHeaders);}
+    }
 
     // Finance state is a single revisioned document. It contains only the
     // business finance UI state that previously lived in browser localStorage.
