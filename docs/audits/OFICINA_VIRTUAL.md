@@ -2,6 +2,54 @@
 
 Fecha: 2026-08-02
 
+## Actualización 2026-10-07 — cierre funcional de #105
+
+Oficina Virtual deja de construir una imagen operativa mezclando caché local, las últimas 100 ejecuciones y estados inferidos.
+
+### Fuente de verdad compartida
+
+- `GET /office/snapshot` está protegido por Cloudflare Access y entrega un snapshot común para todos los navegadores.
+- El backend pagina `Agent_Log`, consulta solo `Agent_Queue.Estado = Pendiente`, y reúne `Automations`, `Maquinas`, `Inventario` e `Incidencias_Operativas`.
+- Cada fuente lleva `ok`, timestamp de lectura y latencia. Un fallo requerido degrada la salud general.
+- La cobertura analítica declara explícitamente si los 31 días fueron recuperados completos.
+
+### Presencia real de agentes
+
+- Las ejecuciones usan `Execution ID`, `Started At`, `Heartbeat At`, `Finished At`, estado y error.
+- `beginAgentResultRun()` abre el ciclo server-side y emite heartbeat cada 20 segundos.
+- `AGENT_LOG.add()` cierra la misma ejecución; no crea un segundo registro si existe `executionId`.
+- **Trabajando** requiere `Estado ejecución = running` y heartbeat de menos de 60 segundos.
+- Una ejecución terminada recientemente nunca se convierte en presencia actual.
+- Errores quedan en Airtable y pueden observarse desde otro equipo.
+
+### Privacidad y auditoría
+
+- El snapshot redacciona prompts/resultados para roles no administrativos antes de enviarlos al navegador.
+- El feed, búsqueda y detalle usan exclusivamente el texto autorizado por el servidor.
+- Ver, copiar, generar digest y exportar dejan trazabilidad en `Oficina_Auditoria`.
+- Las copias/exportaciones solicitan confirmación.
+- El historial local se limita a 50 entradas y a 1.200 caracteres de salida; el servidor aplica retención de 31 días.
+- El SVG exportado elimina referencias a imágenes remotas para ser autocontenido.
+
+### Automatizaciones, máquinas e incidencias
+
+- Cada automatización se clasifica `healthy / degraded / unknown / down / paused` con cadencia esperada.
+- Backlog y salud están separados: tener tareas pendientes no convierte `lead-worker` en saludable.
+- `EjecucionesHoy` solo cuenta si `Periodo ejecuciones` y `Zona horaria = America/Santiago` corresponden al día observado.
+- Máquinas incorporan `Ultima telemetria` y `Estado telemetria`; el snapshot no depende de haber abierto antes la pestaña Máquinas.
+- Incidencias de fuentes, automatizaciones y máquinas se crean/actualizan en `Incidencias_Operativas` con responsable, SLA y cierre por recuperación.
+
+### Analítica temporal
+
+- KPIs diarios, heatmap, barras y comparación semanal usan calendario `America/Santiago`.
+- Se eliminó la inferencia de días mediante divisiones fijas por 86.400.000 ms en estas superficies, evitando errores durante cambios DST.
+- El antiguo “Empleado del mes” pasó a **Mayor volumen de ejecuciones** y solo aparece si la cobertura de 30 días es completa; no se presenta como evaluación de desempeño.
+
+### Dependencias finales
+
+El código queda listo para producción, pero una automatización sin heartbeat real se mostrará **unknown/degraded**, nunca verde. En el cutover final de #306 se debe desplegar el proxy actualizado y asegurar que Worker/API/bridge externos mantengan `UltimaEjecucion`, período, zona y estado de heartbeat.
+
+
 ## Alcance
 
 Se revisaron:
@@ -37,7 +85,10 @@ Se revisaron:
 - La escena 3D tiene cámara, fullscreen, reducción de trabajo fuera del viewport y soporte táctil.
 - El resumen diario y la exportación reutilizan el modelo actual.
 
-## Hallazgos
+## Hallazgos originales (histórico)
+
+> El diagnóstico inicial se conserva como evidencia. El bloque de actualización describe el estado corregido.
+
 
 ### Críticos
 
