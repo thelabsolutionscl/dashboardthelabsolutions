@@ -122,3 +122,41 @@ curl -X POST https://thelab-leads-worker.TU-SUB.workers.dev/portal/link \
   -d '{"clienteId":"recXXXXXXXXXXXXXX","dias":30}'
 ```
 Respuesta OK: `{ "ok": true, "clienteId": "rec…", "queueId": "rec…" }`. El webhook de LinkedIn requiere `LINKEDIN_WEBHOOK_KEY`; no existe fallback a la clave pública de `/lead`. Los reintentos con el mismo `linkedinLeadId` se deduplican y el lead queda también trazado en `LinkedIn_Prospects`.
+
+
+## LinkedIn Lead Sync oficial
+
+Además del puente Make/Zapier, el Worker soporta la integración oficial:
+
+| Método | Ruta | Auth | Uso |
+|---|---|---|---|
+| GET | `/webhooks/linkedin/official?challengeCode=…` | challenge LinkedIn | Validación del webhook |
+| POST | `/webhooks/linkedin/official` | `X-LI-Signature` | Notificaciones Lead Sync |
+| GET/POST/DELETE | `/linkedin/subscriptions` | `X-Linkedin-Admin-Key` | Listar/crear/eliminar suscripciones |
+
+Variables/secretos:
+
+- `LINKEDIN_API_VERSION=202609` (no secreto, en `wrangler.toml`).
+- `LINKEDIN_CLIENT_ID`.
+- `LINKEDIN_CLIENT_SECRET`.
+- `LINKEDIN_ACCESS_TOKEN` — opcional si se usa token estático/bootstrap.
+- `LINKEDIN_REFRESH_TOKEN` — recomendado cuando LinkedIn habilita refresh programático.
+- `LINKEDIN_ADMIN_KEY` — clave interna para administrar suscripciones.
+- `LINKEDIN_WEBHOOK_KEY` — se conserva únicamente para el endpoint Make/Zapier legado.
+
+La app debe estar aprobada por **LinkedIn Lead Sync API** y el token debe incluir
+`r_marketing_leadgen_automation`. Advertising API por sí sola no habilita
+`leadFormResponses`.
+
+Ejemplo para crear una suscripción owner-level una vez configuradas las credenciales:
+
+```bash
+curl -X POST https://thelab-leads-worker.wast3dspa.workers.dev/linkedin/subscriptions \
+  -H "Content-Type: application/json" \
+  -H "X-Linkedin-Admin-Key: <LINKEDIN_ADMIN_KEY>" \
+  -d '{"owner":{"kind":"sponsoredAccount","urn":"urn:li:sponsoredAccount:123456"},"leadType":"SPONSORED"}'
+```
+
+Si no se entrega `webhook`, el Worker usa automáticamente
+`https://thelab-leads-worker.wast3dspa.workers.dev/webhooks/linkedin/official`
+cuando se invoca desde ese dominio.

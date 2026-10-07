@@ -47,7 +47,7 @@ const ACCESS_ALLOWED_TABLES=new Set([
   // Do not automatically widen reader/operator/finance access to campaign,
   // notification or operational logs, which can contain personal information.
   'Automations','Agent_Queue','Agent_Log','Contenido','Social_Posts',
-  'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
+  'Social_Interactions','Social_Metrics','LinkedIn_Prospects','LinkedIn_Events',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);
 const ACCESS_ADMIN_ONLY_TABLES=new Set([
@@ -56,7 +56,7 @@ const ACCESS_ADMIN_ONLY_TABLES=new Set([
   // Read/write requires admin until a per-record scoped service exists.
   'Monitor Sistema',
   'Automations','Agent_Queue','Agent_Log','Contenido','Social_Posts',
-  'Social_Interactions','Social_Metrics','LinkedIn_Prospects',
+  'Social_Interactions','Social_Metrics','LinkedIn_Prospects','LinkedIn_Events',
   'Newsletter_Campañas','Newsletter_Envios','Google_Ads_KPIs','Google_Ads_Campanas'
 ]);
 const ACCESS_JWKS_CACHE=new Map();
@@ -272,6 +272,16 @@ function accessAllows(identity,method,path){
   if(path==='/office/execution')return method==='POST'&&['sales','operator','finance','admin'].includes(identity.role);
   if(path==='/office/incidents')return ['operator','admin'].includes(identity.role)&&['GET','POST','PATCH'].includes(method);
   if(path==='/office/audit')return method==='POST'&&['sales','operator','finance','admin'].includes(identity.role);
+  // LinkedIn uses dedicated server-side routes instead of granting marketing/sales
+  // generic Airtable access to staging, CRM and event history.
+  if(path.startsWith('/linkedin/')){
+    const marketing=identity.email==='marketing@thelab.solutions';
+    const commercial=['sales','operator','admin'].includes(identity.role)||marketing;
+    if(path==='/linkedin/prospects')return method==='GET'&&commercial;
+    if(path==='/linkedin/metrics')return method==='GET'&&(commercial||finance);
+    if(path==='/linkedin/command')return method==='POST'&&commercial;
+    return false;
+  }
   // Sales reads remain owner-scoped. The sole write shape admitted by RBAC
   // is a single-record PATCH on an approved commercial table; the Worker
   // applies a *separate opt-in switch*, field allowlist, optimistic precondition
