@@ -2620,7 +2620,8 @@ export class CrmMutationGuard {
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/mail-session'
               ?this._handleMailSession(request):path==='/mail-rpc'
-                ?this._handleMailRpc(request):path==='/shared-machineops'
+                ?this._handleMailRpc(request):path==='/supplier-po-reserve'
+                  ?this._handleSupplierPoReserve(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
                   ?this._handleSharedFinance(request):path==='/shared-remunerations'
@@ -2786,6 +2787,23 @@ export class CrmMutationGuard {
       return {response};
     }catch(_){return {response:null,error:'Mail API unavailable'};}
   }
+  async _handleSupplierPoReserve(request){
+    if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid purchase order reserve JSON'},422);}
+    const actor=p?.actor,year=Number(p?.year);
+    if(!actor||typeof actor.email!=='string'||!['operator','finance','admin'].includes(actor.role)||
+       !Number.isInteger(year)||year<2024||year>2100)
+      return this._json({error:'Purchase order reserve denied'},403);
+    const key='supplier-po-seq:'+year;
+    const current=Math.max(0,Number(await this.state.storage.get(key))||0);
+    const next=current+1;
+    await this.state.storage.put(key,next);
+    const numero='OC-'+year+'-'+String(next).padStart(3,'0');
+    const auditKey='supplier-po-reservation:'+year+':'+next;
+    await this.state.storage.put(auditKey,{numero,actor:actor.email,role:actor.role,at:new Date().toISOString()});
+    return this._json({ok:true,numero,sequence:next,year},201);
+  }
+
   async _handleMailSession(request){
     if(!['POST','DELETE'].includes(request.method))return this._json({error:'Method not allowed'},405);
     let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid mail session JSON'},422);}
@@ -4157,7 +4175,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/supplier/purchase-order/reserve'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -4602,6 +4620,26 @@ export default {
       }catch(_){return json({error:'Agenda write guard unavailable'},503,scopedHeaders);}
     }
 
+
+    if(url.pathname==='/supplier/purchase-order/reserve'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||!env.CRM_MUTATION_GUARD)return json({error:'Purchase order reservation unavailable'},503,headers);
+      let body;try{body=await request.json();}catch(_){return json({error:'Invalid purchase order reserve JSON'},422,headers);}
+      const year=Number(body?.year);
+      if(!Number.isInteger(year)||year<2024||year>2100)return json({error:'Invalid purchase order year'},422,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-supplier-po-sequence'));
+        const guarded=await stub.fetch('https://crm-write.internal/supplier-po-reserve',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({year,actor:{email:authorized.identity.email,role:authorized.identity.role}})
+        });
+        const h=new Headers(guarded.headers);Object.entries(headers).forEach(([k,v])=>h.set(k,v));
+        if(guarded.ok){try{await officeAudit(env,authorized.identity,'view','supplier-po-reserve','',
+          'Correlativo OC reservado');}catch(_){}}
+        return new Response(guarded.body,{status:guarded.status,headers:h});
+      }catch(_){return json({error:'Purchase order reservation unavailable'},503,headers);}
+    }
 
     if(url.pathname==='/mail/accounts'){
       const h={...CORS,'Cache-Control':'private, no-store'};
