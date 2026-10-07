@@ -179,6 +179,7 @@ test('RBAC declara el módulo Proveedores', () => {
 test('pedidos, precios y OC usan supplierId estable y toleran nombres legacy solo como migración', () => {
   assert.match(PROV,/function _supplierId\(rec\)/);
   assert.match(PROV,/function _supplierPedidoIds\(pedido\)/);
+  assert.match(PROV,/raw=f\['Proveedores'\]\?\?/);
   assert.match(PROV,/function _supplierPedidos\(supplierId\)/);
   const card=fn('buildProveedorCard'),row=fn('buildProveedorRow'),oc=fn('openOCModal');
   assert.match(card,/_supplierPedidos\(supplierId\)/);
@@ -245,7 +246,11 @@ test('ficha de proveedor no presenta revenue del cliente como gasto del proveedo
   const card=fn('buildProveedorCard'),row=fn('buildProveedorRow');
   assert.doesNotMatch(card,/Monto total \(CLP\)|formatCLP\(total\)/);
   assert.doesNotMatch(row,/pvTotalValor|Total pedidos:/);
-  assert.match(row,/costos del proveedor se muestran desde OC\/precios/);
+  assert.match(PROV,/function _supplierSpend\(supplierId\)/);
+  assert.match(card,/_supplierSpend\(supplierId\)/);
+  assert.match(row,/_supplierSpend\(supplierId\)/);
+  assert.match(PROV,/comprometido/);
+  assert.match(PROV,/pagado/);
 });
 
 test('aprobar o rechazar exige motivo/evidencia y conserva actor, fecha e historial', () => {
@@ -276,12 +281,21 @@ test('eliminar protege dependencias y conserva supplierId archivando', () => {
   assert.match(del,/_archiveSupplier\(id,nombre\)/);
   assert.match(fn('bulkDeleteProveedores'),/deps\.total/);
   assert.match(fn('bulkDeleteProveedores'),/'Estado':'Inactivo'/);
+  assert.match(fn('_supplierDependencies'),/evaluations/);
+  assert.match(fn('restoreProveedor'),/airtableWrite\('Proveedores','PATCH',id,\{'Estado':'Activo'\}\)/);
 });
 
 test('la recarga del maestro supera el antiguo corte de 500 y usa helper paginado', () => {
   const create=fn('createProveedor');
   assert.match(create,/airtableFetch\('Proveedores',2000\)/);
   assert.doesNotMatch(create,/airtableFetch\('Proveedores',500\)/);
+});
+
+test('rutas críticas de proveedores usan _proxyCfg y no inventan otra configuración', () => {
+  const proxy=fn('_supplierProxyPost');
+  assert.match(proxy,/_proxyCfg/);
+  assert.match(proxy,/X-App-Key/);
+  assert.doesNotMatch(proxy,/PROXY_CONFIG|AIRTABLE_PROXY_URL|AIRTABLE_PROXY_KEY/);
 });
 
 test('duplicados del dashboard se detectan por RUT, email o razón social normalizados', () => {
@@ -315,7 +329,10 @@ test('OC recorre ciclo auditable y registra recepción por ítem', () => {
   assert.match(PROV,/'Enviada':\['Aceptada','Cancelada'\]/);
   assert.match(PROV,/'Aceptada':\['Recibida parcial','Recibida total','Cancelada'\]/);
   assert.match(PROV,/'Facturada':\['Pagada','Cerrada'\]/);
-  assert.match(fn('cambiarEstadoOC'),/PurchaseOrderEvents/);
+  assert.match(fn('cambiarEstadoOC'),/_supplierProxyPost\('\/supplier\/purchase-order\/transition'/);
+  assert.match(PROXY,/_handleSupplierPoTransition/);
+  assert.match(PROXY,/PURCHASE_ORDER_REVISION_CONFLICT/);
+  assert.match(PROXY,/PurchaseOrderEvents/);
   assert.match(fn('registrarRecepcionOC'),/'Cantidad recibida'/);
   assert.match(fn('registrarRecepcionOC'),/'Estado recepción'/);
 });
@@ -369,4 +386,5 @@ test('backend impone catálogo de tablas, campos y métodos para proveedores aud
   assert.match(PROXY,/operatorWritePayloadAllowed/);
   assert.match(PROXY,/operatorFieldValueAllowed/);
   assert.match(ACCESS,/supplier\/purchase-order\/reserve/);
+  assert.match(ACCESS,/supplier\/purchase-order\/transition/);
 });
