@@ -979,25 +979,34 @@ async function nlSubSave(){
   const email=(document.getElementById('nlSubEmail').value||'').trim();
   const rubro=(document.getElementById('nlSubRubro').value||'').trim();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Email inválido','error');return;}
+  const evidence=(prompt('Evidencia del consentimiento para recibir newsletter (ej: autorización por email, formulario web, contrato):','')||'').trim();
+  if(evidence.length<6){toast('Debes registrar evidencia del consentimiento','error');return;}
+  const actor=(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||'dashboard';
+  const consent={source:'Alta manual dashboard',date:new Date().toISOString(),user:actor,evidence:evidence.slice(0,500)};
+  const consentLine='[NEWSLETTER CONSENT] '+JSON.stringify(consent);
+  const withConsent=(base,prevNotes='')=>({...base,'Notas internas':(String(prevNotes||'').trim()+(prevNotes?'\n':'')+consentLine).slice(0,95000)});
   const btn=document.getElementById('nlSubSaveBtn');const prev=btn.textContent;btn.disabled=true;btn.textContent='Guardando…';
   try{
     if(id){
-      const fields={'Email':email,'Suscrito newsletter':true,'Baja newsletter':false};
-      if(nombre)fields['Empresa']=nombre; if(rubro)fields['Industria / Rubro']=rubro;
+      const current=(state.clientes||[]).find(x=>x.id===id);
+      let fields=withConsent({'Email':email,'Suscrito newsletter':true,'Baja newsletter':false,'Email válido':true},current?.fields?.['Notas internas']);
+      if(nombre)fields['Empresa']=nombre;if(rubro)fields['Industria / Rubro']=rubro;
       const res=await airtableWrite('Clientes','PATCH',id,fields);
-      const c=(state.clientes||[]).find(x=>x.id===id);if(c)Object.assign(c.fields,res.fields||fields);
-      toast('Destinatario actualizado ✓','success');
-    } else {
+      if(current)Object.assign(current.fields,res.fields||fields);
+      toast('Destinatario actualizado con evidencia de consentimiento ✓','success');
+    }else{
       const exist=(state.clientes||[]).find(x=>String(x.fields['Email']||'').toLowerCase()===email.toLowerCase());
       if(exist){
-        const fields={'Suscrito newsletter':true,'Baja newsletter':false};if(rubro&&!exist.fields['Industria / Rubro'])fields['Industria / Rubro']=rubro;
+        let fields=withConsent({'Suscrito newsletter':true,'Baja newsletter':false,'Email válido':true},exist.fields['Notas internas']);
+        if(rubro&&!exist.fields['Industria / Rubro'])fields['Industria / Rubro']=rubro;
         const res=await airtableWrite('Clientes','PATCH',exist.id,fields);Object.assign(exist.fields,res.fields||fields);
-        toast('Cliente existente suscrito al newsletter ✓','success');
-      } else {
-        const fields={'Empresa':nombre||email,'Email':email,'Suscrito newsletter':true,'Validado':false};if(rubro)fields['Industria / Rubro']=rubro;
+        toast('Cliente existente suscrito con evidencia ✓','success');
+      }else{
+        let fields=withConsent({'Empresa':nombre||email,'Email':email,'Suscrito newsletter':true,'Email válido':true,'Validado':false},'');
+        if(rubro)fields['Industria / Rubro']=rubro;
         const res=await airtableWrite('Clientes','POST',null,fields);
         state.clientes=state.clientes||[];state.clientes.unshift(res);if(state.clientesByIdRec)state.clientesByIdRec[res.id]=res;
-        toast('Destinatario agregado ✓','success');
+        toast('Destinatario agregado con evidencia ✓','success');
       }
     }
     document.getElementById('nlSubModal').style.display='none';
