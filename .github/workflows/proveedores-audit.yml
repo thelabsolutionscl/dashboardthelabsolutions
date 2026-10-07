@@ -7,6 +7,8 @@ on:
       - 'index.html'
       - 'js/proveedores.js'
       - 'lead-worker/src/index.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'tests/proveedores-wiring.test.js'
       - 'tests/smoke.test.js'
       - 'docs/audits/PROVEEDORES.md'
@@ -16,6 +18,8 @@ on:
       - 'index.html'
       - 'js/proveedores.js'
       - 'lead-worker/src/index.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'tests/proveedores-wiring.test.js'
       - 'tests/smoke.test.js'
       - 'docs/audits/PROVEEDORES.md'
@@ -45,6 +49,8 @@ jobs:
         run: |
           node --check js/proveedores.js
           node --check lead-worker/src/index.js
+          node --check airtable-proxy/src/worker.js
+          node --check airtable-proxy/src/access-auth.js
 
       - name: Audit supplier wiring and controls
         run: node --test tests/proveedores-wiring.test.js

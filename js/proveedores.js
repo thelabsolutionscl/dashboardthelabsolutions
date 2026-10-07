@@ -128,6 +128,7 @@ function renderCatManager(){
       ${n?`<span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">${n} uso${n!==1?'s':''}</span>`:''}
       <button onclick="catMove(${i},-1)" ${i===0?'disabled':''} title="Subir" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===0?'.3':'1'}">↑</button>
       <button onclick="catMove(${i},1)" ${i===cats.length-1?'disabled':''} title="Bajar" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===cats.length-1?'.3':'1'}">↓</button>
+      <button onclick="renamePvCat(${i})" title="Renombrar y migrar categoría" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer">✎</button>
       <button onclick="deletePvCat(${i})" title="${n?'Hay proveedores en esta categoría':''}" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>
     </div>`;
   }).join(''):`<div class="empty-state" style="padding:20px;font-size:12px">Sin categorías — agrega una abajo</div>`;
@@ -241,9 +242,9 @@ function buildProveedorCard(p){
   const email=f['Email']||'';
   const web=f['Sitio Web']||'';
   const cats=pvCat(f)||'Sin categoría';
-  const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===String(nombre).toLowerCase());
+  const pedidosTodos=state.pedidos.filter(x=>_supplierPedidoMatches(x,id,nombre));
   const pedidosActivos=pedidosTodos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||''));
-  const total=pedidosTodos.reduce((s,x)=>s+(Number(x.fields['Monto total (CLP)'])||0),0);
+  const total=_supplierSpend(id);
   const cls=estado==='Bloqueado'?'is-blocked':estado==='Inactivo'?'is-inactive':estadoPost==='ENTREVISTAR'?'is-review':'';
   const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;
   return `<article class="op-record pv-card ${cls}" data-id="${id}">
@@ -263,7 +264,7 @@ function buildProveedorCard(p){
       <div><span>Email</span>${email?`<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>`:'<b>Sin email</b>'}</div>
       <div><span>Teléfono</span>${tel?`<a href="tel:${escapeHtml(tel)}">${escapeHtml(f['Teléfono']||tel)}</a>`:'<b>Sin teléfono</b>'}</div>
     </div>
-    <p class="op-caption">${pedidosTodos.length?`${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''} registrada${pedidosTodos.length!==1?'s':''} · ${formatCLP(total)} acumulado`:'Sin pedidos vinculados registrados'}</p>
+    <p class="op-caption">${pedidosTodos.length?`${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''} registrada${pedidosTodos.length!==1?'s':''} · ${formatCLP(total)} en OC comprometidas`:'Sin pedidos vinculados registrados'}</p>
     <footer>
       <span><small>Gestión</small>${escapeHtml(f['Condiciones de pago']||'Condición de pago sin registrar')}</span>
       <div class="pv-card-actions">
@@ -287,10 +288,10 @@ function buildProveedorRow(p){
   const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${rep})">★</span>`).join('');
   const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
   const nombre=f['Nombre']||'';
-  const pedidosActivos=state.pedidos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'')&&(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
-  const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
+  const pedidosActivos=state.pedidos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'')&&_supplierPedidoMatches(x,id,nombre));
+  const pedidosTodos=state.pedidos.filter(x=>_supplierPedidoMatches(x,id,nombre));
   const pedCount=pedidosActivos.length;
-  const pvTotalValor=pedidosTodos.reduce((s,x)=>s+(x.fields['Monto total (CLP)']||0),0);
+  const pvTotalValor=_supplierSpend(id);
   const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha ingreso']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
   const estadoPost=f['Estado postulación']||'';
@@ -320,7 +321,7 @@ function buildProveedorRow(p){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
           ${f['Condiciones de pago']?`<div style="font-size:11px"><span style="color:var(--text3)">Pago:</span> ${escapeHtml(f['Condiciones de pago'])}</div>`:''}
-          ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Total pedidos:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
+          ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Gasto OC comprometido:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
           ${pvLastOrder?`<div style="font-size:11px"><span style="color:var(--text3)">Último pedido:</span> ${escapeHtml(pvLastOrder)}</div>`:''}
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
           ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px">${formatRichText(f['Notas'])}</div>`:''}
@@ -352,7 +353,7 @@ function toggleProveedorFicha(id){
 }
 function highlightStars(el,n){const wrap=el.parentElement;wrap.querySelectorAll('span').forEach((s,i)=>{s.style.color=i<n?'#facc15':'var(--text3)';});}
 function resetStars(wrap,rep){wrap.querySelectorAll('span').forEach((s,i)=>{s.style.color=i<rep?'#facc15':'var(--text3)';});}
-async function updateRepProveedor(id,rep){
+updateRepProveedor=async function(id,rep){
   const p=state.proveedores.find(x=>x.id===id);if(!p) return;
   const old=p.fields['Reputación'];
   p.fields['Reputación']=rep;
@@ -862,7 +863,7 @@ function delOC(id){if(!confirm('¿Eliminar esta orden de compra?'))return;_ocSav
 function generarOCPDF(id){
   const oc=_ocAll().find(x=>x.id===id);if(!oc){toast('OC no encontrada','error');return;}
   const esc=s=>escapeHtml(String(s==null?'':s));const clp=n=>formatCLP(Math.round(n||0));
-  const pv=(state.proveedores||[]).find(p=>String(p.fields['Nombre']||'')===oc.proveedor);
+  const pv=(state.proveedores||[]).find(p=>p.id===oc.supplierId)||(state.proveedores||[]).find(p=>String(p.fields['Nombre']||'')===oc.proveedor);
   const rows=(oc.items||[]).map(it=>`<tr><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3">${esc(it.item)}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:center">${it.cantidad}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:right">${clp(it.precio)}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:right">${clp(it.cantidad*it.precio)}</td></tr>`).join('');
   const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(oc.numero)} — ${esc(oc.proveedor)}</title>
 <style>@page{size:A4;margin:16mm}*{box-sizing:border-box}body{font-family:-apple-system,system-ui,'Segoe UI',Arial,sans-serif;color:#111;margin:0}</style></head><body>
@@ -906,3 +907,222 @@ function renderOCList(){
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--danger)" title="Eliminar" data-id="${o.id}" onclick="delOC(this.dataset.id)">✕</button>
     </div>`).join('')}</div></div>`;
 }
+
+
+// ── SUPPLIER OPS V2 · identidad estable y backend autoritativo ─────────
+const _supplierOpsState={ready:false,loading:null,prices:[],purchaseOrders:[],purchaseOrderItems:[],evaluations:[],categories:[],fetchedAt:null};
+function _supplierProxyCfg(){
+  try{
+    const px=typeof _proxyCfg==='function'?_proxyCfg():null;if(!px?.url||!px?.key)return null;
+    const u=new URL(px.url);if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.search||u.hash)return null;
+    if(u.protocol==='http:'&&!['localhost','127.0.0.1'].includes(u.hostname))return null;
+    return{base:u.origin+u.pathname.replace(/\/$/,''),key:px.key};
+  }catch(_){return null;}
+}
+async function _supplierApi(path,opts={}){
+  const cfg=_supplierProxyCfg();if(!cfg)throw Error('Proxy seguro no configurado');
+  const r=await fetch(cfg.base+path,{credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,...(opts.body?{'Content-Type':'application/json'}:{})},...opts});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw Error(d.error||d.detail||('Supplier API '+r.status));return d;
+}
+function _supplierMutationId(prefix='supplier'){return prefix+':'+Date.now()+':'+crypto.randomUUID();}
+async function _supplierMutate(op,payload={}){
+  return _supplierApi('/suppliers/mutate',{method:'POST',body:JSON.stringify({op,mutationId:_supplierMutationId(op),...payload})});
+}
+function _supplierMapPrice(r){
+  const f=r.fields||{};return{id:r.id,supplierId:f['Supplier ID']||'',prov:f['Supplier Name']||'',item:f.Item||'',
+    precio:Number(f['Net Price']||0),unidad:f.Unit||'u',fecha:f['Vigencia desde']||'',nota:f['Source URL']||'',
+    currency:f.Currency||'CLP',taxRate:Number(f['Tax Rate']||0),minQty:Number(f['Min Qty']||0),sourceUrl:f['Source URL']||'',vigente:f.Vigente!==false};
+}
+function _supplierMapPO(r,items){
+  const f=r.fields||{},poId=f.ID||r.id;return{id:poId,_recordId:r.id,numero:f['Número']||'',supplierId:f['Supplier ID']||'',
+    proveedor:f['Supplier Name']||'',fecha:String(f['Creada en']||'').slice(0,10),notas:f['Condiciones de pago']||'',
+    items:(items||[]).filter(x=>x.fields?.['PO ID']===poId).sort((a,b)=>Number(a.fields?.['Línea']||0)-Number(b.fields?.['Línea']||0))
+      .map(x=>({item:x.fields?.['Ítem']||'',sku:x.fields?.SKU||'',cantidad:Number(x.fields?.Cantidad||0),unidad:x.fields?.Unidad||'u',
+        precio:Number(x.fields?.['Neto unitario']||0),taxRate:Number(x.fields?.['Tasa impuesto']||0),recibida:Number(x.fields?.['Cantidad recibida']||0)})),
+    neto:Number(f.Neto||0),iva:Number(f.Impuesto||0),total:Number(f.Total||0),estado:f.Estado||'Borrador',currency:f.Moneda||'CLP',revision:Number(f['Revisión']||0)};
+}
+async function _supplierOpsHydrate(force=false){
+  if(_supplierOpsState.loading&&!force)return _supplierOpsState.loading;
+  _supplierOpsState.loading=(async()=>{
+    try{
+      const d=await _supplierApi('/suppliers/snapshot',{method:'GET'});
+      _supplierOpsState.prices=(d.prices||[]).map(_supplierMapPrice);
+      _supplierOpsState.purchaseOrderItems=d.purchaseOrderItems||[];
+      _supplierOpsState.purchaseOrders=(d.purchaseOrders||[]).map(r=>_supplierMapPO(r,_supplierOpsState.purchaseOrderItems));
+      _supplierOpsState.evaluations=d.evaluations||[];_supplierOpsState.categories=d.categories||[];
+      _supplierOpsState.fetchedAt=d.fetchedAt||null;_supplierOpsState.ready=true;
+      if(Array.isArray(d.suppliers)&&d.suppliers.length){state.proveedores=d.suppliers;}
+      if(Array.isArray(d.pedidos)&&d.pedidos.length){state.pedidos=d.pedidos;}
+      return true;
+    }catch(e){console.warn('[SupplierOps]',e.message);return false;}
+    finally{_supplierOpsState.loading=null;}
+  })();
+  return _supplierOpsState.loading;
+}
+function _supplierByAny(v){
+  const x=String(v||'');return (state.proveedores||[]).find(p=>p.id===x)||
+    (state.proveedores||[]).find(p=>String(p.fields?.Nombre||'').toLowerCase()===x.toLowerCase())||null;
+}
+function _supplierPedidoMatches(pedido,supplierId,nombre){
+  const f=pedido?.fields||{},linked=f['Proveedor ID']||f['Supplier ID']||f['Proveedor IDs'];
+  const rawLinks=f.Proveedores||linked;const ids=Array.isArray(rawLinks)?rawLinks.map(x=>typeof x==='string'?x:(x?.id||x?.name||'')):String(rawLinks||'').split(',').map(x=>x.trim());
+  if(ids.filter(Boolean).includes(supplierId))return true;
+  // Compatibilidad de lectura para pedidos históricos: nunca se usa para crear relaciones nuevas.
+  return !ids.filter(Boolean).length&&String(f.Proveedor||'').split(',').map(x=>x.trim().toLowerCase()).includes(String(nombre||'').toLowerCase());
+}
+function _supplierSpend(supplierId){
+  return (_supplierOpsState.purchaseOrders||[]).filter(o=>o.supplierId===supplierId&&!['Cancelada'].includes(o.estado))
+    .reduce((n,o)=>n+Number(o.total||0),0);
+}
+getPvCats=function(){
+  const remote=(_supplierOpsState.categories||[]).filter(r=>r.fields?.Activa!==false)
+    .sort((a,b)=>Number(a.fields?.Orden||0)-Number(b.fields?.Orden||0)).map(r=>r.fields?.Nombre).filter(Boolean);
+  return remote.length?remote:[...PV_CATS_DEFAULT];
+}
+setPvCats=function(arr){
+  const colors=getPvCatColorMap(),categories=(arr||[]).map(name=>({name,color:(colors[name]||[])[0]||'#888888'}));
+  _supplierMutate('syncCategories',{categories}).then(()=>_supplierOpsHydrate(true)).then(()=>{fillCatSelects();renderCatManager();}).catch(e=>toast('Error categorías: '+e.message,'error'));
+}
+getPvCatColorMap=function(){
+  const out={};for(const r of _supplierOpsState.categories||[]){const f=r.fields||{};if(f.Nombre&&f.Color)out[f.Nombre]=[f.Color,f.Color+'18',f.Color+'48'];}return out;
+}
+setPvCatColorMap=function(){}
+_preciosProv=function(){return _supplierOpsState.prices.filter(x=>x.vigente);}
+_preciosProvSaveArr=function(){throw Error('SupplierPrices es autoritativo; no se guardan blobs locales');}
+_preciosProvBackup=async function(){return false;}
+_preciosDeProv=function(prov){
+  const p=_supplierByAny(prov),id=p?.id||String(prov||''),name=String(p?.fields?.Nombre||prov||'').toLowerCase();
+  return _preciosProv().filter(x=>x.supplierId===id||(!x.supplierId&&String(x.prov||'').toLowerCase()===name))
+    .sort((a,b)=>_normItem(a.item).localeCompare(_normItem(b.item))||String(b.fecha||'').localeCompare(String(a.fecha||'')));
+}
+addPrecioProv=async function(prov){
+  const p=_supplierByAny(prov);if(!p){toast('Proveedor no encontrado','error');return;}
+  const item=(prompt('Ítem o material cotizado:')||'').trim();if(!item)return;
+  const raw=prompt('Precio neto unitario:','');if(raw==null)return;const netPrice=Number(String(raw).replace(/[^\d.-]/g,''));if(!(netPrice>=0)){toast('Precio inválido','error');return;}
+  const unit=(prompt('Unidad:','unidad')||'unidad').trim()||'unidad';
+  const currency=(prompt('Moneda (CLP/USD/EUR):','CLP')||'CLP').trim().toUpperCase();
+  const minQty=Math.max(0,Number(prompt('Mínimo de compra:','0')||0));
+  const sourceUrl=(prompt('URL/documento fuente (opcional):','')||'').trim();
+  try{
+    await _supplierMutate('addPrice',{supplierId:p.id,supplierName:p.fields?.Nombre||'',item,unit,netPrice,currency,minQty,taxRate:0.19,validFrom:hoyCL(),sourceUrl});
+    await _supplierOpsHydrate(true);renderProveedores();toast('✓ Precio registrado y versionado','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+delPrecioProv=function(){toast('Los precios forman historial inmutable. Registra un precio nuevo para reemplazar el vigente.','info');}
+_ocAll=function(){return _supplierOpsState.purchaseOrders;}
+_ocSaveArr=function(){throw Error('PurchaseOrders es autoritativo; no se guardan blobs locales');}
+_ocBackup=async function(){return false;}
+_ocNextNum=function(){return 'OC-PENDIENTE';}
+openOCModal=function(prov,ocId){
+  const sel=document.getElementById('ocProveedor'),provs=(state.proveedores||[]).slice().sort((a,b)=>String(a.fields?.Nombre||'').localeCompare(String(b.fields?.Nombre||'')));
+  sel.innerHTML='<option value="">— Selecciona proveedor —</option>'+provs.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.fields?.Nombre||'')}</option>`).join('');
+  document.getElementById('ocRows').innerHTML='';document.getElementById('ocId').value=ocId||'';
+  const oc=ocId?_ocAll().find(x=>x.id===ocId):null;
+  if(oc){sel.value=oc.supplierId||'';document.getElementById('ocFecha').value=oc.fecha||hoyCL();document.getElementById('ocNotas').value=oc.notas||'';(oc.items||[]).forEach(it=>ocAddRow(it));}
+  else{const p=_supplierByAny(prov);sel.value=p?.id||'';document.getElementById('ocFecha').value=hoyCL();document.getElementById('ocNotas').value='';ocAddRow();}
+  ocProveedorChanged();ocCalc();document.getElementById('ocModal').style.display='flex';
+}
+ocProveedorChanged=function(){
+  const id=document.getElementById('ocProveedor').value,hint=document.getElementById('ocPreciosHint');if(!hint)return;
+  const n=id?_preciosDeProv(id).length:0;hint.textContent=n?`· ${n} precio(s) vigentes de este proveedor`:'';
+}
+guardarOC=async function(conPDF){
+  const supplierId=document.getElementById('ocProveedor').value,p=_supplierByAny(supplierId);if(!p){toast('Selecciona un proveedor','error');return;}
+  if(document.getElementById('ocId').value){toast('Las OC emitidas son versionadas; crea una nueva o cambia su estado.','info');return;}
+  const items=_ocRows().filter(x=>x.item&&x.cantidad>0).map(x=>({item:x.item,qty:x.cantidad,netUnit:x.precio,unit:'u',taxRate:0.19}));
+  if(!items.length){toast('Agrega al menos un ítem con cantidad','error');return;}
+  try{
+    const d=await _supplierMutate('createPO',{supplierId,items,currency:'CLP',paymentTerms:(document.getElementById('ocNotas').value||'').trim()});
+    await _supplierOpsHydrate(true);closeOCModal();renderOCList();toast('✓ '+(d.po?.number||'OC')+' creada como Borrador','success');
+    if(conPDF&&d.po?.poId)generarOCPDF(d.po.poId);
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+setProvEstadoPost=async function(id,estado){
+  const p=state.proveedores.find(x=>x.id===id);if(!p)return;
+  const motive=(document.getElementById('pvmotivo-'+id)?.value||'').trim();
+  let checklist=[],evidence='';
+  if(['APROBADO','RECHAZADO'].includes(estado)){
+    if(motive.length<5){toast('Escribe un motivo de evaluación antes de decidir','error');return;}
+    checklist=(prompt('Checklist verificado (separa por comas):','Identidad, contacto, capacidad')||'').split(',').map(x=>x.trim()).filter(Boolean);
+    if(!checklist.length){toast('Checklist obligatorio','error');return;}
+    evidence=(prompt('Evidencia o referencia (documento, reunión, prueba, etc.):','')||'').trim();
+  }
+  try{
+    const score=Number(p.fields?.['Reputación']||3)||3;
+    const d=await _supplierMutate('evaluation',{supplierId:id,status:estado,motive,evidence,checklist,
+      scores:{quality:score,onTime:score,price:score,response:score},incidents:0});
+    p.fields['Estado postulación']=estado;p.fields['Reputación']=d.score||score;renderProveedores();toast('✓ Evaluación registrada con historial','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+updateRepProveedor=function(){toast('La reputación ahora se deriva de evaluaciones y entregas; no se edita directamente.','info');}
+deleteProveedor=async function(id,nombre){
+  if(!confirm(`¿Archivar proveedor "${nombre}"? Se conservará su identidad y todo su historial.`))return;
+  try{await _supplierMutate('archiveSupplier',{supplierId:id});await _supplierOpsHydrate(true);renderProveedores();toast('✓ Proveedor archivado sin perder vínculos','success');}
+  catch(e){toast('Error: '+e.message,'error');}
+}
+bulkDeleteProveedores=async function(){
+  const ids=[...selectedProveedores];if(!ids.length)return;if(!confirm(`¿Archivar ${ids.length} proveedor(es)?`))return;
+  let ok=0,err=0;for(const id of ids){try{await _supplierMutate('archiveSupplier',{supplierId:id});ok++;}catch(_){err++;}}
+  await _supplierOpsHydrate(true);clearProveedoresSelection();renderProveedores();
+  toast(err?`${ok} archivados, ${err} con error`:`✓ ${ok} proveedores archivados`,err?'info':'success');
+}
+createProveedor=async function(){
+  const nombre=(document.getElementById('np-nombre')?.value||'').trim(),categorias=getPvSelectedCats('np');
+  if(!nombre){toast('Nombre requerido','error');return;}if(!categorias.length){toast('Selecciona al menos una categoría','error');return;}
+  const email=(document.getElementById('np-email')?.value||'').trim(),tel=(document.getElementById('np-telefono')?.value||'').trim(),rut=(document.getElementById('np-rut')?.value||'').trim();
+  if(email&&!validEmail(email)){toast('Email inválido','error');return;}if(tel&&!validPhone(tel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}if(rut&&!validRUT(rut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
+  const fields={Nombre:nombre,'Categoría':categorias,Contacto:document.getElementById('np-contacto')?.value||'',Cargo:document.getElementById('np-cargo')?.value||'',
+    'Teléfono':tel,WhatsApp:document.getElementById('np-whatsapp')?.value||'',Email:email,'Sitio Web':document.getElementById('np-web')?.value||'',RUT:rut,
+    Comuna:document.getElementById('np-comuna')?.value||'',Región:document.getElementById('np-region')?.value||'',Estado:document.getElementById('np-estado')?.value||'Activo',
+    'Condiciones de pago':document.getElementById('np-condpago')?.value||'','Plazo de entrega (días)':Number(document.getElementById('np-plazo')?.value)||null,
+    Productos:document.getElementById('np-productos')?.value||'',Notas:document.getElementById('np-notas')?.value||''};
+  const btn=document.getElementById('createProveedorBtn');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  try{
+    const d=await _supplierMutate('createSupplier',{fields});await _supplierOpsHydrate(true);renderProveedores();clearForm('proveedor');switchTab('proveedores');
+    toast(d.deduped?'Proveedor existente detectado; no se creó duplicado':'✓ Proveedor creado','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='✚ Crear Proveedor';}}
+}
+const _supplierLegacyRender=renderProveedores;
+renderProveedores=function(skipAnalytics){
+  if(!_supplierOpsState.ready&&!_supplierOpsState.loading)_supplierOpsHydrate().then(ok=>{if(ok)_supplierLegacyRender(skipAnalytics);});
+  return _supplierLegacyRender(skipAnalytics);
+};
+setTimeout(()=>_supplierOpsHydrate().then(ok=>{if(ok){fillCatSelects();renderProveedores();}}),0);
+
+renamePvCat=async function(idx){
+  const cats=getPvCats(),oldName=cats[idx];if(!oldName)return;
+  const newName=(prompt('Nuevo nombre de categoría:',oldName)||'').trim();if(!newName||newName===oldName)return;
+  try{
+    await _supplierMutate('renameCategory',{oldName,newName});await _supplierOpsHydrate(true);
+    fillCatSelects();renderCatManager();renderProveedores();toast('✓ Categoría renombrada y proveedores migrados','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+};
+deletePvCat=async function(idx){
+  const cats=getPvCats(),name=cats[idx];if(!name)return;
+  const inUse=state.proveedores.some(p=>pvCat(p.fields).split(', ').map(x=>x.trim()).includes(name));
+  if(inUse){toast('No se puede eliminar: primero renombra/migra esta categoría o quítala de los proveedores.','error');return;}
+  cats.splice(idx,1);setPvCats(cats);
+};
+const _supplierLegacyExport=exportToCSV;
+exportToCSV=async function(t){
+  if(t!=='proveedores')return _supplierLegacyExport(t);
+  const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase(),cat=document.getElementById('proveedorCatFilter')?.value||'';
+  const list=(state.proveedores||[]).filter(p=>{const f=p.fields||{};
+    const matchSearch=!search||[f.Nombre,f.Contacto,f.Email,f.Comuna,f.Productos,pvCat(f)].some(v=>String(v||'').toLowerCase().includes(search));
+    return matchSearch&&(!cat||pvCat(f).includes(cat));});
+  if(!list.length){toast('Sin datos para exportar','error');return;}
+  const headers=['Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Región','Estado','RUT','Condiciones pago','Plazo días','Productos','Notas'];
+  const rows=list.map(p=>{const f=p.fields||{};return[f.Nombre,pvCat(f),f.Contacto,f['Teléfono'],f.Email,f.Comuna,f['Región'],f.Estado,f.RUT,f['Condiciones de pago'],f['Plazo de entrega (días)'],f.Productos,f.Notas];});
+  const safe=v=>{let x=String(v??'');if(/^[=+\-@]/.test(x))x="'"+x;x=x.replace(/"/g,'""');return/[",\n]/.test(x)?'"'+x+'"':x;};
+  const csv=[headers.map(safe).join(','),...rows.map(r=>r.map(safe).join(','))].join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='proveedores-'+hoyCL()+'.csv';a.click();URL.revokeObjectURL(url);
+  try{
+    const cfg=_supplierProxyCfg();if(cfg)await fetch(cfg.base+'/office/audit',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify({action:'export',entity:'Proveedores',executionId:_supplierMutationId('export'),detail:'CSV filtrado · '+list.length+' filas'})});
+  }catch(_){}
+  toast('✓ proveedores.csv descargado','success');
+};

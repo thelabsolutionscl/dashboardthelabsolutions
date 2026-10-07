@@ -115,7 +115,7 @@ test('operator mutations are strict opt-in fields by verified table and type',()
     ['Cotizaciones','POST',{'N° Cotización':'260901',Cliente:[rec],'Total final (CLP)':120000}],
     ['Pedidos','POST',{'N° Pedido':'PED-2026-050',Cotizaciones:[rec],
       'Estado pedido':'Confirmado','Monto total (CLP)':150000}],
-    ['Proveedores','POST',{Nombre:'Proveedor A',Categoría:['Impresión'],Reputación:3}],
+    ['Proveedores','POST',{Nombre:'Proveedor A',Categoría:['Impresión'],Contacto:'Ana'}],
     ['Clientes','PATCH',{Empresa:'Cliente existente',Validado:true}],
     ['Cotizaciones','PATCH',{'Estado cotización':'Enviada',Cliente:[rec]}],
     ['Pedidos','PATCH',{'Estado pedido':'En producción','Equipo asignado':'Taller'}],
@@ -133,7 +133,8 @@ test('operator mutations are strict opt-in fields by verified table and type',()
     ['Pedidos','N° documento tributario','33-100'],
     ['Pedidos','Factura URL','https://evil.example'],
     ['Proveedores','Condiciones de pago','a 30 días'],
-    ['Proveedores','RUT','11.111.111-1']
+    ['Proveedores','RUT','11.111.111-1'],
+    ['Proveedores','Reputación',3],['Proveedores','Estado postulación','APROBADO']
   ]){
     assert.equal(operatorWritePayloadAllowed(table,'PATCH',{fields:{[field]:value}}),false,
       table+' forbidden '+field);

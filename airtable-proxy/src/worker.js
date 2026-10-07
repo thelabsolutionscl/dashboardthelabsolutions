@@ -51,15 +51,15 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
     'FT Relleno (%)':'number','FT Soportes':'select',
     'FT Peso estimado (g)':'number','FT Tiempo impresión':'text',
     'FT Notas producción':'notes','FT Actualizado':'date',
-    'Notas QA':'notes','Foto QA URL':'url','Fecha objetivo interna':'date',
+    'Notas QA':'notes','Foto QA URL':'url','Fecha objetivo interna':'date','Proveedores':'links',
     'Historial fechas calendario':'notes'
   }),
   Proveedores:Object.freeze({
     'Nombre':'text','Categoría':'choices','Contacto':'text',
     'Cargo':'text','Teléfono':'phone','Email':'email',
     'Sitio Web':'url','Comuna':'text','Región':'text',
-    'Reputación':'number','Estado':'text','Plazo de entrega (días)':'number',
-    'Productos':'notes','WhatsApp':'phone','Estado postulación':'select'
+    'Estado':'text','Plazo de entrega (días)':'number',
+    'Productos':'notes','WhatsApp':'phone'
   }),
   // Machine tables are operational, but they are no longer a generic Airtable
   // write tunnel for signed operators. Identity/config fields stay immutable.
@@ -2624,7 +2624,8 @@ export class CrmMutationGuard {
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
                   ?this._handleSharedFinance(request):path==='/shared-remunerations'
-                    ?this._handleSharedRemunerations(request):path==='/visual-ai-guard'
+                    ?this._handleSharedRemunerations(request):path==='/supplier-ops'
+                      ?this._handleSupplierOps(request):path==='/visual-ai-guard'
                     ?this._handleVisualAiGuard(request):path==='/newsletter-send'
                       ?this._handleNewsletterSend(request):path==='/social-lead'
                         ?this._handleSocialLead(request):path==='/scoped-patch'
@@ -3273,6 +3274,253 @@ export class CrmMutationGuard {
     return this._json({error:'Unknown visual guard operation'},404);
   }
 
+  async _handleSupplierOps(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Supplier guard unavailable'},503);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid supplier mutation'},422);}
+    const actor=p?.actor,op=String(p?.op||''),mutationId=String(p?.mutationId||'');
+    if(!actor||typeof actor.email!=='string'||!['operator','finance','admin'].includes(actor.role)||
+       !/^[A-Za-z0-9._:-]{12,160}$/.test(mutationId))
+      return this._json({error:'Supplier mutation denied'},403);
+    const key='supplier-mutation:'+mutationId;
+    const prior=await this.state.storage.get(key);
+    if(prior?.done)return this._json({...prior.response,reused:true},200);
+    const finish=async(response,status=200)=>{
+      await this.state.storage.put(key,{done:true,response,at:new Date().toISOString()});
+      return this._json(response,status);
+    };
+    try{
+      if(op==='createSupplier'){
+        const fields=supplierNormalizeMaster(p.fields||{});
+        const dup=await supplierFindDuplicate(this.env,fields);
+        if(dup)return finish({ok:true,supplierId:dup.id,record:dup,deduped:true},200);
+        const rec=await officeCreate(this.env,'Proveedores',fields);
+        return finish({ok:true,supplierId:rec.id,record:rec,deduped:false},201);
+      }
+
+      if(op==='evaluation'){
+        const supplierId=supplierIdSafe(p.supplierId);
+        if(!supplierId)return this._json({error:'Invalid supplierId'},422);
+        const status=String(p.status||'').toUpperCase();
+        if(!['ENTREVISTAR','APROBADO','RECHAZADO'].includes(status))
+          return this._json({error:'Invalid evaluation status'},422);
+        const motive=String(p.motive||'').trim(),evidence=String(p.evidence||'').trim();
+        if(['APROBADO','RECHAZADO'].includes(status)&&motive.length<5)
+          return this._json({error:'Motivo obligatorio'},422);
+        const checklist=Array.isArray(p.checklist)
+          ?p.checklist.map(x=>String(x).slice(0,120)).filter(Boolean).slice(0,30):[];
+        if(['APROBADO','RECHAZADO'].includes(status)&&!checklist.length)
+          return this._json({error:'Checklist obligatorio'},422);
+        const scores=supplierScores(p.scores||{},Number(p.incidents||0));
+        const row=await officeCreate(this.env,'SupplierEvaluations',{
+          ID:'SE-'+crypto.randomUUID(),'Supplier ID':supplierId,Proveedor:[supplierId],
+          Estado:status,Motivo:motive,Evidencia:evidence,'Checklist JSON':JSON.stringify(checklist),
+          Calidad:scores.quality,Puntualidad:scores.onTime,Precio:scores.price,
+          Respuesta:scores.response,Incidentes:scores.incidents,'Score derivado':scores.score,
+          Fecha:new Date().toISOString(),Responsable:actor.email
+        });
+        await officePatch(this.env,'Proveedores',supplierId,{
+          'Estado postulación':status,'Reputación':scores.score
+        });
+        return finish({ok:true,evaluation:row,score:scores.score},201);
+      }
+
+      if(op==='addPrice'){
+        const supplierId=supplierIdSafe(p.supplierId);
+        if(!supplierId)return this._json({error:'Invalid supplierId'},422);
+        const data=supplierNormalizePrice(p,supplierId,actor.email);
+        const formula="AND({Supplier ID}='"+officeEsc(supplierId)+"',{Item Key}='"+
+          officeEsc(data['Item Key'])+"',{Vigente}=1)";
+        const existing=await officeFind(this.env,'SupplierPrices',formula);
+        if(existing)await officePatch(this.env,'SupplierPrices',existing.id,{
+          Vigente:false,'Vigencia hasta':data['Vigencia desde'],
+          Revision:Number(existing.fields?.Revision||0)+1
+        });
+        const row=await officeCreate(this.env,'SupplierPrices',data);
+        return finish({ok:true,price:row},201);
+      }
+
+      if(op==='createPO'){
+        const supplierId=supplierIdSafe(p.supplierId);
+        if(!supplierId)return this._json({error:'Invalid supplierId'},422);
+        const supplier=await supplierGet(this.env,supplierId);
+        if(!supplier)return this._json({error:'Supplier not found'},404);
+        const items=supplierNormalizePoItems(p.items||[]);
+        if(!items.length)return this._json({error:'PO items required'},422);
+
+        const year=officeDateCL().slice(0,4),seqKey='supplier-po-seq:'+year;
+        let seq=Number(await this.state.storage.get(seqKey)||0);
+        if(seq<1){
+          const rows=await officeList(this.env,'PurchaseOrders',{fields:['Número'],max:5000});
+          const prefix='OC-'+year+'-';
+          seq=rows.reduce((max,row)=>{
+            const value=String(row.fields?.['Número']||'');
+            if(!value.startsWith(prefix))return max;
+            const n=Number(value.slice(prefix.length));
+            return Number.isSafeInteger(n)&&n>0?Math.max(max,n):max;
+          },0);
+        }
+        seq+=1;
+        await this.state.storage.put(seqKey,seq);
+        const number='OC-'+year+'-'+String(seq).padStart(3,'0');
+        const totals=supplierPoTotals(items),poId='PO-'+crypto.randomUUID();
+        const row=await officeCreate(this.env,'PurchaseOrders',{
+          ID:poId,'Número':number,'Supplier ID':supplierId,Proveedor:[supplierId],
+          'Supplier Name':String(supplier.fields?.Nombre||''),
+          Moneda:String(p.currency||'CLP').toUpperCase(),
+          'Condiciones de pago':String(p.paymentTerms||'').slice(0,500),
+          Estado:'Borrador',Neto:totals.net,Impuesto:totals.tax,Total:totals.total,
+          'Revisión':1,'Creada en':new Date().toISOString(),'Creada por':actor.email
+        });
+        let line=0;
+        for(const it of items){
+          line+=1;
+          await officeCreate(this.env,'PurchaseOrderItems',{
+            ID:poId+'-'+line,'PO ID':poId,Línea:line,Ítem:it.item,SKU:it.sku,
+            Cantidad:it.qty,Unidad:it.unit,'Neto unitario':it.netUnit,
+            'Tasa impuesto':it.taxRate,'Cantidad recibida':0,'Revisión':1
+          });
+        }
+        return finish({ok:true,po:{...row,number,poId},totals},201);
+      }
+
+      if(op==='transitionPO'){
+        const poId=String(p.poId||''),target=String(p.status||'');
+        const po=await supplierFindByField(this.env,'PurchaseOrders','ID',poId);
+        if(!po)return this._json({error:'PO not found'},404);
+        const current=String(po.fields?.Estado||'Borrador');
+        if(!supplierPoTransitionAllowed(current,target))
+          return this._json({error:'Invalid PO transition'},409);
+        if(target==='Aprobada'&&!['admin','finance'].includes(actor.role))
+          return this._json({error:'Approval role required'},403);
+        const patch={Estado:target,'Revisión':Number(po.fields?.['Revisión']||0)+1};
+        const now=new Date().toISOString();
+        const stamp={
+          Aprobada:['Aprobada en','Aprobada por'],Enviada:['Enviada en','Enviada por'],
+          Aceptada:['Aceptada en','Aceptada por'],Facturada:['Facturada en','Facturada por'],
+          Pagada:['Pagada en','Pagada por'],Cerrada:['Cerrada en','Cerrada por'],
+          Cancelada:['Cancelada en','Cancelada por']
+        }[target];
+        if(stamp){patch[stamp[0]]=now;patch[stamp[1]]=actor.email;}
+        const updated=await officePatch(this.env,'PurchaseOrders',po.id,patch);
+        return finish({ok:true,po:updated},200);
+      }
+
+      if(op==='receivePO'){
+        const poId=String(p.poId||''),lines=Array.isArray(p.lines)?p.lines:[];
+        const po=await supplierFindByField(this.env,'PurchaseOrders','ID',poId);
+        if(!po)return this._json({error:'PO not found'},404);
+        if(!['Aceptada','Recibida parcial'].includes(String(po.fields?.Estado||'')))
+          return this._json({error:'PO cannot be received in current state'},409);
+        const items=await officeList(this.env,'PurchaseOrderItems',{
+          formula:"{PO ID}='"+officeEsc(poId)+"'",max:1000
+        });
+        const byLine=new Map(lines.map(x=>[
+          Number(x.line),Math.max(0,Number(x.received)||0)
+        ]));
+        let any=false;
+        for(const item of items){
+          const line=Number(item.fields?.['Línea']||0);
+          if(!byLine.has(line))continue;
+          const ordered=Number(item.fields?.Cantidad||0);
+          const received=Math.min(ordered,byLine.get(line));
+          if(received>0)any=true;
+          await officePatch(this.env,'PurchaseOrderItems',item.id,{
+            'Cantidad recibida':received,'Revisión':Number(item.fields?.['Revisión']||0)+1
+          });
+          item.fields['Cantidad recibida']=received;
+        }
+        if(!any)return this._json({error:'No received quantities'},422);
+        const all=items.length>0&&items.every(item=>
+          Number(item.fields?.['Cantidad recibida']||0)>=Number(item.fields?.Cantidad||0)
+        );
+        const state=all?'Recibida total':'Recibida parcial';
+        const updated=await officePatch(this.env,'PurchaseOrders',po.id,{
+          Estado:state,'Recibida en':new Date().toISOString(),'Recibida por':actor.email,
+          'Revisión':Number(po.fields?.['Revisión']||0)+1
+        });
+        return finish({ok:true,po:updated},200);
+      }
+
+      if(op==='syncCategories'){
+        const cats=Array.isArray(p.categories)?p.categories.slice(0,100):[];
+        if(!cats.length)return this._json({error:'Categories required'},422);
+        const clean=cats.map((x,i)=>({
+          name:supplierNormText(typeof x==='string'?x:x.name),
+          color:supplierNormText(typeof x==='string'?'':x?.color||''),
+          order:i+1
+        })).filter(x=>x.name);
+        const existing=await officeList(this.env,'SupplierCategories',{max:2000});
+        const byName=new Map(existing.map(r=>[
+          String(r.fields?.Nombre||'').toLowerCase(),r
+        ]));
+        const active=new Set();
+        for(const c of clean){
+          const catKey=c.name.toLowerCase();active.add(catKey);
+          const old=byName.get(catKey);
+          const fields={
+            Nombre:c.name,Color:c.color||'#888888',Orden:c.order,Activa:true,
+            'Revisión':Number(old?.fields?.['Revisión']||0)+1
+          };
+          if(old)await officePatch(this.env,'SupplierCategories',old.id,fields);
+          else await officeCreate(this.env,'SupplierCategories',{
+            ID:'SC-'+crypto.randomUUID(),...fields
+          });
+        }
+        for(const old of existing){
+          const catKey=String(old.fields?.Nombre||'').toLowerCase();
+          if(catKey&&!active.has(catKey)&&old.fields?.Activa!==false)
+            await officePatch(this.env,'SupplierCategories',old.id,{
+              Activa:false,'Revisión':Number(old.fields?.['Revisión']||0)+1
+            });
+        }
+        return finish({ok:true,count:clean.length},200);
+      }
+
+      if(op==='renameCategory'){
+        const oldName=supplierNormText(p.oldName),newName=supplierNormText(p.newName);
+        if(!oldName||!newName||oldName.toLowerCase()===newName.toLowerCase())
+          return this._json({error:'Invalid category rename'},422);
+        const rows=await officeList(this.env,'SupplierCategories',{max:2000});
+        const cat=rows.find(r=>String(r.fields?.Nombre||'').toLowerCase()===oldName.toLowerCase());
+        if(!cat)return this._json({error:'Category not found'},404);
+        if(rows.some(r=>r.id!==cat.id&&
+          String(r.fields?.Nombre||'').toLowerCase()===newName.toLowerCase()&&
+          r.fields?.Activa!==false))
+          return this._json({error:'Category already exists'},409);
+        const suppliers=await officeList(this.env,'Proveedores',{max:10000});
+        let migrated=0;
+        for(const rec of suppliers){
+          const raw=rec.fields?.['Categoría'];
+          const arr=Array.isArray(raw)?raw.map(x=>x?.name||x):raw?[String(raw)]:[];
+          if(!arr.some(x=>String(x).toLowerCase()===oldName.toLowerCase()))continue;
+          const next=arr.map(x=>String(x).toLowerCase()===oldName.toLowerCase()?newName:x);
+          await officePatch(this.env,'Proveedores',rec.id,{'Categoría':next});
+          migrated+=1;
+        }
+        await officePatch(this.env,'SupplierCategories',cat.id,{
+          Nombre:newName,'Revisión':Number(cat.fields?.['Revisión']||0)+1
+        });
+        return finish({ok:true,migrated},200);
+      }
+
+      if(op==='archiveSupplier'){
+        const supplierId=supplierIdSafe(p.supplierId);
+        if(!supplierId)return this._json({error:'Invalid supplierId'},422);
+        const deps=await supplierDependencies(this.env,supplierId);
+        const state=deps.total>0?'Archivado':'Inactivo';
+        const rec=await officePatch(this.env,'Proveedores',supplierId,{Estado:state});
+        return finish({ok:true,record:rec,archived:true,dependencies:deps},200);
+      }
+
+      return this._json({error:'Unknown supplier operation'},404);
+    }catch(e){
+      return this._json({
+        error:'Supplier operation failed',detail:String(e?.message||e).slice(0,300)
+      },503);
+    }
+  }
+
   async _handleSharedRemunerations(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
       return this._json({error:'Shared remunerations guard unavailable'},503);
@@ -3910,6 +4158,265 @@ export class CrmMutationGuard {
 }
 
 
+const SUPPLIER_TABLE_SCHEMAS=Object.freeze({
+  SupplierPrices:[
+    {name:'ID',type:'singleLineText'},{name:'Supplier ID',type:'singleLineText'},
+    {name:'Supplier Name',type:'singleLineText'},{name:'Item Key',type:'singleLineText'},
+    {name:'Item',type:'singleLineText'},{name:'SKU',type:'singleLineText'},
+    {name:'Currency',type:'singleLineText'},{name:'Unit',type:'singleLineText'},
+    {name:'Net Price',type:'number'},{name:'Tax Rate',type:'number'},
+    {name:'Min Qty',type:'number'},{name:'Vigencia desde',type:'date'},
+    {name:'Vigencia hasta',type:'date'},{name:'Source URL',type:'url'},
+    {name:'Vigente',type:'checkbox'},{name:'Revision',type:'number'},
+    {name:'Created At',type:'dateTime'},{name:'Created By',type:'email'}
+  ],
+  PurchaseOrders:[
+    {name:'ID',type:'singleLineText'},{name:'Número',type:'singleLineText'},
+    {name:'Supplier ID',type:'singleLineText'},{name:'Supplier Name',type:'singleLineText'},
+    {name:'Moneda',type:'singleLineText'},{name:'Condiciones de pago',type:'multilineText'},
+    {name:'Estado',type:'singleLineText'},{name:'Neto',type:'number'},
+    {name:'Impuesto',type:'number'},{name:'Total',type:'number'},{name:'Revisión',type:'number'},
+    {name:'Creada en',type:'dateTime'},{name:'Creada por',type:'email'},
+    {name:'Aprobada en',type:'dateTime'},{name:'Aprobada por',type:'email'},
+    {name:'Enviada en',type:'dateTime'},{name:'Enviada por',type:'email'},
+    {name:'Aceptada en',type:'dateTime'},{name:'Aceptada por',type:'email'},
+    {name:'Recibida en',type:'dateTime'},{name:'Recibida por',type:'email'},
+    {name:'Facturada en',type:'dateTime'},{name:'Facturada por',type:'email'},
+    {name:'Pagada en',type:'dateTime'},{name:'Pagada por',type:'email'},
+    {name:'Cerrada en',type:'dateTime'},{name:'Cerrada por',type:'email'},
+    {name:'Cancelada en',type:'dateTime'},{name:'Cancelada por',type:'email'}
+  ],
+  PurchaseOrderItems:[
+    {name:'ID',type:'singleLineText'},{name:'PO ID',type:'singleLineText'},
+    {name:'Línea',type:'number'},{name:'Ítem',type:'singleLineText'},
+    {name:'SKU',type:'singleLineText'},{name:'Cantidad',type:'number'},
+    {name:'Unidad',type:'singleLineText'},{name:'Neto unitario',type:'number'},
+    {name:'Tasa impuesto',type:'number'},{name:'Cantidad recibida',type:'number'},
+    {name:'Revisión',type:'number'}
+  ],
+  SupplierEvaluations:[
+    {name:'ID',type:'singleLineText'},{name:'Supplier ID',type:'singleLineText'},
+    {name:'Estado',type:'singleLineText'},{name:'Motivo',type:'multilineText'},
+    {name:'Evidencia',type:'multilineText'},{name:'Checklist JSON',type:'multilineText'},
+    {name:'Calidad',type:'number'},{name:'Puntualidad',type:'number'},
+    {name:'Precio',type:'number'},{name:'Respuesta',type:'number'},
+    {name:'Incidentes',type:'number'},{name:'Score derivado',type:'number'},
+    {name:'Fecha',type:'dateTime'},{name:'Responsable',type:'email'}
+  ],
+  SupplierCategories:[
+    {name:'ID',type:'singleLineText'},{name:'Nombre',type:'singleLineText'},
+    {name:'Color',type:'singleLineText'},{name:'Orden',type:'number'},
+    {name:'Activa',type:'checkbox'},{name:'Revisión',type:'number'}
+  ]
+});
+function supplierIdSafe(v){
+  const x=String(v||'');
+  return /^rec[A-Za-z0-9]{14}$/.test(x)?x:'';
+}
+function supplierNormText(v){return String(v??'').trim().replace(/\s+/g,' ').slice(0,1000);}
+function supplierNormRut(v){return String(v||'').toUpperCase().replace(/[^0-9K]/g,'');}
+function supplierNormEmail(v){return String(v||'').trim().toLowerCase();}
+function supplierNormalizeMaster(fields){
+  const name=supplierNormText(fields?.Nombre);
+  if(!name)throw new Error('Nombre requerido');
+  const out={...fields,Nombre:name};
+  if(Object.hasOwn(out,'RUT'))out.RUT=supplierNormRut(out.RUT);
+  if(Object.hasOwn(out,'Email'))out.Email=supplierNormEmail(out.Email);
+  if(out['Sitio Web']){
+    const raw=String(out['Sitio Web']);
+    const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);
+    if(!['http:','https:'].includes(u.protocol))throw new Error('Sitio Web inválido');
+    out['Sitio Web']=u.href;
+  }
+  if(Object.hasOwn(out,'Teléfono'))out['Teléfono']=String(out['Teléfono']||'').replace(/[^0-9+]/g,'').slice(0,20);
+  if(Object.hasOwn(out,'WhatsApp'))out.WhatsApp=String(out.WhatsApp||'').replace(/[^0-9+]/g,'').slice(0,20);
+  delete out['Reputación'];
+  return out;
+}
+async function supplierFindDuplicate(env,fields){
+  const rut=supplierNormRut(fields.RUT),email=supplierNormEmail(fields.Email);
+  const name=supplierNormText(fields.Nombre).toLowerCase(),clauses=[];
+  if(rut)clauses.push("REGEX_REPLACE(UPPER({RUT}&''),'[^0-9K]','')='"+officeEsc(rut)+"'");
+  if(email)clauses.push("LOWER({Email}&'')='"+officeEsc(email)+"'");
+  if(name)clauses.push("LOWER(TRIM({Nombre}&''))='"+officeEsc(name)+"'");
+  if(!clauses.length)return null;
+  return officeFind(env,'Proveedores',clauses.length>1?'OR('+clauses.join(',')+')':clauses[0]);
+}
+async function supplierGet(env,id){
+  if(!supplierIdSafe(id))return null;
+  const r=await fetch(AIRTABLE_BASE+'/v0/'+OFFICE_BASE_ID+'/Proveedores/'+id,{
+    headers:officeHeaders(env),redirect:'manual'
+  });
+  if(!r.ok)return null;
+  return officeJson(r);
+}
+async function supplierFindByField(env,table,field,value){
+  return officeFind(env,table,"{"+field+"}='"+officeEsc(String(value||''))+"'");
+}
+function supplierItemKey(item,unit='u'){
+  return supplierNormText(item).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-|-$/g,'')+'|'+supplierNormText(unit).toLowerCase();
+}
+function supplierNormalizePrice(p,supplierId,actor){
+  const item=supplierNormText(p.item),unit=supplierNormText(p.unit||'u'),net=Number(p.netPrice);
+  if(!item||!Number.isFinite(net)||net<0)throw new Error('Precio inválido');
+  const currency=String(p.currency||'CLP').toUpperCase();
+  if(!/^[A-Z]{3}$/.test(currency))throw new Error('Moneda inválida');
+  const tax=Math.max(0,Math.min(1,Number(p.taxRate??0.19)));
+  return{
+    ID:'SP-'+crypto.randomUUID(),'Supplier ID':supplierId,Proveedor:[supplierId],
+    'Supplier Name':supplierNormText(p.supplierName),'Item Key':supplierItemKey(item,unit),
+    Item:item,SKU:supplierNormText(p.sku),Currency:currency,Unit:unit,
+    'Net Price':Math.round(net*100)/100,'Tax Rate':tax,'Min Qty':Math.max(0,Number(p.minQty||0)),
+    'Vigencia desde':String(p.validFrom||officeDateCL()).slice(0,10),
+    'Vigencia hasta':p.validTo?String(p.validTo).slice(0,10):'',
+    'Source URL':String(p.sourceUrl||''),'Vigente':true,Revision:1,
+    'Created At':new Date().toISOString(),'Created By':actor
+  };
+}
+function supplierScores(scores,incidents){
+  const clamp=v=>Math.max(1,Math.min(5,Number(v)||3));
+  const quality=clamp(scores.quality),onTime=clamp(scores.onTime),
+    price=clamp(scores.price),response=clamp(scores.response);
+  incidents=Math.max(0,Number(incidents)||0);
+  const score=Math.max(1,Math.min(5,Math.round(
+    ((quality*.35+onTime*.30+price*.20+response*.15)-Math.min(1.5,incidents*.25))*10
+  )/10));
+  return{quality,onTime,price,response,incidents,score};
+}
+function supplierNormalizePoItems(items){
+  if(!Array.isArray(items)||items.length>200)return[];
+  return items.map(x=>({
+    item:supplierNormText(x.item),sku:supplierNormText(x.sku),
+    qty:Number(x.qty??x.cantidad),unit:supplierNormText(x.unit||x.unidad||'u'),
+    netUnit:Number(x.netUnit??x.precio),
+    taxRate:Math.max(0,Math.min(1,Number(x.taxRate??0.19)))
+  })).filter(x=>x.item&&Number.isFinite(x.qty)&&x.qty>0&&
+    Number.isFinite(x.netUnit)&&x.netUnit>=0);
+}
+function supplierPoTotals(items){
+  let net=0,tax=0;
+  for(const x of items){const line=x.qty*x.netUnit;net+=line;tax+=line*x.taxRate;}
+  net=Math.round(net);tax=Math.round(tax);
+  return{net,tax,total:net+tax};
+}
+const SUPPLIER_PO_TRANSITIONS=Object.freeze({
+  Borrador:['Aprobación','Cancelada'],
+  'Aprobación':['Borrador','Aprobada','Cancelada'],
+  Aprobada:['Enviada','Cancelada'],
+  Enviada:['Aceptada','Cancelada'],
+  Aceptada:['Recibida parcial','Recibida total','Cancelada'],
+  'Recibida parcial':['Recibida parcial','Recibida total','Cancelada'],
+  'Recibida total':['Facturada','Cerrada'],
+  Facturada:['Pagada','Cerrada'],Pagada:['Cerrada'],Cerrada:[],Cancelada:[]
+});
+function supplierPoTransitionAllowed(a,b){
+  return (SUPPLIER_PO_TRANSITIONS[String(a)]||[]).includes(String(b));
+}
+async function supplierDependencies(env,supplierId){
+  const result={SupplierPrices:0,PurchaseOrders:0,SupplierEvaluations:0,Pedidos:0,Facturas:0,Inventario:0};
+  for(const table of ['SupplierPrices','PurchaseOrders','SupplierEvaluations']){
+    try{
+      const rows=await officeList(env,table,{max:10000});
+      result[table]=rows.filter(r=>String(r.fields?.['Supplier ID']||'')===supplierId||
+        (Array.isArray(r.fields?.Proveedores)&&r.fields.Proveedores.includes(supplierId))).length;
+    }catch(_){}
+  }
+  for(const table of ['Pedidos','Facturas','Inventario']){
+    try{
+      const rows=await officeList(env,table,{max:10000});
+      result[table]=rows.filter(r=>
+        Array.isArray(r.fields?.Proveedores)&&r.fields.Proveedores.includes(supplierId)
+      ).length;
+    }catch(_){}
+  }
+  return{...result,total:Object.values(result).reduce((a,b)=>a+b,0)};
+}
+async function supplierEnsureSchema(env){
+  const metaUrl=AIRTABLE_BASE+'/v0/meta/bases/'+OFFICE_BASE_ID+'/tables';
+  const get=async()=>{
+    const r=await fetch(metaUrl,{headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN}});
+    if(!r.ok)throw new Error('metadata '+r.status);
+    return r.json();
+  };
+  let meta=await get(),created=[];
+  for(const [name,fields] of Object.entries(SUPPLIER_TABLE_SCHEMAS)){
+    let table=(meta.tables||[]).find(t=>t.name===name);
+    if(!table){
+      const r=await fetch(metaUrl,{
+        method:'POST',headers:officeHeaders(env),body:JSON.stringify({name,fields})
+      });
+      if(!r.ok)throw new Error('create '+name+' '+r.status);
+      await r.json();created.push(name);meta=await get();
+      table=(meta.tables||[]).find(t=>t.name===name);
+    }else{
+      for(const field of fields){
+        if((table.fields||[]).some(x=>x.name===field.name))continue;
+        const r=await fetch(metaUrl+'/'+table.id+'/fields',{
+          method:'POST',headers:officeHeaders(env),body:JSON.stringify(field)
+        });
+        if(!r.ok)throw new Error('field '+name+'.'+field.name+' '+r.status);
+      }
+    }
+  }
+  meta=await get();
+  const supplierTable=(meta.tables||[]).find(t=>t.name==='Proveedores');
+  if(!supplierTable)throw new Error('Proveedores table missing');
+  const linkTargets=['SupplierPrices','PurchaseOrders','SupplierEvaluations','Pedidos','Facturas','Inventario'];
+  for(const name of linkTargets){
+    const table=(meta.tables||[]).find(t=>t.name===name);
+    if(!table||(table.fields||[]).some(x=>x.name==='Proveedores'))continue;
+    const r=await fetch(metaUrl+'/'+table.id+'/fields',{
+      method:'POST',headers:officeHeaders(env),
+      body:JSON.stringify({
+        name:'Proveedores',type:'multipleRecordLinks',
+        options:{linkedTableId:supplierTable.id}
+      })
+    });
+    if(!r.ok)throw new Error('link '+name+' '+r.status);
+  }
+  return{ok:true,created,tables:Object.keys(SUPPLIER_TABLE_SCHEMAS),linked:linkTargets};
+}
+async function supplierSnapshot(env){
+  const [suppliers,prices,pos,items,evaluations,categories,pedidos]=await Promise.all([
+    officeList(env,'Proveedores',{max:10000}),
+    officeList(env,'SupplierPrices',{max:10000}),
+    officeList(env,'PurchaseOrders',{max:10000}),
+    officeList(env,'PurchaseOrderItems',{max:20000}),
+    officeList(env,'SupplierEvaluations',{max:10000}),
+    officeList(env,'SupplierCategories',{max:2000}),
+    officeList(env,'Pedidos',{max:10000})
+  ]);
+  const byName=new Map();
+  for(const rec of suppliers){
+    const k=supplierNormText(rec.fields?.Nombre).toLowerCase();
+    if(!k)continue;
+    const arr=byName.get(k)||[];arr.push(rec.id);byName.set(k,arr);
+  }
+  for(const rec of pedidos){
+    if(Array.isArray(rec.fields?.Proveedores)&&rec.fields.Proveedores.length)continue;
+    const names=String(rec.fields?.Proveedor||'').split(',')
+      .map(x=>supplierNormText(x).toLowerCase()).filter(Boolean);
+    const ids=[];let ambiguous=false;
+    for(const name of names){
+      const hits=byName.get(name)||[];
+      if(hits.length!==1){ambiguous=true;break;}
+      ids.push(hits[0]);
+    }
+    if(ids.length&&!ambiguous){
+      try{
+        await officePatch(env,'Pedidos',rec.id,{Proveedores:[...new Set(ids)]});
+        rec.fields.Proveedores=[...new Set(ids)];
+      }catch(_){}
+    }
+  }
+  return{
+    ok:true,suppliers,prices,purchaseOrders:pos,purchaseOrderItems:items,
+    evaluations,categories,pedidos,fetchedAt:new Date().toISOString()
+  };
+}
+
 const OFFICE_BASE_ID='app1YtD74AqiPWQhy';
 const OFFICE_TZ='America/Santiago';
 const OFFICE_AUTOMATION_EXPECT=Object.freeze({
@@ -4157,7 +4664,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -4169,6 +4676,81 @@ export default {
       return json(authorized.identity
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
+    }
+
+    if(url.pathname==='/suppliers/bootstrap'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||authorized.identity.role!=='admin')
+        return json({error:'Admin required'},403,headers);
+      try{
+        const out=await supplierEnsureSchema(env);
+        try{
+          await officeAudit(env,authorized.identity,'bootstrap','suppliers','schema','Supplier schema ensured');
+        }catch(_){}
+        return json(out,200,headers);
+      }catch(e){
+        return json({
+          error:'Supplier schema bootstrap failed',
+          detail:String(e?.message||e).slice(0,300)
+        },503,headers);
+      }
+    }
+
+    if(url.pathname==='/suppliers/snapshot'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity)return json({error:'Cloudflare Access required'},401,headers);
+      try{return json(await supplierSnapshot(env),200,headers);}
+      catch(e){
+        return json({
+          error:'Supplier snapshot unavailable',
+          detail:String(e?.message||e).slice(0,300)
+        },503,headers);
+      }
+    }
+
+    if(url.pathname==='/suppliers/mutate'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||!env.CRM_MUTATION_GUARD)
+        return json({error:'Supplier mutation unavailable'},503,headers);
+      let body;
+      try{
+        const raw=await request.text();
+        if(raw.length>500000)throw Error('large');
+        body=JSON.parse(raw);
+      }catch(_){return json({error:'Invalid supplier mutation'},422,headers);}
+      if(!body||typeof body!=='object'||Array.isArray(body))
+        return json({error:'Invalid supplier mutation'},422,headers);
+      const mutationId=String(body.mutationId||'');
+      if(!/^[A-Za-z0-9._:-]{12,160}$/.test(mutationId))
+        return json({error:'mutationId required'},422,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(
+          env.CRM_MUTATION_GUARD.idFromName('tls-supplier-ops')
+        );
+        const guarded=await stub.fetch('https://crm-write.internal/supplier-ops',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            ...body,
+            actor:{email:authorized.identity.email,role:authorized.identity.role}
+          })
+        });
+        const outHeaders=new Headers(guarded.headers);
+        Object.entries(headers).forEach(([k,v])=>outHeaders.set(k,v));
+        if(guarded.ok){
+          try{
+            await officeAudit(
+              env,authorized.identity,'supplier:'+String(body.op||''),
+              'suppliers',mutationId,'Mutación auditable de proveedores'
+            );
+          }catch(_){}
+        }
+        return new Response(guarded.body,{status:guarded.status,headers:outHeaders});
+      }catch(_){
+        return json({error:'Supplier mutation guard unavailable'},503,headers);
+      }
     }
 
     if(url.pathname==='/office/snapshot'){

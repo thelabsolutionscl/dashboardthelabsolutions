@@ -1322,80 +1322,117 @@ async function handleLead(request, env, ctx, cors) {
  * Crea un registro en la tabla Proveedores con "Estado postulación" = ENTREVISTAR.
  * El equipo lo cambia luego a APROBADO / RECHAZADO y añade "Motivo evaluación".
  * ══════════════════════════════════════════════════════════════════════ */
+function supplierNormRutPublic(v){return String(v||'').toUpperCase().replace(/[^0-9K]/g,'');}
+function supplierNormEmailPublic(v){return String(v||'').trim().toLowerCase();}
+function supplierFormulaEsc(v){return String(v||'').replace(/'/g,"\\'");}
+async function airtableFindProveedor(env,{rut,email,nombre}){
+  const clauses=[],nr=supplierNormRutPublic(rut),ne=supplierNormEmailPublic(email),nn=String(nombre||'').trim().toLowerCase();
+  if(nr)clauses.push("REGEX_REPLACE(UPPER({RUT}&''),'[^0-9K]','')='"+supplierFormulaEsc(nr)+"'");
+  if(ne)clauses.push("LOWER({Email}&'')='"+supplierFormulaEsc(ne)+"'");
+  if(nn)clauses.push("LOWER(TRIM({Nombre}&''))='"+supplierFormulaEsc(nn)+"'");
+  if(!clauses.length)return null;
+  const formula=clauses.length>1?"OR("+clauses.join(",")+")":clauses[0];
+  const url=AIRTABLE_API+"/"+env.AIRTABLE_BASE_ID+"/"+encodeURIComponent("Proveedores")+
+    "?maxRecords=1&filterByFormula="+encodeURIComponent(formula);
+  for(let i=0;i<4;i++){
+    try{
+      const r=await fetch(url,{headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+      if(r.ok){const d=await r.json();return d?.records?.[0]||null;}
+      if(r.status===429||r.status>=500){await sleep(250*(i+1));continue;}
+      return null;
+    }catch(_){await sleep(250*(i+1));}
+  }
+  return null;
+}
+async function airtableCreateSupplierOnce(env,fields){
+  let f={...fields};
+  for(let i=0;i<8;i++){
+    let r;
+    try{r=await airtableCreate(env,"Proveedores",f);}
+    catch(e){throw new Error("Airtable outcome uncertain; do not retry create: "+String(e?.message||e));}
+    if(r.ok)return r.json();
+    if(r.status===429||r.status>=500)
+      throw new Error("Airtable "+r.status+" outcome uncertain; do not retry create");
+    const bad=await unknownFieldFrom(r);
+    if(bad&&bad in f){delete f[bad];continue;}
+    throw new Error(await airtableErr(r));
+  }
+  throw new Error("Airtable: esquema de Proveedores no resoluble");
+}
+async function supplierApplicationHash(value){
+  const bytes=new TextEncoder().encode(String(value||''));
+  const digest=await crypto.subtle.digest("SHA-256",bytes);
+  return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+async function supplierApplicationGet(env,key){
+  if(!env.RL)return null;
+  try{const raw=await env.RL.get("supplier-application:"+key);return raw?JSON.parse(raw):null;}catch(_){return null;}
+}
+async function supplierApplicationPut(env,key,value){
+  if(!env.RL)return false;
+  try{await env.RL.put("supplier-application:"+key,JSON.stringify(value),{expirationTtl:86400*30});return true;}catch(_){return false;}
+}
+
 async function handleProveedor(request, env, ctx, cors) {
-  // 1) Clave compartida (anti-bot básico)
   if (env.PUBLIC_LEAD_KEY) {
-    const key = request.headers.get("X-Public-Lead-Key") || "";
-    if (!timingSafeEqual(key, env.PUBLIC_LEAD_KEY)) {
-      return json({ ok: false, error: "No autorizado" }, 401, cors);
-    }
+    const key=request.headers.get("X-Public-Lead-Key")||"";
+    if(!timingSafeEqual(key,env.PUBLIC_LEAD_KEY))return json({ok:false,error:"No autorizado"},401,cors);
   }
+  const body=await readJson(request);
+  if(!body)return json({ok:false,error:"JSON inválido"},400,cors);
+  if(body.company_website||body._hp)return json({ok:true,proveedorId:null},200,cors);
+  const securityWarnings=[];
+  if(env.TURNSTILE_SECRET){
+    const ok=await verifyTurnstile(env.TURNSTILE_SECRET,body.turnstileToken,request);
+    if(!ok)return json({ok:false,error:"Verificación anti-bot falló"},403,cors);
+  }else securityWarnings.push("TURNSTILE_SECRET no configurado");
+  if(!env.RL)securityWarnings.push("RL/idempotencia KV no configurado");
+  const limited=await rateLimited(env,request,"proveedor",5,60);
+  if(limited)return json({ok:false,error:"Demasiadas solicitudes"},429,cors);
 
-  const body = await readJson(request);
-  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
-
-  // 2) Honeypot
-  if (body.company_website || body._hp) {
-    return json({ ok: true, proveedorId: null }, 200, cors);
+  const nombre=str(body.name)||str(body.company),email=supplierNormEmailPublic(str(body.email)),phone=str(body.phone);
+  const rut=supplierNormRutPublic(str(body.rut));
+  if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({ok:false,error:"Email inválido"},400,cors);
+  const phoneDigits=String(phone||'').replace(/\D/g,'');
+  if(phone&&!(phoneDigits.length>=8&&phoneDigits.length<=12))return json({ok:false,error:"Teléfono inválido"},400,cors);
+  const rawWebsite=str(body.website);
+  if(rawWebsite){
+    try{const u=new URL(/^https?:\/\//i.test(rawWebsite)?rawWebsite:'https://'+rawWebsite);if(!['http:','https:'].includes(u.protocol))throw Error();}
+    catch(_){return json({ok:false,error:"Sitio web inválido"},400,cors);}
   }
+  if(!nombre)return json({ok:false,error:"Falta el nombre del proveedor"},400,cors);
+  if(!email&&!phone)return json({ok:false,error:"Falta email o teléfono"},400,cors);
+  const provided=request.headers.get("Idempotency-Key")||str(body.idempotencyKey);
+  const identity=[rut,email,String(nombre).trim().toLowerCase(),String(phone).replace(/\D/g,"")].join("|");
+  const idem=provided&&/^[A-Za-z0-9._:-]{12,160}$/.test(provided)?provided:await supplierApplicationHash(identity);
+  const prior=await supplierApplicationGet(env,idem);
+  if(prior?.proveedorId)return json({ok:true,proveedorId:prior.proveedorId,reused:true,securityWarnings},200,cors);
 
-  // 3) Turnstile (opcional)
-  if (env.TURNSTILE_SECRET) {
-    const ok = await verifyTurnstile(env.TURNSTILE_SECRET, body.turnstileToken, request);
-    if (!ok) return json({ ok: false, error: "Verificación anti-bot falló" }, 403, cors);
-  }
-
-  // 4) Rate-limit por IP
-  const limited = await rateLimited(env, request, "proveedor", 5, 60);
-  if (limited) return json({ ok: false, error: "Demasiadas solicitudes" }, 429, cors);
-
-  // 5) Validación mínima
-  const nombre = str(body.name) || str(body.company);
-  const email = str(body.email);
-  const phone = str(body.phone);
-  if (!nombre) return json({ ok: false, error: "Falta el nombre del proveedor" }, 400, cors);
-  if (!email && !phone) {
-    return json({ ok: false, error: "Falta email o teléfono" }, 400, cors);
-  }
-
-  const contacto = str(body.contact) || nombre;
-  const categoria = str(body.categoria || body.category);
-  const productos = str(body.productos || body.products);
-  const website = str(body.website);
-  const message = str(body.message);
-
-  const notas = ["📥 Postulación vía formulario web (thelab.solutions/proveedores)."];
-  if (message) notas.push(message);
-
-  const fields = stripEmpty({
-    Nombre: nombre,
-    Contacto: contacto,
-    Cargo: str(body.cargo || body.role),
-    Email: email,
-    Teléfono: phone,
-    WhatsApp: str(body.whatsapp) || phone,
-    "Sitio Web": website,
-    RUT: str(body.rut),
-    Comuna: str(body.comuna),
-    Región: str(body.region),
-    // multipleSelects → array; typecast crea la opción si no existe
-    Categoría: categoria ? [categoria] : undefined,
-    Productos: productos,
-    Notas: notas.join("\n\n"),
-    "Estado postulación": "ENTREVISTAR",
+  const contacto=str(body.contact)||nombre,categoria=str(body.categoria||body.category),
+    productos=str(body.productos||body.products),website=str(body.website),message=str(body.message);
+  const notas=["📥 Postulación vía formulario web (thelab.solutions/proveedores)."];
+  if(message)notas.push(message);
+  const fields=stripEmpty({
+    Nombre:nombre,Contacto:contacto,Cargo:str(body.cargo||body.role),Email:email,Teléfono:phone,
+    WhatsApp:str(body.whatsapp)||phone,"Sitio Web":website,RUT:rut,Comuna:str(body.comuna),Región:str(body.region),
+    Categoría:categoria?[categoria]:undefined,Productos:productos,Notas:notas.join("\n\n"),"Estado postulación":"ENTREVISTAR"
   });
-
-  const summary = { nombre, contacto, email, phone, categoria, productos, website, message };
-
-  try {
-    const rec = await airtableCreateTolerant(env, "Proveedores", fields);
-    ctx.waitUntil(sendProveedorNotification(env, summary));
-    return json({ ok: true, proveedorId: rec?.id || null }, 200, cors);
-  } catch (e) {
-    console.error("[proveedor]", e?.stack || e?.message || String(e));
-    // No perder la postulación: avisar por email aunque Airtable falle.
-    ctx.waitUntil(sendProveedorNotification(env, { ...summary, failed: true }));
-    return json({ ok: false, error: "No se pudo registrar la postulación" }, 502, cors);
+  const summary={nombre,contacto,email,phone,categoria,productos,website,message};
+  try{
+    const duplicate=await airtableFindProveedor(env,{rut,email,nombre});
+    if(duplicate){
+      await supplierApplicationPut(env,idem,{proveedorId:duplicate.id,deduped:true,at:new Date().toISOString()});
+      ctx.waitUntil(sendProveedorNotification(env,{...summary,deduped:true}));
+      return json({ok:true,proveedorId:duplicate.id,deduped:true,reused:false,securityWarnings},200,cors);
+    }
+    const rec=await airtableCreateSupplierOnce(env,fields);
+    await supplierApplicationPut(env,idem,{proveedorId:rec?.id||null,deduped:false,at:new Date().toISOString()});
+    ctx.waitUntil(sendProveedorNotification(env,summary));
+    return json({ok:true,proveedorId:rec?.id||null,deduped:false,reused:false,securityWarnings},201,cors);
+  }catch(e){
+    console.error("[proveedor]",e?.stack||e?.message||String(e));
+    ctx.waitUntil(sendProveedorNotification(env,{...summary,failed:true}));
+    return json({ok:false,error:"No se pudo registrar la postulación",retryable:false,securityWarnings},502,cors);
   }
 }
 

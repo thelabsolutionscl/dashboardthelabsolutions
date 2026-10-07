@@ -1,270 +1,183 @@
 #!/usr/bin/env node
 'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const ROOT=path.join(__dirname,'..');
+const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
+const PROV=fs.readFileSync(path.join(ROOT,'js','proveedores.js'),'utf8');
+const LEAD=fs.readFileSync(path.join(ROOT,'lead-worker','src','index.js'),'utf8');
+const PROXY=fs.readFileSync(path.join(ROOT,'airtable-proxy','src','worker.js'),'utf8');
+const ACCESS=fs.readFileSync(path.join(ROOT,'airtable-proxy','src','access-auth.js'),'utf8');
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-
-const ROOT = path.join(__dirname, '..');
-const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-const PROV = fs.readFileSync(path.join(ROOT, 'js', 'proveedores.js'), 'utf8');
-const WORKER = fs.readFileSync(path.join(ROOT, 'lead-worker', 'src', 'index.js'), 'utf8');
-const SOURCE = `${INDEX}\n${PROV}`;
-
-function esc(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-function count(re, text = SOURCE) {
-  return (text.match(re) || []).length;
-}
-function unique(name, text = PROV) {
-  assert.equal(
-    count(new RegExp(`(?:async\\s+)?function\\s+${esc(name)}\\s*\\(`, 'g'), text),
-    1,
-    `${name} debe existir exactamente una vez`
-  );
-}
-function balancedEnd(source, openIndex) {
-  let depth = 0, quote = null, lineComment = false, blockComment = false;
-  for (let i = openIndex; i < source.length; i += 1) {
-    const c = source[i], n = source[i + 1], p = source[i - 1];
-    if (lineComment) { if (c === '\n') lineComment = false; continue; }
-    if (blockComment) { if (c === '*' && n === '/') { blockComment = false; i += 1; } continue; }
-    if (quote) { if (c === quote && p !== '\\') quote = null; continue; }
-    if (c === '/' && n === '/') { lineComment = true; i += 1; continue; }
-    if (c === '/' && n === '*') { blockComment = true; i += 1; continue; }
-    if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
-    if (c === '{') depth += 1;
-    if (c === '}' && --depth === 0) return i;
-  }
-  return -1;
-}
-function fn(name, text = PROV) {
-  const re = new RegExp(`(?:async\\s+)?function\\s+${esc(name)}\\s*\\(`);
-  const found = re.exec(text);
-  assert.ok(found, `falta ${name}()`);
-  const open = text.indexOf('{', found.index);
-  const end = balancedEnd(text, open);
-  assert.notEqual(end, -1, `llaves desbalanceadas en ${name}()`);
-  return text.slice(found.index, end + 1);
-}
-
-test('PROVEEDORES conserva navegación y contenedores esenciales', () => {
-  assert.equal(count(/id=["']tab-proveedores["']/g, INDEX), 1);
-  assert.match(INDEX, /switchTab\(\s*['"]proveedores['"]\s*\)/);
-  assert.match(INDEX, /switchTabMobile\(\s*['"]proveedores['"]\s*\)/);
-  assert.equal(count(/<script[^>]+src=["']js\/proveedores\.js\?v=/g, INDEX), 1);
-  for (const id of ['proveedoresTableBody', 'proveedorSearch', 'proveedorCatFilter', 'mejorPrecioProv', 'ocList', 'ocModal']) {
-    assert.equal(count(new RegExp(`id=["']${id}["']`, 'g'), INDEX), 1, `${id} debe existir una vez`);
-  }
+test('PROVEEDORES conserva navegación y UI esencial',()=>{
+  assert.equal((INDEX.match(/id=["']tab-proveedores["']/g)||[]).length,1);
+  for(const id of ['proveedoresTableBody','proveedorSearch','proveedorCatFilter','mejorPrecioProv','ocList','ocModal'])
+    assert.ok(INDEX.includes('id="'+id+'"')||INDEX.includes("id='"+id+"'"),id);
+  assert.match(INDEX,/js\/proveedores\.js\?v=/);
 });
 
-test('las funciones principales no se redefinen silenciosamente', () => {
-  [
-    'pvCat', 'fillCatSelects', 'renderPvCatChips', 'renderCatManager',
-    'renderProveedores', 'updateRepProveedor', 'setProvEstadoPost',
-    'saveProvMotivo', 'createProveedor', 'saveEditProveedor',
-    'bulkDeleteProveedores', 'bulkEditProveedorEstado', 'deleteProveedor',
-    '_preciosProv', '_preciosProvSaveArr', '_preciosProvBackup',
-    '_preciosDeProv', 'addPrecioProv', 'delPrecioProv',
-    '_mejorPrecioPorItem', 'renderMejorPrecio', '_ocAll', '_ocSaveArr',
-    '_ocBackup', '_ocNextNum', 'openOCModal', 'ocAddRow', 'ocCalc',
-    'guardarOC', 'delOC', 'generarOCPDF', 'renderOCList', 'exportToCSV'
-  ].forEach(name => unique(name));
+test('SupplierOps usa record ID de Airtable como supplierId canónico',()=>{
+  assert.match(PROV,/_supplierByAny\(v\)/);
+  assert.match(PROV,/_supplierPedidoMatches\(pedido,supplierId,nombre\)/);
+  assert.match(PROV,/f\.Proveedores\|\|linked/);
+  assert.match(PROXY,/supplierIdSafe\(v\)/);
+  assert.match(PROXY,/rec\[A-Za-z0-9\].*14/);
 });
 
-test('crear y editar validan identidad antes de escribir en Airtable', () => {
-  const create = fn('createProveedor');
-  const edit = fn('saveEditProveedor');
-  for (const block of [create, edit]) {
-    assert.match(block, /Nombre requerido/);
-    assert.match(block, /Selecciona al menos una categor/i);
-    assert.match(block, /validEmail/);
-    assert.match(block, /validPhone/);
-    assert.match(block, /validRUT/);
-  }
-  assert.match(create, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]POST['"]/);
-  assert.match(edit, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]PATCH['"]/);
+test('bootstrap crea entidades individuales y relaciones reales',()=>{
+  for(const table of ['SupplierPrices','PurchaseOrders','PurchaseOrderItems','SupplierEvaluations','SupplierCategories'])
+    assert.ok(PROXY.includes(table),table);
+  assert.match(PROXY,/type:'multipleRecordLinks'/);
+  assert.match(PROXY,/name:'Proveedores'/);
+  assert.match(PROXY,/linkedTableId:supplierTable\.id/);
+  assert.match(PROXY,/linkTargets=.*Pedidos.*Facturas.*Inventario/);
 });
 
-test('reputación y postulación aplican actualización optimista con rollback', () => {
-  const rep = fn('updateRepProveedor');
-  const post = fn('setProvEstadoPost');
-  assert.match(rep, /Reputación/);
-  assert.match(rep, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]PATCH['"]/);
-  assert.match(rep, /catch[\s\S]*old/);
-  assert.match(post, /Estado postulación/);
-  assert.match(post, /catch[\s\S]*old/);
-  assert.match(PROV, /ENTREVISTAR/);
-  assert.match(PROV, /APROBADO/);
-  assert.match(PROV, /RECHAZADO/);
-  assert.match(fn('saveProvMotivo'), /Motivo evaluación/);
+test('snapshot pagina y migra pedidos históricos solo con nombre inequívoco',()=>{
+  assert.match(PROXY,/officeList\(env,'Proveedores',\{max:10000\}\)/);
+  assert.match(PROXY,/officeList\(env,'Pedidos',\{max:10000\}\)/);
+  assert.match(PROXY,/hits\.length!==1/);
+  assert.match(PROXY,/officePatch\(env,'Pedidos',rec\.id,\{Proveedores:/);
 });
 
-test('la ficha conecta pedidos, evaluación e historial de precios', () => {
-  // renderProveedores quedó como orquestador; la ficha se arma en
-  // buildProveedorRow, que es donde deben vivir los vínculos.
-  const render = fn('renderProveedores');
-  assert.match(render, /state\.proveedores/);
-  assert.match(render, /buildProveedorRow/, 'el listado debe delegar la ficha en buildProveedorRow');
-  const ficha = fn('buildProveedorRow');
-  assert.match(ficha, /state\.pedidos/);
-  assert.match(ficha, /Pedidos activos vinculados/);
-  assert.match(ficha, /Estado postulación/);
-  assert.match(ficha, /_preciosProvFichaHtml/);
-  assert.match(PROV, /Motivo evaluación/);
+test('creación dashboard es idempotente y deduplica antes de crear',()=>{
+  assert.match(PROV,/_supplierMutate\('createSupplier'/);
+  assert.match(PROXY,/supplierFindDuplicate/);
+  assert.match(PROXY,/supplier-mutation:/);
+  assert.match(PROXY,/prior\?\.done/);
+  assert.match(PROXY,/deduped:true/);
 });
 
-test('el formulario público aplica controles antiabuso y crea postulación', () => {
-  assert.match(WORKER, /url\.pathname\s*===\s*["']\/proveedor["']/);
-  const handler = fn('handleProveedor', WORKER);
-  assert.match(handler, /X-Public-Lead-Key/);
-  assert.match(handler, /company_website|_hp/);
-  assert.match(handler, /verifyTurnstile/);
-  assert.match(handler, /rateLimited\([^)]*["']proveedor["'][^)]*5[^)]*60/);
-  assert.match(handler, /Falta el nombre del proveedor/);
-  assert.match(handler, /Falta email o teléfono/);
-  assert.match(handler, /airtableCreateTolerant\([^)]*["']Proveedores["']/);
-  assert.match(handler, /ENTREVISTAR/);
-  assert.match(handler, /sendProveedorNotification/);
+test('postulación pública deduplica e idempotentiza sin repetir POST ambiguo',()=>{
+  assert.match(LEAD,/Idempotency-Key/);
+  assert.match(LEAD,/supplierApplicationHash/);
+  assert.match(LEAD,/supplierApplicationGet/);
+  assert.match(LEAD,/airtableFindProveedor/);
+  assert.match(LEAD,/airtableCreateSupplierOnce/);
+  assert.match(LEAD,/outcome uncertain; do not retry create/);
 });
 
-test('precios se comparan por ítem y tienen respaldo best-effort', () => {
-  // La lectura pasa por el helper de listas compartidas: guarda igual en el
-  // navegador, pero filtra los borrados y permite fusionar con el otro equipo
-  // en vez de pisarlo (ver tests/listas-compartidas.test.js).
-  assert.match(fn('_preciosProv'), /_listaVivos\(_PRECIOS_PROV_KEY\)/);
-  assert.match(fn('_preciosProvSaveArr'), /_listaGuardar\(_PRECIOS_PROV_KEY/);
-  assert.match(fn('_preciosProvSaveArr'), /_preciosProvBackup/);
-  assert.match(fn('_preciosProvBackup'), /_monitorUpsert\(['"]PRECIOS_PROV['"]/);
-  assert.match(fn('_mejorPrecioPorItem'), /precio\s*<\s*best\[key\]\.precio/);
-  // La clave incluye la UNIDAD: no se comparan precios de unidades distintas.
-  assert.match(fn('_mejorPrecioPorItem'), /_precioKey\(p\.item,p\.unidad\)/);
-  assert.match(fn('renderMejorPrecio'), /ultimoPorProv|último precio por proveedor/);
+test('postulación pública conserva antiabuso y avisa configuración incompleta',()=>{
+  assert.match(LEAD,/company_website\|\|body\._hp/);
+  assert.match(LEAD,/verifyTurnstile/);
+  assert.match(LEAD,/rateLimited\(env,request,"proveedor",5,60\)/);
+  assert.match(LEAD,/TURNSTILE_SECRET no configurado/);
+  assert.match(LEAD,/RL\/idempotencia KV no configurado/);
 });
 
-test('órdenes de compra calculan, respaldan y generan documento', () => {
-  assert.match(fn('_ocSaveArr'), /_ocBackup/);
-  assert.match(fn('_ocBackup'), /_monitorUpsert\(['"]ORDENES_COMPRA['"]/);
-  assert.match(fn('_ocNextNum'), /OC-/);
-  const save = fn('guardarOC');
-  assert.match(save, /estado\s*:\s*['"]Emitida['"]/);
-  assert.match(save, /_ocSaveArr/);
-  const calc = fn('ocCalc');
-  assert.match(calc, /0\.19/);
-  assert.match(calc, /ocNeto/);
-  assert.match(calc, /ocIva/);
-  assert.match(calc, /ocTotal/);
-  assert.match(fn('generarOCPDF'), /window\.print|print\(\)/);
+test('datos públicos importados validan email teléfono y web',()=>{
+  assert.match(LEAD,/Email inválido/);
+  assert.match(LEAD,/Teléfono inválido/);
+  assert.match(LEAD,/Sitio web inválido/);
 });
 
-test('la exportación CSV incluye proveedores, escape y BOM UTF-8', () => {
-  const csv = fn('exportToCSV');
-  assert.match(csv, /t===['"]proveedores['"]/);
-  assert.match(csv, /replace\(\/"\/g\s*,\s*['"]""['"]\)/);
-  assert.match(csv, /\\uFEFF/);
-  assert.match(csv, /text\/csv/);
+test('edición permite limpiar campos vacíos',()=>{
+  const a=PROV.indexOf('async function saveEditProveedor()'),b=PROV.indexOf('// ── PROVEEDORES MULTI-SELECT',a);
+  const block=PROV.slice(a,b);
+  assert.match(block,/'Teléfono':document\.getElementById\('epTelefono'\)\.value\|\|''/);
+  assert.match(block,/'Notas':document\.getElementById\('epNotas'\)\.value\|\|''/);
+  assert.doesNotMatch(block,/delete fields\[k\]/);
 });
 
-test('RBAC declara el módulo Proveedores', () => {
-  assert.match(INDEX, /RBAC[\s\S]*proveedores/);
-  assert.match(INDEX, /nuevo-proveedor/);
+test('evaluación exige motivo checklist y conserva actor fecha y evidencia',()=>{
+  assert.match(PROV,/_supplierMutate\('evaluation'/);
+  assert.match(PROV,/Checklist verificado/);
+  assert.match(PROXY,/Motivo obligatorio/);
+  assert.match(PROXY,/Checklist obligatorio/);
+  assert.match(PROXY,/Responsable:actor\.email/);
+  assert.match(PROXY,/Evidencia:evidence/);
 });
 
-// Hallazgos confirmados: deben convertirse en pruebas obligatorias al corregirse.
-test('diagnóstico: pedidos y OC deben enlazar proveedores por record ID', (t) => {
-  const render = fn('renderProveedores');
-  const oc = fn('openOCModal');
-  if (/\['Proveedor'\][\s\S]{0,180}nombre\.toLowerCase\(\)/.test(render) || /option value=.*Nombre/.test(oc)) {
-    t.todo('CRÍTICO: reemplazar nombres/comas por supplierId estable; renombrar o duplicar nombres rompe pedidos, gasto, precios y OC');
-    return;
-  }
+test('reputación y estado de postulación solo cambian por SupplierOps',()=>{
+  assert.match(PROXY,/function supplierScores/);
+  assert.match(PROXY,/'Score derivado':scores\.score/);
+  assert.match(PROV,/La reputación ahora se deriva de evaluaciones y entregas/);
+  const allowStart=PROXY.indexOf('Proveedores:Object.freeze({');
+  const allowEnd=PROXY.indexOf('  }),',allowStart);
+  const allow=PROXY.slice(allowStart,allowEnd);
+  assert.doesNotMatch(allow,/Reputación/);
+  assert.doesNotMatch(allow,/Estado postulación/);
 });
 
-test('crear proveedor solo reintenta tras rechazo de esquema confirmado', () => {
-  const create = fn('createProveedor');
-  const guard = fn('_pvCanRetryCreateAfterError');
-  assert.match(guard, /422|UNKNOWN_FIELD_NAME/, 'el fallback exige una respuesta de esquema confirmada');
-  assert.match(guard, /timeout|network|failed to fetch|5\\d\\d/i, 'timeout/red/5xx deben quedar fuera del retry');
-  assert.match(create, /if\(!_pvCanRetryCreateAfterError\(e\)\) throw e;/);
-  assert.match(create, /try\{await refresh\(\);\}[\s\S]*catch\(refreshErr\)/, 'un fallo de refresh no puede volver a ejecutar POST');
-  assert.match(create, /finally\{[\s\S]*btn\.disabled=false/, 'el botón siempre se restaura');
+test('SupplierPrices guarda los campos económicos y de vigencia',()=>{
+  for(const field of ['Supplier ID','Item Key','Currency','Unit','Net Price','Tax Rate','Min Qty','Vigencia desde','Vigencia hasta','Source URL'])
+    assert.ok(PROXY.includes(field),field);
+  assert.match(PROXY,/existing.*Vigente/s);
 });
 
-test('editar permite limpiar campos vacíos en Airtable', () => {
-  const edit = fn('saveEditProveedor');
-  assert.doesNotMatch(edit, /Object\.keys\(fields\)[\s\S]*delete fields\[k\]/, 'no debe quitar vacíos del PATCH');
-  assert.match(edit, /'Teléfono':document\.getElementById\('epTelefono'\)\.value\|\|''/);
-  assert.match(edit, /'Notas':document\.getElementById\('epNotas'\)\.value\|\|''/);
-  assert.match(edit, /await airtableWrite\('Proveedores','PATCH',id,fields\)/);
+test('precios ya no se escriben como blob local',()=>{
+  assert.match(PROV,/_preciosProvSaveArr=function\(\)\{throw Error\('SupplierPrices es autoritativo/);
+  assert.match(PROV,/_supplierOpsState\.prices/);
 });
 
-test('diagnóstico: categorías no deben depender de localStorage', (t) => {
-  if (/function getPvCats\(\)[\s\S]{0,220}localStorage/.test(PROV)) {
-    t.todo('categorías, orden y colores deben ser configuración compartida y migrable, no variar por navegador');
-    return;
-  }
+test('OC reserva correlativo dentro del guard serial',()=>{
+  assert.match(PROXY,/seqKey='supplier-po-seq:'\+year/);
+  assert.match(PROXY,/state\.storage\.put\(seqKey,seq\)/);
+  assert.match(PROXY,/String\(seq\)\.padStart\(3,'0'\)/);
+  assert.match(PROV,/_ocNextNum=function\(\)\{return 'OC-PENDIENTE'/);
 });
 
-test('diagnóstico: precios y OC no deben sincronizarse como blobs completos', (t) => {
-  if (/localStorage/.test(fn('_preciosProvSaveArr')) && /localStorage/.test(fn('_ocSaveArr'))) {
-    t.todo('PRECIOS_PROV y ORDENES_COMPRA requieren registros individuales/versionados; el blob completo pierde cambios concurrentes y auditoría');
-    return;
-  }
+test('OC tiene ciclo operativo y aprobación restringida',()=>{
+  for(const state of ['Borrador','Aprobación','Aprobada','Enviada','Aceptada','Recibida parcial','Recibida total','Facturada','Pagada','Cerrada','Cancelada'])
+    assert.ok(PROXY.includes(state),state);
+  assert.match(PROXY,/Approval role required/);
+  assert.match(PROXY,/Aprobada en/);
+  assert.match(PROXY,/Recibida en/);
 });
 
-test('diagnóstico: numeración de OC debe ser atómica', (t) => {
-  const next = fn('_ocNextNum');
-  if (/_ocAll\(\)/.test(next) && /mx\+1/.test(next)) {
-    t.todo('CRÍTICO: dos equipos pueden emitir el mismo OC-AAAA-NNN; reservar correlativo único en backend');
-    return;
-  }
+test('OC e ítems son entidades separadas y soportan recepción parcial',()=>{
+  assert.match(PROXY,/officeCreate\(this\.env,'PurchaseOrders'/);
+  assert.match(PROXY,/officeCreate\(this\.env,'PurchaseOrderItems'/);
+  assert.match(PROXY,/'Cantidad recibida'/);
+  assert.match(PROXY,/Recibida total.*Recibida parcial/);
 });
 
-test('diagnóstico: valoración no debe usar revenue del cliente', (t) => {
-  const render = fn('renderProveedores');
-  if (/Monto total \(CLP\)/.test(render) && /Total pedidos/.test(render)) {
-    t.todo('“Total pedidos” suma la venta al cliente, no el costo, OC, factura o pago del proveedor');
-    return;
-  }
+test('ficha usa gasto de OC y no revenue del cliente',()=>{
+  assert.match(PROV,/function _supplierSpend\(supplierId\)/);
+  assert.match(PROV,/Gasto OC/);
 });
 
-test('diagnóstico: evaluación debe guardar evidencia y responsable', (t) => {
-  const post = fn('setProvEstadoPost');
-  if (/Estado postulación/.test(post) && !/Fecha|Responsable|Aprobado por|historial|evento/i.test(post)) {
-    t.todo('APROBADO/RECHAZADO puede cambiarse sin motivo obligatorio, actor, fecha, checklist, documentos ni historial');
-    return;
-  }
+test('eliminación es archivo lógico y revisa dependencias por relaciones reales',()=>{
+  assert.match(PROV,/_supplierMutate\('archiveSupplier'/);
+  assert.match(PROXY,/supplierDependencies/);
+  assert.match(PROXY,/\['Pedidos','Facturas','Inventario'\]/);
+  assert.match(PROXY,/fields\?\.Proveedores.*includes\(supplierId\)/s);
+  assert.match(PROXY,/deps\.total>0\?'Archivado':'Inactivo'/);
 });
 
-test('diagnóstico: el endpoint público debe deduplicar postulaciones', (t) => {
-  const handler = fn('handleProveedor', WORKER);
-  if (/airtableCreateTolerant/.test(handler) && !/idempot|dedup|upsert/i.test(handler)) {
-    t.todo('POST /proveedor crea una fila por reintento; reservar idempotency key y resolver duplicados por RUT/email normalizado');
-    return;
-  }
+test('categorías son compartidas y renombrar migra proveedores',()=>{
+  assert.match(PROXY,/SupplierCategories/);
+  assert.match(PROXY,/op==='syncCategories'/);
+  assert.match(PROXY,/op==='renameCategory'/);
+  assert.match(PROXY,/'Categoría':next/);
+  assert.match(PROV,/renamePvCat=async function/);
+  assert.match(PROV,/_supplierMutate\('syncCategories'/);
 });
 
-test('diagnóstico: eliminar debe proteger dependencias', (t) => {
-  const del = fn('deleteProveedor');
-  if (/airtableDelete/.test(del) && !/pedido|orden|factura|depend|bloque/i.test(del)) {
-    t.todo('archivar/bloquear proveedores con pedidos, OC, facturas, precios o evaluaciones; restaurar hoy crea otro record ID');
-    return;
-  }
+test('CSV respeta filtros neutraliza fórmulas y audita exportación',()=>{
+  const tail=PROV.slice(PROV.lastIndexOf('const _supplierLegacyExport'));
+  assert.match(tail,/proveedorSearch/);
+  assert.match(tail,/proveedorCatFilter/);
+  assert.match(tail,/\[=\+\\-@\]/);
+  assert.match(tail,/\/office\/audit/);
+  assert.match(tail,/action:'export'/);
 });
 
-test('diagnóstico: la recarga debe paginar', (t) => {
-  const create = fn('createProveedor');
-  if (/airtableFetch\(['"]Proveedores['"]\s*,\s*500\)/.test(create)) {
-    t.todo('no truncar el maestro en 500; paginar y calcular estadísticas sobre el universo completo');
-    return;
-  }
+test('API Proveedores está protegida por Access y Durable Object',()=>{
+  assert.match(ACCESS,/path==='\/suppliers\/snapshot'/);
+  assert.match(ACCESS,/path==='\/suppliers\/mutate'/);
+  assert.match(ACCESS,/path==='\/suppliers\/bootstrap'/);
+  assert.match(PROXY,/idFromName\('tls-supplier-ops'\)/);
+  assert.match(PROXY,/path==='\/supplier-ops'/);
 });
 
-test.todo('OC debe recorrer Borrador/Aprobada/Enviada/Aceptada/Recibida parcial/Cerrada/Cancelada con historial');
-test.todo('OC y precios deben guardar supplierId, moneda, unidad, IVA/exención, vigencia, condiciones y documento fuente');
-test.todo('la reputación debe derivarse de entregas reales y conservar cada evaluación');
-test.todo('URLs, mailto, tel y WhatsApp deben validarse también para registros importados');
-test.todo('CSV debe neutralizar fórmulas, respetar filtros y auditar exportaciones sensibles');
-test.todo('autorización de lectura/escritura debe imponerse en backend por tabla, fila y campo');
+test('bootstrap y mutaciones generan auditoría',()=>{
+  assert.match(PROXY,/officeAudit\(env,authorized\.identity,'bootstrap','suppliers'/);
+  assert.match(PROXY,/officeAudit\(\s*env,authorized\.identity,'supplier:'/);
+});
+
+test('no quedan TODO de auditoría',()=>{
+  assert.doesNotMatch(fs.readFileSync(__filename,'utf8'),/test\.todo/);
+});

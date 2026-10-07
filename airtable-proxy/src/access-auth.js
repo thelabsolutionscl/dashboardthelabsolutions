@@ -259,6 +259,11 @@ function accessAllows(identity,method,path){
     ((finance||admin)&&method==='PUT');
   if(path==='/shared/remunerations/audit')
     return ['sales','finance','admin'].includes(identity.role)&&method==='POST';
+  if(path==='/suppliers/snapshot')return method==='GET'&&
+    ['viewer','sales','operator','finance','admin'].includes(identity.role);
+  if(path==='/suppliers/mutate')return method==='POST'&&
+    ['operator','finance','admin'].includes(identity.role);
+  if(path==='/suppliers/bootstrap')return method==='POST'&&admin;
   if(path==='/visual-ai/rpc')return ['sales','operator','finance','admin'].includes(identity.role)&&method==='POST';
   if(path==='/newsletter/send')return method==='POST'&&admin;
   if(path==='/social/lead')return method==='POST'&&(admin||identity.email==='marketing@thelab.solutions');
