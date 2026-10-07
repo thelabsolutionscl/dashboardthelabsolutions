@@ -363,12 +363,13 @@ test('valid JWT but insufficient role is explicitly forbidden',async()=>{
   const x=req(jwt({email:'visita@example.com'}),'POST');
   assert.equal((await accessAuthorize(x.request,cfg,x.path)).response.status,403);
 });
-test('proxy wires Access after shared compatibility key, before any private route',()=>{
+test('proxy verifies signed Access before the legacy compatibility key and before private routes',()=>{
   const proxy=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/worker.js'),'utf8');
-  const key=proxy.indexOf("const appKey = request.headers.get('X-App-Key')");
-  const access=proxy.indexOf('await accessAuthorize(request,env',key);
+  const access=proxy.indexOf('const authorized=await accessAuthorize(request,env,authPath)');
+  const key=proxy.indexOf("const appKey=request.headers.get('X-App-Key')",access);
+  const legacy=proxy.indexOf('authorized.legacy',key);
   const ai=proxy.indexOf("if (url.pathname === '/anthropic/usage')");
-  assert.ok(key>0&&access>key&&ai>access);
+  assert.ok(access>0&&key>access&&legacy>key&&ai>legacy);
 });
 
 test('feedback-link issuance belongs only to signed operator, finance and admin roles',()=>{
