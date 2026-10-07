@@ -1353,12 +1353,39 @@ async function airtableFindProveedor(env,{rut,email,nombre}){
   }
   return null;
 }
+async function airtableFindSupplierApplication(env,key,{rut,email,nombre}){
+  const esc=x=>String(x).replace(/'/g,"\\'");
+  const clauses=[];
+  if(key)clauses.push(`{Idempotency key}='${esc(key)}'`);
+  const nr=supplierNormRut(rut),ne=supplierNormEmail(email),nn=supplierNormText(nombre);
+  if(nr)clauses.push(`REGEX_REPLACE(UPPER({RUT} & ""), "[^0-9K]", "")='${esc(nr)}'`);
+  if(ne)clauses.push(`LOWER(TRIM({Email} & ""))='${esc(ne)}'`);
+  if(nn)clauses.push(`LOWER(TRIM({Nombre} & ""))=LOWER('${esc(String(nombre).trim())}')`);
+  if(!clauses.length)return null;
+  const formula=clauses.length>1?`OR(${clauses.join(",")})`:clauses[0];
+  const url=`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("SupplierApplications")}?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
+  const r=await fetch(url,{headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+  if(!r.ok)throw new Error(await airtableErr(r));
+  const d=await r.json();return d?.records?.[0]||null;
+}
 async function supplierApplicationProcess(env,payload){
   if(!env.AIRTABLE_TOKEN||!env.AIRTABLE_BASE_ID)throw new Error('Airtable no configurado');
   const existing=await airtableFindProveedor(env,{rut:payload.rut,email:payload.email,nombre:payload.nombre});
-  if(existing)return {ok:true,proveedorId:existing.id,reused:true};
-  const rec=await airtableCreateTolerant(env,"Proveedores",payload.fields);
-  return {ok:true,proveedorId:rec?.id||null,reused:false};
+  if(existing)return {ok:true,proveedorId:existing.id,applicationId:null,reused:true,kind:'supplier'};
+  const prior=await airtableFindSupplierApplication(env,payload.idempotencyKey,{
+    rut:payload.rut,email:payload.email,nombre:payload.nombre
+  });
+  if(prior)return {ok:true,proveedorId:null,applicationId:prior.id,reused:true,kind:'application'};
+  const f=payload.fields||{},category=Array.isArray(f['Categoría'])?f['Categoría'].join(', '):String(f['Categoría']||'');
+  const rec=await airtableCreateTolerant(env,"SupplierApplications",stripEmpty({
+    'Application ID':crypto.randomUUID(),'Nombre':f['Nombre'],'Contacto':f['Contacto'],
+    'Cargo':f['Cargo'],'Email':f['Email'],'Teléfono':f['Teléfono'],'WhatsApp':f['WhatsApp'],
+    'Sitio Web':f['Sitio Web'],'RUT':f['RUT'],'Comuna':f['Comuna'],'Región':f['Región'],
+    'Categoría':category,'Productos':f['Productos'],'Mensaje':payload.message||'',
+    'Estado':'Pendiente','Idempotency key':payload.idempotencyKey,
+    'Fecha postulación':new Date().toISOString()
+  }));
+  return {ok:true,proveedorId:null,applicationId:rec?.id||null,reused:false,kind:'application'};
 }
 
 async function handleProveedor(request, env, ctx, cors) {
@@ -1434,12 +1461,12 @@ async function handleProveedor(request, env, ctx, cors) {
     const stub=env.SUPPLIER_APPLICATION_GUARD.get(env.SUPPLIER_APPLICATION_GUARD.idFromName(idempotencyKey));
     const guarded=await stub.fetch("https://supplier.internal/apply",{
       method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({key:idempotencyKey,payload:{nombre,email,rut:str(body.rut),fields}})
+      body:JSON.stringify({key:idempotencyKey,payload:{idempotencyKey,nombre,email,rut:str(body.rut),message,fields}})
     });
     const result=await guarded.json().catch(()=>null);
     if(!guarded.ok||!result?.ok)throw new Error(result?.error||"No se pudo registrar la postulación");
     if(!result.replayed&&!result.reused)ctx.waitUntil(sendProveedorNotification(env, summary));
-    return json({ok:true,proveedorId:result.proveedorId||null,reused:!!result.reused,replayed:!!result.replayed},200,cors);
+    return json({ok:true,proveedorId:result.proveedorId||null,applicationId:result.applicationId||null,kind:result.kind||null,reused:!!result.reused,replayed:!!result.replayed},200,cors);
   } catch (e) {
     console.error("[proveedor]", e?.stack || e?.message || String(e));
     ctx.waitUntil(sendProveedorNotification(env, { ...summary, failed: true }));
