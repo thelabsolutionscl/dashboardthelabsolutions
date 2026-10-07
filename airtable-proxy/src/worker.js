@@ -45,7 +45,7 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
     'Cantidad':'number','Estado pedido':'select',
     'Etapa producción':'select','Equipo asignado':'select',
     'Tipo despacho':'select','Tipo documento':'select',
-    'Notas pedido':'notes','Proveedor':'text','Ficha Tecnica':'notes',
+    'Notas pedido':'notes','Proveedor':'text','Proveedores':'links','Ficha Tecnica':'notes',
     'FT Material':'select','FT Color':'text','FT Acabado':'select',
     'FT Cantidad':'number','FT Impresora':'text','FT Altura capa':'text',
     'FT Relleno (%)':'number','FT Soportes':'select',
@@ -57,9 +57,43 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
   Proveedores:Object.freeze({
     'Nombre':'text','Categoría':'choices','Contacto':'text',
     'Cargo':'text','Teléfono':'phone','Email':'email',
-    'Sitio Web':'url','Comuna':'text','Región':'text',
-    'Reputación':'number','Estado':'text','Plazo de entrega (días)':'number',
-    'Productos':'notes','WhatsApp':'phone','Estado postulación':'select'
+    'Sitio Web':'url','RUT':'text','Comuna':'text','Región':'text',
+    'Reputación':'number','Estado':'text','Condiciones de pago':'text',
+    'Plazo de entrega (días)':'number','Productos':'notes','Notas':'notes',
+    'WhatsApp':'phone','Estado postulación':'select','Motivo evaluación':'notes'
+  }),
+  SupplierPrices:Object.freeze({
+    'Price ID':'text','Proveedor':'links','Supplier ID':'record-ref',
+    'SKU / Material':'text','Descripción':'text','Moneda':'select','Unidad':'text',
+    'Precio neto':'money','Impuesto (%)':'number','Exento':'flag','Mínimo compra':'number',
+    'Vigente desde':'date','Vigente hasta':'date','Documento fuente':'notes',
+    'Autor':'email','Fecha registro':'datetime','Activo':'flag'
+  }),
+  PurchaseOrders:Object.freeze({
+    'N° OC':'text','Proveedor':'links','Supplier ID':'record-ref','Estado':'select',
+    'Fecha':'date','Moneda':'select','Condiciones de pago':'notes','Neto':'money',
+    'Impuesto':'money','Total':'money','Notas':'notes','Autor':'email','Aprobador':'email',
+    'Fecha aprobación':'datetime','Destinatario':'email','Fecha envío':'datetime',
+    'Fecha aceptación':'datetime','Fecha cierre':'datetime','Idempotency key':'text',
+    'Revisión':'number'
+  }),
+  PurchaseOrderItems:Object.freeze({
+    'Item ID':'text','Orden de compra':'links','Proveedor':'links','Supplier ID':'record-ref',
+    'SKU / Material':'text','Descripción':'text','Cantidad':'number','Unidad':'text',
+    'Moneda':'select','Precio neto unitario':'money','Impuesto (%)':'number','Exento':'flag',
+    'Cantidad recibida':'number','Estado recepción':'select','Documento fuente':'notes',
+    'Fecha registro':'datetime'
+  }),
+  PurchaseOrderEvents:Object.freeze({
+    'Event ID':'text','Orden de compra':'links','Tipo':'text','Estado anterior':'text',
+    'Estado nuevo':'text','Actor':'email','Fecha':'datetime','Motivo':'notes',
+    'Evidencia':'notes','Revisión':'number'
+  }),
+  SupplierEvaluations:Object.freeze({
+    'Evaluation ID':'text','Proveedor':'links','Supplier ID':'record-ref',
+    'Estado anterior':'text','Estado nuevo':'text','Motivo':'notes','Evidencia':'notes',
+    'Responsable':'email','Fecha':'datetime','Calidad':'number','Puntualidad':'number',
+    'Precio':'number','Respuesta':'number','Incidentes':'number','Notas':'notes'
   }),
   // Machine tables are operational, but they are no longer a generic Airtable
   // write tunnel for signed operators. Identity/config fields stay immutable.
@@ -84,6 +118,11 @@ const OPERATOR_WRITE_METHODS=Object.freeze({
   Cotizaciones:new Set(['POST','PATCH']),
   Pedidos:new Set(['POST','PATCH']),
   Proveedores:new Set(['POST','PATCH']),
+  SupplierPrices:new Set(['POST','PATCH']),
+  PurchaseOrders:new Set(['POST','PATCH']),
+  PurchaseOrderItems:new Set(['POST','PATCH']),
+  PurchaseOrderEvents:new Set(['POST']),
+  SupplierEvaluations:new Set(['POST']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
   Maquinas_Mant:new Set(['POST']),
@@ -154,6 +193,11 @@ function operatorFieldValueAllowed(kind,value,key){
   }
   if(kind==='email')return !value||value.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   if(kind==='phone')return value.length<=80;
+  if(kind==='datetime'){
+    if(!value)return true;
+    if(typeof value!=='string'||value.length>40)return false;
+    const d=new Date(value);return !Number.isNaN(d.getTime())&&/T/.test(value);
+  }
   if(kind==='url'){
     if(!value)return true;
     if(value.length>1024)return false;
@@ -179,6 +223,11 @@ function operatorWritePayloadAllowed(table,method,payload){
       const required={
         Clientes:['Empresa'],Cotizaciones:['N° Cotización'],
         Pedidos:['N° Pedido'],Proveedores:['Nombre'],
+        SupplierPrices:['Price ID','Proveedor','Supplier ID','Descripción','Precio neto'],
+        PurchaseOrders:['N° OC','Proveedor','Supplier ID','Estado','Fecha'],
+        PurchaseOrderItems:['Item ID','Orden de compra','Proveedor','Supplier ID','Descripción','Cantidad'],
+        PurchaseOrderEvents:['Event ID','Orden de compra','Tipo','Fecha'],
+        SupplierEvaluations:['Evaluation ID','Proveedor','Supplier ID','Estado nuevo','Fecha'],
         Maquinas_Eventos:['maquina_id','fecha','tipo'],
         Maquinas_Mant:['maquina_id','tipo','fecha','ts'],
         Equipo_Eventos:['persona_id','fecha','tipo']
@@ -1662,11 +1711,36 @@ const OPERATOR_READ_FIELDS=Object.freeze({
     'FT Impresora','FT Altura capa','FT Relleno (%)','FT Soportes',
     'FT Peso estimado (g)','FT Tiempo impresión',
     'FT Notas producción','Fecha despacho','Fecha objetivo interna',
-    'N° seguimiento courier','Proveedor','Foto QA URL','Notas QA',
+    'N° seguimiento courier','Proveedor','Proveedores','Foto QA URL','Notas QA',
     'Historial fechas calendario','FT Actualizado'
   ]),
   Proveedores:new Set([...VIEWER_READ_FIELDS.Proveedores,
-    'WhatsApp','Estado postulación','Productos'
+    'WhatsApp','Estado postulación','Productos','Supplier ID',
+    'Condiciones de pago','Motivo evaluación','Notas'
+  ]),
+  SupplierPrices:new Set([
+    'Price ID','Proveedor','Supplier ID','SKU / Material','Descripción','Moneda','Unidad',
+    'Precio neto','Impuesto (%)','Exento','Mínimo compra','Vigente desde','Vigente hasta',
+    'Documento fuente','Autor','Fecha registro','Activo'
+  ]),
+  PurchaseOrders:new Set([
+    'N° OC','Proveedor','Supplier ID','Estado','Fecha','Moneda','Condiciones de pago',
+    'Neto','Impuesto','Total','Notas','Autor','Aprobador','Fecha aprobación','Destinatario',
+    'Fecha envío','Fecha aceptación','Fecha cierre','Idempotency key','Revisión'
+  ]),
+  PurchaseOrderItems:new Set([
+    'Item ID','Orden de compra','Proveedor','Supplier ID','SKU / Material','Descripción',
+    'Cantidad','Unidad','Moneda','Precio neto unitario','Impuesto (%)','Exento',
+    'Cantidad recibida','Estado recepción','Documento fuente','Fecha registro'
+  ]),
+  PurchaseOrderEvents:new Set([
+    'Event ID','Orden de compra','Tipo','Estado anterior','Estado nuevo','Actor','Fecha',
+    'Motivo','Evidencia','Revisión'
+  ]),
+  SupplierEvaluations:new Set([
+    'Evaluation ID','Proveedor','Supplier ID','Estado anterior','Estado nuevo','Motivo',
+    'Evidencia','Responsable','Fecha','Calidad','Puntualidad','Precio','Respuesta',
+    'Incidentes','Notas'
   ]),
   Maquinas:new Set([...VIEWER_READ_FIELDS.Maquinas,'ip','cam']),
   Maquinas_Eventos:new Set([...VIEWER_READ_FIELDS.Maquinas_Eventos,'desc','pedido_id']),
