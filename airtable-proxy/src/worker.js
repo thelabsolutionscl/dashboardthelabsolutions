@@ -2713,8 +2713,9 @@ export class CrmMutationGuard {
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/mail-session'
               ?this._handleMailSession(request):path==='/mail-rpc'
-                ?this._handleMailRpc(request):path==='/supplier-po-reserve'
-                  ?this._handleSupplierPoReserve(request):path==='/supplier-po-transition'
+                ?this._handleMailRpc(request):path==='/supplier-create'
+                  ?this._handleSupplierCreate(request):path==='/supplier-po-reserve'
+                    ?this._handleSupplierPoReserve(request):path==='/supplier-po-transition'
                     ?this._handleSupplierPoTransition(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
@@ -2881,6 +2882,50 @@ export class CrmMutationGuard {
       return {response};
     }catch(_){return {response:null,error:'Mail API unavailable'};}
   }
+  async _handleSupplierCreate(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)return this._json({error:'Supplier create unavailable'},503);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid supplier create JSON'},422);}
+    const actor=p?.actor,fields=p?.fields,key=String(p?.idempotencyKey||'');
+    if(!actor||typeof actor.email!=='string'||!['operator','finance','admin'].includes(actor.role)||
+       !/^[A-Za-z0-9._:@+-]{12,180}$/.test(key)||!operatorWritePayloadAllowed('Proveedores','POST',{fields}))
+      return this._json({error:'Supplier create denied'},403);
+    const cached=await this.state.storage.get('supplier-create-result');
+    if(cached)return this._json({...cached,replayed:true},200);
+    const esc=x=>String(x||'').replace(/'/g,"\\'");
+    const rut=String(fields['RUT']||'').toUpperCase().replace(/[^0-9K]/g,'');
+    const email=String(fields['Email']||'').trim().toLowerCase(),name=String(fields['Nombre']||'').trim();
+    const clauses=[];
+    if(rut)clauses.push(`REGEX_REPLACE(UPPER({RUT} & ""), "[^0-9K]", "")='${esc(rut)}'`);
+    if(email)clauses.push(`LOWER(TRIM({Email} & ""))='${esc(email)}'`);
+    if(name)clauses.push(`LOWER(TRIM({Nombre} & ""))=LOWER('${esc(name)}')`);
+    const base=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/',url=base+encodeURIComponent('Proveedores');
+    if(clauses.length){
+      const q=new URLSearchParams({maxRecords:'1',filterByFormula:clauses.length>1?`OR(${clauses.join(',')})`:clauses[0]});
+      try{
+        const rr=await fetch(url+'?'+q.toString(),{headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,Accept:'application/json'},redirect:'manual'});
+        if(!rr.ok)return this._json({error:'Supplier duplicate check unavailable'},503);
+        const d=await rr.json();if(d?.records?.length){
+          const result={ok:true,supplierId:d.records[0].id,reused:true};
+          await this.state.storage.put('supplier-create-result',result);return this._json(result,200);
+        }
+      }catch(_){return this._json({error:'Supplier duplicate check unavailable'},503);}
+    }
+    let created;
+    try{
+      const rr=await fetch(url,{method:'POST',redirect:'manual',
+        headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+        body:JSON.stringify({fields,typecast:true})});
+      if(!rr.ok)return this._json({error:'Supplier create rejected'},rr.status===422?422:503);
+      created=await rr.json();
+    }catch(_){
+      return this._json({error:'Supplier create outcome uncertain; retry with same idempotency key'},503);
+    }
+    if(!/^rec[A-Za-z0-9]{14}$/.test(String(created?.id||'')))return this._json({error:'Supplier create invalid response'},502);
+    const result={ok:true,supplierId:created.id,reused:false};
+    await this.state.storage.put('supplier-create-result',result);
+    return this._json(result,201);
+  }
+
   async _handleSupplierPoReserve(request){
     if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
     let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid purchase order reserve JSON'},422);}
@@ -4331,7 +4376,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/supplier/purchase-order/reserve'||url.pathname==='/supplier/purchase-order/transition'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/supplier/create'||url.pathname==='/supplier/purchase-order/reserve'||url.pathname==='/supplier/purchase-order/transition'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -4776,6 +4821,27 @@ export default {
       }catch(_){return json({error:'Agenda write guard unavailable'},503,scopedHeaders);}
     }
 
+
+    if(url.pathname==='/supplier/create'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||!env.CRM_MUTATION_GUARD)return json({error:'Supplier create unavailable'},503,headers);
+      let body;try{body=await request.json();}catch(_){return json({error:'Invalid supplier create JSON'},422,headers);}
+      const key=String(body?.idempotencyKey||''),fields=body?.fields;
+      if(!/^[A-Za-z0-9._:@+-]{12,180}$/.test(key)||!operatorWritePayloadAllowed('Proveedores','POST',{fields}))
+        return json({error:'Invalid supplier create'},422,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-supplier-create:'+key));
+        const guarded=await stub.fetch('https://crm-write.internal/supplier-create',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({idempotencyKey:key,fields,actor:{email:authorized.identity.email,role:authorized.identity.role}})
+        });
+        const h=new Headers(guarded.headers);Object.entries(headers).forEach(([k,v])=>h.set(k,v));
+        if(guarded.ok){try{await officeAudit(env,authorized.identity,'create','supplier','',
+          'Creación idempotente de proveedor');}catch(_){}}
+        return new Response(guarded.body,{status:guarded.status,headers:h});
+      }catch(_){return json({error:'Supplier create unavailable'},503,headers);}
+    }
 
     if(url.pathname==='/supplier/purchase-order/transition'){
       const headers={...CORS,'Cache-Control':'private, no-store'};
