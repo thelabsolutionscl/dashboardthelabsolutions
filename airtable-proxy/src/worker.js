@@ -4664,7 +4664,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -4676,6 +4676,37 @@ export default {
       return json(authorized.identity
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
+    }
+
+    if(url.pathname==='/tts/elevenlabs'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity)return json({error:'Cloudflare Access required'},401,headers);
+      if(!env.ELEVENLABS_API_KEY)return json({error:'ElevenLabs not configured'},503,headers);
+      let p;try{const raw=await request.text();if(raw.length>12000)throw Error('large');p=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid TTS payload'},422,headers);}
+      const text=String(p?.text||'').trim();
+      if(!text||text.length>4000)return json({error:'TTS text invalid'},422,headers);
+      const voice=String(env.ELEVENLABS_VOICE_ID||'ClNifCEVq1smkl4M3aTk');
+      if(!/^[A-Za-z0-9_-]{8,80}$/.test(voice))return json({error:'TTS voice misconfigured'},503,headers);
+      try{
+        const upstream=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(voice),{
+          method:'POST',redirect:'manual',
+          headers:{'Content-Type':'application/json','xi-api-key':env.ELEVENLABS_API_KEY,
+            Accept:'audio/mpeg'},
+          body:JSON.stringify({text,model_id:'eleven_multilingual_v2',
+            voice_settings:{stability:0.5,similarity_boost:0.75}})
+        });
+        if(!upstream.ok||upstream.status>=300&&upstream.status<400){
+          try{await upstream.body?.cancel?.();}catch(_){}
+          return json({error:'ElevenLabs request rejected'},upstream.status===429?429:502,headers);
+        }
+        const outHeaders=new Headers(headers);
+        outHeaders.set('Content-Type',upstream.headers.get('Content-Type')||'audio/mpeg');
+        outHeaders.set('Content-Disposition','inline');
+        outHeaders.set('X-Content-Type-Options','nosniff');
+        return new Response(upstream.body,{status:200,headers:outHeaders});
+      }catch(_){return json({error:'ElevenLabs unavailable'},503,headers);}
     }
 
     if(url.pathname==='/suppliers/bootstrap'){
