@@ -37,7 +37,8 @@ jobs:
           SII_CUTOVER_VERIFIED: ${{ vars.SII_CUTOVER_VERIFIED }}  # segundo control: sesiones, CORS, roles y certificación comprobados
           SII_RUT_EMISOR: ${{ secrets.SII_RUT_EMISOR }}
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
-          PROXY_URL: ${{ secrets.PROXY_URL }}
+          # Public canonical endpoint; not a secret. Keeping it versioned prevents stale workers.dev cutovers.
+          PROXY_URL: https://proxy.thelab.solutions
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           ACCESS_BROWSER_MODE: ${{ vars.ACCESS_BROWSER_MODE }}
           ACCESS_CUTOVER_VERIFIED: ${{ vars.ACCESS_CUTOVER_VERIFIED }}
