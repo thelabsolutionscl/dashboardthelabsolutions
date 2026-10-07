@@ -30,9 +30,40 @@ const PV_CAT_EXTRA_PALETTE=[
   ['#6366f1','rgba(99,102,241,0.13)','rgba(99,102,241,0.32)'],
 ];
 const PV_CATS_DEFAULT=['Filamentos 3D','Resinas y materiales','Componentes LED / Neones','Trofeos y medallas','Packaging / Embalaje','Electrónica y cables','Logística y despacho','Diseño / Gráfica','Servicios varios','Otro'];
-function getPvCats(){try{const s=localStorage.getItem('pv_categorias');return s?JSON.parse(s):[...PV_CATS_DEFAULT];}catch{return[...PV_CATS_DEFAULT];}}
-function setPvCats(arr){localStorage.setItem('pv_categorias',JSON.stringify(arr));}
-function getPvCatColorMap(){try{const s=localStorage.getItem('pv_cat_colors');return s?JSON.parse(s):{};} catch{return {};}}
+let _supplierCategoryRows=[];
+function getPvCats(){
+  if(_supplierCategoryRows.length)return _supplierCategoryRows.filter(r=>r.fields?.['Activo']!==false)
+    .sort((a,b)=>Number(a.fields?.['Orden']||0)-Number(b.fields?.['Orden']||0))
+    .map(r=>r.fields?.['Categoría']).filter(Boolean);
+  try{const raw=localStorage.getItem('pv_categorias');return raw?JSON.parse(raw):[...PV_CATS_DEFAULT];}
+  catch{return[...PV_CATS_DEFAULT];}
+}
+async function _syncSupplierCategories(arr){
+  const actor=AUTH.getUser()?.username||'',now=new Date().toISOString();
+  const byName=new Map(_supplierCategoryRows.map(r=>[String(r.fields?.['Categoría']||'').toLowerCase(),r]));
+  for(let i=0;i<arr.length;i++){
+    const name=String(arr[i]||'').trim();if(!name)continue;
+    const row=byName.get(name.toLowerCase()),color=(getPvCatColorMap()[name]?.[0]||PV_CAT_COLORS[name]?.[0]||PV_CAT_EXTRA_PALETTE[i%PV_CAT_EXTRA_PALETTE.length]?.[0]||'#888888');
+    if(row)await airtableWrite('SupplierCategories','PATCH',row.id,{'Orden':i+1,'Color':color,'Activo':true,'Actualizado':now,'Autor':actor});
+    else await airtableWrite('SupplierCategories','POST',null,{'Categoría':name,'Orden':i+1,'Color':color,'Activo':true,'Actualizado':now,'Autor':actor});
+  }
+  for(const row of _supplierCategoryRows){
+    const name=String(row.fields?.['Categoría']||'');
+    if(name&&!arr.some(x=>String(x).toLowerCase()===name.toLowerCase())&&row.fields?.['Activo']!==false)
+      await airtableWrite('SupplierCategories','PATCH',row.id,{'Activo':false,'Actualizado':now,'Autor':actor});
+  }
+  const data=await airtableFetch('SupplierCategories',1000);_supplierCategoryRows=data.records||[];
+}
+function setPvCats(arr){
+  localStorage.setItem('pv_categorias',JSON.stringify(arr));
+  _syncSupplierCategories(arr).then(()=>{fillCatSelects();renderCatManager();})
+    .catch(e=>toast('Categorías guardadas localmente; sincronización pendiente: '+e.message,'info'));
+}
+function getPvCatColorMap(){
+  const out={};for(const r of _supplierCategoryRows){const n=r.fields?.['Categoría'],c=r.fields?.['Color'];if(n&&c)out[n]=[c,c+'21',c+'52'];}
+  if(Object.keys(out).length)return out;
+  try{const raw=localStorage.getItem('pv_cat_colors');return raw?JSON.parse(raw):{};}catch{return {};}
+}
 function setPvCatColorMap(obj){localStorage.setItem('pv_cat_colors',JSON.stringify(obj));}
 function getPvCatColor(cat){
   if(PV_CAT_COLORS[cat]) return PV_CAT_COLORS[cat];
@@ -128,6 +159,7 @@ function renderCatManager(){
       ${n?`<span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">${n} uso${n!==1?'s':''}</span>`:''}
       <button onclick="catMove(${i},-1)" ${i===0?'disabled':''} title="Subir" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===0?'.3':'1'}">↑</button>
       <button onclick="catMove(${i},1)" ${i===cats.length-1?'disabled':''} title="Bajar" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===cats.length-1?'.3':'1'}">↓</button>
+      <button onclick="renamePvCat(${i})" title="Renombrar y migrar proveedores" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer">✎</button>
       <button onclick="deletePvCat(${i})" title="${n?'Hay proveedores en esta categoría':''}" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>
     </div>`;
   }).join(''):`<div class="empty-state" style="padding:20px;font-size:12px">Sin categorías — agrega una abajo</div>`;
@@ -146,18 +178,31 @@ function addPvCat(){
   inp.focus();
   toast(`✓ Categoría "${name}" agregada`,'success');
 }
-function deletePvCat(idx){
-  const cats=getPvCats();
-  const name=cats[idx];if(!name) return;
-  const inUse=state.proveedores.some(p=>pvCat(p.fields).split(', ').map(s=>s.trim()).includes(name));
-  if(inUse&&!confirm(`"${name}" está siendo usada por algunos proveedores.\n¿Eliminar igualmente?`)) return;
-  cats.splice(idx,1);
-  setPvCats(cats);
-  const cm=getPvCatColorMap();delete cm[name];setPvCatColorMap(cm);
-  fillCatSelects();
-  renderCatManager();
-  toast(`Categoría "${name}" eliminada`,'info');
+async function renamePvCat(idx){
+  const cats=getPvCats(),oldName=cats[idx];if(!oldName)return;
+  const next=(prompt('Nuevo nombre de categoría:',oldName)||'').trim();
+  if(!next||next===oldName)return;
+  if(cats.some((c,i)=>i!==idx&&c.toLowerCase()===next.toLowerCase())){toast('Esa categoría ya existe','error');return;}
+  const affected=(state.proveedores||[]).filter(p=>pvCat(p.fields).split(', ').map(x=>x.trim()).includes(oldName));
+  try{
+    for(const p of affected){
+      const current=Array.isArray(p.fields['Categoría'])?p.fields['Categoría'].map(x=>x.name||x):pvCat(p.fields).split(', ').filter(Boolean);
+      const updated=current.map(x=>x===oldName?next:x);
+      await airtableWrite('Proveedores','PATCH',p.id,{'Categoría':updated});p.fields['Categoría']=updated;
+    }
+    cats[idx]=next;setPvCats(cats);fillCatSelects();renderProveedores();renderCatManager();
+    toast(`✓ Categoría renombrada en ${affected.length} proveedor(es)`,'success');
+  }catch(e){toast('No se pudo migrar la categoría: '+e.message,'error');}
 }
+function deletePvCat(idx){
+  const cats=getPvCats(),name=cats[idx];if(!name)return;
+  const inUse=state.proveedores.some(p=>pvCat(p.fields).split(', ').map(x=>x.trim()).includes(name));
+  if(inUse){toast('No se puede eliminar una categoría en uso. Renómbrala o quítala de los proveedores primero.','error');return;}
+  if(!confirm(`¿Archivar la categoría “${name}”?`))return;
+  cats.splice(idx,1);setPvCats(cats);fillCatSelects();renderCatManager();
+  toast(`Categoría “${name}” archivada`,'info');
+}
+
 function resetPvCats(){
   if(!confirm('¿Restaurar las 10 categorías predeterminadas?\nSe eliminarán las categorías personalizadas.')) return;
   localStorage.removeItem('pv_categorias');
@@ -746,16 +791,18 @@ async function _supplierStructuredHydrate(force=false){
   if(_supplierStructuredReady&&!force)return true;
   if(_supplierStructuredLoading&&!force)return _supplierStructuredLoading;
   _supplierStructuredLoading=(async()=>{
-    const [prices,pos,items,evals]=await Promise.all([
+    const [prices,pos,items,evals,categories]=await Promise.all([
       airtableFetch('SupplierPrices',1000),
       airtableFetch('PurchaseOrders',1000),
       airtableFetch('PurchaseOrderItems',2000),
-      airtableFetch('SupplierEvaluations',2000)
+      airtableFetch('SupplierEvaluations',2000),
+      airtableFetch('SupplierCategories',1000)
     ]);
     _supplierPriceRows=prices.records||[];
     _supplierPoRows=pos.records||[];
     _supplierPoItemRows=items.records||[];
     _supplierEvaluationRows=evals.records||[];
+    _supplierCategoryRows=categories.records||[];
     _supplierStructuredReady=true;return true;
   })().catch(e=>{console.warn('[Proveedores] datos estructurados no disponibles:',e.message);return false;})
     .finally(()=>{_supplierStructuredLoading=null;});
@@ -1017,13 +1064,12 @@ async function guardarOC(conPDF){
   let ocId=id,numero=existing?.numero||'',revision=(existing?.revision||0)+1;
   try{
     if(id){
+      if((existing.items||[]).length)throw new Error('Los ítems de una OC ya guardada no se editan; cancela y crea una nueva versión.');
       await airtableWrite('PurchaseOrders','PATCH',id,{
         'Proveedor':[supplierId],'Supplier ID':supplierId,'Fecha':fecha,'Moneda':'CLP',
         'Condiciones de pago':supplier.fields?.['Condiciones de pago']||'','Neto':neto,
         'Impuesto':impuesto,'Total':total,'Notas':notas,'Revisión':revision
       });
-      // Existing items are immutable purchase evidence: editing a saved OC is blocked once items exist.
-      if((existing.items||[]).length)throw new Error('Los ítems de una OC ya guardada no se editan; cancela y crea una nueva versión.');
     }else{
       numero=await _ocReserveNum();
       const created=await airtableWrite('PurchaseOrders','POST',null,{
