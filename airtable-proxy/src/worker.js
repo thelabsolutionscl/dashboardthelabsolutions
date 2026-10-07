@@ -57,51 +57,9 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
   Proveedores:Object.freeze({
     'Nombre':'text','Categoría':'choices','Contacto':'text',
     'Cargo':'text','Teléfono':'phone','Email':'email',
-    'Sitio Web':'url','RUT':'text','Comuna':'text','Región':'text',
-    'Reputación':'number','Estado':'text','Condiciones de pago':'text',
-    'Plazo de entrega (días)':'number','Productos':'notes','Notas':'notes',
-    'WhatsApp':'phone','Estado postulación':'select','Motivo evaluación':'notes'
-  }),
-  SupplierPrices:Object.freeze({
-    'Price ID':'text','Proveedor':'links','Supplier ID':'record-ref',
-    'SKU / Material':'text','Descripción':'text','Moneda':'select','Unidad':'text',
-    'Precio neto':'money','Impuesto (%)':'number','Exento':'flag','Mínimo compra':'number',
-    'Vigente desde':'date','Vigente hasta':'date','Documento fuente':'notes',
-    'Autor':'email','Fecha registro':'datetime','Activo':'flag'
-  }),
-  PurchaseOrders:Object.freeze({
-    'N° OC':'text','Proveedor':'links','Supplier ID':'record-ref','Estado':'select',
-    'Fecha':'date','Moneda':'select','Condiciones de pago':'notes','Neto':'money',
-    'Impuesto':'money','Total':'money','Notas':'notes','Autor':'email','Aprobador':'email',
-    'Fecha aprobación':'datetime','Destinatario':'email','Fecha envío':'datetime',
-    'Fecha aceptación':'datetime','Fecha cierre':'datetime','Idempotency key':'text',
-    'Revisión':'number'
-  }),
-  PurchaseOrderItems:Object.freeze({
-    'Item ID':'text','Orden de compra':'links','Proveedor':'links','Supplier ID':'record-ref',
-    'SKU / Material':'text','Descripción':'text','Cantidad':'number','Unidad':'text',
-    'Moneda':'select','Precio neto unitario':'money','Impuesto (%)':'number','Exento':'flag',
-    'Cantidad recibida':'number','Estado recepción':'select','Documento fuente':'notes',
-    'Fecha registro':'datetime'
-  }),
-  PurchaseOrderEvents:Object.freeze({
-    'Event ID':'text','Orden de compra':'links','Tipo':'text','Estado anterior':'text',
-    'Estado nuevo':'text','Actor':'email','Fecha':'datetime','Motivo':'notes',
-    'Evidencia':'notes','Revisión':'number'
-  }),
-  SupplierEvaluations:Object.freeze({
-    'Evaluation ID':'text','Proveedor':'links','Supplier ID':'record-ref',
-    'Estado anterior':'text','Estado nuevo':'text','Motivo':'notes','Evidencia':'notes',
-    'Responsable':'email','Fecha':'datetime','Calidad':'number','Puntualidad':'number',
-    'Precio':'number','Respuesta':'number','Incidentes':'number','Notas':'notes'
-  }),
-  SupplierCategories:Object.freeze({
-    'Categoría':'text','Orden':'number','Color':'text','Activo':'flag',
-    'Actualizado':'datetime','Autor':'email'
-  }),
-  SupplierApplications:Object.freeze({
-    'Estado':'select','Proveedor':'links','Supplier ID':'record-ref','Revisado por':'email',
-    'Fecha revisión':'datetime','Motivo':'notes','Evidencia':'notes'
+    'Sitio Web':'url','Comuna':'text','Región':'text',
+    'Reputación':'number','Estado':'text','Plazo de entrega (días)':'number',
+    'Productos':'notes','WhatsApp':'phone','Estado postulación':'select'
   }),
   // Machine tables are operational, but they are no longer a generic Airtable
   // write tunnel for signed operators. Identity/config fields stay immutable.
@@ -126,13 +84,6 @@ const OPERATOR_WRITE_METHODS=Object.freeze({
   Cotizaciones:new Set(['POST','PATCH']),
   Pedidos:new Set(['POST','PATCH']),
   Proveedores:new Set(['POST','PATCH']),
-  SupplierPrices:new Set(['POST','PATCH']),
-  PurchaseOrders:new Set(['POST','PATCH']),
-  PurchaseOrderItems:new Set(['POST','PATCH']),
-  PurchaseOrderEvents:new Set(['POST']),
-  SupplierEvaluations:new Set(['POST']),
-  SupplierCategories:new Set(['POST','PATCH']),
-  SupplierApplications:new Set(['PATCH']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
   Maquinas_Mant:new Set(['POST']),
@@ -1727,40 +1678,14 @@ const OPERATOR_READ_FIELDS=Object.freeze({
     'Historial fechas calendario','FT Actualizado'
   ]),
   Proveedores:new Set([...VIEWER_READ_FIELDS.Proveedores,
-    'WhatsApp','Estado postulación','Productos','Supplier ID',
-    'Condiciones de pago','Motivo evaluación','Notas'
+    'WhatsApp','Estado postulación','Productos'
   ]),
-  SupplierPrices:new Set([
-    'Price ID','Proveedor','Supplier ID','SKU / Material','Descripción','Moneda','Unidad',
-    'Precio neto','Impuesto (%)','Exento','Mínimo compra','Vigente desde','Vigente hasta',
-    'Documento fuente','Autor','Fecha registro','Activo'
-  ]),
-  PurchaseOrders:new Set([
-    'N° OC','Proveedor','Supplier ID','Estado','Fecha','Moneda','Condiciones de pago',
-    'Neto','Impuesto','Total','Notas','Autor','Aprobador','Fecha aprobación','Destinatario',
-    'Fecha envío','Fecha aceptación','Fecha cierre','Idempotency key','Revisión'
-  ]),
-  PurchaseOrderItems:new Set([
-    'Item ID','Orden de compra','Proveedor','Supplier ID','SKU / Material','Descripción',
-    'Cantidad','Unidad','Moneda','Precio neto unitario','Impuesto (%)','Exento',
-    'Cantidad recibida','Estado recepción','Documento fuente','Fecha registro'
-  ]),
-  PurchaseOrderEvents:new Set([
-    'Event ID','Orden de compra','Tipo','Estado anterior','Estado nuevo','Actor','Fecha',
-    'Motivo','Evidencia','Revisión'
-  ]),
-  SupplierEvaluations:new Set([
-    'Evaluation ID','Proveedor','Supplier ID','Estado anterior','Estado nuevo','Motivo',
-    'Evidencia','Responsable','Fecha','Calidad','Puntualidad','Precio','Respuesta',
-    'Incidentes','Notas'
-  ]),
-  SupplierCategories:new Set(['Categoría','Orden','Color','Activo','Actualizado','Autor']),
-  SupplierApplications:new Set([
-    'Application ID','Nombre','Contacto','Cargo','Email','Teléfono','WhatsApp','Sitio Web',
-    'RUT','Comuna','Región','Categoría','Productos','Mensaje','Estado','Proveedor',
-    'Supplier ID','Idempotency key','Fecha postulación','Revisado por','Fecha revisión',
-    'Motivo','Evidencia'
-  ]),
+
+
+
+
+
+
   Maquinas:new Set([...VIEWER_READ_FIELDS.Maquinas,'ip','cam']),
   Maquinas_Eventos:new Set([...VIEWER_READ_FIELDS.Maquinas_Eventos,'desc','pedido_id']),
   Maquinas_Mant:new Set([...VIEWER_READ_FIELDS.Maquinas_Mant,'notas','ts']),
@@ -2886,7 +2811,7 @@ export class CrmMutationGuard {
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)return this._json({error:'Supplier create unavailable'},503);
     let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid supplier create JSON'},422);}
     const actor=p?.actor,fields=p?.fields,key=String(p?.idempotencyKey||'');
-    if(!actor||typeof actor.email!=='string'||!['operator','finance','admin'].includes(actor.role)||
+    if(!actor||typeof actor.email!=='string'||!['finance','admin'].includes(actor.role)||
        !/^[A-Za-z0-9._:@+-]{12,180}$/.test(key)||!operatorWritePayloadAllowed('Proveedores','POST',{fields}))
       return this._json({error:'Supplier create denied'},403);
     const cached=await this.state.storage.get('supplier-create-result');
@@ -2930,7 +2855,7 @@ export class CrmMutationGuard {
     if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
     let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid purchase order reserve JSON'},422);}
     const actor=p?.actor,year=Number(p?.year);
-    if(!actor||typeof actor.email!=='string'||!['operator','finance','admin'].includes(actor.role)||
+    if(!actor||typeof actor.email!=='string'||!['finance','admin'].includes(actor.role)||
        !Number.isInteger(year)||year<2024||year>2100)
       return this._json({error:'Purchase order reserve denied'},403);
     const key='supplier-po-seq:'+year;
@@ -2951,7 +2876,7 @@ export class CrmMutationGuard {
       next=String(p?.next||''),actor=p?.actor,motivo=String(p?.motivo||'').slice(0,20000),
       evidencia=String(p?.evidencia||'').slice(0,20000),destinatario=String(p?.destinatario||'');
     if(!/^rec[A-Za-z0-9]{14}$/.test(id)||!Number.isInteger(expectedRevision)||expectedRevision<0||
-       !actor||typeof actor.email!=='string'||!['operator','finance','admin'].includes(actor.role))
+       !actor||typeof actor.email!=='string'||!['finance','admin'].includes(actor.role))
       return this._json({error:'Purchase order transition denied'},403);
     const transitions={
       'Borrador':['Aprobación','Cancelada'],'Aprobación':['Aprobada','Borrador','Cancelada'],
