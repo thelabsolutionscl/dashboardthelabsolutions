@@ -33,6 +33,17 @@ test('una comisión distingue estimada, devengada, pagada y revertida',()=>{
   assert.equal(Engine.deriveOrder({id:'recD',fields:{...base.fields,'Estado pedido':'Cancelado'}},{rules:[Engine.DEFAULT_RULE],events:[]}).status,'reversed');
 });
 
+test('reglas net_paid prorratean pagos parciales y las reversas usan monto explícito',()=>{
+  const rule={...Engine.DEFAULT_RULE,basis:'net_paid'};
+  const partial={id:'recPartial',fields:{'Fecha entrega':'2026-10-06','Monto neto (CLP)':100000,
+    'Monto total (CLP)':119000,'DTE N°':'33-20','Monto pagado (CLP)':59500}};
+  const e=Engine.deriveOrder(partial,{rules:[rule],events:[]});
+  assert.equal(e.paymentRatio,.5);assert.equal(e.eligibleNet,50000);assert.equal(e.commission,1750);assert.equal(e.status,'accrued');
+  const reversal=Engine.deriveOrder({id:'recRev',fields:{...partial.fields,'Estado pedido':'Cancelado',
+    'Monto nota crédito neto (CLP)':25000}},{rules:[rule],events:[]});
+  assert.equal(reversal.eligibleNet,-25000);assert.equal(reversal.commission,-875);assert.equal(reversal.status,'reversed');
+});
+
 test('un evento compartido aprobado congela el resultado del pedido vivo',()=>{
   const order={id:'recFreeze',fields:{'N° Pedido':'PED-X','Fecha entrega':'2026-10-06','Monto neto (CLP)':999999}};
   const frozen={id:'ev-1',sourceId:'recFreeze',order:'PED-X',sellerEmail:'v@thelab.solutions',seller:'V',
