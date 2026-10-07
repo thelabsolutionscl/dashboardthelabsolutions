@@ -86,7 +86,8 @@ test('crear y editar validan identidad antes de escribir en Airtable', () => {
     assert.match(block, /validPhone/);
     assert.match(block, /validRUT/);
   }
-  assert.match(create, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]POST['"]/);
+  assert.match(create, /_supplierCreateSafe\(fields\)/);
+  assert.match(fn('_supplierCreateSafe'), /_supplierProxyPost\('\/supplier\/create'/);
   assert.match(edit, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]PATCH['"]/);
 });
 
@@ -117,19 +118,23 @@ test('la ficha conecta pedidos, evaluación e historial de precios', () => {
   assert.match(PROV, /Motivo evaluación/);
 });
 
-test('el formulario público aplica controles antiabuso y crea postulación', () => {
-  assert.match(WORKER, /url\.pathname\s*===\s*["']\/proveedor["']/);
-  const handler = fn('handleProveedor', WORKER);
-  assert.match(handler, /X-Public-Lead-Key/);
-  assert.match(handler, /company_website|_hp/);
-  assert.match(handler, /verifyTurnstile/);
-  assert.match(handler, /rateLimited\([^)]*["']proveedor["'][^)]*5[^)]*60/);
-  assert.match(handler, /Falta el nombre del proveedor/);
-  assert.match(handler, /Falta email o teléfono/);
-  assert.match(handler, /SUPPLIER_APPLICATION_GUARD/);
-  assert.match(WORKER, /supplierApplicationProcess[\s\S]*airtableCreateTolerant\(env,[\s\S]*["']Proveedores["']/);
-  assert.match(handler, /ENTREVISTAR/);
-  assert.match(handler, /sendProveedorNotification/);
+test('el formulario público aplica antiabuso y crea SupplierApplication separada', () => {
+  assert.match(WORKER,/url\.pathname\s*===\s*["']\/proveedor["']/);
+  const handler=fn('handleProveedor',WORKER);
+  assert.match(handler,/X-Public-Lead-Key/);
+  assert.match(handler,/company_website|_hp/);
+  assert.match(handler,/verifyTurnstile/);
+  assert.match(handler,/rateLimited\([^)]*["']proveedor["'][^)]*5[^)]*60/);
+  assert.match(handler,/Falta el nombre del proveedor/);
+  assert.match(handler,/Falta email o teléfono/);
+  assert.match(handler,/SUPPLIER_APPLICATION_GUARD/);
+  assert.match(handler,/PUBLIC_LEAD_KEY no configurada/);
+  assert.match(handler,/TURNSTILE_SECRET no configurada/);
+  assert.match(WORKER,/airtableFindSupplierApplication/);
+  assert.match(WORKER,/supplierApplicationProcess[\s\S]*airtableCreateTolerant\(env,"SupplierApplications"/);
+  assert.match(WORKER,/'Estado':'Pendiente'/);
+  assert.doesNotMatch(fn('supplierApplicationProcess',WORKER),/airtableCreateTolerant\(env,"Proveedores"/);
+  assert.match(handler,/sendProveedorNotification/);
 });
 
 test('precios estructurados conservan compatibilidad legacy sin volver a escribir blobs', () => {
@@ -189,14 +194,18 @@ test('pedidos, precios y OC usan supplierId estable y toleran nombres legacy sol
   assert.match(fn('_preciosDeProv'),/p\.supplierId\|\|_supplierResolveId\(p\.prov\)/);
 });
 
-test('crear proveedor solo reintenta tras rechazo de esquema confirmado', () => {
-  const create = fn('createProveedor');
-  const guard = fn('_pvCanRetryCreateAfterError');
-  assert.match(guard, /422|UNKNOWN_FIELD_NAME/, 'el fallback exige una respuesta de esquema confirmada');
-  assert.match(guard, /timeout|network|failed to fetch|5\\d\\d/i, 'timeout/red/5xx deben quedar fuera del retry');
-  assert.match(create, /if\(!_pvCanRetryCreateAfterError\(e\)\) throw e;/);
-  assert.match(create, /try\{await refresh\(\);\}[\s\S]*catch\(refreshErr\)/, 'un fallo de refresh no puede volver a ejecutar POST');
-  assert.match(create, /finally\{[\s\S]*btn\.disabled=false/, 'el botón siempre se restaura');
+test('crear proveedor es idempotente en backend y no repite POST tras resultado ambiguo', () => {
+  const create=fn('createProveedor'),safe=fn('_supplierCreateSafe');
+  assert.match(create,/_supplierCreateSafe\(fields\)/);
+  assert.match(safe,/_supplierCreateKey\(fields\)/);
+  assert.match(safe,/_supplierProxyPost\('\/supplier\/create'/);
+  assert.match(PROXY,/_handleSupplierCreate/);
+  assert.match(PROXY,/supplier-create-result/);
+  assert.match(PROXY,/Supplier duplicate check unavailable/);
+  assert.match(PROXY,/Supplier create outcome uncertain; retry with same idempotency key/);
+  assert.match(PROXY,/filterByFormula/);
+  assert.match(ACCESS,/path==='\/supplier\/create'/);
+  assert.match(create,/finally\{[\s\S]*btn\.disabled=false/);
 });
 
 test('editar permite limpiar campos vacíos en Airtable', () => {
@@ -271,6 +280,7 @@ test('endpoint público serializa idempotencia y deduplica por RUT/email/nombre 
   assert.match(WORKER,/supplierNormRut/);
   assert.match(WORKER,/supplierNormEmail/);
   assert.match(WORKER,/supplierApplicationProcess/);
+  assert.match(WORKER,/airtableFindSupplierApplication/);
 });
 
 test('eliminar protege dependencias y conserva supplierId archivando', () => {
@@ -295,6 +305,19 @@ test('rutas críticas de proveedores usan _proxyCfg y no inventan otra configura
   assert.match(proxy,/_proxyCfg/);
   assert.match(proxy,/X-App-Key/);
   assert.doesNotMatch(proxy,/PROXY_CONFIG|AIRTABLE_PROXY_URL|AIRTABLE_PROXY_KEY/);
+});
+
+test('SupplierApplication se convierte explícitamente y deduplica contra el maestro', () => {
+  assert.match(PROV,/airtableFetch\('SupplierApplications',1000\)/);
+  assert.match(PROV,/function renderSupplierApplications/);
+  const review=fn('reviewSupplierApplication');
+  assert.match(review,/_supplierFindDuplicate\(\{nombre,rut,email\}\)/);
+  assert.match(review,/_supplierCreateSafe\(fields\)/);
+  assert.match(review,/airtableWrite\('SupplierApplications','PATCH',id/);
+  assert.match(review,/'Estado':'Convertida'/);
+  assert.match(review,/'Proveedor':\[supplierId\]/);
+  assert.match(review,/SupplierEvaluations/);
+  assert.match(review,/Postulación vinculada al proveedor existente/);
 });
 
 test('duplicados del dashboard se detectan por RUT, email o razón social normalizados', () => {
@@ -389,7 +412,7 @@ test('CSV neutraliza fórmulas, respeta filtros y registra auditoría', () => {
 });
 
 test('backend impone catálogo de tablas, campos y métodos para proveedores auditables', () => {
-  for(const table of ['SupplierPrices','PurchaseOrders','PurchaseOrderItems','PurchaseOrderEvents','SupplierEvaluations','SupplierCategories']){
+  for(const table of ['SupplierPrices','PurchaseOrders','PurchaseOrderItems','PurchaseOrderEvents','SupplierEvaluations','SupplierCategories','SupplierApplications']){
     assert.match(ACCESS,new RegExp(table));
     assert.match(PROXY,new RegExp(table+':Object\\.freeze'));
   }
