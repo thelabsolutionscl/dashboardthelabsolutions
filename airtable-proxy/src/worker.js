@@ -51,7 +51,7 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
     'FT Relleno (%)':'number','FT Soportes':'select',
     'FT Peso estimado (g)':'number','FT Tiempo impresión':'text',
     'FT Notas producción':'notes','FT Actualizado':'date',
-    'Notas QA':'notes','Foto QA URL':'url','Fecha objetivo interna':'date',
+    'Notas QA':'notes','Foto QA URL':'url','Fecha objetivo interna':'date','Proveedores':'links',
     'Historial fechas calendario':'notes'
   }),
   Proveedores:Object.freeze({
