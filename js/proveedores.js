@@ -321,7 +321,7 @@ function buildProveedorRow(p){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
           ${f['Condiciones de pago']?`<div style="font-size:11px"><span style="color:var(--text3)">Pago:</span> ${escapeHtml(f['Condiciones de pago'])}</div>`:''}
-          ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Total pedidos:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
+          ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Gasto OC comprometido:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
           ${pvLastOrder?`<div style="font-size:11px"><span style="color:var(--text3)">Último pedido:</span> ${escapeHtml(pvLastOrder)}</div>`:''}
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
           ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px">${formatRichText(f['Notas'])}</div>`:''}
