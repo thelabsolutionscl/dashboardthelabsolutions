@@ -43,7 +43,49 @@ function say(m,t){try{toast(m,t||'info');}catch(_){console.log(m);}}
 function proxyCfg(){
  try{var p=typeof _proxyCfg==='function'?_proxyCfg():null;if(!p||!p.url||!p.key)return null;var u=new URL(p.url);if(!/^https?:$/.test(u.protocol)||u.username||u.password||u.search||u.hash)return null;return{base:u.href.replace(/\/$/,''),key:p.key};}catch(_){return null;}
 }
+// El Demo utiliza la misma interfaz v2, pero nunca consulta el Gateway real.
+var demoProspects=null,demoSeq=0;
+function linkedinDemoRecords(){
+ if(!demoProspects)demoProspects=[
+  {id:'demo-li-1',fields:{Prospecto:'Camila Torres',Empresa:'Agencia Prisma',Cargo:'Directora de Producción',Segmento:'Agencia marketing / BTL',Identidad:'The Lab Solutions',Campaña:'Agencias BTL 2026',Estado:'Oportunidad','Score B2B':91,'Servicio interés':'Activaciones','Próximo seguimiento':new Date(Date.now()-86400000).toISOString(),Notas:'Solicitó propuesta para activación corporativa (datos ficticios).'}},
+  {id:'demo-li-2',fields:{Prospecto:'Matías Rojas',Empresa:'Eventos Horizonte',Cargo:'Productor Ejecutivo',Segmento:'Eventos / Productora',Identidad:'Nicanor',Campaña:'Premiaciones 2026',Estado:'Respondió','Score B2B':82,'Servicio interés':'Premiaciones','Próximo seguimiento':new Date(Date.now()+86400000).toISOString()}},
+  {id:'demo-li-3',fields:{Prospecto:'Valentina Soto',Empresa:'Retail Norte',Cargo:'Brand Manager',Segmento:'Marketing / Brand',Identidad:'Gustavo',Campaña:'Merchandising B2B',Estado:'Calificado','Score B2B':75,'Servicio interés':'Merchandising'}}
+ ];
+ return demoProspects;
+}
+function linkedinDemoMetrics(){
+ var records=linkedinDemoRecords(),active=records.filter(function(r){return r.fields.Estado!=='Descartado';});
+ var responded=active.filter(function(r){return ['Respondió','Oportunidad','Cliente'].includes(r.fields.Estado);});
+ var opportunities=active.filter(function(r){return ['Oportunidad','Cliente'].includes(r.fields.Estado);});
+ var groups={};
+ ['campana','identidad','segmento'].forEach(function(dim){
+  var key={campana:'Campaña',identidad:'Identidad',segmento:'Segmento'}[dim],names=[...new Set(active.map(function(r){return r.fields[key]||'Sin asignar';}))];
+  groups[dim]=names.map(function(name){var rows=active.filter(function(r){return (r.fields[key]||'Sin asignar')===name;});
+   return {name:name,prospects:rows.length,response_rate:rows.filter(function(r){return ['Respondió','Oportunidad','Cliente'].includes(r.fields.Estado);}).length/rows.length,opportunity_rate:rows.filter(function(r){return ['Oportunidad','Cliente'].includes(r.fields.Estado);}).length/rows.length,clients:rows.filter(function(r){return r.fields.Estado==='Cliente';}).length,orders:0,revenue_net_after_linkedin:0};});
+ });
+ return {summary:{response_rate:responded.length/(active.length||1),opportunity_rate:opportunities.length/(active.length||1),client_rate:active.filter(function(r){return r.fields.Estado==='Cliente';}).length/(active.length||1),overdue:active.filter(function(r){return prospectDue(r.fields);}).length,avg_response_hours:null,median_response_hours:null,revenue_net_after_linkedin:0},groups:groups,demo:true};
+}
+function linkedinDemoApi(path,method,body){
+ if(path==='/linkedin/prospects')return {records:linkedinDemoRecords().map(function(r){return structuredClone(r);}),demo:true};
+ if(path==='/linkedin/metrics')return linkedinDemoMetrics();
+ if(path!=='/linkedin/command'||method!=='POST')throw new Error('Acción no disponible en Demo');
+ var list=linkedinDemoRecords(),action=body&&body.action,rec=list.find(function(r){return r.id===body.id;});
+ if(action==='create'){rec={id:'demo-li-'+(++demoSeq+100),fields:{...(body.fields||{}),Estado:'Descubierto'}};list.push(rec);}
+ else if(!rec)throw new Error('Prospecto Demo no encontrado');
+ else if(action==='update')rec.fields={...rec.fields,...body.fields};
+ else if(action==='transition'){if(!STATES.includes(body.target))throw new Error('Estado inválido');rec.fields.Estado=body.target;}
+ else if(action==='analyze'){rec.fields['Score B2B']=Math.max(70,Number(rec.fields['Score B2B'])||75);rec.fields.Estado='Analizado';rec.fields.Notas=(rec.fields.Notas||'')+' | Análisis IA simulado, sin consumo de tokens.';}
+ else if(action==='convert'){
+  if(!CONVERTIBLE_STATES.includes(rec.fields.Estado))throw new Error('Primero califica el prospecto');
+  if(rec.fields.Convertido)return {record:structuredClone(rec),already_converted:true,demo:true};
+  rec.fields.Estado='Cliente';rec.fields.Convertido=true;
+  var client={id:'demo-li-client-'+rec.id,fields:{Empresa:rec.fields.Empresa||rec.fields.Prospecto,'Origen lead':'LinkedIn',Contacto:rec.fields.Prospecto||'',Email:rec.fields.Email||''}};
+  rec.fields.Cliente=[client.id];return {record:structuredClone(rec),client:client,created:true,demo:true};
+ }else throw new Error('Acción no disponible en Demo');
+ return {record:structuredClone(rec),demo:true};
+}
 async function linkedinApi(path,method,body){
+ if(window._DEMO_MODE)return linkedinDemoApi(path,method||'GET',body);
  var p=proxyCfg();if(!p)throw new Error('Proxy seguro no configurado');
  var r=await fetch(p.base+path,{method:method||'GET',credentials:'include',redirect:'error',cache:'no-store',
   headers:{'X-App-Key':p.key,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -81,7 +123,7 @@ function modal(){
  m.addEventListener('click',function(x){if(x.target===m)linkedinCloseProspect();});document.body.appendChild(m);
 }
 async function linkedinLoad(force){
- mount();if(typeof _redesDemo!=='undefined'&&_redesDemo){state.linkedinProspects=[];linkedinMetrics=null;loaded=true;linkedinRender();return;}
+ mount();if(!window._DEMO_MODE&&typeof _redesDemo!=='undefined'&&_redesDemo){state.linkedinProspects=[];linkedinMetrics=null;loaded=true;linkedinRender();return;}
  if(busy)return;if(loaded&&!force){linkedinRender();return;}busy=true;
  try{var all=await Promise.all([linkedinApi('/linkedin/prospects','GET'),linkedinApi('/linkedin/metrics','GET')]);state.linkedinProspects=all[0].records||[];linkedinMetrics=all[1]||null;loaded=true;linkedinRender();}
  catch(err){var x=document.getElementById('linkedinProspectList');if(x)x.innerHTML='<div class="empty">⚠ '+e(err.message)+'</div>';}finally{busy=false;}

@@ -1,0 +1,23 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'..','js','linkedin.js'),'utf8');
+test('LinkedIn Demo v2 preserves local-only API and latest UI actions',async()=>{
+ const ctx={window:{_DEMO_MODE:true},document:{},Date,URL,console,setTimeout,structuredClone};ctx.window.window=ctx.window;
+ vm.runInNewContext(source.split('var baseInit=window.initRedes')[0]+'window.__demoApiForTest=linkedinDemoApi;})();',ctx);
+ const api=ctx.window.__demoApiForTest;
+ const initial=api('/linkedin/prospects','GET');
+ assert.equal(initial.records.length,3);
+ assert.equal(api('/linkedin/metrics','GET').summary.overdue>=1,true);
+ const created=api('/linkedin/command','POST',{action:'create',fields:{Prospecto:'Demo Nuevo',Empresa:'Empresa Ficticia'}});
+ assert.equal(created.record.fields.Estado,'Descubierto');
+ assert.equal(api('/linkedin/command','POST',{action:'transition',id:created.record.id,target:'Calificado'}).record.fields.Estado,'Calificado');
+ const analyzed=api('/linkedin/command','POST',{action:'analyze',id:created.record.id});
+ assert.match(analyzed.record.fields.Notas,/simulado/);
+ api('/linkedin/command','POST',{action:'transition',id:created.record.id,target:'Calificado'});
+ const client=api('/linkedin/command','POST',{action:'convert',id:created.record.id});
+ assert.equal(client.created,true);
+ assert.equal(client.client.fields['Origen lead'],'LinkedIn');
+ assert.equal(api('/linkedin/prospects','GET').records.length,4);
+ assert.match(source,/if\(window\._DEMO_MODE\)return linkedinDemoApi/);
+ assert.match(source,/if\(!window\._DEMO_MODE&&typeof _redesDemo/);
+});
