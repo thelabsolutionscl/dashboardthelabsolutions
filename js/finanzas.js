@@ -2138,18 +2138,15 @@ function clearMbPrinterTunnel(){
   try{reconnectAllPrinterWs();pollPrinters();}catch(_){}
 }
 function saveMbElevenLabsKey(){
-  const inp=document.getElementById('mbElevenLabsKey');const v=(inp?.value||'').trim();
-  if(!v){toast('Ingresa una API Key de ElevenLabs','error');return;}
-  localStorage.setItem('elevenlabs_key',v);
-  if(inp){inp.value='';inp.placeholder='Guardada ✓';}
-  const st=document.getElementById('mbElevenLabsStatus');if(st) st.textContent='✓ Voz ElevenLabs activa';
-  toast('✓ ElevenLabs Key guardada','success');
+  try{localStorage.removeItem('elevenlabs_key');}catch(_){}
+  const inp=document.getElementById('mbElevenLabsKey');if(inp){inp.value='';inp.disabled=true;inp.placeholder='Administrada en servidor';}
+  const st=document.getElementById('mbElevenLabsStatus');if(st)st.textContent='Credencial protegida en backend';
+  toast('ElevenLabs ahora se configura únicamente en el servidor seguro','info');
 }
 function clearMbElevenLabsKey(){
-  localStorage.removeItem('elevenlabs_key');
-  const inp=document.getElementById('mbElevenLabsKey');if(inp){inp.value='';inp.placeholder='sk_...';}
-  const st=document.getElementById('mbElevenLabsStatus');if(st) st.textContent='Sin configurar';
-  toast('ElevenLabs Key eliminada','info');
+  try{localStorage.removeItem('elevenlabs_key');}catch(_){}
+  const inp=document.getElementById('mbElevenLabsKey');if(inp){inp.value='';inp.disabled=true;inp.placeholder='Administrada en servidor';}
+  const st=document.getElementById('mbElevenLabsStatus');if(st)st.textContent='Credencial protegida en backend';
 }
 document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
