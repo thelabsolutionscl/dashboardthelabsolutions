@@ -302,7 +302,9 @@ const MAIL={
       return data;
     }
     const pass=this.getMailPassFor(fromEmail);
-    if(!pass)return {error:'No se envió: la casilla '+fromEmail+' no tiene una sesión activa.'};
+    if(!pass){
+      return {error:'No se envió: la casilla '+fromEmail+' no tiene una sesión activa.'};
+    }
     const fd=new URLSearchParams();fd.append('user',fromEmail);fd.append('pass',pass);
     for(const[k,v] of Object.entries(params||{}))fd.append(k,v);
     const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),30000);
