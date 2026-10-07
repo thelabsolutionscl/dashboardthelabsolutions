@@ -9,6 +9,9 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const OFFICE = fs.readFileSync(path.join(ROOT, 'js', 'oficina.js'), 'utf8');
+const AGENTS = fs.readFileSync(path.join(ROOT, 'js', 'agentes.js'), 'utf8');
+const WORKER = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'worker.js'), 'utf8');
+const ACCESS = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'access-auth.js'), 'utf8');
 const MACHINES = fs.existsSync(path.join(ROOT, 'js', 'maquinas.js'))
   ? fs.readFileSync(path.join(ROOT, 'js', 'maquinas.js'), 'utf8')
   : '';
@@ -121,28 +124,27 @@ test('la oficina admite token o proxy y avisa cuando está ciega', () => {
   assert.match(OFFICE, /oficinaErr/);
 });
 
-test('el modelo integra las cinco fuentes operativas', () => {
-  const render = fn('_renderOficina');
-  assert.match(render, /AGENT_LOG\._runs/);
-  assert.match(render, /airtableFetch\(['"]Agent_Log['"],\s*100\)/);
-  assert.match(render, /Agent_Queue/);
-  assert.match(render, /airtableFetch\([^\n]*200/);
-  assert.match(render, /airtableFetch\(['"]Automations['"],\s*50\)/);
-  assert.match(render, /airtableFetch\(['"]Maquinas['"],\s*200\)/);
-  assert.match(render, /airtableFetch\(['"]Inventario['"],\s*200\)/);
+test('el modelo consume un snapshot autoritativo con cinco fuentes y timestamps', () => {
+  const render=fn('_renderOficina');
+  assert.match(render, /_ofFetchSnapshot/);
+  assert.match(render, /snap\?\.runs/);
+  assert.match(render, /pending_count/);
+  assert.match(render, /snap\?\.automations/);
+  assert.match(render, /snap\?\.printers/);
+  assert.match(render, /snap\?\.inventory/);
+  assert.match(WORKER, /source\[name\]=\{ok:true,at:/);
+  assert.match(WORKER, /agent_log/);
+  assert.match(WORKER, /agent_queue/);
+  assert.match(WORKER, /automations/);
+  assert.match(WORKER, /machines/);
+  assert.match(WORKER, /inventory/);
 });
 
-test('las cachés tienen ventana acotada e invalidación manual', () => {
-  assert.match(OFFICE, /const\s+_OF_CACHE_MS\s*=\s*25000/);
-  for (const cache of ['_ofRunsCache', '_ofQueueCache', '_ofAutoCache', '_ofMaqCache', '_ofInvCache']) {
-    assert.match(OFFICE, new RegExp(esc(cache)), `falta ${cache}`);
-  }
-  const refresh = fn('refreshOficina');
-  assert.match(refresh, /_ofRunsCache\s*=\s*\{t:0/);
-  assert.match(refresh, /_ofQueueCache\s*=\s*\{t:0/);
-  assert.match(refresh, /_ofAutoCache\s*=\s*\{t:0/);
-  assert.match(refresh, /_ofMaqCache\s*=\s*\{t:0/);
-  assert.match(refresh, /_ofInvCache\s*=\s*\{t:0/);
+test('el snapshot tiene cache corta e invalidación manual', () => {
+  assert.match(OFFICE,/const\s+_OF_CACHE_MS\s*=\s*25000/);
+  assert.match(fn('_ofFetchSnapshot'),/_ofRunsCache/);
+  const refresh=fn('refreshOficina');
+  assert.match(refresh,/_ofRunsCache\s*=\s*\{t:0/);
 });
 
 test('las tres vistas comparten el mismo modelo de trabajadores', () => {
@@ -157,14 +159,12 @@ test('las tres vistas comparten el mismo modelo de trabajadores', () => {
   assert.match(fn('_ofRenderIso'), /aria-label/);
 });
 
-test('el modo de impresoras prioriza telemetría en vivo cuando existe', () => {
-  const render = fn('_renderOficina');
-  assert.match(render, /_printerStatus/);
-  assert.match(render, /lv\s*&&\s*lv\.state/);
-  assert.match(render, /printing/);
-  assert.match(render, /progress/);
-  assert.match(render, /eta/);
-  if (MACHINES) assert.match(MACHINES, /_printerStatus/);
+test('Oficina recibe telemetría de impresoras desde el snapshot compartido', () => {
+  const render=fn('_renderOficina');
+  assert.match(render, /snap\?\.printers/);
+  assert.match(render, /lastTelemetry/);
+  assert.match(render, /telemetry/);
+  assert.doesNotMatch(render, /si la pestaña Impresoras la ha poblado/);
 });
 
 test('feed y detalle escapan la consulta antes de mostrarla', () => {
@@ -173,8 +173,9 @@ test('feed y detalle escapan la consulta antes de mostrarla', () => {
   assert.match(feed, /substring\(0,120\)/);
   assert.match(feed, /ofFeedView/);
   const open = fn('_ofOpenRun');
-  assert.match(open, /escapeHtml\(String\(r\.input\)\)/);
-  assert.match(open, /formatAgentReport\(r\.output\)/);
+  assert.match(open, /_ofRunVisibleText\(r,false\)/);
+  assert.match(open, /escapeHtml\(input\)/);
+  assert.match(open, /formatAgentReport\(output\)/);
 });
 
 test('URLs de imágenes se restringen antes de entrar a la escena', () => {
@@ -213,149 +214,140 @@ test('la suite smoke continúa cubriendo el cableado general', () => {
   assert.match(smoke, /oficina/i);
 });
 
-test('diagnóstico: Agent_Log debe paginar o agregarse en backend', (t) => {
-  const render = fn('_renderOficina');
-  if (/airtableFetch\(['"]Agent_Log['"],\s*100\)/.test(render) && !/offset|paginate|cursor|aggregate/i.test(render)) {
-    t.todo('CRÍTICO: 7/14/30 días, ranking y empleado del mes no pueden depender de solo 100 filas');
-    return;
-  }
+
+test('Agent_Log se pagina completamente en backend y declara cobertura 30 días',()=>{
+  assert.match(WORKER,/async function officeList/);
+  assert.match(WORKER,/do\{/);
+  assert.match(WORKER,/offset/);
+  assert.match(WORKER,/coverage=\{complete30d:/);
+  assert.match(WORKER,/31\*24\*3600000/);
+  assert.doesNotMatch(fn('_renderOficina'),/airtableFetch\(['"]Agent_Log['"],\s*100/);
 });
 
-test('diagnóstico: la cola debe contar solo pendientes y paginar', (t) => {
-  const render = fn('_renderOficina');
-  if (/queueLen\s*=\s*\(q\.records\|\|\[\]\)\.length/.test(render) && !/Estado[^\n]*(Pendiente|Procesando)/i.test(render)) {
-    t.todo('CRÍTICO: consultar/contar estados pendientes procesables; no todos los registros históricos de Agent_Queue');
-    return;
-  }
+test('la cola cuenta exclusivamente Pendiente',()=>{
+  assert.match(WORKER,/formula:"\{Estado\}='Pendiente'"/);
+  assert.match(WORKER,/pending_count:/);
+  assert.doesNotMatch(fn('_renderOficina'),/Agent_Queue[^\n]*\.length/);
 });
 
-test('diagnóstico: dedupe de ejecuciones necesita ID durable', (t) => {
-  const render = fn('_renderOficina');
-  if (/slice\(0,30\)/.test(render) && !/external.?id|run.?id|execution.?id|record.?id/i.test(render)) {
-    t.todo('usar ID de ejecución/recordId; agent+timestamp+prefijo puede colapsar runs legítimos o duplicar local/remoto');
-    return;
-  }
+test('las ejecuciones tienen ID durable y dedupe por executionId',()=>{
+  assert.match(AGENTS,/_officeExecId/);
+  assert.match(AGENTS,/executionId/);
+  assert.match(AGENTS,/_dedupKey\(r\)\{return r\.executionId/);
+  assert.match(WORKER,/\{Execution ID\}/);
 });
 
-test('diagnóstico: Trabajando requiere ciclo de ejecución o heartbeat', (t) => {
-  const status = fn('_ofStatus');
-  if (/d\s*<\s*90000/.test(status) && !/heartbeat|started|finished|running/i.test(status)) {
-    t.todo('CRÍTICO: no inferir presencia actual desde una ejecución terminada hace <90s');
-    return;
-  }
+test('Trabajando requiere estado running y heartbeat fresco',()=>{
+  const state=fn('_ofRunState');
+  assert.match(state,/state===['"]running['"]/);
+  assert.match(state,/heartbeatAt/);
+  assert.match(state,/60000/);
+  assert.match(state,/Ejecución sin heartbeat/);
+  assert.doesNotMatch(fn('_renderOficina'),/_ofActive\.has/);
 });
 
-test('diagnóstico: errores de agentes deben ser compartidos y durables', (t) => {
-  if (/const\s+_ofAgentErrors\s*=\s*\{\}/.test(OFFICE)) {
-    t.todo('persistir error, ejecución, timestamp y recuperación en telemetría compartida; hoy vive solo en el navegador');
-    return;
-  }
+test('errores de agentes quedan durables en el ciclo compartido',()=>{
+  assert.match(AGENTS,/_officeExecutionFail/);
+  assert.match(AGENTS,/action:['"]error['"]/);
+  assert.match(WORKER,/Error ejecución/);
+  assert.match(WORKER,/Estado ejecución.*error/);
 });
 
-test('diagnóstico: todas las automatizaciones necesitan heartbeat y cadencia', (t) => {
-  if (/expectMins:90/.test(OFFICE) && count(/expectMins\s*:/g, OFFICE) < 5) {
-    t.todo('definir expected cadence/heartbeat por automatización y alertar “Sin telemetría” o atraso');
-    return;
-  }
+test('automatizaciones tienen cadencia y estados de health explícitos',()=>{
+  assert.match(WORKER,/OFFICE_AUTOMATION_EXPECT/);
+  for(const id of ['lead-worker','airtable-proxy','printer-bridge','mail-api','sii-worker'])
+    assert.match(WORKER,new RegExp(id));
+  assert.match(WORKER,/state:'unknown'/);
+  assert.match(WORKER,/state:'degraded'/);
+  assert.match(WORKER,/state:'down'/);
+  assert.match(WORKER,/state:'paused'/);
+  assert.match(WORKER,/state:'healthy'/);
 });
 
-test('diagnóstico: la salud no debe quedar verde con telemetría ausente', (t) => {
-  const alerts = fn('_ofRenderAlerts');
-  const health = fn('_ofRenderHealth');
-  if (!/Sin telemetría/.test(alerts) && /Todo en orden/.test(health)) {
-    t.todo('CRÍTICO: automatizaciones sin telemetría deben degradar salud o aparecer como estado desconocido');
-    return;
-  }
+test('telemetría ausente degrada salud y backlog no cambia health del worker',()=>{
+  assert.match(WORKER,/autoBad/);
+  assert.match(WORKER,/health=sourceBad\.length\|\|autoBad\.length\|\|printerBad\.length\?'degraded':'healthy'/);
+  const render=fn('_renderOficina');
+  assert.doesNotMatch(render,/lead-worker[^\n]*queueLen[^\n]*En cola/);
 });
 
-test('diagnóstico: la cola no demuestra que Lead Worker esté sano', (t) => {
-  const render = fn('_renderOficina');
-  if (/lead-worker/.test(render) && /queueLen/.test(render) && /En cola/.test(render)) {
-    t.todo('separar backlog de disponibilidad del worker; un worker caído también puede acumular cola');
-    return;
-  }
+test('EjecucionesHoy sólo cuenta con período y zona verificados',()=>{
+  assert.match(WORKER,/Periodo ejecuciones/);
+  assert.match(WORKER,/Zona horaria/);
+  assert.match(WORKER,/today_verified/);
+  assert.match(fn('_renderOficina'),/x\.today_verified/);
 });
 
-test('diagnóstico: EjecucionesHoy debe tener período verificable', (t) => {
-  const render = fn('_renderOficina');
-  if (/EjecucionesHoy/.test(render) && !/Fecha.*Ejecuciones|Periodo|D[ií]a de conteo|countDate/i.test(render)) {
-    t.todo('no sumar un contador stale sin fecha/zona; almacenar período y reset confirmado');
-    return;
-  }
+test('inventario y máquinas forman parte de salud/frescura del snapshot',()=>{
+  assert.match(WORKER,/healthRequired=\['agent_log','agent_queue','automations','machines','inventory'\]/);
+  assert.match(WORKER,/lastTelemetry/);
+  assert.match(WORKER,/telemetry=last/);
+  assert.match(fn('_renderOficina'),/snap\?\.inventory/);
 });
 
-test('diagnóstico: inventario debe afectar frescura y salud', (t) => {
-  const render = fn('_renderOficina');
-  if (/el estante es decorativo: un fallo aquí no marca _ofErr/.test(render)) {
-    t.todo('mostrar origen/frescura/error del inventario; el resumen operativo no debe ocultar una lectura fallida');
-    return;
-  }
+test('feed y detalle consumen texto redaccionado por rol',()=>{
+  assert.match(WORKER,/officeRunForRole/);
+  assert.match(WORKER,/contentRestricted/);
+  assert.match(WORKER,/officeMaskText/);
+  assert.match(fn('_ofRenderFeed'),/_ofRunVisibleText/);
+  assert.match(fn('_ofOpenRun'),/contentRestricted/);
 });
 
-test('diagnóstico: telemetría de impresoras no debe depender de otra pestaña', (t) => {
-  const render = fn('_renderOficina');
-  if (/si la pestaña Impresoras la ha poblado/.test(render)) {
-    t.todo('Oficina debe consultar heartbeat/estado del bridge directamente o compartir un store central inicializado');
-    return;
-  }
+test('fechas analíticas usan America Santiago y setDate calendar-safe',()=>{
+  const dateLogic=[fn('_ofSpark'),fn('_ofDayInsight'),fn('_ofBarsDays'),fn('_ofHeatmap')].join('\n');
+  assert.match(dateLogic,/America\/Santiago/);
+  assert.match(dateLogic,/setDate/);
+  assert.doesNotMatch(dateLogic,/Math\.round\([^\n]*\/864e5/);
 });
 
-test('diagnóstico: el snapshot necesita timestamp por fuente', (t) => {
-  const render = fn('_renderOficina');
-  if (/_ofRunsCache/.test(render) && /_ofAutoCache/.test(render) && !/sourceTimestamp|snapshotAt|asOf|frescura por fuente/i.test(render)) {
-    t.todo('mostrar “as of” de logs, cola, automatizaciones, máquinas e inventario; hoy se mezclan momentos distintos');
-    return;
-  }
+test('ranking declara volumen y sólo aparece con cobertura completa',()=>{
+  const render=fn('_renderOficina');
+  assert.match(render,/Mayor volumen/);
+  assert.match(render,/if\(coverage\)/);
+  assert.doesNotMatch(render,/Empleado del mes/);
 });
 
-test('diagnóstico: feed y detalle requieren redacción por rol', (t) => {
-  const feed = fn('_ofRenderFeed');
-  const open = fn('_ofOpenRun');
-  if (/r\.input/.test(feed) && /r\.output/.test(open) && !/redact|mask|sensitive|fieldPermission|canView/i.test(feed + open)) {
-    t.todo('CRÍTICO: ocultar prompts/resultados sensibles según rol y tipo de agente; búsqueda/copia no deben saltarse permisos');
-    return;
-  }
+test('copias, digest, detalle y exportación tienen confirmación o auditoría',()=>{
+  assert.match(fn('_ofOpenRun'),/_ofAudit\('view'/);
+  assert.match(fn('ofFeedCopy'),/confirm\(/);
+  assert.match(fn('ofFeedCopy'),/_ofAudit\('copy'/);
+  assert.match(fn('ofDigest'),/confirm\(/);
+  assert.match(fn('ofDigest'),/_ofAudit\('digest'/);
+  assert.match(fn('ofExport'),/confirm\(/);
+  assert.match(fn('ofExport'),/_ofAudit\('export'/);
+  assert.match(WORKER,/Oficina_Auditoria/);
 });
 
-test('diagnóstico: fechas deben ser calendar-safe para America/Santiago', (t) => {
-  const dateLogic = [fn('_ofSpark'), fn('_ofDayInsight'), fn('_ofBarsDays'), fn('_ofHeatmap')].join('\n');
-  if (/864e5|86400000/.test(dateLogic) && !/America\/Santiago|Temporal|setDate\(/.test(dateLogic)) {
-    t.todo('evitar aritmética fija de 24h en comparaciones por día; Chile cambia DST');
-    return;
-  }
+test('SVG exportado no conserva imágenes remotas',()=>{
+  const exp=fn('ofExport');
+  assert.match(exp,/querySelectorAll\('image'\).*remove/);
+  assert.doesNotMatch(OFFICE,/https:\/\/dashboard\.thelab\.solutions\/logo-thelab\.png/);
 });
 
-test('diagnóstico: rankings deben declararse como volumen, no desempeño', (t) => {
-  const render = fn('_renderOficina');
-  if (/Empleado del mes/.test(render) && /MÁS ejecuciones/.test(render)) {
-    t.todo('renombrar a “mayor volumen” o incorporar calidad, SLA, costo, error y resultado de negocio');
-    return;
-  }
+test('incidencias son trazables con responsable SLA y cierre',()=>{
+  assert.match(WORKER,/Incidencias_Operativas/);
+  assert.match(WORKER,/Responsable/);
+  assert.match(WORKER,/SLA/);
+  assert.match(WORKER,/Estado:'Resuelta'/);
+  assert.match(WORKER,/\/office\/incidents/);
 });
 
-test('diagnóstico: empleado del mes no debe usar una muestra incompleta', (t) => {
-  const render = fn('_renderOficina');
-  if (/count30/.test(render) && /Agent_Log['"],100/.test(render)) {
-    t.todo('ocultar/advertir el premio hasta disponer de los 30 días completos y consistentes entre navegadores');
-    return;
-  }
+test('retención y contenido indexable quedan acotados',()=>{
+  assert.match(WORKER,/Retener hasta/);
+  assert.match(WORKER,/31\*24\*3600000/);
+  assert.match(AGENTS,/this\._runs\.length>50/);
+  assert.match(AGENTS,/output:String\(output\|\|''\)\.substring\(0,1200\)/);
 });
 
-test('diagnóstico: exportar/copiar datos requiere política de sensibilidad', (t) => {
-  const text = fn('_ofOpenRun') + fn('ofFeedCopy') + fn('ofDigest') + fn('ofExport');
-  if (/clipboard\.writeText/.test(text) && !/confirm|redact|sensitive|permission/i.test(text)) {
-    t.todo('aplicar permisos/redacción y confirmación al copiar resultados, digest y exportaciones sensibles');
-    return;
-  }
+test('RBAC expone Oficina mediante rutas dedicadas y mantiene Agent_Log admin-only',()=>{
+  assert.match(ACCESS,/path===['"]\/office\/snapshot['"]/);
+  assert.match(ACCESS,/path===['"]\/office\/execution['"]/);
+  assert.match(ACCESS,/path===['"]\/office\/audit['"]/);
+  assert.match(ACCESS,/path===['"]\/office\/incidents['"]/);
+  assert.match(ACCESS,/ACCESS_ADMIN_ONLY_TABLES/);
+  assert.match(ACCESS,/Agent_Log/);
 });
 
-test('diagnóstico: el SVG exportado debería ser autocontenido', (t) => {
-  if (/https:\/\/dashboard\.thelab\.solutions\/logo-thelab\.png/.test(OFFICE)) {
-    t.todo('embebir el logo o advertir dependencia externa; el SVG exportado puede quedar roto/offline');
-    return;
-  }
+test('suite no deja TODO diagnósticos de Oficina',()=>{
+  assert.doesNotMatch(fs.readFileSync(__filename,'utf8'),/test\.todo|t\.todo/);
 });
-
-test.todo('agregar healthcheck independiente del Worker/Make para distinguir activo, degradado, desconocido y caído');
-test.todo('convertir alertas de automatización/impresora en incidencias trazables con responsable, SLA y cierre');
-test.todo('limitar retención y contenido indexable del feed de actividad según política de privacidad');

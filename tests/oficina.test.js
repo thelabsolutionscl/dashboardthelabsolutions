@@ -100,11 +100,15 @@ test('al proxy solo se le exige cadencia en horario de trabajo', () => {
   assert.match(OF, /expectMins:45, soloHabil:true/, 'el proxy debe declararlo');
 });
 
-test('el degradado ocurre antes de contar quién trabaja', () => {
-  // Si no, el resumen seguiría inflado aunque la tarjeta se vea gris.
-  const i = OF.indexOf('const st=_ofEstadoAutomatizacion(a,f);');
-  const j = OF.indexOf("if(cls==='of-work') working++;", i);
-  assert.ok(i > 0 && j > i);
+test('el conteo de trabajando usa sólo ejecuciones running con heartbeat fresco', () => {
+  const fn=cuerpo('function _ofRunState(');
+  assert.match(fn,/state===['"]running['"]/);
+  assert.match(fn,/heartbeatAt/);
+  assert.match(fn,/60000/);
+  const render=cuerpo('async function _renderOficina(');
+  assert.match(render,/running=list\.find/);
+  assert.match(render,/Date\.now\(\)-Date\.parse\(r\.heartbeatAt\)<=60000/);
+  assert.doesNotMatch(render,/_ofStatus\(lastT\).*Trabajando/s);
 });
 
 test('el vigilante avisa solo en los cambios', () => {
@@ -175,9 +179,10 @@ test('el sondeo no se apila ni corre con la pestaña oculta', () => {
   assert.match(stop, /_oficinaInterval=null/);
 });
 
-test('si Airtable falla, la oficina lo dice en vez de fingir', () => {
+test('si el snapshot compartido falla, la oficina lo dice en vez de fingir', () => {
   assert.match(OF, /_ofErr=true/);
-  assert.match(OF, /errEl\.textContent='⚠ Sin conexión con Airtable[^']*'/, 'el banner debe decirlo');
-  assert.match(OF, /errEl\.style\.display=''/, 'y hacerse visible');
+  assert.match(OF, /Snapshot compartido no disponible/,'el banner debe decir que no hay verdad global');
+  assert.match(OF, /no se mostrará actividad local como si fuera global/);
+  assert.match(OF, /errEl\.style\.display=''/,'y hacerse visible');
   assert.match(OF, /Datos en caché/);
 });

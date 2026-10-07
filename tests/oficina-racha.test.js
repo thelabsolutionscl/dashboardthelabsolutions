@@ -46,7 +46,7 @@ function fakeDate(nowMs) {
 }
 
 // Monta _ofSameDay + _ofDayInsight + _ofStreakRecord en un mismo scope (se llaman entre sí).
-const body = [fn('_ofSameDay'), fn('_ofDayInsight'), fn('_ofStreakRecord')].join('\n');
+const body = [fn('_ofSameDay'), fn('_ofChileDay'), fn('_ofDayInsight'), fn('_ofStreakRecord')].join('\n');
 const m = new Function('Date', body + '\nreturn {_ofSameDay,_ofDayInsight,_ofStreakRecord};')(fakeDate(FIXED));
 
 // Timestamp del mediodía de hace `n` días calendario (en la zona local del runner).

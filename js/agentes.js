@@ -6,10 +6,63 @@ function _agMine(coll){ return (typeof isVendorMode==='function'&&isVendorMode()
 
 // ── AGENTES INLINE ─────────────────────────────────────────────
 let _agentInlineText='';
+let _agentInlineExecutionId='';
+const _officeAgentRuns=new Map();
+function _officeProxyCfg(){try{return typeof _proxyCfg==='function'?_proxyCfg():null;}catch(_){return null;}}
+function _officeExecId(agentId){
+  const rand=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID().replace(/-/g,''):
+    Math.random().toString(36).slice(2)+Date.now().toString(36);
+  return 'exec_'+String(agentId||'agent').replace(/[^A-Za-z0-9_-]/g,'').slice(0,28)+'_'+rand.slice(0,30);
+}
+async function _officeExecPost(payload){
+  const cfg=_officeProxyCfg();if(!cfg?.url||!cfg?.key||window._DEMO_MODE)return null;
+  const r=await fetch(cfg.url.replace(/\/$/,'')+'/office/execution',{method:'POST',credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(!r.ok)throw new Error('Office execution HTTP '+r.status);
+  return r.json();
+}
+function beginAgentResultRun(agentId,input){
+  const started=Date.now(),executionId=_officeExecId(agentId);
+  const rec={agentId:String(agentId||''),executionId,started,input:String(input||''),timer:null,closed:false};
+  _officeAgentRuns.set(started,rec);_agentInlineExecutionId=executionId;
+  _officeExecPost({action:'start',executionId,agent:rec.agentId,input:rec.input,source:'dashboard'}).catch(()=>{});
+  rec.timer=setInterval(()=>{if(rec.closed){clearInterval(rec.timer);return;}
+    _officeExecPost({action:'heartbeat',executionId}).catch(()=>{});},20000);
+  setTimeout(()=>{if(!rec.closed)_officeExecutionFail(started,'Ejecución sin cierre después de 10 minutos');},10*60*1000);
+  return started;
+}
+function _officeExecutionFinish(started,output){
+  const rec=_officeAgentRuns.get(started);if(!rec||rec.closed)return rec?.executionId||'';
+  rec.closed=true;if(rec.timer)clearInterval(rec.timer);
+  _officeExecPost({action:'finish',executionId:rec.executionId,output:String(output||'')}).catch(()=>{});
+  _officeAgentRuns.delete(started);return rec.executionId;
+}
+function _officeExecutionFail(started,error){
+  const rec=_officeAgentRuns.get(started);if(!rec||rec.closed)return rec?.executionId||'';
+  rec.closed=true;if(rec.timer)clearInterval(rec.timer);
+  _officeExecPost({action:'error',executionId:rec.executionId,error:String(error?.message||error||'Error')}).catch(()=>{});
+  _officeAgentRuns.delete(started);return rec.executionId;
+}
+function officeExecutionFailByAgent(agent){
+  const key=String(agent||'').toLowerCase();
+  for(const [started,r] of _officeAgentRuns){if(String(r.agentId||'').toLowerCase()===key){_officeExecutionFail(started,'Ejecución reportada con error');return true;}}
+  return false;
+}
+function agentResultMeta(agentId,started,extra){
+  const rec=_officeAgentRuns.get(started),executionId=rec?.executionId||'';
+  return Object.assign({agentId,executionId,startedAt:new Date(started).toISOString(),elapsedMs:Math.max(0,Date.now()-started),
+    timestamp:new Date().toISOString()},extra||{});
+}
+async function officeAuditAction(action,entity,executionId,detail){
+  const cfg=_officeProxyCfg();if(!cfg?.url||!cfg?.key||window._DEMO_MODE)return false;
+  try{const r=await fetch(cfg.url.replace(/\/$/,'')+'/office/audit',{method:'POST',credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},
+    body:JSON.stringify({action,entity,executionId,detail:String(detail||'').slice(0,1000)})});return r.ok;}catch(_){return false;}
+}
 
-function closeAgentInlineModal(){document.getElementById('agentInlineModal').style.display='none';_agentInlineText='';}
+function closeAgentInlineModal(){document.getElementById('agentInlineModal').style.display='none';_agentInlineText='';_agentInlineExecutionId='';}
 
-function copyAgentResult(){if(!_agentInlineText){toast('Sin contenido','error');return;}navigator.clipboard.writeText(_agentInlineText).then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));}
+function copyAgentResult(){if(!_agentInlineText){toast('Sin contenido','error');return;}if(!confirm('¿Copiar este resultado? La acción quedará registrada en Oficina Virtual.'))return;officeAuditAction('copy','agent-result',_agentInlineExecutionId,'Resultado de agente').catch(()=>{});navigator.clipboard.writeText(_agentInlineText).then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));}
 
 function _getClienteRecFromField(field){
   if(!field) return null;
@@ -171,7 +224,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
   try{showAgentWorking(cfg);}catch(e){}
   const ctx=state.loaded?buildAgentContext(agentId):'';
   const fullInput=ctx?`${ctx}\n\nCONSULTA: ${contextText}`:contextText;
-  const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId):Date.now();
+  const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId,contextText):Date.now();
   try{
     const result=await callAgentClaude(agentId,cfg.sys+AGENT_TONE,fullInput);
     const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started,{subject:contextText}):{};
@@ -183,6 +236,7 @@ async function runAgentInline(agentId,contextText,actionsFn){
     else actionsEl.innerHTML=agentCtaButtonsHtml('',result)+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
     try{AGENT_LOG.add(cfg.label,contextText,result,meta);}catch(e){}
   }catch(e){
+    try{_officeExecutionFail(started,e);}catch(_){}
     resultEl.className='agent-modal-result';
     resultEl.textContent='❌ Error: '+e.message;
     toast('Error agente: '+e.message,'error');
@@ -1651,37 +1705,40 @@ const AGENT_LOG={
   add(agent,input,output,meta){
     this._load();
     const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
-    const safeMeta=meta?{agentId:meta.agentId||(typeof _agentVisualId==='function'?_agentVisualId(agent):agent),demo:!!meta.demo,model:meta.model||meta.usage?.model||'',elapsedMs:meta.elapsedMs??null,dataSource:meta.dataSource||'',subject:String(meta.subject||input||'').split('\n')[0].slice(0,120),timestamp:meta.timestamp||new Date().toISOString(),usage:meta.usage?{input_tokens:meta.usage.input_tokens||0,output_tokens:meta.usage.output_tokens||0,cache_creation_input_tokens:meta.usage.cache_creation_input_tokens||0,cache_read_input_tokens:meta.usage.cache_read_input_tokens||0,total_tokens:meta.usage.total_tokens||0,cost_usd:meta.usage.cost_usd||0}:null}:null;
-    const entry={id:Date.now(),agent,input:(input||'').substring(0,300),output:output||'',time:new Date().toISOString(),user:u?.name||u?.username||'—',meta:safeMeta};
+    const safeMeta=meta?{agentId:meta.agentId||(typeof _agentVisualId==='function'?_agentVisualId(agent):agent),executionId:meta.executionId||'',startedAt:meta.startedAt||'',demo:!!meta.demo,model:meta.model||meta.usage?.model||'',elapsedMs:meta.elapsedMs??null,dataSource:meta.dataSource||'',subject:String(meta.subject||input||'').split('\n')[0].slice(0,120),timestamp:meta.timestamp||new Date().toISOString(),usage:meta.usage?{input_tokens:meta.usage.input_tokens||0,output_tokens:meta.usage.output_tokens||0,cache_creation_input_tokens:meta.usage.cache_creation_input_tokens||0,cache_read_input_tokens:meta.usage.cache_read_input_tokens||0,total_tokens:meta.usage.total_tokens||0,cost_usd:meta.usage.cost_usd||0}:null}:null;
+    const execId=safeMeta?.executionId||meta?.executionId||'';
+    const entry={id:execId||Date.now(),executionId:execId,agent,input:(input||'').substring(0,300),output:String(output||'').substring(0,1200),time:new Date().toISOString(),user:u?.name||u?.username||'—',meta:safeMeta};
+    if(execId&&meta?.elapsedMs!=null){try{_officeExecutionFinish(Number(meta.startedAt?Date.parse(meta.startedAt):0)||Array.from(_officeAgentRuns.entries()).find(([,v])=>v.executionId===execId)?.[0],output);}catch(_){}}
     // Comunicación entre agentes: si justo antes ejecutó otro agente distinto, es un handoff → el agente anterior camina a este departamento
     try{ const now=Date.now(); if(typeof ofLogComm==='function'){ if(_ofLastExec && _ofLastExec.label!==agent && now-_ofLastExec.t<120000) ofLogComm(_ofLastExec.label, agent); _ofLastExec={label:agent,t:now}; } }catch(e){}
     this._runs.unshift(entry);
-    if(this._runs.length>100) this._runs=this._runs.slice(0,100);
+    if(this._runs.length>50) this._runs=this._runs.slice(0,50);
     try{localStorage.setItem(this._key,JSON.stringify(this._runs));}catch(e){}
     this._merged=null;
     // Write-behind a Airtable (silencioso: la tabla puede no existir o el rol no escribir)
     try{
-      if(u&&typeof RBAC!=='undefined'&&RBAC.canWriteRole(u.role)){
-        airtableWrite('Agent_Log','POST',null,{'Agente':entry.agent,'Consulta':entry.input,'Resultado':entry.output.substring(0,5000),'Usuario':entry.user,'Fecha':entry.time}).catch(()=>{});
+      if(!execId&&u&&typeof RBAC!=='undefined'&&RBAC.canWriteRole(u.role)){
+        airtableWrite('Agent_Log','POST',null,{'Agente':entry.agent,'Consulta':entry.input,'Resultado':entry.output.substring(0,1200),'Usuario':entry.user,'Fecha':entry.time}).catch(()=>{});
       }
     }catch(e){}
   },
-  _dedupKey(r){return r.agent+'|'+(r.time||'').substring(0,16)+'|'+(r.input||'').substring(0,40);},
+  _dedupKey(r){return r.executionId||r.id||r.agent+'|'+(r.time||'')+'|'+(r.input||'').substring(0,40);},
   open(){
     this._load();
     const m=document.getElementById('agentLogModal');if(!m) return;
     m.style.display='flex';
     this._merged=this._runs;
     this.render();
-    // Merge con el historial compartido de Airtable (si la tabla existe)
-    airtableFetch('Agent_Log',100).then(res=>{
-      const remote=(res.records||[]).map(rec=>({id:'at_'+rec.id,agent:rec.fields['Agente']||'—',input:rec.fields['Consulta']||'',output:rec.fields['Resultado']||'',time:rec.fields['Fecha']||rec.createdTime||'',user:rec.fields['Usuario']||'—',remote:true}));
-      const seen=new Set();
-      const all=[...this._runs,...remote].filter(r=>{const k=this._dedupKey(r);if(seen.has(k)) return false;seen.add(k);return true;});
-      all.sort((a,b)=>(b.time||'').localeCompare(a.time||''));
-      this._merged=all.slice(0,100);
-      this.render();
-    }).catch(()=>{});
+    // El historial compartido autoritativo viene del snapshot server-side, ya redaccionado por rol.
+    const cfg=_officeProxyCfg();
+    if(cfg?.url&&cfg?.key)fetch(cfg.url.replace(/\/$/,'')+'/office/snapshot',{credentials:'include',redirect:'error',headers:{'X-App-Key':cfg.key}})
+      .then(r=>r.ok?r.json():Promise.reject(Error('snapshot'))).then(doc=>{
+        const remote=(doc.runs||[]).map(x=>({id:x.executionId||x.id,executionId:x.executionId,agent:x.agent||'—',
+          input:x.input||'',output:x.output||'',time:x.time||x.finishedAt||x.startedAt||'',user:x.user||'',remote:true,
+          restricted:!!x.contentRestricted,state:x.state,sensitivity:x.sensitivity}));
+        const seen=new Set();const all=[...remote,...this._runs].filter(r=>{const k=this._dedupKey(r);if(seen.has(k))return false;seen.add(k);return true;});
+        all.sort((a,b)=>(b.time||'').localeCompare(a.time||''));this._merged=all.slice(0,200);this.render();
+      }).catch(()=>{});
   },
   close(){const m=document.getElementById('agentLogModal');if(m) m.style.display='none';},
   render(){
@@ -1703,6 +1760,7 @@ const AGENT_LOG={
     const rows=this._merged||this._runs;
     const r=rows.find(x=>String(x.id)===String(id));if(!r) return;
     this.close();
+    officeAuditAction('view','agent-log',r.executionId||'',r.agent||'').catch(()=>{});
     document.getElementById('agentInlineTitle').textContent='📜 '+r.agent+' — '+NOTIFY._fmtFull(r.time);
     const resultEl=document.getElementById('agentInlineResult');
     resultEl.className='agent-modal-result';
@@ -1711,7 +1769,7 @@ const AGENT_LOG={
     const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
     const rid=r.meta?.agentId||_agentVisualId(r.agent);
     resultEl.innerHTML=consultaHtml+(typeof renderAgentResult==='function'?renderAgentResult(rid,r.output||'',r.meta||{}):formatAgentReport(r.output||''));
-    _agentInlineText=r.output;
+    _agentInlineText=r.output;_agentInlineExecutionId=r.executionId||'';
     document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button><button class="btn btn-ghost btn-sm" onclick="closeAgentInlineModal();AGENT_LOG.open()">← Volver al historial</button>';
     document.getElementById('agentInlineModal').style.display='flex';
   },
