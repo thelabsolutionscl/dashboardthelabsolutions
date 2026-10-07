@@ -102,11 +102,33 @@ test('unapproved proxy URLs do not receive service credentials',async()=>{
  assert.ok(r.errors.length);
  assert.equal(h.calls.length,0);
 });
-test('post-cutover catches leaked SII master key in published HTML',async()=>{
+test('post-cutover catches any leaked browser master secret in published HTML',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const base={...cfg,stage:'post',siiAccessMode:'true',
+   siiWorkerKey:'test-secret-exposed-123456',
+   portalAdminKey:'portal-master-test-123456',
+   printerTunnelToken:'printer-master-test-123456'};
+ const sii=await checkAccessReadiness(base,mock({leak:true}).fetcher);
+ assert.match(sii.errors.join(' '),/still contains SII_WORKER_KEY/);
+
+ const proxySecret='proxy-master-test-123456';
+ const h=mock();
+ const fetcher=async(url,init={})=>{
+   if(url==='https://dashboard.thelab.solutions/')
+     return new Response('<html>'+proxySecret+'</html>',{status:200});
+   return h.fetcher(url,init);
+ };
+ const proxy=await checkAccessReadiness({...base,proxyKey:proxySecret},fetcher);
+ assert.match(proxy.errors.join(' '),/still contains PROXY_KEY/);
+});
+test('post-cutover exposure scan fails closed when an original master is unavailable',async()=>{
  const {checkAccessReadiness}=await import(script.href);
  const r=await checkAccessReadiness({...cfg,stage:'post',siiAccessMode:'true',
-   siiWorkerKey:'test-secret-exposed-123456'},mock({leak:true}).fetcher);
- assert.match(r.errors.join(' '),/still contains the SII credential/);
+   siiWorkerKey:'sii-master-test-123456',
+   portalAdminKey:'portal-master-test-123456',
+   printerTunnelToken:''},mock().fetcher);
+ assert.match(r.errors.join(' '),/Original master secrets required/);
+ assert.match(r.errors.join(' '),/PRINTER_TUNNEL_TOKEN/);
 });
 test('manual GitHub workflow performs no writes to Airtable or SII',()=>{
  const workflow=fs.readFileSync(path.join(__dirname,'../.github/workflows/access-readiness.yml'),'utf8');
