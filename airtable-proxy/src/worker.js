@@ -6249,6 +6249,42 @@ async function heartbeat(env) {
         const updated=await officePatch(this.env,'PurchaseOrders',po.id,{Estado:state,'Recibida en':new Date().toISOString(),'Recibida por':actor.email,Revisión:Number(po.fields?.['Revisión']||0)+1});
         return finish({ok:true,po:updated},200);
       }
+      if(op==='syncCategories'){
+        const cats=Array.isArray(p.categories)?p.categories.slice(0,100):[];
+        if(!cats.length)return this._json({error:'Categories required'},422);
+        const clean=cats.map((x,i)=>({name:supplierNormText(typeof x==='string'?x:x.name),color:supplierNormText(x?.color||''),order:i+1})).filter(x=>x.name);
+        const existing=await officeList(this.env,'SupplierCategories',{max:2000});
+        const byName=new Map(existing.map(r=>[String(r.fields?.Nombre||'').toLowerCase(),r]));
+        const active=new Set();
+        for(const c of clean){
+          const key=c.name.toLowerCase();active.add(key);const row=byName.get(key);
+          const fields={Nombre:c.name,Color:c.color||'#888888',Orden:c.order,Activa:true,'Revisión':Number(row?.fields?.['Revisión']||0)+1};
+          if(row)await officePatch(this.env,'SupplierCategories',row.id,fields);
+          else await officeCreate(this.env,'SupplierCategories',{ID:'SC-'+crypto.randomUUID(),...fields});
+        }
+        for(const row of existing){const key=String(row.fields?.Nombre||'').toLowerCase();if(key&&!active.has(key)&&row.fields?.Activa!==false)
+          await officePatch(this.env,'SupplierCategories',row.id,{Activa:false,'Revisión':Number(row.fields?.['Revisión']||0)+1});}
+        return finish({ok:true,count:clean.length},200);
+      }
+      if(op==='renameCategory'){
+        const oldName=supplierNormText(p.oldName),newName=supplierNormText(p.newName);
+        if(!oldName||!newName||oldName.toLowerCase()===newName.toLowerCase())return this._json({error:'Invalid category rename'},422);
+        const rows=await officeList(this.env,'SupplierCategories',{max:2000});
+        const cat=rows.find(r=>String(r.fields?.Nombre||'').toLowerCase()===oldName.toLowerCase());
+        if(!cat)return this._json({error:'Category not found'},404);
+        if(rows.some(r=>r.id!==cat.id&&String(r.fields?.Nombre||'').toLowerCase()===newName.toLowerCase()&&r.fields?.Activa!==false))
+          return this._json({error:'Category already exists'},409);
+        const suppliers=await officeList(this.env,'Proveedores',{max:10000});
+        let migrated=0;
+        for(const rec of suppliers){
+          const raw=rec.fields?.['Categoría'];const arr=Array.isArray(raw)?raw.map(x=>x?.name||x):raw?[String(raw)]:[];
+          if(!arr.some(x=>String(x).toLowerCase()===oldName.toLowerCase()))continue;
+          const next=arr.map(x=>String(x).toLowerCase()===oldName.toLowerCase()?newName:x);
+          await officePatch(this.env,'Proveedores',rec.id,{'Categoría':next});migrated++;
+        }
+        await officePatch(this.env,'SupplierCategories',cat.id,{Nombre:newName,'Revisión':Number(cat.fields?.['Revisión']||0)+1});
+        return finish({ok:true,migrated},200);
+      }
       if(op==='archiveSupplier'){
         const supplierId=supplierIdSafe(p.supplierId);if(!supplierId)return this._json({error:'Invalid supplierId'},422);
         const deps=await supplierDependencies(this.env,supplierId);
