@@ -39,6 +39,8 @@ jobs:
           SII_RAZON_SOCIAL: ${{ secrets.SII_RAZON_SOCIAL }}
           PROXY_URL: ${{ secrets.PROXY_URL }}
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
+          ACCESS_BROWSER_MODE: ${{ vars.ACCESS_BROWSER_MODE }}
+          ACCESS_CUTOVER_VERIFIED: ${{ vars.ACCESS_CUTOVER_VERIFIED }}
           PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
           ADS_WEBAPP: ${{ secrets.ADS_WEBAPP }}
           ADS_CUSTOMER: ${{ secrets.ADS_CUSTOMER }}
@@ -56,11 +58,27 @@ jobs:
           # Nunca publicar un PAT de Airtable en GitHub Pages, ni siquiera
           # cuando falte el Proxy. Si no hay backend configurado se detiene
           # el deploy y la versión actualmente publicada queda intacta.
-          if [ -z "${PROXY_URL}" ] || [ -z "${PROXY_KEY}" ]; then
-            echo "::error::PROXY_URL y PROXY_KEY son obligatorios. Deploy bloqueado para evitar exponer Airtable."
+          if [ -z "${PROXY_URL}" ]; then
+            echo "::error::PROXY_URL es obligatorio. Deploy bloqueado para evitar acceso directo a Airtable."
             exit 1
           fi
-          echo "Modo proxy obligatorio: Airtable y la IA usan airtable-proxy."
+          if [ "${ACCESS_BROWSER_MODE}" = "true" ]; then
+            if [ "${ACCESS_CUTOVER_VERIFIED}" != "true" ]; then
+              echo "::error::ACCESS_BROWSER_MODE requiere ACCESS_CUTOVER_VERIFIED=true después de probar DNS, sesiones y roles."
+              exit 1
+            fi
+            if [[ ! "${PROXY_URL}" =~ ^https://[a-z0-9-]+\.thelab\.solutions/?$ ]]; then
+              echo "::error::Browser Access requiere proxy HTTPS same-site en *.thelab.solutions."
+              exit 1
+            fi
+            echo "Modo Cloudflare Access: PROXY_KEY no se publica en Pages."
+          else
+            if [ -z "${PROXY_KEY}" ]; then
+              echo "::error::PROXY_KEY es obligatorio mientras el navegador siga en modo legacy."
+              exit 1
+            fi
+            echo "Modo proxy legacy: APP_KEY de compatibilidad todavía activo."
+          fi
           sed -i "s|%%GOOGLE_CLIENT_ID%%|${GOOGLE_CLIENT_ID}|g" index.html
           # Portal del cliente: lo sirve el lead-worker. El dashboard solo necesita
           # su URL y PORTAL_ADMIN_KEY para pedir el link firmado de cada cliente.
@@ -122,7 +140,13 @@ jobs:
           sed -i "s|%%SII_RUT_EMISOR%%|${SII_RUT_EMISOR}|g" index.html
           sed -i "s|%%SII_RAZON_SOCIAL%%|${SII_RAZON_SOCIAL}|g" index.html
           sed -i "s|%%PROXY_URL%%|${PROXY_URL}|g" index.html
-          sed -i "s|%%PROXY_KEY%%|${PROXY_KEY}|g" index.html
+          if [ "${ACCESS_BROWSER_MODE}" = "true" ]; then
+            sed -i "s|%%PROXY_KEY%%||g" index.html
+            sed -i "s|%%ACCESS_BROWSER_MODE%%|true|g" index.html
+          else
+            sed -i "s|%%PROXY_KEY%%|${PROXY_KEY}|g" index.html
+            sed -i "s|%%ACCESS_BROWSER_MODE%%|false|g" index.html
+          fi
           sed -i "s|%%PRINTER_TUNNEL%%|${PRINTER_TUNNEL}|g" index.html
           sed -i "s|%%ADS_WEBAPP%%|${ADS_WEBAPP}|g" index.html
           sed -i "s|%%ADS_CUSTOMER%%|${ADS_CUSTOMER}|g" index.html

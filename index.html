@@ -6334,6 +6334,7 @@ const _DEFAULTS={
   SII_RAZON_SOCIAL:'%%SII_RAZON_SOCIAL%%',
   PROXY_URL:'%%PROXY_URL%%',
   PROXY_KEY:'%%PROXY_KEY%%',
+  ACCESS_BROWSER_MODE:'%%ACCESS_BROWSER_MODE%%',
   PRINTER_TUNNEL:'%%PRINTER_TUNNEL%%',
   ADS_WEBAPP:'%%ADS_WEBAPP%%',
   ADS_CUSTOMER:'%%ADS_CUSTOMER%%',
@@ -7291,18 +7292,22 @@ function saveUserMenuProxy(){
   const keyInp=document.getElementById('umProxyKey');
   const urlVal=(urlInp?.value||'').trim();
   const keyVal=(keyInp?.value||'').trim();
+  const accessMode=String(_DEFAULTS.ACCESS_BROWSER_MODE||'').toLowerCase()==='true';
   if(!urlVal){toast('Ingresa la URL del Worker','error');urlInp?.focus();return;}
-  if(!urlVal.startsWith('http')){toast('La URL debe comenzar con https://','error');urlInp?.focus();return;}
+  if(!urlVal.startsWith('https://')){toast('La URL debe comenzar con https://','error');urlInp?.focus();return;}
   localStorage.setItem('proxy_url',urlVal);
-  if(keyVal&&!keyVal.startsWith('••')){
+  if(accessMode){
+    localStorage.removeItem('proxy_key');sessionStorage.removeItem('proxy_key');
+    if(keyInp){keyInp.value='';keyInp.disabled=true;keyInp.placeholder='Cloudflare Access';}
+  }else if(keyVal&&!keyVal.startsWith('••')){
     localStorage.setItem('proxy_key',keyVal);
     if(keyInp) keyInp.value='••••••••'+keyVal.slice(-4);
-  } else if(!keyVal&&!localStorage.getItem('proxy_key')){
+  }else if(!keyVal&&!localStorage.getItem('proxy_key')){
     toast('Ingresa la clave del proxy','error');keyInp?.focus();return;
   }
   const ps=document.getElementById('umProxyStatus');
-  if(ps) ps.textContent='✓ Proxy activo — token Airtable vive en el Worker';
-  toast('Proxy configurado ✓ — el token Airtable ya no viaja al browser','success');
+  if(ps) ps.textContent=accessMode?'✓ Proxy activo · sesión Cloudflare Access':'✓ Proxy activo — token Airtable vive en el Worker';
+  toast(accessMode?'Proxy Access configurado ✓':'Proxy configurado ✓ — el token Airtable ya no viaja al browser','success');
   loadAllData();
 }
 function savePrinterTunnel(){
@@ -7369,9 +7374,8 @@ function _airtableConfig(){
   // DEMO nunca hereda el proxy ni el PAT guardado en este navegador. Todas las
   // operaciones se resuelven contra el almacén efímero de la sesión.
   if(window._DEMO_MODE) return{base:'demo://airtable',headers:{'X-Demo-Mode':'1'}};
-  const proxyUrl=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
-  const proxyKey=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
-  if(proxyUrl&&proxyKey) return{base:proxyUrl.replace(/\/$/,''),headers:{'X-App-Key':_hdrSafe(proxyKey,'La clave del proxy')}};
+  const px=_proxyCfg();
+  if(px?.url) return{base:px.url,headers:px.key?{'X-App-Key':_hdrSafe(px.key,'La clave del proxy')}:{},access:px.access===true};
   const t=getToken();if(!t) throw new Error('Sin token');
   return{base:'https://api.airtable.com/v0',headers:{'Authorization':'Bearer '+_hdrSafe(t,'El token de Airtable')}};
 }
@@ -8809,9 +8813,16 @@ function startAutoRefresh(){if(autoRefreshInterval) clearInterval(autoRefreshInt
 // ── AI ────────────────────────────────────────────────────────
 // Config del proxy Worker (si está) — guarda los secretos en el servidor, no en el navegador
 function _proxyCfg(){
+  const accessMode=String(_DEFAULTS.ACCESS_BROWSER_MODE||'').toLowerCase()==='true';
   const url=localStorage.getItem('proxy_url')||(_DEFAULTS.PROXY_URL.startsWith('%%')?'':_DEFAULTS.PROXY_URL);
+  if(accessMode&&url){
+    // Compatibility sentinel only: authorization is the signed Cloudflare
+    // Access session. This value is intentionally public and grants nothing.
+    try{localStorage.removeItem('proxy_key');sessionStorage.removeItem('proxy_key');}catch(_){}
+    return{url:url.replace(/\/$/,''),key:'access-session',access:true};
+  }
   const key=localStorage.getItem('proxy_key')||(_DEFAULTS.PROXY_KEY.startsWith('%%')?'':_DEFAULTS.PROXY_KEY);
-  return(url&&key)?{url:url.replace(/\/$/,''),key}:null;
+  return(url&&key)?{url:url.replace(/\/$/,''),key,access:false}:null;
 }
 // ¿Hay CÓMO llamar a Claude? Sólo DEMO o el Proxy Worker protegido.
 // Una API key pegada en el navegador jamás habilita Anthropic.

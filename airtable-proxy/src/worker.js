@@ -5070,26 +5070,28 @@ export default {
       return json({ error: 'Forbidden origin' }, 403, CORS);
     }
 
-    // Auth — la passphrase nunca sale al cliente como un token de servicio real
-    const appKey = request.headers.get('X-App-Key');
-    // Visual AI standalone (GitHub Pages) authenticates exclusively with signed
-    // Cloudflare Access identity; it never receives the shared APP_KEY.
-    if (!leadServiceRoute && !visualServiceRoute && (!appKey || appKey !== env.APP_KEY)) {
-      return json({ error: 'Unauthorized' }, 403, CORS);
-    }
-    // After configuration, the shared app key is only a compatibility check.
-    // Cloudflare Access signs each user's identity, and role decisions happen
-    // on the server; a forged Origin or copied APP_KEY cannot grant rights.
-    const authorized=await accessAuthorize(request,env,
-      leadServiceRoute?'/service/lead/anthropic/v1/messages':
+    // Cloudflare Access is the browser identity after cutover. Resolve it
+    // before checking the legacy APP_KEY so a signed human session never
+    // depends on a credential shared with the public Pages bundle.
+    const authPath=leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
       url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
-        ?url.pathname:'/v0'+url.pathname);
+        ?url.pathname:'/v0'+url.pathname;
+    const authorized=await accessAuthorize(request,env,authPath);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
       Object.entries(CORS).forEach(([k,v])=>headers.set(k,v));
       return new Response(authorized.response.body,{status:authorized.response.status,headers});
     }
+
+    // Legacy mode keeps the existing APP_KEY requirement exactly as before.
+    // With ACCESS_ENFORCE active, accessAuthorize() already verified the signed
+    // identity/service identity, so APP_KEY is no longer an authorization factor.
+    const appKey=request.headers.get('X-App-Key');
+    if(authorized.legacy&&!leadServiceRoute&&!visualServiceRoute&&
+       (!appKey||appKey!==env.APP_KEY))
+      return json({error:'Unauthorized'},403,CORS);
+
     if(url.pathname==='/access/me'){
       if(request.method!=='GET'||url.search)return json({error:'Method not allowed'},405,CORS);
       return json(authorized.identity
