@@ -666,32 +666,39 @@ Puedo continuar con cualquiera de esas tareas dentro de la DEMO: abrir el módul
     if(!text){ setState('idle'); maybeRelisten(); return; }
     const clean=text.replace(/[*_#`]/g,'').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,'').trim();
     if(!clean){ setState('idle'); maybeRelisten(); return; }
-    // ElevenLabs premium TTS
-    const elKey=localStorage.getItem('elevenlabs_key')||(_DEFAULTS.ELEVENLABS&&!_DEFAULTS.ELEVENLABS.startsWith('%%')?_DEFAULTS.ELEVENLABS:'');
-    if(elKey){
-      try{
-        setState('speaking');
-        const voiceId=localStorage.getItem('elevenlabs_voice_id')||'ClNifCEVq1smkl4M3aTk';
-        const r=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json','xi-api-key':elKey},
-          body:JSON.stringify({text:clean,model_id:'eleven_multilingual_v2',voice_settings:{stability:0.5,similarity_boost:0.75}})
-        });
-        if(r.ok){
-          const blob=await r.blob();
-          const url=URL.createObjectURL(blob);
-          const audio=new Audio(url);
-          audio.onended=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
-          audio.onerror=()=>{ URL.revokeObjectURL(url); setState('idle'); maybeRelisten(); };
-          await audio.play().catch(()=>{});
-          return;
-        } else {
-          const errData=await r.json().catch(()=>({}));
-          const msg=errData?.detail?.message||errData?.detail||('HTTP '+r.status);
-          if(typeof toast==='function') toast('ElevenLabs: '+msg,'error');
+    // ElevenLabs premium TTS: la API key vive exclusivamente en airtable-proxy.
+    // Purga credenciales históricas que pudieran haber quedado en este navegador.
+    try{localStorage.removeItem('elevenlabs_key');}catch(_){}
+    try{
+      const px=typeof _proxyCfg==='function'?_proxyCfg():null;
+      if(px?.url&&px?.key){
+        const u=new URL(px.url);
+        const safe=['https:','http:'].includes(u.protocol)&&!u.username&&!u.password&&!u.search&&!u.hash&&
+          (u.protocol==='https:'||['localhost','127.0.0.1'].includes(u.hostname));
+        if(safe){
+          setState('speaking');
+          const base=u.origin+u.pathname.replace(/\/$/,'');
+          const r=await fetch(base+'/tts/elevenlabs',{
+            method:'POST',credentials:'include',redirect:'error',
+            headers:{'Content-Type':'application/json','X-App-Key':px.key},
+            body:JSON.stringify({text:clean})
+          });
+          if(r.ok){
+            const blob=await r.blob();
+            const url=URL.createObjectURL(blob);
+            const audio=new Audio(url);
+            audio.onended=()=>{URL.revokeObjectURL(url);setState('idle');maybeRelisten();};
+            audio.onerror=()=>{URL.revokeObjectURL(url);setState('idle');maybeRelisten();};
+            await audio.play().catch(()=>{});
+            return;
+          }
+          if(r.status!==503&&r.status!==404){
+            const errData=await r.json().catch(()=>({}));
+            if(typeof toast==='function')toast('Voz premium: '+(errData?.error||('HTTP '+r.status)),'error');
+          }
         }
-      }catch(e){ if(typeof toast==='function') toast('ElevenLabs: '+e.message,'error'); }
-    }
+      }
+    }catch(e){console.warn('[KAI TTS]',e?.message||e);}
     // Fallback: voz del navegador
     if(!JV.synth){ setState('idle'); maybeRelisten(); return; }
     JV.synth.cancel();
