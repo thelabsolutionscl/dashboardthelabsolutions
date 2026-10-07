@@ -139,7 +139,7 @@ export default {
         return await handleNewsletterConfirm(request, env);
       }
 
-      if (request.method === "GET" && url.pathname === "/newsletter/unsubscribe") {
+      if ((request.method === "GET" || request.method === "POST") && url.pathname === "/newsletter/unsubscribe") {
         return await handleNewsletterUnsubscribe(request, env);
       }
 
@@ -1614,14 +1614,33 @@ async function handleNewsletterConfirm(request, env) {
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleNewsletterUnsubscribe(request, env) {
   const url = new URL(request.url);
-  const email = str(url.searchParams.get("e"));
-  if (!email) return htmlPage("Enlace inválido", "Falta el correo en el enlace de baja.", false);
+  let email="",token="";
+  if(request.method==="POST"){
+    const type=String(request.headers.get("Content-Type")||"");
+    if(type.includes("application/x-www-form-urlencoded")){
+      const raw=await request.text(),form=new URLSearchParams(raw);email=str(form.get("e"));token=str(form.get("t"));
+    }else{
+      const body=await readJson(request);email=str(body?.e||body?.email);token=str(body?.t||body?.token);
+    }
+  }else{
+    email=str(url.searchParams.get("e"));token=str(url.searchParams.get("t"));
+  }
+  if (!email || !(await nlVerify(env, "unsubscribe", email, token))) {
+    return htmlPage("Enlace inválido", "La baja requiere un enlace personal válido.", false, 400);
+  }
+  if(request.method==="GET"){
+    const action=escapeHtmlW(url.origin+"/newsletter/unsubscribe");
+    const e=escapeHtmlW(email),t=escapeHtmlW(token);
+    const page=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirmar baja — The Lab Solutions</title></head><body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center"><main style="max-width:460px;padding:40px 28px;text-align:center">${logoHeader(true)}<h1 style="font-size:22px">Confirmar baja</h1><p style="color:#b6b6bd">Abrir este enlace no modifica tu suscripción. Confirma para dejar de recibir el newsletter.</p><form method="post" action="${action}"><input type="hidden" name="e" value="${e}"><input type="hidden" name="t" value="${t}"><button type="submit" style="border:0;border-radius:9px;background:#00b3a4;color:#06231f;font-weight:700;padding:12px 20px;cursor:pointer">Darme de baja</button></form></main></body></html>`;
+    return new Response(page,{status:200,headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
+  }
   if (env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
     try {
       const id = await airtableFindCliente(env, { email });
       if (id) await airtableUpdateTolerant(env, "Clientes", id, stripEmpty({ "Baja newsletter": true, "Suscrito newsletter": false }));
     } catch (e) {
       console.error("[leads-worker] unsubscribe:", e.message);
+      return htmlPage("No pudimos procesar la baja", "Inténtalo nuevamente. Tu suscripción no se modificó.", false, 503);
     }
   }
   return htmlPage("Te diste de baja", "Ya no recibirás más correos del newsletter. Si fue un error, puedes volver a suscribirte en thelab.solutions.", true);
