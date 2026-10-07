@@ -314,9 +314,20 @@ test('adjuntos activos o ejecutables quedan bloqueados también en backend',()=>
 });
 test('casillas compartidas se asignan por backend y hola no aparece automáticamente',()=>{
   assert.match(WORKER,/MAIL_SHARED_ACCOUNT_MAP/);
+  assert.match(WORKER,/function mailAccessEnforced\(/);
+  assert.match(WORKER,/MAIL_ACCESS_MODE/);
   assert.match(WORKER,/function mailAuthorizedAccounts\(/);
   assert.doesNotMatch(methodBlock('accounts'),/hola@thelab\.solutions/);
   assert.match(ACCESS,/path==='\/mail\/accounts'/);
+});
+test('cuentas locales sobreviven hasta que el cutover de correo sea explícito',()=>{
+  const accounts=methodBlock('accounts');
+  const load=methodBlock('_loadAuthorizedAccounts');
+  const add=methodBlock('addAccount');
+  assert.match(accounts,/if\(!this\._secureMailReady\)return list\.filter/);
+  assert.match(load,/d\.enforced!==true/);
+  assert.match(load,/this\._authorizedAccounts=null/);
+  assert.match(add,/this\._secureMailReady&&!this\._authorizedAccounts\?\.includes\(email\)/);
 });
 test('postAs falla explícitamente si el remitente no está autorizado o sin sesión',()=>{
   const postAs=methodBlock('postAs');
