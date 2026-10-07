@@ -29,6 +29,8 @@ ALLOWED_ORIGINS = "https://thelab.solutions,https://www.thelab.solutions,https:/
 AUTO_PROCESS_LEADS = "false"
 # Si se reactiva: máximo de leads pre-scoreados automáticamente por día.
 AUTO_PROCESS_DAILY_CAP = "25"
+# Marketing API version used by the official LinkedIn Lead Sync integration.
+LINKEDIN_API_VERSION = "202609"
 # Todas las llamadas Claude pasan por el proxy central protegido.
 AI_PROXY_URL = "https://airtable-proxy.wast3dspa.workers.dev"
 # Poda diaria de Agent_Queue: borra tareas "Completado" con más de N días
@@ -94,6 +96,11 @@ new_sqlite_classes = ["SocialEventGuard"]
 #   PUBLIC_LEAD_KEY         (clave compartida con la web — anti-bot básico)
 #   GOOGLE_ADS_WEBHOOK_KEY  (clave del webhook de Google Lead Form)
 #   LINKEDIN_WEBHOOK_KEY    (clave del webhook de LinkedIn vía Make/Zapier)
+#   LINKEDIN_CLIENT_ID      (app LinkedIn aprobada para Lead Sync)
+#   LINKEDIN_CLIENT_SECRET  (client secret: challenge + X-LI-Signature)
+#   LINKEDIN_ACCESS_TOKEN   (opcional: token bootstrap/estático con r_marketing_leadgen_automation)
+#   LINKEDIN_REFRESH_TOKEN  (recomendado si la app tiene programmatic refresh habilitado)
+#   LINKEDIN_ADMIN_KEY      (administra suscripciones Lead Sync desde el Worker; nunca va al navegador)
 #   SOCIAL_WEBHOOK_KEY      (OBLIGATORIO para /webhooks/social; nunca PUBLIC_LEAD_KEY)
 #   TURNSTILE_SECRET        (opcional — verificación Cloudflare Turnstile)
 #   AI_PROXY_KEY            (mismo valor que APP_KEY/PROXY_KEY del airtable-proxy; GitHub Actions lo sincroniza)
