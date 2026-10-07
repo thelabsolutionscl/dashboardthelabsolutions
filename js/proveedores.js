@@ -252,7 +252,7 @@ function _normSupplierText(v){return String(v||'').normalize('NFD').replace(/[\u
 function _normSupplierRut(v){return String(v||'').toUpperCase().replace(/[^0-9K]/g,'');}
 function _normSupplierEmail(v){return String(v||'').trim().toLowerCase();}
 function _supplierPedidoIds(pedido){
-  const f=pedido?.fields||{},raw=f['Proveedor ID']??f['ProveedorId']??f['Supplier ID']??f['SupplierId']??f['Proveedor'];
+  const f=pedido?.fields||{},raw=f['Proveedores']??f['Proveedor ID']??f['ProveedorId']??f['Supplier ID']??f['SupplierId']??f['Proveedor'];
   const vals=Array.isArray(raw)?raw:[raw];
   const ids=[];
   for(const v of vals){
@@ -743,8 +743,16 @@ async function bulkEditProveedorEstado(){
 function _supplierDependencies(id){
   const prices=_preciosProv().filter(x=>(x.supplierId||_supplierResolveId(x.prov))===id);
   const pos=_ocAll().filter(x=>(x.supplierId||_supplierResolveId(x.proveedor))===id);
-  const pedidos=_supplierPedidos(id);
-  return {prices,pos,pedidos,total:prices.length+pos.length+pedidos.length};
+  const pedidos=_supplierPedidos(id),evaluations=_supplierEvaluationRowsFor(id);
+  const p=_supplierById(id),f=p?.fields||{};
+  const linked=[...(f['SupplierPrices']||[]),...(f['PurchaseOrders']||[]),...(f['PurchaseOrderItems']||[]),...(f['SupplierEvaluations']||[])];
+  return {prices,pos,pedidos,evaluations,linked:[...new Set(linked)],
+    total:prices.length+pos.length+pedidos.length+evaluations.length+new Set(linked).size};
+}
+async function restoreProveedor(id){
+  const p=_supplierById(id);if(!p)throw Error('Proveedor no encontrado');
+  await airtableWrite('Proveedores','PATCH',id,{'Estado':'Activo'});
+  p.fields['Estado']='Activo';renderProveedores();toast('Proveedor restaurado con la misma identidad','success');
 }
 async function _archiveSupplier(id,nombre){
   await airtableWrite('Proveedores','PATCH',id,{'Estado':'Inactivo'});
@@ -754,7 +762,7 @@ async function _archiveSupplier(id,nombre){
 async function deleteProveedor(id,nombre){
   const deps=_supplierDependencies(id);
   if(deps.total){
-    if(!confirm(`“${nombre}” tiene dependencias (${deps.pedidos.length} pedidos, ${deps.pos.length} OC, ${deps.prices.length} precios). No se puede eliminar. ¿Archivarlo como Inactivo?`))return;
+    if(!confirm(`“${nombre}” tiene dependencias (${deps.pedidos.length} pedidos, ${deps.pos.length} OC, ${deps.prices.length} precios, ${deps.evaluations.length} evaluaciones). No se puede eliminar. ¿Archivarlo como Inactivo?`))return;
     try{await _archiveSupplier(id,nombre);}catch(e){toast('Error: '+e.message,'error');}
     return;
   }
