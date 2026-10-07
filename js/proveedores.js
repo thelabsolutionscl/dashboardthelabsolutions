@@ -355,6 +355,7 @@ function buildProveedorCard(p){
   const supplierId=_supplierId(p);
   const pedidosTodos=_supplierPedidos(supplierId);
   const pedidosActivos=pedidosTodos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||''));
+  const spend=_supplierSpend(supplierId);
 
   const cls=estado==='Bloqueado'?'is-blocked':estado==='Inactivo'?'is-inactive':estadoPost==='ENTREVISTAR'?'is-review':'';
   const wa=_safeSupplierPhone(f['WhatsApp'])||tel;
@@ -375,7 +376,7 @@ function buildProveedorCard(p){
       <div><span>Email</span>${email?`<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>`:'<b>Sin email</b>'}</div>
       <div><span>Teléfono</span>${tel?`<a href="tel:${escapeHtml(tel)}">${escapeHtml(f['Teléfono']||tel)}</a>`:'<b>Sin teléfono</b>'}</div>
     </div>
-    <p class="op-caption">${pedidosTodos.length?`${pedidosTodos.length} pedido${pedidosTodos.length!==1?'s':''} vinculado${pedidosTodos.length!==1?'s':''} por supplierId`:'Sin pedidos vinculados registrados'}</p>
+    <p class="op-caption">${spend.count?`OC: ${formatCLP(spend.committed)} comprometido · ${formatCLP(spend.received)} recibido · ${formatCLP(spend.paid)} pagado`:(pedidosTodos.length?`${pedidosTodos.length} pedido${pedidosTodos.length!==1?'s':''} vinculado${pedidosTodos.length!==1?'s':''} por supplierId`:'Sin compras registradas')}</p>
     <footer>
       <span><small>Gestión</small>${escapeHtml(f['Condiciones de pago']||'Condición de pago sin registrar')}</span>
       <div class="pv-card-actions">
@@ -402,6 +403,7 @@ function buildProveedorRow(p){
   const supplierId=_supplierId(p);
   const pedidosTodos=_supplierPedidos(supplierId);
   const pedidosActivos=pedidosTodos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||''));
+  const spend=_supplierSpend(supplierId);
   const pedCount=pedidosActivos.length;
   const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha ingreso']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
@@ -432,7 +434,7 @@ function buildProveedorRow(p){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
           ${f['Condiciones de pago']?`<div style="font-size:11px"><span style="color:var(--text3)">Pago:</span> ${escapeHtml(f['Condiciones de pago'])}</div>`:''}
-          ${pedidosTodos.length?`<div style="font-size:11px"><span style="color:var(--text3)">Pedidos vinculados:</span> <strong>${pedidosTodos.length}</strong> <span style="color:var(--text3)">· costos del proveedor se muestran desde OC/precios, no desde ventas al cliente</span></div>`:''}
+          ${spend.count?`<div style="font-size:11px"><span style="color:var(--text3)">Compras:</span> <strong>${formatCLP(spend.committed)}</strong> comprometido · <strong>${formatCLP(spend.received)}</strong> recibido · <strong>${formatCLP(spend.paid)}</strong> pagado</div>`:(pedidosTodos.length?`<div style="font-size:11px"><span style="color:var(--text3)">Pedidos vinculados:</span> <strong>${pedidosTodos.length}</strong> <span style="color:var(--text3)">· sin OC estructurada aún</span></div>`:'')}
           ${pvLastOrder?`<div style="font-size:11px"><span style="color:var(--text3)">Último pedido:</span> ${escapeHtml(pvLastOrder)}</div>`:''}
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
           ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px">${formatRichText(f['Notas'])}</div>`:''}
@@ -825,21 +827,23 @@ function exportToCSV(t){
 }
 
 let _supplierStructuredReady=false,_supplierStructuredLoading=null;
-let _supplierPriceRows=[],_supplierPoRows=[],_supplierPoItemRows=[],_supplierEvaluationRows=[];
+let _supplierPriceRows=[],_supplierPoRows=[],_supplierPoItemRows=[],_supplierPoEventRows=[],_supplierEvaluationRows=[];
 async function _supplierStructuredHydrate(force=false){
   if(_supplierStructuredReady&&!force)return true;
   if(_supplierStructuredLoading&&!force)return _supplierStructuredLoading;
   _supplierStructuredLoading=(async()=>{
-    const [prices,pos,items,evals,categories]=await Promise.all([
+    const [prices,pos,items,events,evals,categories]=await Promise.all([
       airtableFetch('SupplierPrices',1000),
       airtableFetch('PurchaseOrders',1000),
       airtableFetch('PurchaseOrderItems',2000),
+      airtableFetch('PurchaseOrderEvents',3000),
       airtableFetch('SupplierEvaluations',2000),
       airtableFetch('SupplierCategories',1000)
     ]);
     _supplierPriceRows=prices.records||[];
     _supplierPoRows=pos.records||[];
     _supplierPoItemRows=items.records||[];
+    _supplierPoEventRows=events.records||[];
     _supplierEvaluationRows=evals.records||[];
     _supplierCategoryRows=categories.records||[];
     _supplierStructuredReady=true;return true;
@@ -876,6 +880,16 @@ function _supplierPoFromRow(r){
     destinatario:f['Destinatario']||'',fechaEnvio:f['Fecha envío']||'',
     fechaAceptacion:f['Fecha aceptación']||'',fechaCierre:f['Fecha cierre']||'',
     revision:Number(f['Revisión']||0),items,structured:true,ts:Date.parse(r.createdTime||f['Fecha']||0)||0};
+}
+function _supplierSpend(supplierId){
+  const pos=_supplierPoRows.map(_supplierPoFromRow).filter(o=>o.supplierId===supplierId&&o.estado!=='Cancelada');
+  const committed=pos.filter(o=>o.estado!=='Borrador').reduce((a,o)=>a+Number(o.total||0),0);
+  const received=pos.filter(o=>['Recibida parcial','Recibida total','Facturada','Pagada','Cerrada'].includes(o.estado))
+    .reduce((a,o)=>a+Number(o.total||0),0);
+  const paidIds=new Set(_supplierPoEventRows.filter(e=>e.fields?.['Estado nuevo']==='Pagada')
+    .flatMap(e=>Array.isArray(e.fields?.['Orden de compra'])?e.fields['Orden de compra']:[]));
+  const paid=pos.filter(o=>o.estado==='Pagada'||paidIds.has(o.id)).reduce((a,o)=>a+Number(o.total||0),0);
+  return {committed,received,paid,count:pos.length};
 }
 function _supplierLegacyPrices(){return _listaVivos(_PRECIOS_PROV_KEY);}
 function _supplierLegacyPOs(){return _listaVivos(_OC_KEY);}
@@ -1030,16 +1044,19 @@ function _ocAll(){
 function _ocSaveArr(arr){_listaGuardar(_OC_KEY,arr);}
 async function _ocBackup(){return false;}
 function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
+async function _supplierProxyPost(path,body){
+  const cfg=window.PROXY_CONFIG||{},base=String(cfg.base||cfg.url||window.AIRTABLE_PROXY_URL||'').replace(/\/$/,'');
+  const key=cfg.key||window.AIRTABLE_PROXY_KEY||'';
+  if(!base||!key)throw Error('proxy seguro no configurado');
+  const r=await fetch(base+path,{method:'POST',credentials:'include',redirect:'error',
+    headers:{'X-App-Key':key,'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  const d=await r.json().catch(()=>({error:'Respuesta inválida del proxy'}));
+  if(!r.ok)throw Object.assign(new Error(d?.error||'Operación rechazada'),{status:r.status,data:d});
+  return d;
+}
 async function _ocReserveNum(){
-  try{
-    const cfg=window.PROXY_CONFIG||{};const base=String(cfg.base||cfg.url||window.AIRTABLE_PROXY_URL||'').replace(/\/$/,'');
-    const key=cfg.key||window.AIRTABLE_PROXY_KEY||'';
-    if(!base||!key)throw Error('proxy no configurado');
-    const r=await fetch(base+'/supplier/purchase-order/reserve',{method:'POST',credentials:'include',redirect:'error',
-      headers:{'X-App-Key':key,'Content-Type':'application/json'},body:JSON.stringify({year:new Date().getFullYear()})});
-    const d=await r.json().catch(()=>null);if(!r.ok||!d?.numero)throw Error(d?.error||'reserva no disponible');
-    return d.numero;
-  }catch(e){throw new Error('No se pudo reservar un número de OC seguro. '+e.message);}
+  try{const d=await _supplierProxyPost('/supplier/purchase-order/reserve',{year:new Date().getFullYear()});return d.numero;}
+  catch(e){throw new Error('No se pudo reservar un número de OC seguro. '+e.message);}
 }
 function openOCModal(provNombre,ocId){
   const sel=document.getElementById('ocProveedor');
@@ -1152,29 +1169,16 @@ async function delOC(id){
 }
 async function cambiarEstadoOC(id,nuevo,motivo='',evidencia=''){
   const oc=_ocAll().find(x=>x.id===id);if(!oc?.structured)throw Error('OC estructurada no encontrada');
-  const transitions={
-    'Borrador':['Aprobación','Cancelada'],'Aprobación':['Aprobada','Borrador','Cancelada'],
-    'Aprobada':['Enviada','Cancelada'],'Enviada':['Aceptada','Cancelada'],
-    'Aceptada':['Recibida parcial','Recibida total','Cancelada'],
-    'Recibida parcial':['Recibida total','Cancelada'],'Recibida total':['Facturada','Cerrada'],
-    'Facturada':['Pagada','Cerrada'],'Pagada':['Cerrada'],'Cerrada':[],'Cancelada':[]
-  };
-  if(!(transitions[oc.estado]||[]).includes(nuevo))throw Error('Transición no permitida: '+oc.estado+' → '+nuevo);
-  const actor=AUTH.getUser()?.username||'',now=new Date().toISOString(),revision=(oc.revision||0)+1;
-  const fields={'Estado':nuevo,'Revisión':revision};
-  if(nuevo==='Aprobada'){fields['Aprobador']=actor;fields['Fecha aprobación']=now;}
-  if(nuevo==='Enviada')fields['Fecha envío']=now;
-  if(nuevo==='Aceptada')fields['Fecha aceptación']=now;
-  if(['Cerrada','Cancelada'].includes(nuevo))fields['Fecha cierre']=now;
-  await airtableWrite('PurchaseOrders','PATCH',id,fields);
-  await airtableWrite('PurchaseOrderEvents','POST',null,{
-    'Event ID':crypto.randomUUID(),'Orden de compra':[id],'Tipo':'estado',
-    'Estado anterior':oc.estado,'Estado nuevo':nuevo,'Actor':actor,'Fecha':now,
-    'Motivo':motivo||'Cambio de estado','Evidencia':evidencia||'','Revisión':revision
+  if(!_ocAllowedNext(oc.estado).includes(nuevo))throw Error('Transición no permitida: '+oc.estado+' → '+nuevo);
+  const d=await _supplierProxyPost('/supplier/purchase-order/transition',{
+    id,expectedRevision:Number(oc.revision||0),expectedState:oc.estado,next:nuevo,
+    motivo:String(motivo||''),evidencia:String(evidencia||''),
+    destinatario:String(_ocTransitionRecipient.get(id)||oc.destinatario||_supplierById(oc.supplierId)?.fields?.['Email']||'')
   });
-  await _supplierStructuredHydrate(true);renderOCList();
+  _ocTransitionRecipient.delete(id);await _supplierStructuredHydrate(true);renderOCList();return d;
 }
 
+const _ocTransitionRecipient=new Map();
 function _ocAllowedNext(estado){
   const m={
     'Borrador':['Aprobación','Cancelada'],'Aprobación':['Aprobada','Borrador','Cancelada'],
@@ -1196,7 +1200,7 @@ async function ocCambiarEstadoUI(id,nuevo){
   if(nuevo==='Enviada'){
     const email=(prompt('Email destinatario de la OC:',oc.destinatario||_supplierById(oc.supplierId)?.fields?.['Email']||'')||'').trim();
     if(!validEmail(email)){toast('Email destinatario inválido','error');return;}
-    try{await airtableWrite('PurchaseOrders','PATCH',id,{'Destinatario':email});}catch(e){toast(e.message,'error');return;}
+    _ocTransitionRecipient.set(id,email);
   }
   try{await cambiarEstadoOC(id,nuevo,motivo,evidencia);toast('OC → '+nuevo,'success');}
   catch(e){toast('No se pudo cambiar la OC: '+e.message,'error');}
