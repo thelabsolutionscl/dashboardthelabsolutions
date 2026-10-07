@@ -90,10 +90,15 @@ test('evaluación exige motivo checklist y conserva actor fecha y evidencia',()=
   assert.match(PROXY,/Evidencia:evidence/);
 });
 
-test('reputación es derivada y no editable directamente',()=>{
+test('reputación y estado de postulación solo cambian por SupplierOps',()=>{
   assert.match(PROXY,/function supplierScores/);
   assert.match(PROXY,/'Score derivado':scores\.score/);
   assert.match(PROV,/La reputación ahora se deriva de evaluaciones y entregas/);
+  const allowStart=PROXY.indexOf('Proveedores:Object.freeze({');
+  const allowEnd=PROXY.indexOf('  }),',allowStart);
+  const allow=PROXY.slice(allowStart,allowEnd);
+  assert.doesNotMatch(allow,/Reputación/);
+  assert.doesNotMatch(allow,/Estado postulación/);
 });
 
 test('SupplierPrices guarda los campos económicos y de vigencia',()=>{
@@ -134,9 +139,11 @@ test('ficha usa gasto de OC y no revenue del cliente',()=>{
   assert.match(PROV,/Gasto OC/);
 });
 
-test('eliminación es archivo lógico y conserva identidad histórica',()=>{
+test('eliminación es archivo lógico y revisa dependencias por relaciones reales',()=>{
   assert.match(PROV,/_supplierMutate\('archiveSupplier'/);
   assert.match(PROXY,/supplierDependencies/);
+  assert.match(PROXY,/\['Pedidos','Facturas','Inventario'\]/);
+  assert.match(PROXY,/fields\?\.Proveedores.*includes\(supplierId\)/s);
   assert.match(PROXY,/deps\.total>0\?'Archivado':'Inactivo'/);
 });
 
