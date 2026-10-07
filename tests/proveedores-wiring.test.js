@@ -207,18 +207,28 @@ test('editar permite limpiar campos vacíos en Airtable', () => {
   assert.match(edit, /await airtableWrite\('Proveedores','PATCH',id,fields\)/);
 });
 
-test('diagnóstico: categorías no deben depender de localStorage', (t) => {
-  if (/function getPvCats\(\)[\s\S]{0,220}localStorage/.test(PROV)) {
-    t.todo('categorías, orden y colores deben ser configuración compartida y migrable, no variar por navegador');
-    return;
-  }
+test('categorías compartidas son autoritativas y localStorage queda solo como fallback', () => {
+  assert.match(PROV,/let _supplierCategoryRows=\[\]/);
+  assert.match(PROV,/airtableFetch\('SupplierCategories',1000\)/);
+  assert.match(PROV,/_syncSupplierCategories\(arr\)/);
+  assert.match(PROV,/airtableWrite\('SupplierCategories','POST'/);
+  assert.match(PROV,/airtableWrite\('SupplierCategories','PATCH'/);
+  assert.match(PROV,/async function renamePvCat/);
+  assert.match(fn('deletePvCat'),/No se puede eliminar una categoría en uso/);
+  assert.match(ACCESS,/SupplierCategories/);
+  assert.match(PROXY,/SupplierCategories:Object\.freeze/);
 });
 
-test('diagnóstico: precios y OC no deben sincronizarse como blobs completos', (t) => {
-  if (/localStorage/.test(fn('_preciosProvSaveArr')) && /localStorage/.test(fn('_ocSaveArr'))) {
-    t.todo('PRECIOS_PROV y ORDENES_COMPRA requieren registros individuales/versionados; el blob completo pierde cambios concurrentes y auditoría');
-    return;
-  }
+test('precios y OC nuevas se guardan como registros individuales, no blobs compartidos', () => {
+  assert.match(PROV,/airtableFetch\('SupplierPrices',1000\)/);
+  assert.match(PROV,/airtableFetch\('PurchaseOrders',1000\)/);
+  assert.match(PROV,/airtableFetch\('PurchaseOrderItems',2000\)/);
+  assert.match(fn('addPrecioProv'),/airtableWrite\('SupplierPrices','POST'/);
+  assert.match(fn('guardarOC'),/airtableWrite\('PurchaseOrders','POST'/);
+  assert.match(fn('guardarOC'),/airtableWrite\('PurchaseOrderItems','POST'/);
+  assert.match(fn('guardarOC'),/airtableWrite\('PurchaseOrderEvents','POST'/);
+  assert.doesNotMatch(fn('addPrecioProv'),/_preciosProvSaveArr/);
+  assert.doesNotMatch(fn('guardarOC'),/_ocSaveArr/);
 });
 
 test('numeración nueva de OC se reserva atómicamente en backend', () => {
@@ -268,12 +278,10 @@ test('eliminar protege dependencias y conserva supplierId archivando', () => {
   assert.match(fn('bulkDeleteProveedores'),/'Estado':'Inactivo'/);
 });
 
-test('diagnóstico: la recarga debe paginar', (t) => {
-  const create = fn('createProveedor');
-  if (/airtableFetch\(['"]Proveedores['"]\s*,\s*500\)/.test(create)) {
-    t.todo('no truncar el maestro en 500; paginar y calcular estadísticas sobre el universo completo');
-    return;
-  }
+test('la recarga del maestro supera el antiguo corte de 500 y usa helper paginado', () => {
+  const create=fn('createProveedor');
+  assert.match(create,/airtableFetch\('Proveedores',2000\)/);
+  assert.doesNotMatch(create,/airtableFetch\('Proveedores',500\)/);
 });
 
 test('duplicados del dashboard se detectan por RUT, email o razón social normalizados', () => {
@@ -300,9 +308,65 @@ test('CSV de proveedores respeta búsqueda/categoría y neutraliza fórmulas', (
   assert.match(csv,/supplierId/);
 });
 
-test.todo('OC debe recorrer Borrador/Aprobada/Enviada/Aceptada/Recibida parcial/Cerrada/Cancelada con historial');
-test.todo('OC y precios deben guardar supplierId, moneda, unidad, IVA/exención, vigencia, condiciones y documento fuente');
-test.todo('la reputación debe derivarse de entregas reales y conservar cada evaluación');
-test.todo('URLs, mailto, tel y WhatsApp deben validarse también para registros importados');
-test.todo('CSV debe neutralizar fórmulas, respetar filtros y auditar exportaciones sensibles');
-test.todo('autorización de lectura/escritura debe imponerse en backend por tabla, fila y campo');
+test('OC recorre ciclo auditable y registra recepción por ítem', () => {
+  assert.match(PROV,/function _ocAllowedNext\(estado\)/);
+  assert.match(PROV,/'Borrador':\['Aprobación','Cancelada'\]/);
+  assert.match(PROV,/'Aprobada':\['Enviada','Cancelada'\]/);
+  assert.match(PROV,/'Enviada':\['Aceptada','Cancelada'\]/);
+  assert.match(PROV,/'Aceptada':\['Recibida parcial','Recibida total','Cancelada'\]/);
+  assert.match(PROV,/'Facturada':\['Pagada','Cerrada'\]/);
+  assert.match(fn('cambiarEstadoOC'),/PurchaseOrderEvents/);
+  assert.match(fn('registrarRecepcionOC'),/'Cantidad recibida'/);
+  assert.match(fn('registrarRecepcionOC'),/'Estado recepción'/);
+});
+
+test('OC y precios conservan supplierId y metadatos estructurados', () => {
+  const price=fn('addPrecioProv'),po=fn('guardarOC');
+  assert.match(price,/'Supplier ID':supplierId/);
+  assert.match(price,/'Moneda':'CLP'/);
+  assert.match(price,/'Unidad':unidad/);
+  assert.match(price,/'Impuesto \(%\)':19/);
+  assert.match(price,/'Vigente desde':fecha/);
+  assert.match(price,/'Documento fuente':nota/);
+  assert.match(po,/'Condiciones de pago'/);
+  assert.match(po,/'Impuesto':impuesto/);
+  assert.match(po,/'Idempotency key':crypto\.randomUUID\(\)/);
+  assert.match(po,/'Exento':false/);
+});
+
+test('reputación se deriva del historial y el agregado ya no se edita directamente', () => {
+  assert.match(PROV,/function _supplierDerivedReputation/);
+  assert.match(PROV,/SupplierEvaluations/);
+  assert.match(fn('updateRepProveedor'),/'Calidad':calidad/);
+  assert.match(fn('updateRepProveedor'),/'Puntualidad':puntualidad/);
+  assert.match(fn('updateRepProveedor'),/'Precio':precio/);
+  assert.match(fn('updateRepProveedor'),/'Incidentes':incidentes/);
+  assert.doesNotMatch(fn('createProveedor'),/'Reputación':parseInt/);
+  assert.doesNotMatch(fn('saveEditProveedor'),/'Reputación':parseInt/);
+  assert.match(PROV,/_lockSupplierRepInputs/);
+});
+
+test('URLs, mailto, tel y WhatsApp se validan también para registros importados', () => {
+  assert.match(PROV,/function _safeSupplierEmail/);
+  assert.match(PROV,/function _safeSupplierPhone/);
+  assert.match(PROV,/function _safeSupplierUrl/);
+  assert.match(PROV,/u\.protocol==='https:'/);
+});
+
+test('CSV neutraliza fórmulas, respeta filtros y registra auditoría', () => {
+  const csv=fn('exportToCSV');
+  assert.match(csv,/proveedorSearch/);
+  assert.match(csv,/proveedorCatFilter/);
+  assert.match(csv,/\^\[=\+\\-@\]/);
+  assert.match(csv,/officeAuditAction\('export','proveedores-csv'/);
+});
+
+test('backend impone catálogo de tablas, campos y métodos para proveedores auditables', () => {
+  for(const table of ['SupplierPrices','PurchaseOrders','PurchaseOrderItems','PurchaseOrderEvents','SupplierEvaluations','SupplierCategories']){
+    assert.match(ACCESS,new RegExp(table));
+    assert.match(PROXY,new RegExp(table+':Object\\.freeze'));
+  }
+  assert.match(PROXY,/operatorWritePayloadAllowed/);
+  assert.match(PROXY,/operatorFieldValueAllowed/);
+  assert.match(ACCESS,/supplier\/purchase-order\/reserve/);
+});
