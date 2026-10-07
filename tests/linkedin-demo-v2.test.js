@@ -3,8 +3,8 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync(path.join(__dirname,'..','js','linkedin.js'),'utf8');
 test('LinkedIn Demo v2 preserves local-only API and latest UI actions',async()=>{
  const ctx={window:{_DEMO_MODE:true},document:{},Date,URL,console,setTimeout,structuredClone};ctx.window.window=ctx.window;
- vm.runInNewContext(source,ctx);
- const api=vm.runInNewContext('linkedinDemoApi',ctx);
+ vm.runInNewContext(source.replace('Object.assign(window,{initLinkedinLeads','window.__demoApiForTest=linkedinDemoApi;Object.assign(window,{initLinkedinLeads'),ctx);
+ const api=ctx.window.__demoApiForTest;
  const initial=api('/linkedin/prospects','GET');
  assert.equal(initial.records.length,3);
  assert.equal(api('/linkedin/metrics','GET').summary.overdue>=1,true);
