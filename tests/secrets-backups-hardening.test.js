@@ -61,7 +61,8 @@ test('backup semanal publica solo cifrado',()=>{
   assert.doesNotMatch(WEEKLY,/path:\s*backup\/\*\.json\s*$/m);
   assert.match(BACKUP,/AES-256-GCM/);
   assert.match(BACKUP,/scryptSync/);
-  assert.doesNotMatch(BACKUP,/backup-crm-.*\.json['"]/);
+  assert.match(BACKUP,/backup-crm-' \+ fecha \+ '\.enc\.json'/);
+  assert.doesNotMatch(BACKUP,/backup-crm-' \+ fecha \+ '\.json'/);
 });
 
 test('migrador legacy cifra y verifica antes de borrar',()=>{
