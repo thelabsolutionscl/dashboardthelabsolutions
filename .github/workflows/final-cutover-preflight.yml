@@ -1,4 +1,5 @@
 name: Final cutover preflight
+# Updating this file intentionally triggers one read-only production preflight.
 
 on:
   workflow_dispatch:
