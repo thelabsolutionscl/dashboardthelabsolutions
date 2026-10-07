@@ -2839,6 +2839,22 @@ function renderFunnel(){
   el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:0 4px">${cols}</div><div style="border-top:1px solid var(--border);padding-top:14px">${bars}</div>`;
 }
 
+// El motor auditable de remuneraciones se carga desde este módulo para evitar
+// mantener dos implementaciones activas en el HTML monolítico. Al instalarse
+// reemplaza el cálculo comercial legado y vuelve a renderizar la pestaña.
+(function loadRemuneracionesEngine(){
+  if(typeof window==='undefined'||window.__TLS_REM_ENGINE_LOADER__)return;
+  window.__TLS_REM_ENGINE_LOADER__=true;
+  try{
+    const current=document.currentScript?.src||'';
+    const v=current?new URL(current,location.href).searchParams.get('v'):'';
+    const script=document.createElement('script');script.async=false;
+    script.src='js/remuneraciones-engine.js'+(v?'?v='+encodeURIComponent(v):'');
+    script.onerror=()=>{window.__TLS_REM_ENGINE_LOADER__=false;};
+    document.head.appendChild(script);
+  }catch(_){window.__TLS_REM_ENGINE_LOADER__=false;}
+})();
+
 // ── REMUNERACIONES SUELDOS & LIQUIDACIÓN ─────────────────────────────
 const REM_SUELDO_KEY='rem_sueldos_v1';
 function _remSueldoStorage(){return window._DEMO_MODE?sessionStorage:localStorage;}
