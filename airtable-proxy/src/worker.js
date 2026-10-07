@@ -800,6 +800,9 @@ function mailSharedAccountMap(env){
     return parsed;
   }catch(_){return {};}
 }
+function mailAccessEnforced(env){
+  return String(env.MAIL_ACCESS_MODE||'').trim().toLowerCase()==='true';
+}
 function mailAuthorizedAccounts(identity,env){
   if(!identity||typeof identity!=='object')return [];
   const email=String(identity.email||'').toLowerCase();
@@ -5221,7 +5224,7 @@ export default {
       if(request.method!=='GET'||url.search)return json({error:'Method not allowed'},405,h);
       if(!authorized.identity)return json({error:'Cloudflare Access required'},401,h);
       const accounts=mailAuthorizedAccounts(authorized.identity,env);
-      return json({ok:true,accounts},200,h);
+      return json({ok:true,enforced:mailAccessEnforced(env),accounts},200,h);
     }
     if(url.pathname==='/mail/session'){
       const h={...CORS,'Cache-Control':'private, no-store'};
