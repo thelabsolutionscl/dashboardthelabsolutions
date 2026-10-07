@@ -195,8 +195,10 @@ const SL3D=(function(){
 
   // ── Preview 3D (canvas, sin librerías) ──────────────────────
   function buildPreview(){
-    const n=S.tris.length/9,cap=12000;
+    const n=S.tris.length/9,cap=30000;
     if(n<=cap){S.prev=S.tris;return;}
+    // La vista previa es sólo visual: conserva una muestra más densa para no
+    // "facetear" curvas ni perder tanta vecindad al calcular normales suaves.
     const stride=Math.ceil(n/cap),out=new Float32Array(Math.ceil(n/stride)*9);let o=0;
     for(let i=0;i<n;i+=stride){out.set(S.tris.subarray(i*9,i*9+9),o);o+=9;}
     S.prev=out;
@@ -253,8 +255,11 @@ const SL3D=(function(){
   }
   function render(){
     const cv=el('slCanvas');if(!S.prev||cv.style.display==='none')return;
-    const dpr=window.devicePixelRatio||1,w=cv.clientWidth||420,h=300;
-    cv.width=w*dpr;cv.height=h*dpr;
+    const dpr=Math.min(window.devicePixelRatio||1,2),w=Math.max(1,cv.clientWidth||420),h=Math.max(1,cv.clientHeight||300);
+    // El backing store debe tener el mismo tamaño CSS real. Antes se forzaban
+    // 300 px de alto y el navegador estiraba el canvas en paneles altos,
+    // produciendo pixelación y haciendo mucho más visibles los triángulos.
+    cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);
     const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
     // Fondo con degradado suave (estudio) en vez de negro plano
     {const bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#1b1e22');bg.addColorStop(0.55,'#121417');bg.addColorStop(1,'#0a0b0d');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);}
@@ -292,34 +297,51 @@ const SL3D=(function(){
       const Ux=bx-ax,Uy=by-ay,Uz=bz-az,Vx=cx2-ax,Vy=cy2-ay,Vz=cz2-az;
       const Nx=Uy*Vz-Uz*Vy,Ny=Uz*Vx-Ux*Vz,Nz=Ux*Vy-Uy*Vx,Nl=Math.hypot(Nx,Ny,Nz)||1;
       const over=S.showSupports&&(Nz/Nl< (ovAng<-0.2?ovAng:-0.57))&&Math.max(az,bz,cz2)>0.5;
-      let diff=0,spec=0;
+      const lights=[],specs=[];
       for(let j=0;j<3;j++){
         const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
         const x1=x*ca-y*sa,y1=x*sa+y*ca;
         const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
         P.push(w/2+x1*sc,h/2-z2*sc);dsum+=y2;
-        // Normal SUAVE del vértice, rotada igual que el vértice → sombreado tipo Gouraud
+        // Normal SUAVE del vértice, rotada igual que el vértice.
+        // Guardamos luz por vértice para interpolarla visualmente en el triángulo;
+        // antes se promediaba todo y cada triángulo quedaba de un color plano.
         const vnx=VN[o+j*3],vny=VN[o+j*3+1],vnz=VN[o+j*3+2];
         const r1=vnx*ca-vny*sa,r2=vnx*sa+vny*ca,rD=r2*cb-vnz*sb,rU=r2*sb+vnz*cb;
-        const d1=Math.max(0,r1*-0.398+rD*-0.498+rU*0.747); // luz principal (arriba-izq-frente)
-        const d2=Math.max(0,r1*0.707+rD*0.566+rU*0.424);   // luz de relleno (abajo-der, suave)
-        diff+=0.30+0.66*d1+0.18*d2+0.10*Math.abs(rD);      // ambiental + principal + relleno + luz de cabeza
-        const hsp=Math.abs(r1*-0.233+rD*-0.876+rU*0.437);  // half-vector → brillo especular
-        spec+=Math.pow(hsp,22);
+        const d1=Math.max(0,r1*-0.398+rD*-0.498+rU*0.747);
+        const d2=Math.max(0,r1*0.707+rD*0.566+rU*0.424);
+        lights.push(Math.min(1,0.30+0.66*d1+0.18*d2+0.10*Math.abs(rD)));
+        const hsp=Math.abs(r1*-0.233+rD*-0.876+rU*0.437);
+        specs.push(Math.pow(hsp,22)*0.5);
       }
-      diff=Math.min(1,diff/3);spec=spec/3*0.5;
-      list[i]={d:dsum,P,diff,spec,over};
+      list[i]={d:dsum,P,lights,specs,over};
     }
+    const shade=(over,diff,spec)=>{
+      const sp=Math.round(spec*255);
+      return over
+        ?`rgb(${Math.min(255,Math.round(236*diff)+sp)},${Math.min(255,Math.round(128*diff)+sp)},${Math.min(255,Math.round(52*diff)+sp)})`
+        :`rgb(${Math.min(255,Math.round(70*diff)+sp)},${Math.min(255,Math.round(200*diff)+sp)},${Math.min(255,Math.round(190*diff)+sp)})`;
+    };
     list.sort((p,q)=>q.d-p.d);
     for(const f of list){
       ctx.beginPath();ctx.moveTo(f.P[0],f.P[1]);ctx.lineTo(f.P[2],f.P[3]);ctx.lineTo(f.P[4],f.P[5]);ctx.closePath();
-      const sp=Math.round(f.spec*255);
-      // Voladizos en naranja (necesitan soporte); resto en teal · brillo especular sumado en blanco
-      const col=f.over
-        ?`rgb(${Math.min(255,Math.round(236*f.diff)+sp)},${Math.min(255,Math.round(128*f.diff)+sp)},${Math.min(255,Math.round(52*f.diff)+sp)})`
-        :`rgb(${Math.min(255,Math.round(70*f.diff)+sp)},${Math.min(255,Math.round(200*f.diff)+sp)},${Math.min(255,Math.round(190*f.diff)+sp)})`;
-      ctx.fillStyle=col;ctx.fill();
-      ctx.strokeStyle=col;ctx.lineWidth=1;ctx.lineJoin='round';ctx.stroke(); // tapa costuras → superficie continua
+      let minI=0,maxI=0;
+      for(let k=1;k<3;k++){if(f.lights[k]<f.lights[minI])minI=k;if(f.lights[k]>f.lights[maxI])maxI=k;}
+      const range=f.lights[maxI]-f.lights[minI];
+      let paint;
+      if(range>0.025){
+        const g=ctx.createLinearGradient(f.P[minI*2],f.P[minI*2+1],f.P[maxI*2],f.P[maxI*2+1]);
+        g.addColorStop(0,shade(f.over,f.lights[minI],f.specs[minI]));
+        g.addColorStop(1,shade(f.over,f.lights[maxI],f.specs[maxI]));
+        paint=g;
+      }else{
+        const d=(f.lights[0]+f.lights[1]+f.lights[2])/3,s=(f.specs[0]+f.specs[1]+f.specs[2])/3;
+        paint=shade(f.over,d,s);
+      }
+      ctx.fillStyle=paint;ctx.fill();
+      // Sólo una costura subpíxel para tapar grietas de antialiasing sin
+      // remarcar los límites triangulares.
+      ctx.strokeStyle=paint;ctx.lineWidth=0.35;ctx.lineJoin='round';ctx.stroke();
     }
     // ── Columnas de soporte (palitos verticales bajo los voladizos) ──
     if(S.showSupports){
@@ -2829,6 +2851,7 @@ self.onmessage=function(ev){
       const wasClick=_ptStart&&_ptMoved<6;S.drag=null;_ptStart=null;
       cv.style.cursor=S.layFlatMode?'crosshair':'grab';
       if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
+      else render(); // repintado final nítido al terminar de rotar
     });
     // Arrastrar para rotar el preview 3D de trayectorias
     const gcv=el('slGcodeCanvas');
