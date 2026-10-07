@@ -189,7 +189,7 @@ async function request(path,method='GET',body){
 }
 async function hydrate(){
   if(hydrating)return hydrating;
-  const u=currentUser();if(target?._DEMO_MODE||!u||!['sales','finance','admin'].includes(u.role)||!proxyConfig())return false;
+  const u=currentUser();if(target?._DEMO_MODE||!u||!['comercial','finanzas','admin','gerencia'].includes(u.role)||!proxyConfig())return false;
   hydrating=(async()=>{
     const r=await request('/shared/remunerations');if(!r.ok)return false;
     const d=await r.json().catch(()=>null);if(!d?.ok||d.data?.version!==2)return false;
@@ -254,7 +254,7 @@ function setPeriod(p,btn){
 }
 async function exportCsv(){
   const events=selectedOrders().map(o=>deriveOrder(o,shared)),u=currentUser(),b=bounds();
-  const csv=csvExport(events,{period:b.label,seller:u?.email||u?.name||''});
+  const csv=csvExport(events,{period:b.label,seller:u?.username||u?.email||u?.name||''});
   try{request('/shared/remunerations/audit','POST',{action:'export',period:b.label,count:events.length}).catch(()=>{});}catch(_){}
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=target.document.createElement('a');
   a.href=url;a.download='remuneraciones-'+String(b.label).replace(/[^0-9A-Za-z_-]+/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
