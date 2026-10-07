@@ -81,6 +81,10 @@ id = "c148848321344f60939fa71a51d050c6"
 # Serializa cada evento social por red+external_event_id. Evita duplicar
 # interacción, Cliente y Agent_Queue ante reintentos concurrentes.
 [[durable_objects.bindings]]
+name = "SUPPLIER_APPLICATION_GUARD"
+class_name = "SupplierApplicationGuard"
+
+[[durable_objects.bindings]]
 name = "SOCIAL_EVENT_GUARD"
 class_name = "SocialEventGuard"
 
@@ -119,3 +123,8 @@ new_sqlite_classes = ["SocialEventGuard"]
 #   RESEND_API_KEY          doble opt-in del formulario web
 #   RESEND_WEBHOOK_SECRET   firma whsec_... del webhook /newsletter/resend-webhook
 # El envío masivo NO vive en este Worker; lo ejecuta airtable-proxy /newsletter/send.
+
+
+[[migrations]]
+tag = "v2-supplier-application-guard"
+new_sqlite_classes = ["SupplierApplicationGuard"]
