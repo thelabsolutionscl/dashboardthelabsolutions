@@ -1,0 +1,55 @@
+name: Cloudflare capability probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-capability-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Cloudflare API permissions (read-only)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
+            echo "::error::Cloudflare deployment credentials are not configured"
+            exit 1
+          fi
+          auth=(-H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json")
+          api="https://api.cloudflare.com/client/v4"
+
+          probe () {
+            local label="$1" url="$2"
+            local code
+            code=$(curl -sS -o /tmp/cf-probe.json -w '%{http_code}' "${auth[@]}" "$url")
+            local success errors
+            success=$(python3 -c 'import json; d=json.load(open("/tmp/cf-probe.json")); print(str(bool(d.get("success"))).lower())' 2>/dev/null || echo false)
+            errors=$(python3 -c 'import json; d=json.load(open("/tmp/cf-probe.json")); print(",".join(str(x.get("code","")) for x in d.get("errors",[])))' 2>/dev/null || true)
+            echo "$label: HTTP $code success=$success errors=${errors:-none}"
+          }
+
+          probe "token-verify" "$api/user/tokens/verify"
+          probe "account-workers" "$api/accounts/$CF_ACCOUNT/workers/services"
+          probe "account-access-apps" "$api/accounts/$CF_ACCOUNT/access/apps"
+
+          code=$(curl -sS -o /tmp/cf-zones.json -w '%{http_code}' "${auth[@]}" "$api/zones?name=thelab.solutions")
+          success=$(python3 -c 'import json; d=json.load(open("/tmp/cf-zones.json")); print(str(bool(d.get("success"))).lower())' 2>/dev/null || echo false)
+          count=$(python3 -c 'import json; d=json.load(open("/tmp/cf-zones.json")); print(len(d.get("result",[])))' 2>/dev/null || echo 0)
+          echo "zone-list: HTTP $code success=$success matches=$count"
+
+          if [ "$success" = "true" ] && [ "$count" -gt 0 ]; then
+            zone=$(python3 -c 'import json; d=json.load(open("/tmp/cf-zones.json")); print(d["result"][0]["id"])')
+            probe "dns-records" "$api/zones/$zone/dns_records?name=proxy.thelab.solutions"
+            probe "worker-routes" "$api/zones/$zone/workers/routes"
+          fi
