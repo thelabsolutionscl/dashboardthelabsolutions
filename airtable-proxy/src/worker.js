@@ -3553,6 +3553,196 @@ export class CrmMutationGuard {
   }
 }
 
+
+const OFFICE_BASE_ID='app1YtD74AqiPWQhy';
+const OFFICE_TZ='America/Santiago';
+const OFFICE_AUTOMATION_EXPECT=Object.freeze({
+  'lead-worker':90,'airtable-proxy':45,'printer-bridge':15,'mail-api':30,'sii-worker':360,
+  'social-listen':30,'social-metrics':180,'social-publish':30
+});
+function officeHeaders(env){return{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json','Content-Type':'application/json'};}
+function officeEsc(v){return String(v??'').replace(/'/g,"\\'");}
+function officeDateCL(d=new Date()){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:OFFICE_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+}
+async function officeJson(r){let d={};try{d=await r.json();}catch(_){}return d;}
+async function officeList(env,table,{fields=[],formula='',max=8000}={}){
+  const out=[];let offset='';
+  do{
+    const q=new URLSearchParams({pageSize:'100'});
+    for(const x of fields)q.append('fields[]',x);
+    if(formula)q.set('filterByFormula',formula);
+    if(offset)q.set('offset',offset);
+    const r=await fetch(AIRTABLE_BASE+'/v0/'+OFFICE_BASE_ID+'/'+encodeURIComponent(table)+'?'+q,{
+      headers:officeHeaders(env),redirect:'manual'});
+    if(!r.ok)throw new Error(table+' '+r.status);
+    const d=await officeJson(r);
+    if(!Array.isArray(d.records))throw new Error(table+' payload invalid');
+    out.push(...d.records);offset=String(d.offset||'');
+    if(out.length>=max&&offset)throw new Error(table+' coverage incomplete');
+  }while(offset);
+  return out;
+}
+async function officeFind(env,table,formula,fields=[]){
+  const rows=await officeList(env,table,{formula,fields,max:100});
+  return rows[0]||null;
+}
+async function officeCreate(env,table,fields){
+  const r=await fetch(AIRTABLE_BASE+'/v0/'+OFFICE_BASE_ID+'/'+encodeURIComponent(table),{
+    method:'POST',headers:officeHeaders(env),redirect:'manual',body:JSON.stringify({fields,typecast:true})});
+  if(!r.ok)throw new Error(table+' create '+r.status);
+  return officeJson(r);
+}
+async function officePatch(env,table,id,fields){
+  const r=await fetch(AIRTABLE_BASE+'/v0/'+OFFICE_BASE_ID+'/'+encodeURIComponent(table)+'/'+id,{
+    method:'PATCH',headers:officeHeaders(env),redirect:'manual',body:JSON.stringify({fields,typecast:true})});
+  if(!r.ok)throw new Error(table+' patch '+r.status);
+  return officeJson(r);
+}
+function officeMaskText(value){
+  let x=String(value||'').slice(0,300);
+  x=x.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'[email]');
+  x=x.replace(/\b(?:\+?56\s*)?9(?:[\s.-]*\d){8}\b/g,'[tel]');
+  x=x.replace(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b/g,'[rut]');
+  x=x.replace(/\b(?:CLP|US\$|\$)\s?[\d.]+(?:,\d+)?\b/gi,'[monto]');
+  return x;
+}
+function officeSensitivity(agent,input){
+  const s=(String(agent)+' '+String(input)).toLowerCase();
+  if(/finance|finanza|remuner|sueldo|factur|sii|banco|rut|payroll/.test(s))return 'restricted';
+  if(/cliente|correo|email|tel[eé]fono|lead|crm/.test(s))return 'sensitive';
+  return 'internal';
+}
+function officeRunForRole(rec,identity){
+  const f=rec.fields||{},admin=identity?.role==='admin';
+  const state=String(f['Estado ejecución']||'completed').toLowerCase();
+  const sens=String(f['Sensibilidad']||officeSensitivity(f.Agente,f.Consulta));
+  const input=String(f.Consulta||''),output=String(f.Resultado||'');
+  const canFull=admin;
+  return {
+    id:rec.id,executionId:String(f['Execution ID']||rec.id),agent:String(f.Agente||''),
+    input:canFull?input:officeMaskText(input),output:canFull?output:officeMaskText(output),
+    contentRestricted:!canFull,sensitivity:sens,user:canFull?String(f.Usuario||''):'',
+    owner:canFull?String(f.Propietario||''):'',
+    startedAt:String(f['Started At']||f.Fecha||rec.createdTime||''),
+    heartbeatAt:String(f['Heartbeat At']||''),finishedAt:String(f['Finished At']||''),
+    time:String(f.Fecha||f['Finished At']||f['Started At']||rec.createdTime||''),
+    state,error:canFull?String(f['Error ejecución']||''):String(f['Error ejecución']?'Error registrado':''),
+    source:String(f['Fuente ejecución']||'dashboard')
+  };
+}
+function officeAutomationState(f,id){
+  if(!f)return{state:'unknown',label:'Sin telemetría',age_ms:null};
+  const last=Date.parse(f.UltimaEjecucion||'')||0,age=last?Date.now()-last:null;
+  const raw=String(f['Heartbeat estado']||f.Estado||'').toLowerCase();
+  if(/paus|repos/.test(raw))return{state:'paused',label:'Pausado',age_ms:age};
+  if(/error|fall|down|ca[ií]d/.test(raw))return{state:'down',label:'Caído',age_ms:age};
+  if(!last)return{state:'unknown',label:'Sin telemetría',age_ms:null};
+  const exp=(OFFICE_AUTOMATION_EXPECT[id]||60)*60000;
+  if(age>Math.max(exp*3,24*3600000))return{state:'down',label:'Sin señal',age_ms:age};
+  if(age>exp)return{state:'degraded',label:'Atrasado',age_ms:age};
+  return{state:'healthy',label:'Operativo',age_ms:age};
+}
+async function officeAudit(env,identity,action,entity,executionId,detail=''){
+  return officeCreate(env,'Oficina_Auditoria',{
+    Evento:action+' · '+(entity||'Oficina'),Usuario:identity.email,Rol:identity.role,
+    'Acción':action,Entidad:String(entity||''),'Execution ID':String(executionId||''),
+    Fecha:new Date().toISOString(),Detalle:String(detail||'').slice(0,5000)
+  });
+}
+async function officeIncident(env,{key,title,source,entityId,severity='Alta',detail='',responsible='Operaciones',slaHours=4},healthy=false){
+  const found=await officeFind(env,'Incidencias_Operativas',`{Clave}='${officeEsc(key)}'`);
+  if(healthy){
+    if(found&&found.fields?.Estado!=='Resuelta')await officePatch(env,'Incidencias_Operativas',found.id,{
+      Estado:'Resuelta',Resuelta:new Date().toISOString(),Detalle:String(detail||'Recuperado').slice(0,9000)});
+    return;
+  }
+  if(found&&found.fields?.Estado!=='Resuelta'){
+    await officePatch(env,'Incidencias_Operativas',found.id,{Detalle:String(detail).slice(0,9000),Severidad:severity});
+    return;
+  }
+  const sla=new Date(Date.now()+slaHours*3600000).toISOString();
+  await officeCreate(env,'Incidencias_Operativas',{
+    Incidencia:title,Clave:key,Fuente:source,'Entidad ID':entityId,Severidad:severity,Estado:'Abierta',
+    Responsable:responsible,SLA:sla,Abierta:new Date().toISOString(),Detalle:String(detail).slice(0,9000)
+  });
+}
+async function officeSnapshot(env,identity){
+  const fetchedAt=new Date().toISOString(),source={};
+  const load=async(name,fn)=>{const t=Date.now();try{const v=await fn();source[name]={ok:true,at:new Date().toISOString(),latency_ms:Date.now()-t};return v;}
+    catch(e){source[name]={ok:false,at:new Date().toISOString(),latency_ms:Date.now()-t,error:String(e.message||e).slice(0,200)};return null;}};
+  const [logs,queue,autos,machines,inventory,incidents]=await Promise.all([
+    load('agent_log',()=>officeList(env,'Agent_Log',{fields:['Agente','Consulta','Resultado','Usuario','Fecha','Execution ID','Started At','Heartbeat At','Finished At','Estado ejecución','Error ejecución','Sensibilidad','Propietario','Fuente ejecución','Retener hasta']})),
+    load('agent_queue',()=>officeList(env,'Agent_Queue',{fields:['Estado','Prioridad','Agente','Fecha creación'],formula:"{Estado}='Pendiente'"})),
+    load('automations',()=>officeList(env,'Automations',{fields:['Nombre','ID','Tipo','Estado','TareaActual','UltimaEjecucion','EjecucionesHoy','Periodo ejecuciones','Zona horaria','Heartbeat estado','Error último'],max:500})),
+    load('machines',()=>officeList(env,'Maquinas',{fields:['id','nombre','num','numG','modelo','color','estado','cam','Ultima telemetria','Estado telemetria'],max:500})),
+    load('inventory',()=>officeList(env,'Inventario',{max:2000})),
+    load('incidents',()=>officeList(env,'Incidencias_Operativas',{formula:"OR({Estado}='Abierta',{Estado}='Reconocida')",max:1000}))
+  ]);
+  const cutoff=Date.now()-31*24*3600000;
+  const liveRuns=(logs||[]).filter(r=>{
+    const f=r.fields||{},t=Date.parse(f['Started At']||f.Fecha||r.createdTime||'')||0;
+    const until=Date.parse(f['Retener hasta']||'')||Infinity;
+    return t>=cutoff&&until>Date.now();
+  }).map(r=>officeRunForRole(r,identity)).sort((a,b)=>Date.parse(b.time||0)-Date.parse(a.time||0));
+  const seen=new Set(),runs=[];
+  for(const r of liveRuns){const k=r.executionId||r.id;if(seen.has(k))continue;seen.add(k);runs.push(r);}
+  const auto=(autos||[]).map(r=>{const f=r.fields||{},id=String(f.ID||f.Nombre||'').toLowerCase();
+    return{id,name:String(f.Nombre||id),type:String(f.Tipo||''),task:String(f.TareaActual||''),last:String(f.UltimaEjecucion||''),
+      today:Number(f.EjecucionesHoy||0),period:String(f['Periodo ejecuciones']||''),zone:String(f['Zona horaria']||''),
+      ...officeAutomationState(f,id)};});
+  const today=officeDateCL();
+  for(const a of auto){if(a.today&&(a.period!==today||a.zone!==OFFICE_TZ))a.today_verified=false;else a.today_verified=true;}
+  const printers=(machines||[]).map(r=>{const f=r.fields||{},last=String(f['Ultima telemetria']||''),age=Date.now()-(Date.parse(last)||0);
+    const telemetry=last?(age<=5*60000?'healthy':age<=20*60000?'degraded':'down'):'unknown';
+    return{id:String(f.id||r.id),name:String(f.nombre||''),num:Number(f.numG||f.num||0),model:String(f.modelo||''),state:String(f.estado||''),
+      telemetry,lastTelemetry:last,cam:!!f.cam};});
+  const healthRequired=['agent_log','agent_queue','automations','machines','inventory'];
+  const sourceBad=healthRequired.filter(k=>!source[k]?.ok);
+  const autoBad=auto.filter(a=>!['healthy','paused'].includes(a.state));
+  const printerBad=printers.filter(p=>['down','unknown'].includes(p.telemetry));
+  const health=sourceBad.length||autoBad.length||printerBad.length?'degraded':'healthy';
+  const coverage={complete30d:!!source.agent_log?.ok,from:new Date(cutoff).toISOString(),to:fetchedAt,
+    run_count:runs.length,pending_queue_count:(queue||[]).length};
+  return {ok:true,fetchedAt,zone:OFFICE_TZ,identity:{role:identity.role,email:identity.email},
+    source,coverage,health,runs,queue:{pending_count:(queue||[]).length},automations:auto,printers,
+    inventory:(inventory||[]).map(r=>({id:r.id,fields:r.fields||{}})),incidents:(incidents||[]).map(r=>({id:r.id,fields:r.fields||{}}))};
+}
+async function officeHandleExecution(request,env,identity){
+  let p;try{p=await request.json();}catch(_){return{status:422,body:{error:'Invalid execution JSON'}};}
+  const action=String(p?.action||''),executionId=String(p?.executionId||'');
+  if(!['start','heartbeat','finish','error'].includes(action)||!/^[A-Za-z0-9_-]{12,100}$/.test(executionId))
+    return{status:422,body:{error:'Invalid execution lifecycle'}};
+  const formula=`{Execution ID}='${officeEsc(executionId)}'`;
+  let row=await officeFind(env,'Agent_Log',formula);
+  const now=new Date().toISOString();
+  if(action==='start'){
+    if(row)return{status:200,body:{ok:true,replayed:true,id:row.id,executionId}};
+    const agent=String(p.agent||'').slice(0,150),input=String(p.input||'').slice(0,5000);
+    if(!agent)return{status:422,body:{error:'Agent required'}};
+    const sensitivity=officeSensitivity(agent,input);
+    row=await officeCreate(env,'Agent_Log',{Agente:agent,Consulta:input,Resultado:'',Usuario:identity.email,Fecha:now,
+      'Execution ID':executionId,'Started At':now,'Heartbeat At':now,'Estado ejecución':'running',
+      Sensibilidad:sensitivity,Propietario:identity.email,'Fuente ejecución':String(p.source||'dashboard').slice(0,120),
+      'Retener hasta':new Date(Date.now()+31*24*3600000).toISOString()});
+    return{status:201,body:{ok:true,replayed:false,id:row.id,executionId}};
+  }
+  if(!row)return{status:409,body:{error:'Execution was not started',code:'OFFICE_EXECUTION_MISSING'}};
+  if(action==='heartbeat'){
+    if(String(row.fields?.['Estado ejecución']||'')!=='running')return{status:200,body:{ok:true,replayed:true,id:row.id,executionId}};
+    await officePatch(env,'Agent_Log',row.id,{'Heartbeat At':now});
+    return{status:200,body:{ok:true,id:row.id,executionId}};
+  }
+  const completed=String(row.fields?.['Estado ejecución']||'');
+  if(['completed','error','cancelled'].includes(completed))return{status:200,body:{ok:true,replayed:true,id:row.id,executionId,state:completed}};
+  const fields={'Heartbeat At':now,'Finished At':now,'Estado ejecución':action==='finish'?'completed':'error'};
+  if(action==='finish'){
+    fields.Resultado=String(p.output||'').slice(0,95000);fields.Fecha=now;
+  }else fields['Error ejecución']=String(p.error||'Error no especificado').slice(0,9000);
+  await officePatch(env,'Agent_Log',row.id,fields);
+  return{status:200,body:{ok:true,id:row.id,executionId,state:fields['Estado ejecución']}};
+}
+
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
