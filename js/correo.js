@@ -1294,6 +1294,7 @@ const MAIL={
     this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
     this._cmpSupplierPoId=opts._supplierPoId||null;
     this._cmpSupplierPoNumber=opts._supplierPoNumber||null;
+    this._cmpIdempotencyKey=opts._idempotencyKey||null;
     this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
     this._cmpFromEmail=opts._fromEmail||null;   // fuerza la casilla desde la que sale (p.ej. hola@)
     this.fillContactsDatalist();
@@ -1326,6 +1327,7 @@ const MAIL={
     this._cmpPdPedido=null;
     this._cmpSupplierPoId=null;
     this._cmpSupplierPoNumber=null;
+    this._cmpIdempotencyKey=null;
     this._cmpFromName=null;
     this._cmpFromEmail=null;
   },
@@ -1648,7 +1650,7 @@ const MAIL={
     status.textContent='Enviando...';status.style.color='var(--text3)';
     try{
       const a=this.auth();
-      const params={action:'send',to,cc,bcc,subject,body,from_name:this._cmpFromName||a.from_name,idempotency_key:crypto.randomUUID()};
+      const params={action:'send',to,cc,bcc,subject,body,from_name:this._cmpFromName||a.from_name,idempotency_key:this._cmpIdempotencyKey||crypto.randomUUID()};
       if(this._cmpAtts.length) params.atts=JSON.stringify(this._cmpAtts.map(x=>({name:x.name,type:x.type,data:x.data})));
       // Si el borrador fija una casilla de salida (p.ej. hola@), autentica como esa
       // cuenta con su clave guardada; si no, sale por la cuenta activa.
@@ -1674,6 +1676,7 @@ const MAIL={
           catch(e){toast('Correo enviado, pero la OC quedó pendiente de registrar: '+e.message,'error');}
           this._cmpSupplierPoId=null;this._cmpSupplierPoNumber=null;
         }
+        this._cmpIdempotencyKey=null;
         this._cmpFromName=null;this._cmpFromEmail=null;
         this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
