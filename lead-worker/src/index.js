@@ -158,6 +158,12 @@ export default {
       if (request.method === "POST" && url.pathname === "/webhooks/social") {
         return await handleSocial(request, env, ctx, cors);
       }
+      if (request.method === "POST" && url.pathname === "/webhooks/social/metrics") {
+        return await handleSocialMetrics(request, env, cors);
+      }
+      if (request.method === "POST" && url.pathname === "/webhooks/social/publish") {
+        return await handleSocialPublish(request, env, cors);
+      }
 
       // Piloto automático de Google Ads: aprobación/rechazo desde el email
       if (url.pathname === "/ads/decision") {
@@ -2043,6 +2049,7 @@ async function socialProcessGuarded(env,s,eventKey){
       "Lead creado":!!clienteId,"Cliente ID":clienteId,"Agent Queue ID":queueId
     }));
   }
+  await socialHeartbeat(env,"social-listen","Social Listen","Evento "+eventKey);
   return {ok:true,interactionId,lead:!!s.esLead,clienteId:clienteId||null,queueId:queueId||null,
     eventKey,replayed:!!inter?.fields?.["External event ID"]};
 }
@@ -2065,6 +2072,61 @@ export class SocialEventGuard {
   }
 }
 
+async function socialAuth(request,env){
+  const expected=String(env.SOCIAL_WEBHOOK_KEY||"").trim();
+  const provided=request.headers.get("X-Social-Webhook-Key")||"";
+  return !!expected&&timingSafeEqual(provided,expected);
+}
+async function socialHeartbeat(env,id,label,task){
+  try{
+    const row=await socialFindOne(env,"Automations",`{ID}='${socialEsc(id)}'`);
+    const fields={Nombre:label,ID:id,Tipo:"Social integration",Estado:"Activo",
+      TareaActual:task,UltimaEjecucion:new Date().toISOString()};
+    if(row)await airtableUpdateTolerant(env,"Automations",row.id,fields);
+    else await airtableCreateTolerant(env,"Automations",fields);
+  }catch(e){console.error("[social-heartbeat]",e?.message||e);}
+}
+async function handleSocialMetrics(request,env,cors){
+  if(!(await socialAuth(request,env)))return json({ok:false,error:"No autorizado"},401,cors);
+  const b=await readJson(request);if(!b)return json({ok:false,error:"JSON inválido"},400,cors);
+  const red=normalizeSocial({red:b.red||b.network,external_event_id:"metric",platform_user_id:"metric",timestamp:b.fecha||b.date||new Date().toISOString()}).red;
+  const fecha=str(b.fecha)||str(b.date);
+  if(!red||!/^\d{4}-\d{2}-\d{2}/.test(fecha))return json({ok:false,error:"red y fecha son obligatorios"},422,cors);
+  const day=fecha.slice(0,10),key=day+" · "+red;
+  const fields={"Período":key,Red:red,Fecha:day,Alcance:numOrNull(b.alcance),
+    Impresiones:numOrNull(b.impresiones),Engagement:numOrNull(b.engagement),Clics:numOrNull(b.clics),
+    "Seguidores nuevos":numOrNull(b.seguidores_nuevos??b.followers_new),Leads:numOrNull(b.leads)};
+  const existing=await socialFindOne(env,"Social_Metrics",`{Período}='${socialEsc(key)}'`);
+  const row=existing?await airtableUpdateTolerant(env,"Social_Metrics",existing.id,stripEmpty(fields))
+                    :await airtableCreateTolerant(env,"Social_Metrics",stripEmpty(fields));
+  await socialHeartbeat(env,"social-metrics","Social Metrics","Snapshot "+key);
+  return json({ok:true,id:row?.id||existing?.id||null,upserted:!!existing,key},200,cors);
+}
+async function handleSocialPublish(request,env,cors){
+  if(!(await socialAuth(request,env)))return json({ok:false,error:"No autorizado"},401,cors);
+  const b=await readJson(request);if(!b)return json({ok:false,error:"JSON inválido"},400,cors);
+  const postId=str(b.post_record_id)||str(b.postId),externalId=str(b.external_post_id)||str(b.externalPostId);
+  const permalink=str(b.permalink),publishedAt=str(b.published_at)||str(b.timestamp);
+  if(!/^rec[A-Za-z0-9]{14}$/.test(postId))return json({ok:false,error:"post_record_id inválido"},422,cors);
+  const currentUrl=`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Social_Posts")}/${postId}`;
+  const rr=await fetch(currentUrl,{headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+  if(!rr.ok)return json({ok:false,error:"Post no encontrado"},rr.status===404?404:503,cors);
+  const post=await rr.json(),attempts=Math.max(0,Number(post.fields?.["Intentos publicación"])||0)+1;
+  if(b.error){
+    await airtableUpdateTolerant(env,"Social_Posts",postId,{"Estado transporte":"Error",
+      "Intentos publicación":attempts,"Error publicación":String(b.error).slice(0,5000)});
+    await socialHeartbeat(env,"social-publish","Social Publish","Último intento con error");
+    return json({ok:false,postId,state:"Error"},207,cors);
+  }
+  let parsed;try{parsed=new URL(permalink);}catch(_){}
+  if(!externalId||!parsed||parsed.protocol!=="https:"||!publishedAt||!Number.isFinite(Date.parse(publishedAt)))
+    return json({ok:false,error:"external_post_id, permalink HTTPS y published_at son obligatorios"},422,cors);
+  await airtableUpdateTolerant(env,"Social_Posts",postId,{Estado:"Publicado","Fecha publicación":publishedAt,
+    "External Post ID":externalId,Permalink:permalink,"Estado transporte":"Confirmado",
+    "Intentos publicación":attempts,"Error publicación":""});
+  await socialHeartbeat(env,"social-publish","Social Publish","Publicación confirmada "+externalId);
+  return json({ok:true,postId,external_post_id:externalId,permalink},200,cors);
+}
 // Detección simple de queja (sentimiento negativo) para disparar el aviso por WhatsApp.
 // Espeja la heurística del dashboard (_redesSentiment).
 function socialIsComplaint(mensaje, intencion) {
