@@ -147,19 +147,21 @@ test('precios se comparan por ítem y tienen respaldo best-effort', () => {
   assert.match(fn('renderMejorPrecio'), /ultimoPorProv|último precio por proveedor/);
 });
 
-test('órdenes de compra calculan, respaldan y generan documento', () => {
-  assert.match(fn('_ocSaveArr'), /_ocBackup/);
-  assert.match(fn('_ocBackup'), /_monitorUpsert\(['"]ORDENES_COMPRA['"]/);
+test('órdenes de compra calculan, persisten por filas y generan documento imprimible', () => {
   assert.match(fn('_ocNextNum'), /OC-/);
-  const save = fn('guardarOC');
-  assert.match(save, /estado:id\?\(arr\.find[\s\S]*'Borrador'\):'Borrador'/);
-  assert.match(save, /_ocSaveArr/);
-  const calc = fn('ocCalc');
-  assert.match(calc, /0\.19/);
-  assert.match(calc, /ocNeto/);
-  assert.match(calc, /ocIva/);
-  assert.match(calc, /ocTotal/);
-  assert.match(fn('generarOCPDF'), /window\.print|print\(\)/);
+  const save=fn('guardarOC');
+  assert.match(save,/airtableWrite\('PurchaseOrders','POST'/);
+  assert.match(save,/airtableWrite\('PurchaseOrderItems','POST'/);
+  assert.match(save,/airtableWrite\('PurchaseOrderEvents','POST'/);
+  assert.match(save,/'Estado':'Borrador'/);
+  assert.doesNotMatch(save,/_ocSaveArr/);
+  const calc=fn('ocCalc');
+  assert.match(calc,/0\.19/);
+  assert.match(calc,/ocNeto/);
+  assert.match(calc,/ocIva/);
+  assert.match(calc,/ocTotal/);
+  assert.match(fn('generarOCPDF'),/window\.open/);
+  assert.match(fn('_ocDocumentHtml'),/Imprimir \/ Guardar PDF/);
 });
 
 test('la exportación CSV incluye proveedores, escape y BOM UTF-8', () => {
@@ -335,6 +337,17 @@ test('OC recorre ciclo auditable y registra recepción por ítem', () => {
   assert.match(PROXY,/PurchaseOrderEvents/);
   assert.match(fn('registrarRecepcionOC'),/'Cantidad recibida'/);
   assert.match(fn('registrarRecepcionOC'),/'Estado recepción'/);
+});
+
+test('OC pasa a Enviada solo después de confirmación del módulo Correo', () => {
+  const ui=fn('ocCambiarEstadoUI'),send=fn('enviarOC'),done=fn('supplierPoMarkSent');
+  assert.match(ui,/if\(nuevo==='Enviada'\)[\s\S]*await enviarOC\(id\);return/);
+  assert.match(send,/MAIL\.openCompose/);
+  assert.match(send,/_supplierPoId:id/);
+  assert.match(send,/_idempotencyKey:'supplier-po-'\+id/);
+  assert.match(done,/cambiarEstadoOC\(id,'Enviada'/);
+  assert.match(done,/Resend ID/);
+  assert.doesNotMatch(send,/cambiarEstadoOC\(id,'Enviada'/);
 });
 
 test('OC y precios conservan supplierId y metadatos estructurados', () => {
