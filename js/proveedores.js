@@ -393,9 +393,8 @@ async function reviewSupplierApplication(id,action){
         'Notas':'Convertido desde postulación '+(f['Application ID']||id),
         'Estado postulación':'APROBADO','Motivo evaluación':motivo
       };
-      const created=await airtableWrite('Proveedores','POST',null,fields);
-      supplierId=created?.id||'';
-      if(!/^rec[A-Za-z0-9]{14}$/.test(supplierId))throw Error('Airtable no confirmó el proveedor creado');
+      const created=await _supplierCreateSafe(fields);
+      supplierId=created.supplierId;
     }
     await airtableWrite('SupplierApplications','PATCH',id,{
       'Estado':'Convertida','Proveedor':[supplierId],'Supplier ID':supplierId,
@@ -665,22 +664,9 @@ async function createProveedor(){
   const safeFields={'Nombre':fields['Nombre'],'Categoría':fields['Categoría']};
   if(fields['Contacto']) safeFields['Contacto']=fields['Contacto'];
   if(fields['Estado']) safeFields['Estado']=fields['Estado'];
-  let fallbackFields=[];
   try{
-    try{
-      await airtableWrite('Proveedores','POST',null,fields);
-    }catch(e){
-      // Solo reintentar si Airtable CONFIRMÓ un rechazo de esquema (HTTP 422).
-      // Timeout/red/5xx son ambiguos: el primer POST pudo haberse creado y repetirlo
-      // generaría un proveedor duplicado.
-      if(!_pvCanRetryCreateAfterError(e)) throw e;
-      fallbackFields=Object.keys(fields).filter(k=>!(k in safeFields));
-      await airtableWrite('Proveedores','POST',null,safeFields);
-    }
-
-    toast(fallbackFields.length
-      ? `✓ "${nombre}" creado (campos omitidos por esquema: ${fallbackFields.join(', ')})`
-      : `✓ "${nombre}" creado`,'success');
+    const created=await _supplierCreateSafe(fields);
+    toast(created.reused?`✓ "${nombre}" ya existía; se reutilizó el mismo proveedor`:`✓ "${nombre}" creado`,'success');
     clearForm('proveedor');switchTab('proveedores');
     try{await refresh();}
     catch(refreshErr){
@@ -1124,6 +1110,16 @@ function _ocAll(){
 function _ocSaveArr(arr){_listaGuardar(_OC_KEY,arr);}
 async function _ocBackup(){return false;}
 function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
+function _supplierCreateKey(fields){
+  const rut=_normSupplierRut(fields?.['RUT']),email=_normSupplierEmail(fields?.['Email']),name=_normSupplierText(fields?.['Nombre']);
+  const raw=rut?('rut:'+rut):email?('email:'+email):('name:'+name.replace(/[^a-z0-9._:@+-]+/g,'-'));
+  return 'supplier-create:'+raw.slice(0,150);
+}
+async function _supplierCreateSafe(fields){
+  const d=await _supplierProxyPost('/supplier/create',{idempotencyKey:_supplierCreateKey(fields),fields});
+  if(!d?.supplierId)throw Error('El backend no confirmó el proveedor');
+  return d;
+}
 async function _supplierProxyPost(path,body){
   let cfg=null;try{cfg=typeof _proxyCfg==='function'?_proxyCfg():null;}catch(_){}
   if(!cfg?.url||!cfg?.key)throw Error('proxy seguro no configurado');
