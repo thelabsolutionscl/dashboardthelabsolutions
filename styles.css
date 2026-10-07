@@ -736,7 +736,9 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   .icon-dock{display:none;}
   .topbar-right{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-left:0;order:1;height:44px;}
   .topbar-right .status-dot,.topbar-right .status-text,.topbar-right #refreshBtn,.topbar-right .btn-key,.topbar-right .btn-ai{display:none;}
-  .user-chip{display:none!important;}
+  /* No usar display:none en #userChip: el menú de usuario vive dentro y debe poder
+     salir como bottom sheet. El bloque móvil anterior ya oculta solo el chip
+     mediante width/visibility y .user-menu.open revierte la visibilidad. */
   /* Topbar móvil: los tres accesos comparten exactamente la misma caja y eje. */
   .topbar-right #mailBtn,.topbar-right #notifBtn,.mobile-menu-btn:not(#mobilePlusBtn){width:44px;min-width:44px;height:44px;min-height:44px;padding:0;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border2);border-radius:10px;background:rgba(255,255,255,.015);line-height:1;}
   .topbar-right #mailBtn svg,.topbar-right #notifBtn svg{display:block;width:20px;height:20px;}
