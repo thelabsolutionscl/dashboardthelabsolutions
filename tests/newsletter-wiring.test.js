@@ -232,7 +232,7 @@ test('clicks técnicos o sin URL no convierten al destinatario en lead caliente'
   const classify=block('function newsletterCommercialClick(', 'async function handleNewsletterResendWebhook', WORKER);
   const webhook=block('async function handleNewsletterResendWebhook(', '/* ── Newsletter: helpers', WORKER);
   assert.match(classify,/newsletter\\\/unsubscribe|unsubscribe|privacidad|privacy|preferencias|preferences/);
-  assert.match(classify,/\^https:\\\/\\\/\/i);
+  assert.ok(classify.includes('^https:\\/\\/'), 'solo HTTPS puede considerarse click comercial');
   assert.match(webhook,/if\(commercial\)\{patch\.Estado=['"]Click['"];patch\[['"]Fecha click['"]\]=when;patch\[['"]Lead caliente['"]\]=true;\}/);
   assert.doesNotMatch(webhook,/patch\[['"]Lead caliente['"]\]=true[^}]*else/s);
 });
