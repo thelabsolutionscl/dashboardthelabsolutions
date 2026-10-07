@@ -2753,6 +2753,19 @@ export class CrmMutationGuard {
       let snapshot;try{snapshot=match?JSON.parse(match[1]):null;}catch(_){}
       if(!snapshot||snapshot.version!==1||!Array.isArray(snapshot.approved)||snapshot.approved.length<1||snapshot.approved.length>500)
         return this._json({error:'Campaign has no approved audience snapshot',code:'AUDIENCE_NOT_APPROVED'},409);
+      const scheduleMatch=notes.match(/(?:^|\n)\[PROGRAMACION NEWSLETTER\]\s*(\{[^\n]*\})/);
+      let schedule;try{schedule=scheduleMatch?JSON.parse(scheduleMatch[1]):null;}catch(_){}
+      if(schedule){
+        if(schedule.zone!=='America/Santiago'||typeof schedule.local!=='string'||
+           !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/.test(schedule.local))
+          return this._json({error:'Invalid newsletter schedule',code:'NEWSLETTER_SCHEDULE_INVALID'},422);
+        const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',
+          day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+        const val=t=>parts.find(x=>x.type===t)?.value||'';
+        const localNow=val('year')+'-'+val('month')+'-'+val('day')+'T'+val('hour')+':'+val('minute');
+        if(localNow<schedule.local)return this._json({error:'Newsletter campaign is not due yet',
+          code:'NEWSLETTER_NOT_DUE',scheduled_local:schedule.local,zone:schedule.zone},409);
+      }
       const subject=String(f.Asunto||f.Campaña||'Newsletter').slice(0,200);
       const baseHtml=String(f['Cuerpo HTML']||'');
       if(!baseHtml||baseHtml.length>100000)return this._json({error:'Campaign HTML missing or too large'},422);
