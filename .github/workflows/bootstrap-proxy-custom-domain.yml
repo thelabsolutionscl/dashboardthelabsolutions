@@ -33,26 +33,10 @@ jobs:
           fi
 
           curl -fsS "${auth[@]}" "$api/zones?name=thelab.solutions" -o /tmp/zones.json
-          zone=$(python3 - <<'PY'
-import json
-d=json.load(open('/tmp/zones.json'))
-rows=d.get('result') or []
-if len(rows)!=1:
-    raise SystemExit(1)
-print(rows[0]['id'])
-PY
-          ) || { echo "::error::Unable to resolve unique Cloudflare zone"; exit 1; }
+          zone=$(python3 -c 'import json; d=json.load(open("/tmp/zones.json")); rows=d.get("result") or []; assert len(rows)==1; print(rows[0]["id"])') || { echo "::error::Unable to resolve unique Cloudflare zone"; exit 1; }
 
           curl -fsS "${auth[@]}" "$api/accounts/$CF_ACCOUNT/workers/domains" -o /tmp/domains.json
-          current=$(python3 - <<'PY'
-import json
-d=json.load(open('/tmp/domains.json'))
-for row in d.get('result') or []:
-    if row.get('hostname')=='proxy.thelab.solutions':
-        print(row.get('service',''))
-        break
-PY
-          )
+          current=$(python3 -c 'import json; d=json.load(open("/tmp/domains.json")); print(next((r.get("service","") for r in d.get("result") or [] if r.get("hostname")=="proxy.thelab.solutions"), ""))')
 
           if [ -n "$current" ]; then
             if [ "$current" != "$service" ]; then
@@ -61,16 +45,7 @@ PY
             fi
             echo "$host is already attached to $service; no change."
           else
-            payload=$(python3 - "$zone" <<'PY'
-import json,sys
-print(json.dumps({
-  "hostname":"proxy.thelab.solutions",
-  "service":"airtable-proxy",
-  "zone_id":sys.argv[1],
-  "zone_name":"thelab.solutions"
-}))
-PY
-            )
+            payload=$(python3 -c 'import json,sys; print(json.dumps({"hostname":"proxy.thelab.solutions","service":"airtable-proxy","zone_id":sys.argv[1],"zone_name":"thelab.solutions"}))' "$zone")
             code=$(curl -sS -o /tmp/attach.json -w '%{http_code}' -X PUT "${auth[@]}"               "$api/accounts/$CF_ACCOUNT/workers/domains" -d "$payload")
             success=$(python3 -c 'import json; d=json.load(open("/tmp/attach.json")); print(str(bool(d.get("success"))).lower())' 2>/dev/null || echo false)
             if [ "$code" != "200" ] || [ "$success" != "true" ]; then
@@ -84,11 +59,7 @@ PY
           # Cloudflare may need a short interval for DNS/certificate propagation.
           ok=false
           for i in $(seq 1 18); do
-            if python3 - <<'PY'
-import socket
-socket.getaddrinfo("proxy.thelab.solutions",443)
-PY
-            then
+            if python3 -c 'import socket; socket.getaddrinfo("proxy.thelab.solutions",443)' >/dev/null 2>&1; then
               status=$(curl -sS -o /tmp/health -w '%{http_code}' --max-time 8 "https://proxy.thelab.solutions/health" || true)
               if [ "$status" = "200" ]; then
                 ok=true
