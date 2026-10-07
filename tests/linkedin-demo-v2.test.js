@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync(path.join(__dirname,'..','js','linkedin.js'),'utf8');
 test('LinkedIn Demo v2 preserves local-only API and latest UI actions',async()=>{
  const ctx={window:{_DEMO_MODE:true},document:{},Date,URL,console,setTimeout,structuredClone};ctx.window.window=ctx.window;
- vm.runInNewContext(source.replace('Object.assign(window,{initLinkedinLeads','window.__demoApiForTest=linkedinDemoApi;Object.assign(window,{initLinkedinLeads'),ctx);
+ vm.runInNewContext(source.split('var baseInit=window.initRedes')[0]+'window.__demoApiForTest=linkedinDemoApi;})();',ctx);
  const api=ctx.window.__demoApiForTest;
  const initial=api('/linkedin/prospects','GET');
  assert.equal(initial.records.length,3);
@@ -13,6 +13,7 @@ test('LinkedIn Demo v2 preserves local-only API and latest UI actions',async()=>
  assert.equal(api('/linkedin/command','POST',{action:'transition',id:created.record.id,target:'Calificado'}).record.fields.Estado,'Calificado');
  const analyzed=api('/linkedin/command','POST',{action:'analyze',id:created.record.id});
  assert.match(analyzed.record.fields.Notas,/simulado/);
+ api('/linkedin/command','POST',{action:'transition',id:created.record.id,target:'Calificado'});
  const client=api('/linkedin/command','POST',{action:'convert',id:created.record.id});
  assert.equal(client.created,true);
  assert.equal(client.client.fields['Origen lead'],'LinkedIn');
