@@ -8,7 +8,7 @@ import { createDecipheriv, scryptSync } from 'node:crypto';
 
 const secret = (process.env.BACKUP_ENCRYPTION_KEY || '').trim();
 const [input, output] = process.argv.slice(2);
-if (!secret || secret.length < 24 || !input || !output) {
+if (!secret || secret.length < 32 || !input || !output) {
   console.error('Se necesita BACKUP_ENCRYPTION_KEY y los paths del archivo cifrado y el destino privado.');
   process.exit(1);
 }
