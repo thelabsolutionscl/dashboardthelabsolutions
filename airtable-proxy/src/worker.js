@@ -2702,7 +2702,8 @@ export class CrmMutationGuard {
             ?this._handleSharedMail(request):path==='/mail-session'
               ?this._handleMailSession(request):path==='/mail-rpc'
                 ?this._handleMailRpc(request):path==='/supplier-po-reserve'
-                  ?this._handleSupplierPoReserve(request):path==='/shared-machineops'
+                  ?this._handleSupplierPoReserve(request):path==='/supplier-po-transition'
+                    ?this._handleSupplierPoTransition(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
                   ?this._handleSharedFinance(request):path==='/shared-remunerations'
@@ -2883,6 +2884,68 @@ export class CrmMutationGuard {
     const auditKey='supplier-po-reservation:'+year+':'+next;
     await this.state.storage.put(auditKey,{numero,actor:actor.email,role:actor.role,at:new Date().toISOString()});
     return this._json({ok:true,numero,sequence:next,year},201);
+  }
+
+  async _handleSupplierPoTransition(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Purchase order transition unavailable'},503);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid purchase order transition JSON'},422);}
+    const id=String(p?.id||''),expectedRevision=Number(p?.expectedRevision),expectedState=String(p?.expectedState||''),
+      next=String(p?.next||''),actor=p?.actor,motivo=String(p?.motivo||'').slice(0,20000),
+      evidencia=String(p?.evidencia||'').slice(0,20000),destinatario=String(p?.destinatario||'');
+    if(!/^rec[A-Za-z0-9]{14}$/.test(id)||!Number.isInteger(expectedRevision)||expectedRevision<0||
+       !actor||typeof actor.email!=='string'||!['operator','finance','admin'].includes(actor.role))
+      return this._json({error:'Purchase order transition denied'},403);
+    const transitions={
+      'Borrador':['Aprobación','Cancelada'],'Aprobación':['Aprobada','Borrador','Cancelada'],
+      'Aprobada':['Enviada','Cancelada'],'Enviada':['Aceptada','Cancelada'],
+      'Aceptada':['Recibida parcial','Recibida total','Cancelada'],
+      'Recibida parcial':['Recibida total','Cancelada'],'Recibida total':['Facturada','Cerrada'],
+      'Facturada':['Pagada','Cerrada'],'Pagada':['Cerrada'],'Cerrada':[],'Cancelada':[]
+    };
+    if(!Object.hasOwn(transitions,expectedState)||!transitions[expectedState].includes(next))
+      return this._json({error:'Purchase order state transition denied'},422);
+    if(next==='Enviada'&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario))
+      return this._json({error:'Valid recipient required before sending'},422);
+    const base=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/';
+    const poUrl=base+encodeURIComponent('PurchaseOrders')+'/'+id;
+    let currentResp;
+    try{currentResp=await fetch(poUrl,{headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,Accept:'application/json'},redirect:'manual'});}
+    catch(_){return this._json({error:'Purchase order read unavailable'},503);}
+    if(!currentResp.ok)return this._json({error:'Purchase order not found'},currentResp.status===404?404:503);
+    const current=await currentResp.json().catch(()=>null),fields=current?.fields||{};
+    const revision=Number(fields['Revisión']||0),state=String(fields['Estado']||'');
+    if(revision!==expectedRevision||state!==expectedState)
+      return this._json({error:'PURCHASE_ORDER_REVISION_CONFLICT',code:'PURCHASE_ORDER_REVISION_CONFLICT',
+        current:{id,state,revision}},409);
+    const now=new Date().toISOString(),nextRevision=revision+1,patch={'Estado':next,'Revisión':nextRevision};
+    if(next==='Aprobada'){patch['Aprobador']=actor.email;patch['Fecha aprobación']=now;}
+    if(next==='Enviada'){patch['Destinatario']=destinatario;patch['Fecha envío']=now;}
+    if(next==='Aceptada')patch['Fecha aceptación']=now;
+    if(['Cerrada','Cancelada'].includes(next))patch['Fecha cierre']=now;
+    let patched;
+    try{
+      const pr=await fetch(poUrl,{method:'PATCH',redirect:'manual',
+        headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:patch,typecast:false})});
+      if(!pr.ok)return this._json({error:'Purchase order transition rejected'},503);
+      patched=await pr.json();
+    }catch(_){return this._json({error:'Purchase order transition outcome uncertain'},503);}
+    const eventFields={'Event ID':crypto.randomUUID(),'Orden de compra':[id],'Tipo':'estado',
+      'Estado anterior':state,'Estado nuevo':next,'Actor':actor.email,'Fecha':now,
+      'Motivo':motivo||next,'Evidencia':evidencia,'Revisión':nextRevision};
+    try{
+      const er=await fetch(base+encodeURIComponent('PurchaseOrderEvents'),{method:'POST',redirect:'manual',
+        headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:eventFields,typecast:false})});
+      if(!er.ok)throw Error('event');
+      await this.state.storage.delete('supplier-po-pending-event:'+id);
+    }catch(_){
+      await this.state.storage.put('supplier-po-pending-event:'+id,{eventFields,at:now});
+      return this._json({error:'Purchase order changed but audit event is pending reconciliation',
+        code:'PURCHASE_ORDER_AUDIT_PENDING',current:{id,state:next,revision:nextRevision}},503);
+    }
+    return this._json({ok:true,id,state:next,revision:nextRevision,record:patched},200);
   }
 
   async _handleMailSession(request){
@@ -4256,7 +4319,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/supplier/purchase-order/reserve'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/supplier/purchase-order/reserve'||url.pathname==='/supplier/purchase-order/transition'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -4701,6 +4764,27 @@ export default {
       }catch(_){return json({error:'Agenda write guard unavailable'},503,scopedHeaders);}
     }
 
+
+    if(url.pathname==='/supplier/purchase-order/transition'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||!env.CRM_MUTATION_GUARD)return json({error:'Purchase order transition unavailable'},503,headers);
+      let body;try{body=await request.json();}catch(_){return json({error:'Invalid purchase order transition JSON'},422,headers);}
+      if(!body||!/^rec[A-Za-z0-9]{14}$/.test(String(body.id||''))||
+         !Number.isInteger(Number(body.expectedRevision))||typeof body.expectedState!=='string'||typeof body.next!=='string')
+        return json({error:'Invalid purchase order transition'},422,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-supplier-po:'+body.id));
+        const guarded=await stub.fetch('https://crm-write.internal/supplier-po-transition',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...body,actor:{email:authorized.identity.email,role:authorized.identity.role}})
+        });
+        const h=new Headers(guarded.headers);Object.entries(headers).forEach(([k,v])=>h.set(k,v));
+        if(guarded.ok){try{await officeAudit(env,authorized.identity,'update','purchase-order',body.id,
+          String(body.expectedState)+' → '+String(body.next));}catch(_){}}
+        return new Response(guarded.body,{status:guarded.status,headers:h});
+      }catch(_){return json({error:'Purchase order transition unavailable'},503,headers);}
+    }
 
     if(url.pathname==='/supplier/purchase-order/reserve'){
       const headers={...CORS,'Cache-Control':'private, no-store'};
