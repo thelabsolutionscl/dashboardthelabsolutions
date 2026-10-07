@@ -3801,7 +3801,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3813,6 +3813,69 @@ export default {
       return json(authorized.identity
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
+    }
+
+    if(url.pathname==='/office/snapshot'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET')return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||!env.AIRTABLE_TOKEN)return json({error:'Office snapshot unavailable'},503,headers);
+      try{
+        const snap=await officeSnapshot(env,authorized.identity);
+        // Important unknown/down states become durable incidents. Recovery closes them.
+        for(const a of snap.automations||[]){
+          const bad=['unknown','degraded','down'].includes(a.state);
+          try{await officeIncident(env,{key:'automation:'+a.id,title:'Automatización '+a.name+' '+a.label,
+            source:'Automations',entityId:a.id,severity:a.state==='down'?'Crítica':'Alta',
+            detail:a.label+' · última señal '+(a.last||'sin telemetría'),responsible:'Operaciones',
+            slaHours:a.state==='down'?2:4},!bad);}catch(_){}
+        }
+        for(const p of snap.printers||[]){
+          const bad=['unknown','down'].includes(p.telemetry);
+          try{await officeIncident(env,{key:'printer:'+p.id,title:'Impresora '+(p.name||p.id)+' sin telemetría',
+            source:'Maquinas',entityId:p.id,severity:p.telemetry==='down'?'Alta':'Media',
+            detail:'Estado de telemetría: '+p.telemetry+' · '+(p.lastTelemetry||'sin señal'),
+            responsible:'Taller',slaHours:4},!bad);}catch(_){}
+        }
+        for(const [name,src] of Object.entries(snap.source||{})){
+          const bad=!src.ok;
+          try{await officeIncident(env,{key:'office-source:'+name,title:'Fuente Oficina no disponible: '+name,
+            source:name,entityId:name,severity:'Alta',detail:src.error||'Fuente sin respuesta',
+            responsible:'Sistemas',slaHours:2},!bad);}catch(_){}
+        }
+        return json(snap,200,headers);
+      }catch(e){return json({error:'Office snapshot failed',detail:String(e?.message||e).slice(0,300)},503,headers);}
+    }
+    if(url.pathname==='/office/execution'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST')return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||!env.AIRTABLE_TOKEN)return json({error:'Office execution unavailable'},503,headers);
+      const r=await officeHandleExecution(request,env,authorized.identity);
+      return json(r.body,r.status,headers);
+    }
+    if(url.pathname==='/office/audit'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST')return json({error:'Method not allowed'},405,headers);
+      let p;try{p=await request.json();}catch(_){return json({error:'Invalid audit JSON'},422,headers);}
+      const action=String(p?.action||''),entity=String(p?.entity||''),executionId=String(p?.executionId||'');
+      if(!['view','copy','export','digest'].includes(action)||entity.length>200||executionId.length>120)
+        return json({error:'Invalid office audit event'},422,headers);
+      try{await officeAudit(env,authorized.identity,action,entity,executionId,String(p?.detail||''));return json({ok:true},201,headers);}
+      catch(_){return json({error:'Office audit unavailable'},503,headers);}
+    }
+    if(url.pathname==='/office/incidents'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(!authorized.identity)return json({error:'Office incidents require Access'},403,headers);
+      if(request.method==='GET'){
+        try{const rows=await officeList(env,'Incidencias_Operativas',{max:1000});
+          return json({ok:true,records:rows},200,headers);}catch(_){return json({error:'Incidents unavailable'},503,headers);}
+      }
+      let p;try{p=await request.json();}catch(_){return json({error:'Invalid incident JSON'},422,headers);}
+      const id=String(p?.id||''),state=String(p?.state||'');
+      if(!/^rec[A-Za-z0-9]{14}$/.test(id)||!['Reconocida','Resuelta'].includes(state))
+        return json({error:'Invalid incident update'},422,headers);
+      try{const fields={Estado:state};if(state==='Resuelta')fields.Resuelta=new Date().toISOString();
+        const row=await officePatch(env,'Incidencias_Operativas',id,fields);return json({ok:true,record:row},200,headers);}
+      catch(_){return json({error:'Incident update failed'},503,headers);}
     }
     if(url.pathname==='/social/lead'){
       const headers={...CORS,'Cache-Control':'private, no-store'};
