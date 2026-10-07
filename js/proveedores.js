@@ -196,6 +196,41 @@ function getSortedProveedores(list){
     if(va<vb) return -d;if(va>vb) return d;return 0;
   });
 }
+function _supplierById(id){return (state.proveedores||[]).find(p=>p&&p.id===id)||null;}
+function _supplierId(rec){return rec&&/^rec[A-Za-z0-9]{14}$/.test(String(rec.id||''))?rec.id:'';}
+function _supplierByName(name){
+  const key=_normSupplierText(name);if(!key)return null;
+  const matches=(state.proveedores||[]).filter(p=>_normSupplierText(p.fields?.['Nombre'])===key);
+  return matches.length===1?matches[0]:null;
+}
+function _normSupplierText(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+function _normSupplierRut(v){return String(v||'').toUpperCase().replace(/[^0-9K]/g,'');}
+function _normSupplierEmail(v){return String(v||'').trim().toLowerCase();}
+function _supplierPedidoIds(pedido){
+  const f=pedido?.fields||{},raw=f['Proveedor ID']??f['ProveedorId']??f['Supplier ID']??f['SupplierId']??f['Proveedor'];
+  const vals=Array.isArray(raw)?raw:[raw];
+  const ids=[];
+  for(const v of vals){
+    if(v&&typeof v==='object'&&v.id)ids.push(v.id);
+    else if(/^rec[A-Za-z0-9]{14}$/.test(String(v||'')))ids.push(String(v));
+  }
+  if(ids.length)return [...new Set(ids)];
+  const names=String(f['Proveedor']||'').split(',').map(_normSupplierText).filter(Boolean);
+  return [...new Set(names.map(n=>_supplierByName(n)?.id).filter(Boolean))];
+}
+function _supplierPedidos(supplierId){return (state.pedidos||[]).filter(p=>_supplierPedidoIds(p).includes(supplierId));}
+function _supplierFindDuplicate({id='',nombre='',rut='',email=''}) {
+  const nr=_normSupplierRut(rut),ne=_normSupplierEmail(email),nn=_normSupplierText(nombre);
+  return (state.proveedores||[]).find(p=>{
+    if(!p||p.id===id)return false;const f=p.fields||{};
+    return (nr&&_normSupplierRut(f['RUT'])===nr)||(ne&&_normSupplierEmail(f['Email'])===ne)||(nn&&_normSupplierText(f['Nombre'])===nn);
+  })||null;
+}
+function _supplierResolveId(value){
+  const v=String(value||'').trim();
+  if(/^rec[A-Za-z0-9]{14}$/.test(v))return v;
+  return _supplierByName(v)?.id||'';
+}
 function filterProveedores(){renderProveedores(true);}
 function renderProveedores(skipAnalytics){
   const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase();
@@ -241,9 +276,10 @@ function buildProveedorCard(p){
   const email=f['Email']||'';
   const web=f['Sitio Web']||'';
   const cats=pvCat(f)||'Sin categoría';
-  const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===String(nombre).toLowerCase());
+  const supplierId=_supplierId(p);
+  const pedidosTodos=_supplierPedidos(supplierId);
   const pedidosActivos=pedidosTodos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||''));
-  const total=pedidosTodos.reduce((s,x)=>s+(Number(x.fields['Monto total (CLP)'])||0),0);
+
   const cls=estado==='Bloqueado'?'is-blocked':estado==='Inactivo'?'is-inactive':estadoPost==='ENTREVISTAR'?'is-review':'';
   const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;
   return `<article class="op-record pv-card ${cls}" data-id="${id}">
@@ -263,7 +299,7 @@ function buildProveedorCard(p){
       <div><span>Email</span>${email?`<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>`:'<b>Sin email</b>'}</div>
       <div><span>Teléfono</span>${tel?`<a href="tel:${escapeHtml(tel)}">${escapeHtml(f['Teléfono']||tel)}</a>`:'<b>Sin teléfono</b>'}</div>
     </div>
-    <p class="op-caption">${pedidosTodos.length?`${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''} registrada${pedidosTodos.length!==1?'s':''} · ${formatCLP(total)} acumulado`:'Sin pedidos vinculados registrados'}</p>
+    <p class="op-caption">${pedidosTodos.length?`${pedidosTodos.length} pedido${pedidosTodos.length!==1?'s':''} vinculado${pedidosTodos.length!==1?'s':''} por supplierId`:'Sin pedidos vinculados registrados'}</p>
     <footer>
       <span><small>Gestión</small>${escapeHtml(f['Condiciones de pago']||'Condición de pago sin registrar')}</span>
       <div class="pv-card-actions">
@@ -287,10 +323,10 @@ function buildProveedorRow(p){
   const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${rep})">★</span>`).join('');
   const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
   const nombre=f['Nombre']||'';
-  const pedidosActivos=state.pedidos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||'')&&(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
-  const pedidosTodos=state.pedidos.filter(x=>(x.fields['Proveedor']||'').toLowerCase()===nombre.toLowerCase());
+  const supplierId=_supplierId(p);
+  const pedidosTodos=_supplierPedidos(supplierId);
+  const pedidosActivos=pedidosTodos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||''));
   const pedCount=pedidosActivos.length;
-  const pvTotalValor=pedidosTodos.reduce((s,x)=>s+(x.fields['Monto total (CLP)']||0),0);
   const pvLastOrder=pedidosTodos.map(x=>x.fields['Fecha entrega']||x.fields['Fecha ingreso']||'').filter(Boolean).sort().reverse()[0]||null;
   const estado=f['Estado']||'Activo';
   const estadoPost=f['Estado postulación']||'';
@@ -320,7 +356,7 @@ function buildProveedorRow(p){
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
           ${f['Región']?`<div style="font-size:11px"><span style="color:var(--text3)">Región:</span> ${escapeHtml(f['Región'])}</div>`:''}
           ${f['Condiciones de pago']?`<div style="font-size:11px"><span style="color:var(--text3)">Pago:</span> ${escapeHtml(f['Condiciones de pago'])}</div>`:''}
-          ${pvTotalValor>0?`<div style="font-size:11px"><span style="color:var(--text3)">Total pedidos:</span> <strong>${formatCLP(pvTotalValor)}</strong> (${pedidosTodos.length} orden${pedidosTodos.length!==1?'es':''})</div>`:''}
+          ${pedidosTodos.length?`<div style="font-size:11px"><span style="color:var(--text3)">Pedidos vinculados:</span> <strong>${pedidosTodos.length}</strong> <span style="color:var(--text3)">· costos del proveedor se muestran desde OC/precios, no desde ventas al cliente</span></div>`:''}
           ${pvLastOrder?`<div style="font-size:11px"><span style="color:var(--text3)">Último pedido:</span> ${escapeHtml(pvLastOrder)}</div>`:''}
           ${f['Productos']?`<div style="font-size:11px;grid-column:1/-1"><span style="color:var(--text3)">Productos:</span> ${escapeHtml(f['Productos'])}</div>`:''}
           ${f['Notas']?`<div style="font-size:11px;grid-column:1/-1;color:var(--text2);border-left:2px solid var(--border2);padding-left:8px">${formatRichText(f['Notas'])}</div>`:''}
@@ -337,7 +373,7 @@ function buildProveedorRow(p){
         ${pedCount>0?`<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:6px">Pedidos activos vinculados</div><div style="display:flex;flex-direction:column;gap:4px">${pedidosActivos.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px;background:var(--surface3);border-radius:5px;padding:5px 10px"><span class="mono" style="color:var(--accent)">${escapeHtml(x.fields['N° Pedido']||'—')}</span><span style="color:var(--text2)">${escapeHtml(resolveClienteName(x.fields['Cliente']))}</span><span style="color:var(--text3)">${x.fields['Estado pedido']||'—'}</span>${x.fields['Fecha entrega']?`<span style="color:var(--text3);margin-left:auto">📅 ${x.fields['Fecha entrega']}</span>`:''}</div>`).join('')}</div></div>`:''}
         <div style="border-top:1px solid var(--border2);padding-top:12px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:8px">🏷️ Historial de precios</div>
-          <div id="preciosProv-${id}" onclick="event.stopPropagation()">${_preciosProvFichaHtml(nombre)}</div>
+          <div id="preciosProv-${id}" onclick="event.stopPropagation()">${_preciosProvFichaHtml(supplierId)}</div>
         </div>
       </div>
     </td>
@@ -420,6 +456,8 @@ async function createProveedor(){
   if(pvTel&&!validPhone(pvTel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
   if(pvRut&&!validRUT(pvRut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
   if(pvRut&&pvRutEl) pvRutEl.value=formatRUT(pvRut);
+  const dup=_supplierFindDuplicate({nombre,rut:pvRut,email:pvEmail});
+  if(dup){toast('Ya existe un proveedor coincidente: '+(dup.fields?.['Nombre']||dup.id)+'. Revisa RUT, email o razón social.','error');return;}
   const btn=document.getElementById('createProveedorBtn');btn.disabled=true;btn.textContent='Guardando...';
   const fields={
     'Nombre':nombre,
@@ -512,6 +550,8 @@ async function saveEditProveedor(){
   if(epTel&&!validPhone(epTel)){toast('Teléfono inválido (8–12 dígitos)','error');return;}
   if(epRut&&!validRUT(epRut)){toast('RUT inválido — revisa el dígito verificador','error');return;}
   if(epRut&&epRutEl) epRutEl.value=formatRUT(epRut);
+  const dup=_supplierFindDuplicate({id,nombre,rut:epRut,email:epEmail});
+  if(dup){toast('Conflicto: ya existe '+(dup.fields?.['Nombre']||dup.id)+' con el mismo RUT, email o razón social.','error');return;}
   const btn=document.getElementById('epGuardarBtn');btn.disabled=true;btn.textContent='Guardando...';
   const fields={
     'Nombre':nombre,
@@ -586,19 +626,29 @@ async function bulkEditProveedorEstado(){
   err?toast(`${ok} actualizados, ${err} con error`,'info'):toast(`✓ ${ok} proveedor${ok!==1?'es':''} → "${estado}"`,'success');
   clearProveedoresSelection();renderProveedores();
 }
+function _supplierDependencies(id){
+  const prices=_preciosProv().filter(x=>(x.supplierId||_supplierResolveId(x.prov))===id);
+  const pos=_ocAll().filter(x=>(x.supplierId||_supplierResolveId(x.proveedor))===id);
+  const pedidos=_supplierPedidos(id);
+  return {prices,pos,pedidos,total:prices.length+pos.length+pedidos.length};
+}
+async function _archiveSupplier(id,nombre){
+  await airtableWrite('Proveedores','PATCH',id,{'Estado':'Inactivo'});
+  const p=_supplierById(id);if(p)p.fields['Estado']='Inactivo';renderProveedores();
+  toast('Proveedor archivado; se conservaron sus relaciones históricas.','success');
+}
 async function deleteProveedor(id,nombre){
-  if(!confirm(`¿Eliminar proveedor "${nombre}"?`)) return;
-  const rec=state.proveedores.find(x=>x.id===id);
-  const snapshot=rec?sanitizeForRestore(rec.fields):null;
+  const deps=_supplierDependencies(id);
+  if(deps.total){
+    if(!confirm(`“${nombre}” tiene dependencias (${deps.pedidos.length} pedidos, ${deps.pos.length} OC, ${deps.prices.length} precios). No se puede eliminar. ¿Archivarlo como Inactivo?`))return;
+    try{await _archiveSupplier(id,nombre);}catch(e){toast('Error: '+e.message,'error');}
+    return;
+  }
+  if(!confirm(`¿Eliminar proveedor “${nombre}”? No tiene dependencias registradas.`))return;
   try{
     await airtableDelete('Proveedores',id);
-    state.proveedores=state.proveedores.filter(x=>x.id!==id);
-    closeEditProveedor();
-    renderProveedores();
-    toastUndo(`Proveedor "${nombre}" eliminado`,async()=>{
-      try{const r=await airtableWrite('Proveedores','POST',null,snapshot);if(r&&r.id) state.proveedores.push(r);renderProveedores();toast(`✓ "${nombre}" restaurado`,'success');}
-      catch(e){toast('No se pudo restaurar: '+e.message,'error');}
-    });
+    state.proveedores=state.proveedores.filter(x=>x.id!==id);closeEditProveedor();renderProveedores();
+    toast('Proveedor eliminado','success');
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
@@ -653,10 +703,11 @@ function exportToCSV(t){
   if(t==='clientes'){headers=['Empresa','Contacto','Email','Teléfono','Etapa','Revenue','Estado','Fact.venc.'];let _cd=(typeof getSortedClientes==='function')?getSortedClientes():state.clientes;if(typeof _cliQuery!=='undefined'&&_cliQuery)_cd=_cd.filter(c=>_rowText(buildClienteRow(c)).includes(_cliQuery));rows=_cd.map(c=>{const f=c.fields;return[f['Empresa']||'',f['Contacto']||'',f['Email']||'',f['Teléfono']||'',f['Etapa venta']||'',f['Revenue total cliente (CLP)']||0,f['Estado cuenta']||'',f['Facturas vencidas']||0];});}
   else if(t==='cotizaciones'){headers=['N°','Cliente','Canal','Subtotal','Total','Urgente','Estado','Vto.'];rows=((typeof getSortedCotizaciones==='function')?getSortedCotizaciones():state.cotizaciones).map(c=>{const f=c.fields;return[f['N° Cotización']||'',resolveClienteName(f['Cliente']),f['Canal solicitud']||'',f['Subtotal (CLP)']||0,f['Total final (CLP)']||0,f['Urgencia (+25%)']?'Sí':'No',f['Estado cotización']||'',f['Fecha vencimiento']||''];});}
   else if(t==='pedidos'){headers=['N°','Cliente','Estado','Proveedor','Monto','Forma de Pago','Anticipo 50%','Saldo 50%','QA','Entrega'];rows=state.pedidos.map(p=>{const f=p.fields;return[f['N° Pedido']||'',resolveClienteName(f['Cliente']),f['Estado pedido']||'',f['Proveedor']||'',f['Monto total (CLP)']||0,f['Forma de pago']||'',f['Anticipo pagado (50%)']?'Sí':'No',f['Saldo pagado (50%)']?'Sí':'No',f['Resultado QA']||'',f['Fecha entrega']||''];});}
-  else if(t==='proveedores'){headers=['Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Reputación','Estado','Plazo (días)','Condiciones pago','Productos','Notas'];rows=state.proveedores.map(p=>{const f=p.fields;return[f['Nombre']||'',pvCat(f),f['Contacto']||'',f['Teléfono']||'',f['Email']||'',f['Comuna']||'',f['Reputación']||'',f['Estado']||'',f['Plazo de entrega (días)']||'',f['Condiciones de pago']||'',f['Productos']||'',f['Notas']||''];});}
+  else if(t==='proveedores'){headers=['supplierId','Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Reputación','Estado','Plazo (días)','Condiciones pago','Productos','Notas'];const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase(),cat=document.getElementById('proveedorCatFilter')?.value||'';const visible=state.proveedores.filter(p=>{const f=p.fields||{};return(!search||(f['Nombre']||'').toLowerCase().includes(search)||(f['Contacto']||'').toLowerCase().includes(search)||(f['Email']||'').toLowerCase().includes(search)||(f['Comuna']||'').toLowerCase().includes(search)||(f['Productos']||'').toLowerCase().includes(search)||pvCat(f).toLowerCase().includes(search))&&(!cat||pvCat(f).includes(cat));});rows=visible.map(p=>{const f=p.fields;return[p.id,f['Nombre']||'',pvCat(f),f['Contacto']||'',f['Teléfono']||'',f['Email']||'',f['Comuna']||'',f['Reputación']||'',f['Estado']||'',f['Plazo de entrega (días)']||'',f['Condiciones de pago']||'',f['Productos']||'',f['Notas']||''];});}
   else{toast('Tipo desconocido','error');return;}
   if(!rows.length){toast('Sin datos','error');return;}
-  const csv=[headers.join(','),...rows.map(r=>r.map(v=>{const s=String(v).replace(/"/g,'""');return/[",\n]/.test(s)?`"${s}"`:s;}).join(','))].join('\n');
+  const csvSafe=v=>{let x=String(v??'');if(/^[=+\-@]/.test(x))x="'"+x;const z=x.replace(/"/g,'""');return/[",\n]/.test(z)?`"${z}"`:z;};
+  const csv=[headers.join(','),...rows.map(r=>r.map(csvSafe).join(','))].join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${t}-${hoyCL()}.csv`;a.click();URL.revokeObjectURL(url);toast(`✓ ${t}.csv descargado`,'success');
 }
 
@@ -681,11 +732,15 @@ function _normItem(s){return String(s||'').toLowerCase().normalize('NFD').replac
 // anunciaba un ahorro inexistente. La unidad entra en la identidad del ítem.
 function _precioKey(item,unidad){return _normItem(item)+'|'+_normItem(unidad);}
 function _preciosDeProv(prov){
-  const k=String(prov||'').toLowerCase();
-  return _preciosProv().filter(p=>String(p.prov||'').toLowerCase()===k).sort((a,b)=>_normItem(a.item).localeCompare(_normItem(b.item))||String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  const supplierId=_supplierResolveId(prov);
+  return _preciosProv().filter(p=>{
+    const id=p.supplierId||_supplierResolveId(p.prov);
+    return supplierId&&id===supplierId;
+  }).sort((a,b)=>_normItem(a.item).localeCompare(_normItem(b.item))||String(b.fecha||'').localeCompare(String(a.fecha||'')));
 }
 function addPrecioProv(prov){
-  const nombre=String(prov||'').trim();
+  const supplierId=_supplierResolveId(prov);const supplier=_supplierById(supplierId);if(!supplier){toast('Proveedor no encontrado','error');return;}
+  const nombre=String(supplier.fields?.['Nombre']||'').trim();
   const item=(prompt('Ítem o material cotizado (ej: PLA 1kg negro, Impresión A3, Corte láser MDF 3mm):')||'').trim();
   if(!item)return;
   const precioRaw=prompt('Precio unitario cotizado (CLP, sin IVA):','');if(precioRaw==null)return;
@@ -696,26 +751,26 @@ function addPrecioProv(prov){
   const fecha=(prompt('Fecha de la cotización (AAAA-MM-DD):',hoyISO)||'').trim()||hoyISO;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){toast('Fecha inválida (AAAA-MM-DD)','error');return;}
   const nota=(prompt('Nota opcional (condición, mínimo de compra, etc.):','')||'').trim();
-  const p=(state.proveedores||[]).find(x=>String(x.fields['Nombre']||'').toLowerCase()===nombre.toLowerCase());
-  const cat=p?pvCat(p.fields):'';
+  const p=supplier;
+  const cat=pvCat(p.fields||{});
   const arr=_preciosProv();
-  arr.push({id:'pp'+arr.length+'_'+item.length+'_'+precio,prov:nombre,cat,item,precio,unidad,fecha,nota});
+  arr.push({id:crypto.randomUUID(),supplierId,prov:nombre,cat,item,sku:_normItem(item),precio,moneda:'CLP',unidad,impuesto:19,minimoCompra:null,fecha,vigenteDesde:fecha,fuente:nota||'',nota,createdAt:new Date().toISOString()});
   _preciosProvSaveArr(arr);
   toast('✓ Precio registrado','success');
   try{renderProveedores();}catch(e){}
   const box=document.getElementById('preciosProv-'+(p?p.id:''));
-  if(p) try{const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(nombre);}catch(e){}
+  if(p) try{const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(supplierId);}catch(e){}
 }
 function delPrecioProv(id){
   const arr=_preciosProv();const rec=arr.find(x=>x.id===id);
   _preciosProvSaveArr(arr.filter(x=>x.id!==id));
   try{renderProveedores();}catch(e){}
-  if(rec){const p=(state.proveedores||[]).find(x=>String(x.fields['Nombre']||'').toLowerCase()===String(rec.prov||'').toLowerCase());if(p){const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(rec.prov);}}
+  if(rec){const sid=rec.supplierId||_supplierResolveId(rec.prov);const p=_supplierById(sid);if(p){const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(sid);}}
 }
 // HTML del historial de precios de un proveedor (con tendencia vs. registro anterior del mismo ítem)
 function _preciosProvFichaHtml(prov){
-  const list=_preciosDeProv(prov);
-  const add=`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();addPrecioProv('${escapeHtml(prov).replace(/'/g,"\\'")}')" style="font-size:11px">＋ Registrar precio</button>`;
+  const supplierId=_supplierResolveId(prov);const supplier=_supplierById(supplierId);const list=_preciosDeProv(supplierId);
+  const add=`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();addPrecioProv('${supplierId}')" style="font-size:11px">＋ Registrar precio</button>`;
   if(!list.length) return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:11px;color:var(--text3)">Sin precios registrados para este proveedor.</span>${add}</div>`;
   // mejor precio por ítem (global) para marcar cuándo este proveedor es el más barato
   const best=_mejorPrecioPorItem();
@@ -789,15 +844,26 @@ async function _ocBackup(){
   }catch(e){}
 }
 function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
+async function _ocReserveNum(){
+  try{
+    const cfg=window.PROXY_CONFIG||{};const base=String(cfg.base||cfg.url||window.AIRTABLE_PROXY_URL||'').replace(/\/$/,'');
+    const key=cfg.key||window.AIRTABLE_PROXY_KEY||'';
+    if(!base||!key)throw Error('proxy no configurado');
+    const r=await fetch(base+'/supplier/purchase-order/reserve',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':key,'Content-Type':'application/json'},body:JSON.stringify({year:new Date().getFullYear()})});
+    const d=await r.json().catch(()=>null);if(!r.ok||!d?.numero)throw Error(d?.error||'reserva no disponible');
+    return d.numero;
+  }catch(e){throw new Error('No se pudo reservar un número de OC seguro. '+e.message);}
+}
 function openOCModal(provNombre,ocId){
   const sel=document.getElementById('ocProveedor');
   const provs=(state.proveedores||[]).slice().sort((a,b)=>String(a.fields['Nombre']||'').localeCompare(String(b.fields['Nombre']||'')));
-  sel.innerHTML='<option value="">— Selecciona proveedor —</option>'+provs.map(p=>`<option value="${escapeHtml(p.fields['Nombre']||'')}">${escapeHtml(p.fields['Nombre']||'')}</option>`).join('');
+  sel.innerHTML='<option value="">— Selecciona proveedor —</option>'+provs.map(p=>`<option value="${p.id}">${escapeHtml(p.fields['Nombre']||'')}</option>`).join('');
   document.getElementById('ocRows').innerHTML='';
   document.getElementById('ocId').value=ocId||'';
   const oc=ocId?_ocAll().find(x=>x.id===ocId):null;
-  if(oc){sel.value=oc.proveedor||'';document.getElementById('ocFecha').value=oc.fecha||hoyCL();document.getElementById('ocNotas').value=oc.notas||'';(oc.items||[]).forEach(it=>ocAddRow(it));}
-  else{sel.value=provNombre||'';document.getElementById('ocFecha').value=hoyCL();document.getElementById('ocNotas').value='';ocAddRow();}
+  if(oc){sel.value=oc.supplierId||_supplierResolveId(oc.proveedor)||'';document.getElementById('ocFecha').value=oc.fecha||hoyCL();document.getElementById('ocNotas').value=oc.notas||'';(oc.items||[]).forEach(it=>ocAddRow(it));}
+  else{sel.value=_supplierResolveId(provNombre)||'';document.getElementById('ocFecha').value=hoyCL();document.getElementById('ocNotas').value='';ocAddRow();}
   ocProveedorChanged();ocCalc();
   document.getElementById('ocModal').style.display='flex';
 }
@@ -835,9 +901,10 @@ function ocCalc(){
   set('ocNeto',neto);set('ocIva',iva);set('ocTotal',neto+iva);
   return {neto,iva,total:neto+iva};
 }
-function guardarOC(conPDF){
-  const proveedor=document.getElementById('ocProveedor').value;
-  if(!proveedor){toast('Selecciona un proveedor','error');return;}
+async function guardarOC(conPDF){
+  const supplierId=document.getElementById('ocProveedor').value;const supplier=_supplierById(supplierId);
+  if(!supplier){toast('Selecciona un proveedor','error');return;}
+  const proveedor=supplier.fields?.['Nombre']||supplierId;
   const items=_ocRows().filter(x=>x.item&&x.cantidad>0).map(x=>({item:x.item,cantidad:x.cantidad,precio:x.precio}));
   if(!items.length){toast('Agrega al menos un ítem con cantidad','error');return;}
   // El total tiene que salir de los MISMOS ítems que se guardan. Antes venía de
@@ -851,9 +918,9 @@ function guardarOC(conPDF){
   if(fantasmas) toast(`⚠ ${fantasmas} fila(s) con precio pero sin nombre no se incluyeron. Ponles nombre o bórralas.`,'info');
   const arr=_ocAll();const id=document.getElementById('ocId').value;
   let oc;
-  const base={proveedor,fecha:document.getElementById('ocFecha').value||hoyCL(),notas:(document.getElementById('ocNotas').value||'').trim(),items,neto,total,estado:'Emitida'};
+  const base={supplierId,proveedor,fecha:document.getElementById('ocFecha').value||hoyCL(),notas:(document.getElementById('ocNotas').value||'').trim(),items:items.map(x=>({...x,unidad:'unidad',moneda:'CLP',impuesto:19})),moneda:'CLP',condiciones:supplier.fields?.['Condiciones de pago']||'',neto,total,estado:id?(arr.find(x=>x.id===id)?.estado||'Borrador'):'Borrador',updatedAt:new Date().toISOString()};
   if(id){oc=arr.find(x=>x.id===id);if(oc)Object.assign(oc,base);}
-  else{oc={id:'oc'+Date.now()+'_'+arr.length,numero:_ocNextNum(),ts:Date.now(),...base};arr.push(oc);}
+  else{oc={id:crypto.randomUUID(),numero:await _ocReserveNum(),ts:Date.now(),createdAt:new Date().toISOString(),historial:[{estado:'Borrador',fecha:new Date().toISOString(),actor:AUTH.getUser()?.username||'usuario'}],...base};arr.push(oc);}
   _ocSaveArr(arr);closeOCModal();toast(`✓ Orden de compra ${oc.numero} guardada`,'success');
   try{renderOCList();}catch(e){}
   if(conPDF) try{generarOCPDF(oc.id);}catch(e){}
@@ -899,7 +966,7 @@ function renderOCList(){
   el.innerHTML=`<div class="card" style="margin-top:16px"><div class="card-header"><span class="card-title">🧾 Órdenes de compra</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openOCModal()">＋ Nueva OC</button></div>
     <div style="padding:2px 0 8px">${arr.slice(0,15).map(o=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--border)">
       <span class="mono" style="color:var(--accent);flex-shrink:0">${escapeHtml(o.numero||'—')}</span>
-      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(o.proveedor||'—')}</div><div style="font-size:10.5px;color:var(--text3)">${escapeHtml(o.fecha||'')} · ${(o.items||[]).length} ítem(s) · ${escapeHtml(o.estado||'Emitida')}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(_supplierById(o.supplierId)?.fields?.['Nombre']||o.proveedor||'—')}</div><div style="font-size:10.5px;color:var(--text3)">${escapeHtml(o.fecha||'')} · ${(o.items||[]).length} ítem(s) · ${escapeHtml(o.estado||'Emitida')}</div></div>
       <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent3);flex-shrink:0">${formatCLP(o.total||0)}</span>
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="PDF" data-id="${o.id}" onclick="generarOCPDF(this.dataset.id)">📄</button>
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Editar" data-id="${o.id}" onclick="openOCModal(null,this.dataset.id)">✎</button>
