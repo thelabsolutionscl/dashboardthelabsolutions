@@ -1501,17 +1501,61 @@ function sharedRemPeriodSlice(doc,p){
     adjustments:doc.adjustments.filter(key).sort((a,b)=>a.id.localeCompare(b.id))
   };
 }
+function sharedRemEconomicEvent(e){
+  const x={...e};delete x.status;delete x.updatedAt;return x;
+}
+function sharedRemPeriodsTransitionAllowed(current,next,actor){
+  const allowed={
+    draft:new Set(['draft','review']),review:new Set(['review','draft','approved']),
+    approved:new Set(['approved','review','closed']),closed:new Set(['closed','paid','reopened']),
+    paid:new Set(['paid','reopened']),reopened:new Set(['reopened','review','approved','closed'])
+  };
+  for(const p of next.periods){
+    const old=current.periods.find(x=>x.id===p.id);
+    if(!old){if(p.status!=='draft')return false;continue;}
+    if(!allowed[old.status]?.has(p.status))return false;
+    if(p.status==='reopened'&&old.status!==p.status&&actor?.role!=='admin')return false;
+  }
+  return current.periods.every(old=>next.periods.some(p=>p.id===old.id));
+}
+function sharedRemClosedTotalsValid(doc){
+  for(const p of doc.periods){
+    if(!['closed','paid'].includes(p.status))continue;
+    const key=x=>x.period===p.period&&String(x.sellerEmail).toLowerCase()===String(p.sellerEmail).toLowerCase();
+    const events=doc.events.filter(key);
+    if(events.some(e=>!['approved','paid','reversed'].includes(e.status)))return false;
+    const total=Math.round(events.reduce((n,e)=>n+Number(e.commission||0),0)+
+      doc.adjustments.filter(key).reduce((n,a)=>n+Number(a.amount||0),0));
+    if(Math.round(Number(p.snapshotTotal||0))!==total)return false;
+  }
+  return true;
+}
 function sharedRemProtected(current,next,actor){
   for(const old of current.periods){
     if(!['closed','paid'].includes(old.status))continue;
     const newer=next.periods.find(p=>p.id===old.id);
     if(!newer)return false;
-    const reopening=newer.status==='reopened'&&actor?.role==='admin';
     const before=sharedRemPeriodSlice(current,old),after=sharedRemPeriodSlice(next,newer);
-    if(reopening){
-      if(JSON.stringify(before.events)!==JSON.stringify(after.events)||
-         JSON.stringify(before.adjustments)!==JSON.stringify(after.adjustments)||
-         newer.snapshotTotal!==old.snapshotTotal)return false;
+    const sameAdjustments=JSON.stringify(before.adjustments)===JSON.stringify(after.adjustments);
+    const immutablePeriod=(p)=>({
+      id:p.id,period:p.period,sellerEmail:p.sellerEmail,seller:p.seller,
+      snapshotTotal:p.snapshotTotal,closedAt:p.closedAt,ruleVersions:p.ruleVersions
+    });
+    if(JSON.stringify(immutablePeriod(old))!==JSON.stringify(immutablePeriod(newer))||!sameAdjustments)return false;
+    if(newer.status==='reopened'&&actor?.role==='admin'){
+      if(JSON.stringify(before.events)!==JSON.stringify(after.events))return false;
+      continue;
+    }
+    if(old.status==='closed'&&newer.status==='paid'){
+      if(before.events.length!==after.events.length)return false;
+      const afterById=new Map(after.events.map(e=>[e.id,e]));
+      for(const ev of before.events){
+        const ne=afterById.get(ev.id);if(!ne)return false;
+        if(JSON.stringify(sharedRemEconomicEvent(ev))!==JSON.stringify(sharedRemEconomicEvent(ne)))return false;
+        if(ev.status==='approved'&&ne.status!=='paid')return false;
+        if(ev.status==='reversed'&&ne.status!=='reversed')return false;
+        if(ev.status==='paid'&&ne.status!=='paid')return false;
+      }
       continue;
     }
     if(JSON.stringify(before)!==JSON.stringify(after))return false;
@@ -3145,6 +3189,12 @@ export class CrmMutationGuard {
     if(current.revision!==payload.expectedRevision)
       return this._json({error:'Remunerations changed on another device',
         code:'REMUNERATIONS_REVISION_CONFLICT',revision:current.revision,data:current.data},409);
+    if(!sharedRemPeriodsTransitionAllowed(current.data,payload.data,actor))
+      return this._json({error:'Invalid remuneration period transition',
+        code:'REMUNERATIONS_TRANSITION_DENIED'},409);
+    if(!sharedRemClosedTotalsValid(payload.data))
+      return this._json({error:'Closed remuneration snapshot does not reconcile',
+        code:'REMUNERATIONS_SNAPSHOT_MISMATCH'},409);
     if(!sharedRemProtected(current.data,payload.data,actor))
       return this._json({error:'Closed remuneration period is immutable',
         code:'REMUNERATIONS_PERIOD_LOCKED'},409);
