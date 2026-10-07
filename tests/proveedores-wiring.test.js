@@ -168,7 +168,7 @@ test('API Proveedores está protegida por Access y Durable Object',()=>{
 
 test('bootstrap y mutaciones generan auditoría',()=>{
   assert.match(PROXY,/officeAudit\(env,authorized\.identity,'bootstrap','suppliers'/);
-  assert.match(PROXY,/officeAudit\(env,authorized\.identity,'supplier:'/);
+  assert.match(PROXY,/officeAudit\(\s*env,authorized\.identity,'supplier:'/);
 });
 
 test('no quedan TODO de auditoría',()=>{
