@@ -128,6 +128,7 @@ function renderCatManager(){
       ${n?`<span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">${n} uso${n!==1?'s':''}</span>`:''}
       <button onclick="catMove(${i},-1)" ${i===0?'disabled':''} title="Subir" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===0?'.3':'1'}">↑</button>
       <button onclick="catMove(${i},1)" ${i===cats.length-1?'disabled':''} title="Bajar" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:11px;line-height:1;cursor:pointer;opacity:${i===cats.length-1?'.3':'1'}">↓</button>
+      <button onclick="renamePvCat(${i})" title="Renombrar y migrar categoría" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer">✎</button>
       <button onclick="deletePvCat(${i})" title="${n?'Hay proveedores en esta categoría':''}" style="background:rgba(255,68,68,0.1);border:1px solid rgba(255,68,68,0.25);color:var(--danger);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:'DM Sans',sans-serif">✕</button>
     </div>`;
   }).join(''):`<div class="empty-state" style="padding:20px;font-size:12px">Sin categorías — agrega una abajo</div>`;
@@ -979,7 +980,10 @@ getPvCats=function(){
     .sort((a,b)=>Number(a.fields?.Orden||0)-Number(b.fields?.Orden||0)).map(r=>r.fields?.Nombre).filter(Boolean);
   return remote.length?remote:[...PV_CATS_DEFAULT];
 }
-setPvCats=function(){toast('Las categorías ahora son compartidas. Usa la gestión central de categorías.','info');}
+setPvCats=function(arr){
+  const colors=getPvCatColorMap(),categories=(arr||[]).map(name=>({name,color:(colors[name]||[])[0]||'#888888'}));
+  _supplierMutate('syncCategories',{categories}).then(()=>_supplierOpsHydrate(true)).then(()=>{fillCatSelects();renderCatManager();}).catch(e=>toast('Error categorías: '+e.message,'error'));
+}
 getPvCatColorMap=function(){
   const out={};for(const r of _supplierOpsState.categories||[]){const f=r.fields||{};if(f.Nombre&&f.Color)out[f.Nombre]=[f.Color,f.Color+'18',f.Color+'48'];}return out;
 }
@@ -1086,3 +1090,38 @@ renderProveedores=function(skipAnalytics){
   return _supplierLegacyRender(skipAnalytics);
 };
 setTimeout(()=>_supplierOpsHydrate().then(ok=>{if(ok){fillCatSelects();renderProveedores();}}),0);
+
+renamePvCat=async function(idx){
+  const cats=getPvCats(),oldName=cats[idx];if(!oldName)return;
+  const newName=(prompt('Nuevo nombre de categoría:',oldName)||'').trim();if(!newName||newName===oldName)return;
+  try{
+    await _supplierMutate('renameCategory',{oldName,newName});await _supplierOpsHydrate(true);
+    fillCatSelects();renderCatManager();renderProveedores();toast('✓ Categoría renombrada y proveedores migrados','success');
+  }catch(e){toast('Error: '+e.message,'error');}
+};
+deletePvCat=async function(idx){
+  const cats=getPvCats(),name=cats[idx];if(!name)return;
+  const inUse=state.proveedores.some(p=>pvCat(p.fields).split(', ').map(x=>x.trim()).includes(name));
+  if(inUse){toast('No se puede eliminar: primero renombra/migra esta categoría o quítala de los proveedores.','error');return;}
+  cats.splice(idx,1);setPvCats(cats);
+};
+const _supplierLegacyExport=exportToCSV;
+exportToCSV=async function(t){
+  if(t!=='proveedores')return _supplierLegacyExport(t);
+  const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase(),cat=document.getElementById('proveedorCatFilter')?.value||'';
+  const list=(state.proveedores||[]).filter(p=>{const f=p.fields||{};
+    const matchSearch=!search||[f.Nombre,f.Contacto,f.Email,f.Comuna,f.Productos,pvCat(f)].some(v=>String(v||'').toLowerCase().includes(search));
+    return matchSearch&&(!cat||pvCat(f).includes(cat));});
+  if(!list.length){toast('Sin datos para exportar','error');return;}
+  const headers=['Nombre','Categoría','Contacto','Teléfono','Email','Comuna','Región','Estado','RUT','Condiciones pago','Plazo días','Productos','Notas'];
+  const rows=list.map(p=>{const f=p.fields||{};return[f.Nombre,pvCat(f),f.Contacto,f['Teléfono'],f.Email,f.Comuna,f['Región'],f.Estado,f.RUT,f['Condiciones de pago'],f['Plazo de entrega (días)'],f.Productos,f.Notas];});
+  const safe=v=>{let x=String(v??'');if(/^[=+\-@]/.test(x))x="'"+x;x=x.replace(/"/g,'""');return/[",\n]/.test(x)?'"'+x+'"':x;};
+  const csv=[headers.map(safe).join(','),...rows.map(r=>r.map(safe).join(','))].join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='proveedores-'+hoyCL()+'.csv';a.click();URL.revokeObjectURL(url);
+  try{
+    const cfg=_supplierProxyCfg();if(cfg)await fetch(cfg.base+'/office/audit',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify({action:'export',entity:'Proveedores',executionId:_supplierMutationId('export'),detail:'CSV filtrado · '+list.length+' filas'})});
+  }catch(_){}
+  toast('✓ proveedores.csv descargado','success');
+};
