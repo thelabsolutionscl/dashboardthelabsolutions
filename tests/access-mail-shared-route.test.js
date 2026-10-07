@@ -12,8 +12,8 @@ const workerSource=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/wo
   .replace('export default','const worker=');
 const {
   CrmMutationGuard,worker,sharedMailSignatureAllowed,sharedMailAddressesAllowed,
-  sharedMailTemplatesAllowed,sharedMailMailboxAllowed,mailAuthorizedAccounts
-}=new Function(workerSource+'\nreturn {CrmMutationGuard,worker,sharedMailSignatureAllowed,sharedMailAddressesAllowed,sharedMailTemplatesAllowed,sharedMailMailboxAllowed,mailAuthorizedAccounts};')();
+  sharedMailTemplatesAllowed,sharedMailMailboxAllowed,mailAuthorizedAccounts,mailAccessEnforced
+}=new Function(workerSource+'\nreturn {CrmMutationGuard,worker,sharedMailSignatureAllowed,sharedMailAddressesAllowed,sharedMailTemplatesAllowed,sharedMailMailboxAllowed,mailAuthorizedAccounts,mailAccessEnforced};')();
 const priorFetch=global.fetch;
 test.after(()=>{global.fetch=priorFetch;});
 const APP='app1YtD74AqiPWQhy',TABLE='Monitor%20Sistema',BASE='/v0/'+APP+'/';
@@ -121,6 +121,12 @@ test('mail validators accept live-shaped data and reject malformed or oversized 
   assert.equal(sharedMailAddressesAllowed(['a@cliente.cl','a@cliente.cl']),false);
   assert.equal(sharedMailTemplatesAllowed(templates()),true);
   assert.equal(sharedMailTemplatesAllowed({...templates(),secret:'x'}),false);
+});
+test('mail cutover requires an explicit server-side switch',()=>{
+  assert.equal(mailAccessEnforced({}),false);
+  assert.equal(mailAccessEnforced({MAIL_ACCESS_MODE:'false'}),false);
+  assert.equal(mailAccessEnforced({MAIL_ACCESS_MODE:'true'}),true);
+  assert.equal(mailAccessEnforced({MAIL_ACCESS_MODE:' TRUE '}),true);
 });
 test('mailbox policy grants only self unless a shared mailbox is explicitly mapped',()=>{
   const sales={role:'sales',email:'seller@thelab.solutions'};

@@ -31,9 +31,13 @@ const MAIL={
     const u=AUTH.getUser(); if(!u) return [];
     let list=[]; try{list=JSON.parse(localStorage.getItem(this._acctsKey())||'[]');}catch(e){list=[];}
     if(!Array.isArray(list)) list=[];
-    if(!list.some(a=>a&&a.email===u.username)) list.unshift({email:u.username,name:u.name||''});
-    const allowed=Array.isArray(this._authorizedAccounts)&&this._authorizedAccounts.length
-      ?new Set(this._authorizedAccounts):new Set([u.username]);
+    if(!list.some(a=>a&&String(a.email||'').toLowerCase()===String(u.username||'').toLowerCase()))
+      list.unshift({email:String(u.username||'').toLowerCase(),name:u.name||''});
+    // Durante la transición previa al cutover, conservar las cuentas que el
+    // usuario ya tenía agregadas localmente. La allowlist server-side pasa a
+    // ser autoritativa SOLO cuando /mail/accounts confirma enforced:true.
+    if(!this._secureMailReady)return list.filter(a=>a&&a.email);
+    const allowed=new Set(Array.isArray(this._authorizedAccounts)?this._authorizedAccounts:[]);
     return list.filter(a=>a&&allowed.has(String(a.email||'').toLowerCase()));
   },
   setAccounts(list){const k=this._acctsKey();if(k) localStorage.setItem(k,JSON.stringify(list));},
@@ -69,6 +73,14 @@ const MAIL={
         headers:{'X-App-Key':cfg.key}});
       const d=await r.json().catch(()=>null);
       if(!r.ok||!d?.ok||!Array.isArray(d.accounts))throw Error('not ready');
+      // Una respuesta de identidad válida no significa que el cutover de correo
+      // esté activo. Sin el switch explícito, no ocultar las cuentas locales ni
+      // forzar sesiones backend a medio configurar.
+      if(d.enforced!==true){
+        this._secureMailReady=false;
+        this._authorizedAccounts=null;
+        return false;
+      }
       this._authorizedAccounts=d.accounts.map(x=>String(x).toLowerCase());
       this._secureMailReady=true;
       const u=AUTH.getUser();
@@ -908,6 +920,10 @@ const MAIL={
     if(email===null) return;
     email=email.trim().toLowerCase();
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Correo inválido','error'); return; }
+    if(this._secureMailReady&&!this._authorizedAccounts?.includes(email)){
+      toast('Esta casilla no está autorizada para tu usuario. Debe agregarse en la allowlist de Correo.','error');
+      return;
+    }
     const list=this.accounts();
     const existing=list.find(a=>a.email===email);
     // Casillas como hola@ vienen precargadas: si ya está, igual dejamos ajustar
