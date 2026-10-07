@@ -6,6 +6,9 @@ on:
     paths:
       - 'index.html'
       - 'js/oficina.js'
+      - 'airtable-proxy/src/access-auth.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'js/agentes.js'
       - 'js/maquinas.js'
       - 'tests/oficina-wiring.test.js'
       - 'tests/smoke.test.js'
@@ -45,6 +48,9 @@ jobs:
         run: |
           node --check js/oficina.js
           node --check js/maquinas.js
+          node --check js/agentes.js
+          node --check airtable-proxy/src/worker.js
+          node --check airtable-proxy/src/access-auth.js
 
       - name: Audit office wiring and safety
         run: node --test tests/oficina-wiring.test.js
