@@ -1322,6 +1322,45 @@ async function handleLead(request, env, ctx, cors) {
  * Crea un registro en la tabla Proveedores con "Estado postulación" = ENTREVISTAR.
  * El equipo lo cambia luego a APROBADO / RECHAZADO y añade "Motivo evaluación".
  * ══════════════════════════════════════════════════════════════════════ */
+function supplierNormText(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+function supplierNormRut(v){return String(v||'').toUpperCase().replace(/[^0-9K]/g,'');}
+function supplierNormEmail(v){return String(v||'').trim().toLowerCase();}
+function supplierIdentityKey(body){
+  const explicit=str(body?.idempotencyKey||body?.idempotency_key);
+  if(explicit&&/^[A-Za-z0-9._:-]{12,128}$/.test(explicit))return 'idem:'+explicit;
+  const rut=supplierNormRut(body?.rut),email=supplierNormEmail(body?.email);
+  const name=supplierNormText(body?.name||body?.company);
+  if(rut)return 'rut:'+rut;if(email)return 'email:'+email;
+  return name?'name:'+name:'';
+}
+async function airtableFindProveedor(env,{rut,email,nombre}){
+  const esc=x=>String(x).replace(/'/g,"\\'");
+  const clauses=[];
+  const nr=supplierNormRut(rut),ne=supplierNormEmail(email),nn=supplierNormText(nombre);
+  if(nr)clauses.push(`REGEX_REPLACE(UPPER({RUT} & ""), "[^0-9K]", "")='${esc(nr)}'`);
+  if(ne)clauses.push(`LOWER(TRIM({Email} & ""))='${esc(ne)}'`);
+  if(nn)clauses.push(`LOWER(TRIM({Nombre} & ""))=LOWER('${esc(String(nombre).trim())}')`);
+  if(!clauses.length)return null;
+  const formula=clauses.length>1?`OR(${clauses.join(",")})`:clauses[0];
+  const url=`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Proveedores")}?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
+  for(let i=0;i<5;i++){
+    try{
+      const r=await fetch(url,{headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+      if(r.ok){const d=await r.json();return d?.records?.[0]||null;}
+      if(r.status===429||r.status>=500){await sleep(250*(i+1));continue;}
+      throw new Error(await airtableErr(r));
+    }catch(e){if(i===4)throw e;await sleep(250*(i+1));}
+  }
+  return null;
+}
+async function supplierApplicationProcess(env,payload){
+  if(!env.AIRTABLE_TOKEN||!env.AIRTABLE_BASE_ID)throw new Error('Airtable no configurado');
+  const existing=await airtableFindProveedor(env,{rut:payload.rut,email:payload.email,nombre:payload.nombre});
+  if(existing)return {ok:true,proveedorId:existing.id,reused:true};
+  const rec=await airtableCreateTolerant(env,"Proveedores",payload.fields);
+  return {ok:true,proveedorId:rec?.id||null,reused:false};
+}
+
 async function handleProveedor(request, env, ctx, cors) {
   // 1) Clave compartida (anti-bot básico)
   if (env.PUBLIC_LEAD_KEY) {
@@ -1386,14 +1425,23 @@ async function handleProveedor(request, env, ctx, cors) {
   });
 
   const summary = { nombre, contacto, email, phone, categoria, productos, website, message };
+  const idempotencyKey=supplierIdentityKey({...body,nombre,email,rut:str(body.rut)});
+  if(!idempotencyKey)return json({ok:false,error:"No se pudo construir identidad de proveedor"},422,cors);
+  if(!env.SUPPLIER_APPLICATION_GUARD)
+    return json({ok:false,error:"Protección idempotente de proveedores no configurada"},503,cors);
 
   try {
-    const rec = await airtableCreateTolerant(env, "Proveedores", fields);
-    ctx.waitUntil(sendProveedorNotification(env, summary));
-    return json({ ok: true, proveedorId: rec?.id || null }, 200, cors);
+    const stub=env.SUPPLIER_APPLICATION_GUARD.get(env.SUPPLIER_APPLICATION_GUARD.idFromName(idempotencyKey));
+    const guarded=await stub.fetch("https://supplier.internal/apply",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({key:idempotencyKey,payload:{nombre,email,rut:str(body.rut),fields}})
+    });
+    const result=await guarded.json().catch(()=>null);
+    if(!guarded.ok||!result?.ok)throw new Error(result?.error||"No se pudo registrar la postulación");
+    if(!result.replayed&&!result.reused)ctx.waitUntil(sendProveedorNotification(env, summary));
+    return json({ok:true,proveedorId:result.proveedorId||null,reused:!!result.reused,replayed:!!result.replayed},200,cors);
   } catch (e) {
     console.error("[proveedor]", e?.stack || e?.message || String(e));
-    // No perder la postulación: avisar por email aunque Airtable falle.
     ctx.waitUntil(sendProveedorNotification(env, { ...summary, failed: true }));
     return json({ ok: false, error: "No se pudo registrar la postulación" }, 502, cors);
   }
@@ -2147,6 +2195,32 @@ async function handleSocialPublish(request,env,cors){
     "Intentos publicación":attempts,"Error publicación":""});
   await socialHeartbeat(env,"social-publish","Social Publish","Publicación confirmada "+externalId);
   return json({ok:true,postId,external_post_id:externalId,permalink},200,cors);
+}
+
+export class SupplierApplicationGuard {
+  constructor(state,env){this.state=state;this.env=env;}
+  async fetch(request){
+    if(request.method!=="POST"||new URL(request.url).pathname!=="/apply")
+      return Response.json({ok:false,error:"Method not allowed"},{status:405});
+    let p;try{p=await request.json();}catch(_){return Response.json({ok:false,error:"Invalid JSON"},{status:422});}
+    if(typeof p?.key!=="string"||p.key.length<5||!p?.payload)
+      return Response.json({ok:false,error:"Invalid supplier application"},{status:422});
+    const done=await this.state.storage.get("result");
+    if(done)return Response.json({...done,replayed:true});
+    const lease=await this.state.storage.get("lease"),now=Date.now();
+    if(lease?.expiresAt>now)return Response.json({ok:false,error:"Supplier application in progress"},{status:409});
+    await this.state.storage.put("lease",{expiresAt:now+120000,key:p.key});
+    try{
+      const result=await supplierApplicationProcess(this.env,p.payload);
+      const stored={...result,completedAt:new Date().toISOString()};
+      await this.state.storage.put("result",stored);
+      await this.state.storage.delete("lease");
+      return Response.json(stored,{status:result.reused?200:201});
+    }catch(e){
+      await this.state.storage.delete("lease");
+      return Response.json({ok:false,error:String(e?.message||e).slice(0,300)},{status:503});
+    }
+  }
 }
 
 export class SocialEventGuard {
