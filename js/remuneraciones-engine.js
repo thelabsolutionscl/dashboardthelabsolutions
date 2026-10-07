@@ -64,7 +64,9 @@ function taxNet(fields,grossField='Monto total (CLP)'){
   }
   const gross=num(f[grossField]||f['Total final (CLP)']);
   for(const k of ['IVA (CLP)','Monto IVA (CLP)','IVA']){
-    const iva=num(f[k]);if(gross>0&&iva>=0&&iva<=gross)return {amount:Math.round(gross-iva),source:grossField+' - '+k,verified:true};
+    if(!Object.prototype.hasOwnProperty.call(f,k)||f[k]===null||f[k]==='')continue;
+    const iva=Number(f[k]);if(gross>0&&Number.isFinite(iva)&&iva>=0&&iva<=gross)
+      return {amount:Math.round(gross-iva),source:grossField+' - '+k,verified:true};
   }
   return {amount:0,source:'sin base tributaria',verified:false};
 }
