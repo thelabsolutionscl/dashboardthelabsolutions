@@ -10,6 +10,8 @@ const ROOT = path.join(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const PROV = fs.readFileSync(path.join(ROOT, 'js', 'proveedores.js'), 'utf8');
 const WORKER = fs.readFileSync(path.join(ROOT, 'lead-worker', 'src', 'index.js'), 'utf8');
+const PROXY = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'worker.js'), 'utf8');
+const ACCESS = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'access-auth.js'), 'utf8');
 const SOURCE = `${INDEX}\n${PROV}`;
 
 function esc(value) {
@@ -173,13 +175,17 @@ test('RBAC declara el módulo Proveedores', () => {
 });
 
 // Hallazgos confirmados: deben convertirse en pruebas obligatorias al corregirse.
-test('diagnóstico: pedidos y OC deben enlazar proveedores por record ID', (t) => {
-  const render = fn('renderProveedores');
-  const oc = fn('openOCModal');
-  if (/\['Proveedor'\][\s\S]{0,180}nombre\.toLowerCase\(\)/.test(render) || /option value=.*Nombre/.test(oc)) {
-    t.todo('CRÍTICO: reemplazar nombres/comas por supplierId estable; renombrar o duplicar nombres rompe pedidos, gasto, precios y OC');
-    return;
-  }
+test('pedidos, precios y OC usan supplierId estable y toleran nombres legacy solo como migración', () => {
+  assert.match(PROV,/function _supplierId\(rec\)/);
+  assert.match(PROV,/function _supplierPedidoIds\(pedido\)/);
+  assert.match(PROV,/function _supplierPedidos\(supplierId\)/);
+  const card=fn('buildProveedorCard'),row=fn('buildProveedorRow'),oc=fn('openOCModal');
+  assert.match(card,/_supplierPedidos\(supplierId\)/);
+  assert.match(row,/_supplierPedidos\(supplierId\)/);
+  assert.match(oc,/<option value="\$\{p\.id\}"/);
+  assert.match(fn('guardarOC'),/supplierId/);
+  assert.match(fn('addPrecioProv'),/supplierId/);
+  assert.match(fn('_preciosDeProv'),/p\.supplierId\|\|_supplierResolveId\(p\.prov\)/);
 });
 
 test('crear proveedor solo reintenta tras rechazo de esquema confirmado', () => {
@@ -214,44 +220,51 @@ test('diagnóstico: precios y OC no deben sincronizarse como blobs completos', (
   }
 });
 
-test('diagnóstico: numeración de OC debe ser atómica', (t) => {
-  const next = fn('_ocNextNum');
-  if (/_ocAll\(\)/.test(next) && /mx\+1/.test(next)) {
-    t.todo('CRÍTICO: dos equipos pueden emitir el mismo OC-AAAA-NNN; reservar correlativo único en backend');
-    return;
-  }
+test('numeración nueva de OC se reserva atómicamente en backend', () => {
+  assert.match(PROV,/async function _ocReserveNum\(\)/);
+  assert.match(fn('guardarOC'),/await _ocReserveNum\(\)/);
+  assert.match(PROXY,/supplier\/purchase-order\/reserve/);
+  assert.match(PROXY,/_handleSupplierPoReserve/);
+  assert.match(PROXY,/supplier-po-seq:/);
+  assert.match(PROXY,/state\.storage\.put\(key,next\)/);
+  assert.match(ACCESS,/path==='\/supplier\/purchase-order\/reserve'/);
 });
 
-test('diagnóstico: valoración no debe usar revenue del cliente', (t) => {
-  const render = fn('renderProveedores');
-  if (/Monto total \(CLP\)/.test(render) && /Total pedidos/.test(render)) {
-    t.todo('“Total pedidos” suma la venta al cliente, no el costo, OC, factura o pago del proveedor');
-    return;
-  }
+test('ficha de proveedor no presenta revenue del cliente como gasto del proveedor', () => {
+  const card=fn('buildProveedorCard'),row=fn('buildProveedorRow');
+  assert.doesNotMatch(card,/Monto total \(CLP\)|formatCLP\(total\)/);
+  assert.doesNotMatch(row,/pvTotalValor|Total pedidos:/);
+  assert.match(row,/costos del proveedor se muestran desde OC\/precios/);
 });
 
-test('diagnóstico: evaluación debe guardar evidencia y responsable', (t) => {
-  const post = fn('setProvEstadoPost');
-  if (/Estado postulación/.test(post) && !/Fecha|Responsable|Aprobado por|historial|evento/i.test(post)) {
-    t.todo('APROBADO/RECHAZADO puede cambiarse sin motivo obligatorio, actor, fecha, checklist, documentos ni historial');
-    return;
-  }
+test('aprobar o rechazar exige motivo/evidencia y conserva actor, fecha e historial', () => {
+  const post=fn('setProvEstadoPost');
+  assert.match(post,/reason\.length<8/);
+  assert.match(post,/Evidencia \/ referencia/);
+  assert.match(post,/AUTH\.getUser/);
+  assert.match(post,/new Date\(\)\.toISOString\(\)/);
+  assert.match(post,/Responsable:/);
+  assert.match(post,/'Notas':prevNotes/);
 });
 
-test('diagnóstico: el endpoint público debe deduplicar postulaciones', (t) => {
-  const handler = fn('handleProveedor', WORKER);
-  if (/airtableCreateTolerant/.test(handler) && !/idempot|dedup|upsert/i.test(handler)) {
-    t.todo('POST /proveedor crea una fila por reintento; reservar idempotency key y resolver duplicados por RUT/email normalizado');
-    return;
-  }
+test('endpoint público serializa idempotencia y deduplica por RUT/email/nombre antes de crear', () => {
+  const handler=fn('handleProveedor',WORKER);
+  assert.match(handler,/supplierIdentityKey/);
+  assert.match(handler,/SUPPLIER_APPLICATION_GUARD/);
+  assert.match(WORKER,/export class SupplierApplicationGuard/);
+  assert.match(WORKER,/airtableFindProveedor/);
+  assert.match(WORKER,/supplierNormRut/);
+  assert.match(WORKER,/supplierNormEmail/);
+  assert.match(WORKER,/supplierApplicationProcess/);
 });
 
-test('diagnóstico: eliminar debe proteger dependencias', (t) => {
-  const del = fn('deleteProveedor');
-  if (/airtableDelete/.test(del) && !/pedido|orden|factura|depend|bloque/i.test(del)) {
-    t.todo('archivar/bloquear proveedores con pedidos, OC, facturas, precios o evaluaciones; restaurar hoy crea otro record ID');
-    return;
-  }
+test('eliminar protege dependencias y conserva supplierId archivando', () => {
+  assert.match(PROV,/function _supplierDependencies\(id\)/);
+  const del=fn('deleteProveedor');
+  assert.match(del,/_supplierDependencies\(id\)/);
+  assert.match(del,/_archiveSupplier\(id,nombre\)/);
+  assert.match(fn('bulkDeleteProveedores'),/deps\.total/);
+  assert.match(fn('bulkDeleteProveedores'),/'Estado':'Inactivo'/);
 });
 
 test('diagnóstico: la recarga debe paginar', (t) => {
@@ -260,6 +273,30 @@ test('diagnóstico: la recarga debe paginar', (t) => {
     t.todo('no truncar el maestro en 500; paginar y calcular estadísticas sobre el universo completo');
     return;
   }
+});
+
+test('duplicados del dashboard se detectan por RUT, email o razón social normalizados', () => {
+  assert.match(PROV,/function _supplierFindDuplicate/);
+  assert.match(fn('createProveedor'),/_supplierFindDuplicate/);
+  assert.match(fn('saveEditProveedor'),/_supplierFindDuplicate/);
+  assert.match(PROV,/_normSupplierRut/);
+  assert.match(PROV,/_normSupplierEmail/);
+});
+
+test('datos importados se validan antes de construir mailto, tel, WhatsApp o enlaces web', () => {
+  assert.match(PROV,/function _safeSupplierEmail/);
+  assert.match(PROV,/function _safeSupplierPhone/);
+  assert.match(PROV,/function _safeSupplierUrl/);
+  assert.match(PROV,/u\.protocol==='https:'/);
+  assert.doesNotMatch(fn('buildProveedorCard'),/web\.startsWith\('http'\)/);
+});
+
+test('CSV de proveedores respeta búsqueda/categoría y neutraliza fórmulas', () => {
+  const csv=fn('exportToCSV');
+  assert.match(csv,/proveedorSearch/);
+  assert.match(csv,/proveedorCatFilter/);
+  assert.match(csv,/\^\[=\+\\-@\]/);
+  assert.match(csv,/supplierId/);
 });
 
 test.todo('OC debe recorrer Borrador/Aprobada/Enviada/Aceptada/Recibida parcial/Cerrada/Cancelada con historial');
