@@ -265,6 +265,7 @@ function accessAllows(identity,method,path){
     ['operator','finance','admin'].includes(identity.role);
   if(path==='/suppliers/bootstrap')return method==='POST'&&admin;
   if(path==='/visual-ai/rpc')return ['sales','operator','finance','admin'].includes(identity.role)&&method==='POST';
+  if(path==='/tts/elevenlabs')return ['sales','operator','finance','admin'].includes(identity.role)&&method==='POST';
   if(path==='/newsletter/send')return method==='POST'&&admin;
   if(path==='/social/lead')return method==='POST'&&(admin||identity.email==='marketing@thelab.solutions');
   if(path==='/office/snapshot')return method==='GET'&&['viewer','sales','operator','finance','admin'].includes(identity.role);
