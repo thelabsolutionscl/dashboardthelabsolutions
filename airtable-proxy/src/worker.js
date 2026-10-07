@@ -4158,6 +4158,262 @@ export class CrmMutationGuard {
 }
 
 
+const SUPPLIER_TABLE_SCHEMAS=Object.freeze({
+  SupplierPrices:[
+    {name:'ID',type:'singleLineText'},{name:'Supplier ID',type:'singleLineText'},
+    {name:'Supplier Name',type:'singleLineText'},{name:'Item Key',type:'singleLineText'},
+    {name:'Item',type:'singleLineText'},{name:'SKU',type:'singleLineText'},
+    {name:'Currency',type:'singleLineText'},{name:'Unit',type:'singleLineText'},
+    {name:'Net Price',type:'number'},{name:'Tax Rate',type:'number'},
+    {name:'Min Qty',type:'number'},{name:'Vigencia desde',type:'date'},
+    {name:'Vigencia hasta',type:'date'},{name:'Source URL',type:'url'},
+    {name:'Vigente',type:'checkbox'},{name:'Revision',type:'number'},
+    {name:'Created At',type:'dateTime'},{name:'Created By',type:'email'}
+  ],
+  PurchaseOrders:[
+    {name:'ID',type:'singleLineText'},{name:'Número',type:'singleLineText'},
+    {name:'Supplier ID',type:'singleLineText'},{name:'Supplier Name',type:'singleLineText'},
+    {name:'Moneda',type:'singleLineText'},{name:'Condiciones de pago',type:'multilineText'},
+    {name:'Estado',type:'singleLineText'},{name:'Neto',type:'number'},
+    {name:'Impuesto',type:'number'},{name:'Total',type:'number'},{name:'Revisión',type:'number'},
+    {name:'Creada en',type:'dateTime'},{name:'Creada por',type:'email'},
+    {name:'Aprobada en',type:'dateTime'},{name:'Aprobada por',type:'email'},
+    {name:'Enviada en',type:'dateTime'},{name:'Enviada por',type:'email'},
+    {name:'Aceptada en',type:'dateTime'},{name:'Aceptada por',type:'email'},
+    {name:'Recibida en',type:'dateTime'},{name:'Recibida por',type:'email'},
+    {name:'Facturada en',type:'dateTime'},{name:'Facturada por',type:'email'},
+    {name:'Pagada en',type:'dateTime'},{name:'Pagada por',type:'email'},
+    {name:'Cerrada en',type:'dateTime'},{name:'Cerrada por',type:'email'},
+    {name:'Cancelada en',type:'dateTime'},{name:'Cancelada por',type:'email'}
+  ],
+  PurchaseOrderItems:[
+    {name:'ID',type:'singleLineText'},{name:'PO ID',type:'singleLineText'},
+    {name:'Línea',type:'number'},{name:'Ítem',type:'singleLineText'},
+    {name:'SKU',type:'singleLineText'},{name:'Cantidad',type:'number'},
+    {name:'Unidad',type:'singleLineText'},{name:'Neto unitario',type:'number'},
+    {name:'Tasa impuesto',type:'number'},{name:'Cantidad recibida',type:'number'},
+    {name:'Revisión',type:'number'}
+  ],
+  SupplierEvaluations:[
+    {name:'ID',type:'singleLineText'},{name:'Supplier ID',type:'singleLineText'},
+    {name:'Estado',type:'singleLineText'},{name:'Motivo',type:'multilineText'},
+    {name:'Evidencia',type:'multilineText'},{name:'Checklist JSON',type:'multilineText'},
+    {name:'Calidad',type:'number'},{name:'Puntualidad',type:'number'},
+    {name:'Precio',type:'number'},{name:'Respuesta',type:'number'},
+    {name:'Incidentes',type:'number'},{name:'Score derivado',type:'number'},
+    {name:'Fecha',type:'dateTime'},{name:'Responsable',type:'email'}
+  ],
+  SupplierCategories:[
+    {name:'ID',type:'singleLineText'},{name:'Nombre',type:'singleLineText'},
+    {name:'Color',type:'singleLineText'},{name:'Orden',type:'number'},
+    {name:'Activa',type:'checkbox'},{name:'Revisión',type:'number'}
+  ]
+});
+function supplierIdSafe(v){
+  const x=String(v||'');
+  return /^rec[A-Za-z0-9]{14}$/.test(x)?x:'';
+}
+function supplierNormText(v){return String(v??'').trim().replace(/\s+/g,' ').slice(0,1000);}
+function supplierNormRut(v){return String(v||'').toUpperCase().replace(/[^0-9K]/g,'');}
+function supplierNormEmail(v){return String(v||'').trim().toLowerCase();}
+function supplierNormalizeMaster(fields){
+  const name=supplierNormText(fields?.Nombre);
+  if(!name)throw new Error('Nombre requerido');
+  const out={...fields,Nombre:name};
+  if(Object.hasOwn(out,'RUT'))out.RUT=supplierNormRut(out.RUT);
+  if(Object.hasOwn(out,'Email'))out.Email=supplierNormEmail(out.Email);
+  if(out['Sitio Web']){
+    const raw=String(out['Sitio Web']);
+    const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);
+    if(!['http:','https:'].includes(u.protocol))throw new Error('Sitio Web inválido');
+    out['Sitio Web']=u.href;
+  }
+  if(Object.hasOwn(out,'Teléfono'))out['Teléfono']=String(out['Teléfono']||'').replace(/[^0-9+]/g,'').slice(0,20);
+  if(Object.hasOwn(out,'WhatsApp'))out.WhatsApp=String(out.WhatsApp||'').replace(/[^0-9+]/g,'').slice(0,20);
+  delete out['Reputación'];
+  return out;
+}
+async function supplierFindDuplicate(env,fields){
+  const rut=supplierNormRut(fields.RUT),email=supplierNormEmail(fields.Email);
+  const name=supplierNormText(fields.Nombre).toLowerCase(),clauses=[];
+  if(rut)clauses.push("REGEX_REPLACE(UPPER({RUT}&''),'[^0-9K]','')='"+officeEsc(rut)+"'");
+  if(email)clauses.push("LOWER({Email}&'')='"+officeEsc(email)+"'");
+  if(name)clauses.push("LOWER(TRIM({Nombre}&''))='"+officeEsc(name)+"'");
+  if(!clauses.length)return null;
+  return officeFind(env,'Proveedores',clauses.length>1?'OR('+clauses.join(',')+')':clauses[0]);
+}
+async function supplierGet(env,id){
+  if(!supplierIdSafe(id))return null;
+  const r=await fetch(AIRTABLE_BASE+'/v0/'+OFFICE_BASE_ID+'/Proveedores/'+id,{
+    headers:officeHeaders(env),redirect:'manual'
+  });
+  if(!r.ok)return null;
+  return officeJson(r);
+}
+async function supplierFindByField(env,table,field,value){
+  return officeFind(env,table,"{"+field+"}='"+officeEsc(String(value||''))+"'");
+}
+function supplierItemKey(item,unit='u'){
+  return supplierNormText(item).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-|-$/g,'')+'|'+supplierNormText(unit).toLowerCase();
+}
+function supplierNormalizePrice(p,supplierId,actor){
+  const item=supplierNormText(p.item),unit=supplierNormText(p.unit||'u'),net=Number(p.netPrice);
+  if(!item||!Number.isFinite(net)||net<0)throw new Error('Precio inválido');
+  const currency=String(p.currency||'CLP').toUpperCase();
+  if(!/^[A-Z]{3}$/.test(currency))throw new Error('Moneda inválida');
+  const tax=Math.max(0,Math.min(1,Number(p.taxRate??0.19)));
+  return{
+    ID:'SP-'+crypto.randomUUID(),'Supplier ID':supplierId,Proveedor:[supplierId],
+    'Supplier Name':supplierNormText(p.supplierName),'Item Key':supplierItemKey(item,unit),
+    Item:item,SKU:supplierNormText(p.sku),Currency:currency,Unit:unit,
+    'Net Price':Math.round(net*100)/100,'Tax Rate':tax,'Min Qty':Math.max(0,Number(p.minQty||0)),
+    'Vigencia desde':String(p.validFrom||officeDateCL()).slice(0,10),
+    'Vigencia hasta':p.validTo?String(p.validTo).slice(0,10):'',
+    'Source URL':String(p.sourceUrl||''),'Vigente':true,Revision:1,
+    'Created At':new Date().toISOString(),'Created By':actor
+  };
+}
+function supplierScores(scores,incidents){
+  const clamp=v=>Math.max(1,Math.min(5,Number(v)||3));
+  const quality=clamp(scores.quality),onTime=clamp(scores.onTime),
+    price=clamp(scores.price),response=clamp(scores.response);
+  incidents=Math.max(0,Number(incidents)||0);
+  const score=Math.max(1,Math.min(5,Math.round(
+    ((quality*.35+onTime*.30+price*.20+response*.15)-Math.min(1.5,incidents*.25))*10
+  )/10));
+  return{quality,onTime,price,response,incidents,score};
+}
+function supplierNormalizePoItems(items){
+  if(!Array.isArray(items)||items.length>200)return[];
+  return items.map(x=>({
+    item:supplierNormText(x.item),sku:supplierNormText(x.sku),
+    qty:Number(x.qty??x.cantidad),unit:supplierNormText(x.unit||x.unidad||'u'),
+    netUnit:Number(x.netUnit??x.precio),
+    taxRate:Math.max(0,Math.min(1,Number(x.taxRate??0.19)))
+  })).filter(x=>x.item&&Number.isFinite(x.qty)&&x.qty>0&&
+    Number.isFinite(x.netUnit)&&x.netUnit>=0);
+}
+function supplierPoTotals(items){
+  let net=0,tax=0;
+  for(const x of items){const line=x.qty*x.netUnit;net+=line;tax+=line*x.taxRate;}
+  net=Math.round(net);tax=Math.round(tax);
+  return{net,tax,total:net+tax};
+}
+const SUPPLIER_PO_TRANSITIONS=Object.freeze({
+  Borrador:['Aprobación','Cancelada'],
+  'Aprobación':['Borrador','Aprobada','Cancelada'],
+  Aprobada:['Enviada','Cancelada'],
+  Enviada:['Aceptada','Cancelada'],
+  Aceptada:['Recibida parcial','Recibida total','Cancelada'],
+  'Recibida parcial':['Recibida parcial','Recibida total','Cancelada'],
+  'Recibida total':['Facturada','Cerrada'],
+  Facturada:['Pagada','Cerrada'],Pagada:['Cerrada'],Cerrada:[],Cancelada:[]
+});
+function supplierPoTransitionAllowed(a,b){
+  return (SUPPLIER_PO_TRANSITIONS[String(a)]||[]).includes(String(b));
+}
+async function supplierDependencies(env,supplierId){
+  const tables=[
+    ['SupplierPrices','Supplier ID'],['PurchaseOrders','Supplier ID'],
+    ['SupplierEvaluations','Supplier ID'],['Pedidos','Proveedor ID']
+  ];
+  const result={};let total=0;
+  for(const [table,field] of tables){
+    try{
+      const rows=await officeList(env,table,{
+        formula:"{"+field+"}='"+officeEsc(supplierId)+"'",max:5000
+      });
+      result[table]=rows.length;total+=rows.length;
+    }catch(_){result[table]=0;}
+  }
+  return{...result,total};
+}
+async function supplierEnsureSchema(env){
+  const metaUrl=AIRTABLE_BASE+'/v0/meta/bases/'+OFFICE_BASE_ID+'/tables';
+  const get=async()=>{
+    const r=await fetch(metaUrl,{headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN}});
+    if(!r.ok)throw new Error('metadata '+r.status);
+    return r.json();
+  };
+  let meta=await get(),created=[];
+  for(const [name,fields] of Object.entries(SUPPLIER_TABLE_SCHEMAS)){
+    let table=(meta.tables||[]).find(t=>t.name===name);
+    if(!table){
+      const r=await fetch(metaUrl,{
+        method:'POST',headers:officeHeaders(env),body:JSON.stringify({name,fields})
+      });
+      if(!r.ok)throw new Error('create '+name+' '+r.status);
+      await r.json();created.push(name);meta=await get();
+      table=(meta.tables||[]).find(t=>t.name===name);
+    }else{
+      for(const field of fields){
+        if((table.fields||[]).some(x=>x.name===field.name))continue;
+        const r=await fetch(metaUrl+'/'+table.id+'/fields',{
+          method:'POST',headers:officeHeaders(env),body:JSON.stringify(field)
+        });
+        if(!r.ok)throw new Error('field '+name+'.'+field.name+' '+r.status);
+      }
+    }
+  }
+  meta=await get();
+  const supplierTable=(meta.tables||[]).find(t=>t.name==='Proveedores');
+  if(!supplierTable)throw new Error('Proveedores table missing');
+  const linkTargets=['SupplierPrices','PurchaseOrders','SupplierEvaluations','Pedidos','Facturas','Inventario'];
+  for(const name of linkTargets){
+    const table=(meta.tables||[]).find(t=>t.name===name);
+    if(!table||(table.fields||[]).some(x=>x.name==='Proveedores'))continue;
+    const r=await fetch(metaUrl+'/'+table.id+'/fields',{
+      method:'POST',headers:officeHeaders(env),
+      body:JSON.stringify({
+        name:'Proveedores',type:'multipleRecordLinks',
+        options:{linkedTableId:supplierTable.id}
+      })
+    });
+    if(!r.ok)throw new Error('link '+name+' '+r.status);
+  }
+  return{ok:true,created,tables:Object.keys(SUPPLIER_TABLE_SCHEMAS),linked:linkTargets};
+}
+async function supplierSnapshot(env){
+  const [suppliers,prices,pos,items,evaluations,categories,pedidos]=await Promise.all([
+    officeList(env,'Proveedores',{max:10000}),
+    officeList(env,'SupplierPrices',{max:10000}),
+    officeList(env,'PurchaseOrders',{max:10000}),
+    officeList(env,'PurchaseOrderItems',{max:20000}),
+    officeList(env,'SupplierEvaluations',{max:10000}),
+    officeList(env,'SupplierCategories',{max:2000}),
+    officeList(env,'Pedidos',{max:10000})
+  ]);
+  const byName=new Map();
+  for(const rec of suppliers){
+    const k=supplierNormText(rec.fields?.Nombre).toLowerCase();
+    if(!k)continue;
+    const arr=byName.get(k)||[];arr.push(rec.id);byName.set(k,arr);
+  }
+  for(const rec of pedidos){
+    if(Array.isArray(rec.fields?.Proveedores)&&rec.fields.Proveedores.length)continue;
+    const names=String(rec.fields?.Proveedor||'').split(',')
+      .map(x=>supplierNormText(x).toLowerCase()).filter(Boolean);
+    const ids=[];let ambiguous=false;
+    for(const name of names){
+      const hits=byName.get(name)||[];
+      if(hits.length!==1){ambiguous=true;break;}
+      ids.push(hits[0]);
+    }
+    if(ids.length&&!ambiguous){
+      try{
+        await officePatch(env,'Pedidos',rec.id,{Proveedores:[...new Set(ids)]});
+        rec.fields.Proveedores=[...new Set(ids)];
+      }catch(_){}
+    }
+  }
+  return{
+    ok:true,suppliers,prices,purchaseOrders:pos,purchaseOrderItems:items,
+    evaluations,categories,pedidos,fetchedAt:new Date().toISOString()
+  };
+}
+
 const OFFICE_BASE_ID='app1YtD74AqiPWQhy';
 const OFFICE_TZ='America/Santiago';
 const OFFICE_AUTOMATION_EXPECT=Object.freeze({
