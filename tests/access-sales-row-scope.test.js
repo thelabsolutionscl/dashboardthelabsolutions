@@ -202,10 +202,12 @@ test('missing or mismatched seller in server identity never falls back to global
     assert.equal(otherH.calls.length,0);
   }finally{user.seller=old;}
 });
-test('all row-scoped requests retain public APP_KEY and Origin checks',async()=>{
+test('signed row-scoped requests rely on Access identity while Origin remains mandatory',async()=>{
+  // A copied/wrong compatibility key is irrelevant after a valid signed Access
+  // identity; row ownership is still enforced server-side.
   const h=await browse(base+'Clientes',{records:[own]},{key:'wrong-key'});
-  assert.equal(h.response.status,403);
-  assert.equal(h.calls.length,0);
+  assert.equal(h.response.status,200);
+  assert.equal(h.calls.length,1);
   const n=await browse(base+'Clientes',{records:[own]},{origin:'https://evil.example'});
   assert.equal(n.response.status,403);
   assert.equal(n.calls.length,0);
