@@ -1105,18 +1105,6 @@ function nlDestToggle(id,checked){if(!_nlDest)return;if(checked)_nlDest.exclude.
 function nlDestAddExtra(){if(!_nlDest)return;const inp=document.getElementById('nlDestExtraEmail');const em=(inp.value||'').trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Email inválido','error');return;}const cli=(state.clientes||[]).find(r=>String(r.fields?.Email||'').trim().toLowerCase()===em.toLowerCase());if(!cli||cli.fields?.['Suscrito newsletter']!==true||cli.fields?.['Baja newsletter']===true||cli.fields?.['Email válido']!==true){toast('Ese email no tiene opt-in válido en Clientes','error');return;}if(_nlDest.extra.some(e=>e.email.toLowerCase()===em.toLowerCase())){toast('Ya está en la lista','info');inp.value='';return;}_nlDest.extra.push({id:cli.id,nombre:cli.fields?.Empresa||cli.fields?.Contacto||em,email:em});inp.value='';nlDestRenderList();}
 function nlDestRemoveExtra(i){if(!_nlDest)return;_nlDest.extra.splice(i,1);nlDestRenderList();}
 async function nlDestSave(close){if(!_nlDest)return;const c=(state.nlCampaigns||[]).find(x=>x.id===_nlDest.campId);if(!c)return;const approved=_nlDestWorking().map(e=>({id:e.id||'',email:String(e.email||'').trim().toLowerCase()}));const snapshot={version:1,seg:_nlDest.seg,exclude:[..._nlDest.exclude],extra:_nlDest.extra.map(e=>({id:e.id||'',email:e.email})),noResend:!!_nlDest.noResend,approved,savedAt:new Date().toISOString(),savedBy:(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||''};const marker='[AUDIENCIA NEWSLETTER] '+JSON.stringify(snapshot);const notes=String(c.fields?.Notas||'').replace(/\n?\[AUDIENCIA NEWSLETTER\][^\n]*/g,'').trim();try{await _redesWrite('Newsletter_Campañas','PATCH',c.id,{'Segmento objetivo':String(_nlDest.seg||'Todos'),'Notas':(notes?notes+'\n':'')+marker});c.fields['Segmento objetivo']=String(_nlDest.seg||'Todos');c.fields.Notas=(notes?notes+'\n':'')+marker;toast('Selección de destinatarios guardada en la campaña ✓','success');renderNlCampaigns();if(close)document.getElementById('nlDestModal').style.display='none';}catch(e){toast('No se pudo guardar la audiencia: '+e.message,'error');throw e;}}
-function _nlEnvioKey(campId,item){return campId+'_'+(item.id||String(item.email||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_')).slice(0,90);}
-function _nlFindEnvioByKey(key){return(state.nlEnvios||[]).find(e=>String(e.fields?.['Envío']||'')===key)||null;}
-async function _nlReserveEnvio(c,item){
-  const key=_nlEnvioKey(c.id,item),existing=_nlFindEnvioByKey(key);
-  if(existing&&['Enviado','Entregado','Abierto','Click'].includes(existing.fields?.Estado||''))return{record:existing,skip:true};
-  if(existing)return{record:existing,skip:false};
-  const fields={'Envío':key,'Campaña':[c.id],'Email':item.email,'Notas':'Reservado por dashboard antes del transporte'};
-  if(item.id)fields.Cliente=[item.id];
-  const created=await _redesWrite('Newsletter_Envios','POST',null,fields);
-  const row={id:created.id,fields:{...fields,...(created.fields||{})}};state.nlEnvios=state.nlEnvios||[];state.nlEnvios.push(row);
-  return{record:row,skip:false};
-}
 async function nlDestSend(){
   if(!_nlDest)return;const list=_nlDestWorking();
   if(!list.length){toast('No hay destinatarios seleccionados','error');return;}
@@ -1212,10 +1200,14 @@ function nlDateCancel(){document.getElementById('nlDateModal').style.display='no
 async function nlSchedule(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c) return;
   const day=await nlDatePicker(c.fields['Fecha envío']||null); if(!day) return;
+  const time=(prompt('Hora de envío en Chile (HH:MM):','09:00')||'').trim();
+  if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)){toast('Hora inválida — usa HH:MM','error');return;}
+  const local=day+'T'+time,marker='[PROGRAMACION NEWSLETTER] '+JSON.stringify({local,zone:'America/Santiago'});
+  const notes=String(c.fields['Notas']||'').replace(/\n?\[PROGRAMACION NEWSLETTER\][^\n]*/g,'').trim();
   try{
-    await _redesWrite('Newsletter_Campañas','PATCH',id,{'Estado':'Programada','Fecha envío':day});
-    c.fields['Estado']='Programada'; c.fields['Fecha envío']=day;
-    toast('Programada para el '+_nlFmtFecha(day)+' ✓','success'); renderNlKpis(); renderNlCampaigns();
+    await _redesWrite('Newsletter_Campañas','PATCH',id,{'Estado':'Programada','Fecha envío':day,'Notas':(notes?notes+'\n':'')+marker});
+    Object.assign(c.fields,{'Estado':'Programada','Fecha envío':day,'Notas':(notes?notes+'\n':'')+marker});
+    toast('Programada para '+day+' '+time+' (America/Santiago) ✓','success');renderNlKpis();renderNlCampaigns();
   }catch(e){toast('No se pudo programar: '+e.message,'error');}
 }
 
