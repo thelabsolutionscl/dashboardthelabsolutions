@@ -3,8 +3,8 @@
 Módulo de newsletter del dashboard: redactar con IA el correo de la empresa,
 revisarlo, programarlo y medir aperturas/clics. La **audiencia son los clientes
 del CRM** (no hay una lista aparte): cada `Cliente` con email y suscrito recibe
-la campaña. El **envío masivo lo hace Make + Resend**; el dashboard redacta,
-aprueba y mide. Quien hace clic se marca como **lead caliente** y se encola al
+la campaña. El **envío real lo ejecuta exclusivamente el proxy autenticado + Resend**; el dashboard redacta,
+aprueba, congela la audiencia y dispara el transporte. Quien hace clic en un CTA comercial se marca como **lead caliente** y se encola al
 vendedor — reusando el mismo pipeline de `Agent_Queue` que el resto del sistema.
 
 > Relación con lo existente: misma arquitectura que Redes Sociales (agente Claude
@@ -140,77 +140,54 @@ propio `origin` del Worker (no hay URLs hardcodeadas).
 
 ---
 
-## 5. Automatización con Make (envío + tracking)
+## 5. Transporte y tracking autoritativos
 
-El dashboard redacta y aprueba; **Make** envía y escucha.
+### 5.1 Envío real: proxy seguro + Resend
 
-### 5.0 Escenario ya creado (revisar antes de activar)
-Se creó en Make el escenario **`The Lab — Newsletter · Envío (Programada → Resend)`**
-(team `259748`, id `5438569`), **inactivo/en pausa** — no envía nada hasta que lo
-revises, le pongas tu API key y lo actives. Flujo (clonado del patrón ya usado en
-la cuenta, envío por **Resend vía HTTP** como el resto de llamadas a APIs):
+El dashboard llama `POST /newsletter/send` con el `campaignId`. Esa ruta:
 
-1. **Airtable · Search** `Newsletter_Campañas` → `Estado = "Programada"` y
-   `Fecha envío ≤ hoy` (máx. 1 por corrida).
-2. **Iterator** sobre la campaña.
-3. **Airtable · Search** `Clientes` → `Suscrito newsletter = true`, `Baja newsletter = false`,
-   `Email` no vacío **y segmentación por rubro**: si la campaña tiene `Segmento objetivo`,
-   filtra `Industria / Rubro = <segmento>`; si está vacío, va a toda la audiencia (máx. 200).
-4. **Iterator** sobre la audiencia.
-5. **Airtable · Create** una fila en `Newsletter_Envios` (link a `Campaña` y `Cliente`,
-   `Email`, `Rubro`, `Estado = Enviado`, `Fecha envío`) → traza por persona.
-6. **HTTP · POST `https://api.resend.com/emails`** (Resend): envía el **`Cuerpo HTML`** ya
-   renderizado por el dashboard (fallback al `Cuerpo (Markdown)` si está vacío), `Asunto`,
-   remitente `The Lab Solutions <hola@thelab.solutions>`, y **tags** `campania` y `envio`
-   (= id de la fila de `Newsletter_Envios`) para casar el tracking.
-7. **Airtable · Update** la campaña → `Estado = "Enviada"` (idempotente).
+1. exige Cloudflare Access y rol `admin`;
+2. toma la audiencia aprobada guardada en la campaña;
+3. vuelve a validar opt-in, baja, email válido y supresiones;
+4. reserva `Newsletter_Envios` antes de transportar;
+5. usa Resend con idempotencia y tags por envío;
+6. genera una baja firmada por destinatario y headers estándar;
+7. cierra la campaña como `Enviada` o `Pausada` según evidencia real.
 
-> **Envío por Resend.** En la cuenta de Make **no hay conexión Resend**, así que el
-> módulo HTTP lleva un **placeholder** en el header: `Authorization: Bearer
-> re_PEGA_AQUI_TU_API_KEY_DE_RESEND`. Reemplázalo por tu API key real en el editor
-> de Make (no por chat). Alternativa: módulo nativo **email/SMTP** (`hola@thelab.solutions`).
+El antiguo escenario Make **no debe enviar campañas** después del cutover. Puede conservarse apagado solo como referencia histórica.
 
-**Para encenderlo:**
-1. En Resend: **verificar el dominio `thelab.solutions`** (DNS: SPF/DKIM) y crear una **API key**.
-2. En Make: abrir el escenario → módulo HTTP → pegar la API key en el header `Authorization`.
-3. **Reactivar la organización** (hoy está en pausa).
-4. Crear una campaña de prueba (`Programada`, `Fecha envío = hoy`) con tu correo como único
-   suscrito y **ejecutar una vez** para validar.
-5. **Activar** el escenario.
+### 5.2 Tracking: webhook firmado de Resend
 
-> El `Cuerpo HTML` ya viene con la **plantilla de marca** (cabecera, cuerpo y pie con baja),
-> renderizado del Markdown en el dashboard al guardar/editar. El pie incluye un enlace de baja
-> (`mailto:hola@thelab.solutions?subject=BAJA`); para baja en un clic, apúntalo a
-> `…/newsletter/unsubscribe?e=<email>`.
+Configurar Resend para enviar `email.delivered`, `email.opened`, `email.clicked`,
+`email.bounced`, `email.suppressed` y `email.complained` a:
 
-### 5.1 Tracking — escenario ya creado (revisar antes de activar)
-**`The Lab — Newsletter · Tracking (Resend webhook)`** (id `5439094`, **inactivo/en pausa**),
-disparado por webhook. URL del hook (pegar en Resend → Webhooks):
+`POST <lead-worker>/newsletter/resend-webhook`
 
-```
-https://hook.us2.make.com/yvji9pvbnoozrrn2eejw1eurmjpt7nfg
-```
+El Worker verifica `svix-id`, `svix-timestamp` y `svix-signature`, deduplica el evento
+y usa el tag `envio_id` para actualizar exactamente una fila `Newsletter_Envios`.
+No busca por email.
 
-Flujo: el webhook recibe el evento de Resend → busca la fila en `Newsletter_Envios`
-(por `Email`) → actualiza `Estado` según el evento (`delivered→Entregado`, `opened→Abierto`,
-`clicked→Click`, `bounced→Rebote`, `complained→Spam`) → al **click**, marca
-`Lead caliente = true` + `Fecha click`, y **auto-encola `FOLLOWUP_AGENT`** en `Agent_Queue`
-(anti-duplicado con `Tarea creada`). El dashboard muestra el lead en "Leads calientes".
+Los clics de baja, privacidad/preferencias o sin URL comercial verificable **no** marcan
+`Lead caliente`.
 
-> **Para encenderlo:** en Resend → *Webhooks*, crear uno a la URL de arriba con los eventos
-> `email.delivered/opened/clicked/bounced/complained`, reactivar la org y **activar** el
-> escenario. ⚠️ Revisar el primer evento real: el casado de la fila usa `data.to` (email);
-> si se quiere casar por la fila exacta, usar el tag `envio` que ya manda el envío (5.0).
+### 5.3 Configuración productiva pendiente
 
----
+Secretos del **airtable-proxy**:
+- `RESEND_API_KEY`
+- `NEWSLETTER_SECRET` — mismo valor que en lead-worker
+- `NEWSLETTER_UNSUBSCRIBE_BASE`
+- opcional `RESEND_FROM`
+
+Secreto del **lead-worker**:
+- `RESEND_WEBHOOK_SECRET`
+
+No pegar estas claves en el navegador, Make ni el repositorio.
 
 ## 6. Roadmap
 
 - **Fase 1 — Lista (en este repo):** pestaña Newsletter (KPIs, generador IA,
   campañas, leads calientes, audiencia), `NEWSLETTER_AGENT`, RBAC y ruta
   `/newsletter` del Worker. Envío de **prueba** vía `mail-api.php`.
-- **Fase 2 — Make (escenarios creados, inactivos):** envío masivo con segmentación +
-  `Newsletter_Envios` (5.0) y tracking por webhook de Resend (5.1). Falta poner la API key
-  de Resend, verificar el dominio, configurar el webhook y activar.
+- **Fase 2 — Reemplazada:** el proxy autenticado es el único transporte de campañas y el lead-worker recibe tracking firmado de Resend. Los escenarios Make de envío/tracking deben permanecer apagados.
 - **Fase 3 — Web (lista):** formulario de suscripción en la web pública apuntando a
   `/newsletter`, con **doble opt-in** (confirmación por email).
