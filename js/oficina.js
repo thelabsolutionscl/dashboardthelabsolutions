@@ -557,6 +557,10 @@ function _ofOpenRun(r){
   document.getElementById('agentInlineActions').innerHTML=(r.contentRestricted?'':agentCtaButtonsHtml('',output))+(output?'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>':'');
   document.getElementById('agentInlineModal').style.display='flex';
 }
+function ofAgentViewRun(idx){
+  const r=_ofAgentRuns&&_ofAgentRuns[idx];if(!r)return;
+  closeOfAgent();_ofOpenRun(r);
+}
 function ofFeedView(i){ const r=_ofFeedShown&&_ofFeedShown[+i]; if(r) _ofOpenRun(r); }
 function ofSetView(v,persist){
   _ofView=v;
