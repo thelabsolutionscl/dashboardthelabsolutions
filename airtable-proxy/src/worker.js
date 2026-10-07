@@ -2736,7 +2736,7 @@ export class CrmMutationGuard {
        !this.env.NEWSLETTER_SECRET||!this.env.NEWSLETTER_UNSUBSCRIBE_BASE)
       return this._json({error:'Newsletter transport unavailable'},503);
     let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid newsletter send request'},422);}
-    if(!p?.actor||!['admin'].includes(p.actor.role)&&p.actor.email!=='marketing@thelab.solutions'||
+    if(!p?.actor||p.actor.role!=='admin'||
        typeof p.campaignId!=='string'||!/^rec[A-Za-z0-9]{14}$/.test(p.campaignId))
       return this._json({error:'Newsletter send denied'},403);
     const lockKey='newsletter-lock:'+p.campaignId,now=Date.now(),lease=await this.state.storage.get(lockKey);
@@ -3555,8 +3555,7 @@ export default {
       if(url.search)return json({error:'Newsletter query parameters not allowed'},422,scopedHeaders);
       if(request.method!=='POST')return json({error:'Method not allowed'},405,scopedHeaders);
       if(!authorized.identity)return json({error:'Newsletter send requires Cloudflare Access'},503,scopedHeaders);
-      if(authorized.identity.role!=='admin'&&authorized.identity.email!=='marketing@thelab.solutions')
-        return json({error:'Newsletter send role denied'},403,scopedHeaders);
+      if(authorized.identity.role!=='admin')return json({error:'Newsletter send role denied'},403,scopedHeaders);
       if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
          Number(request.headers.get('Content-Length')||0)>2000)
         return json({error:'Newsletter send expects bounded JSON'},415,scopedHeaders);
