@@ -10,6 +10,8 @@ const ROOT = path.join(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const REDES = fs.readFileSync(path.join(ROOT, 'js', 'redes.js'), 'utf8');
 const WORKER = fs.readFileSync(path.join(ROOT, 'lead-worker', 'src', 'index.js'), 'utf8');
+const PROXY = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'worker.js'), 'utf8');
+const ACCESS = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'access-auth.js'), 'utf8');
 const DOCS = fs.readFileSync(path.join(ROOT, 'docs', 'NEWSLETTER.md'), 'utf8');
 const SOURCE = `${INDEX}\n${REDES}`;
 
@@ -153,7 +155,7 @@ test('RBAC declara acceso y escritura específica para Newsletter', () => {
 });
 
 test('el servidor reserva Newsletter_Envios antes de llamar a Resend', () => {
-  const worker=WORKER;
+  const worker=PROXY;
   assert.match(worker,/Newsletter_Envios/);
   const reserveAt=worker.indexOf("encodeURIComponent('Newsletter_Envios')");
   const resendAt=worker.indexOf("https://api.resend.com/emails");
@@ -172,7 +174,7 @@ test('el secreto HMAC del newsletter es obligatorio y exclusivo', () => {
 });
 
 test('la selección de destinatarios se versiona en Newsletter_Campañas', () => {
-  const save=block('async function nlDestSave(', 'function _nlEnvioKey');
+  const save=block('async function nlDestSave(', 'async function nlDestSend');
   assert.doesNotMatch(save,/localStorage\.setItem/);
   assert.match(save,/Newsletter_Campañas['"],['"]PATCH/);
   assert.match(save,/AUDIENCIA NEWSLETTER/);
@@ -184,30 +186,30 @@ test('la selección de destinatarios se versiona en Newsletter_Campañas', () =>
 });
 
 test('noResend queda congelado en la audiencia aprobada y el servidor respeta ledger', () => {
-  const save=block('async function nlDestSave(', 'function _nlEnvioKey');
+  const save=block('async function nlDestSave(', 'async function nlDestSend');
   assert.match(save,/approved/);
   assert.match(save,/noResend/);
-  assert.match(WORKER,/terminal=new Set/);
-  assert.match(WORKER,/suppressedStates=new Set/);
+  assert.match(PROXY,/terminal=new Set/);
+  assert.match(PROXY,/suppressedStates=new Set/);
 });
 
 test('una campaña parcial queda Pausada y el servidor conserva resultado por destinatario', () => {
-  assert.match(WORKER,/finalState=\(failed\|\|suppressed\)\?['"]Pausada['"]:['"]Enviada['"]/);
-  assert.match(WORKER,/PENDING_RECONCILIATION/);
-  assert.match(WORKER,/ERROR Resend/);
-  assert.match(WORKER,/NEWSLETTER_CLOSE_UNCERTAIN/);
+  assert.match(PROXY,/finalState=\(failed\|\|suppressed\)\?['"]Pausada['"]:['"]Enviada['"]/);
+  assert.match(PROXY,/PENDING_RECONCILIATION/);
+  assert.match(PROXY,/ERROR Resend/);
+  assert.match(PROXY,/NEWSLETTER_CLOSE_UNCERTAIN/);
 });
 
 test('cada envío real genera baja firmada y personalizada',()=>{
-  assert.match(WORKER,/unsubscribe:\+email|['"]unsubscribe:['"]\+email/);
-  assert.match(WORKER,/NEWSLETTER_SECRET/);
-  assert.match(WORKER,/NEWSLETTER_UNSUBSCRIBE_BASE/);
-  assert.match(WORKER,/newsletter\/unsubscribe\?e=/);
+  assert.match(PROXY,/unsubscribe:\+email|['"]unsubscribe:['"]\+email/);
+  assert.match(PROXY,/NEWSLETTER_SECRET/);
+  assert.match(PROXY,/NEWSLETTER_UNSUBSCRIBE_BASE/);
+  assert.match(PROXY,/newsletter\/unsubscribe\?e=/);
 });
 test('Resend recibe List-Unsubscribe y one-click POST',()=>{
-  assert.match(WORKER,/['"]List-Unsubscribe['"]/);
-  assert.match(WORKER,/['"]List-Unsubscribe-Post['"]/);
-  assert.match(WORKER,/List-Unsubscribe=One-Click/);
+  assert.match(PROXY,/['"]List-Unsubscribe['"]/);
+  assert.match(PROXY,/['"]List-Unsubscribe-Post['"]/);
+  assert.match(PROXY,/List-Unsubscribe=One-Click/);
 });
 test('los emails extra exigen opt-in vigente en Clientes',()=>{
   const add=block('function nlDestAddExtra(', 'function nlDestRemoveExtra');
@@ -223,15 +225,32 @@ test('Enviada no puede marcarse manualmente sin evidencia de transporte',()=>{
   assert.match(REDES,/Cerrar administrativamente/);
 });
 test('cada envío Resend lleva tag del Newsletter_Envios exacto',()=>{
-  assert.match(WORKER,/tags:\[\{name:['"]envio_id['"],value:String\(envio\.id\)\}/);
-  assert.match(WORKER,/resend_id=/);
+  assert.match(PROXY,/tags:\[\{name:['"]envio_id['"],value:String\(envio\.id\)\}/);
+  assert.match(PROXY,/resend_id=/);
 });
-test.todo('un clic de baja, privacidad o recursos técnicos no debe convertir al destinatario en lead caliente');
+test('clicks técnicos o sin URL no convierten al destinatario en lead caliente',()=>{
+  const classify=block('function newsletterCommercialClick(', 'async function handleNewsletterResendWebhook', WORKER);
+  const webhook=block('async function handleNewsletterResendWebhook(', '/* ── Newsletter: helpers', WORKER);
+  assert.match(classify,/newsletter\\\/unsubscribe|unsubscribe|privacidad|privacy|preferencias|preferences/);
+  assert.match(classify,/^https/);
+  assert.match(webhook,/if\(commercial\)\{patch\.Estado=['"]Click['"];patch\[['"]Fecha click['"]\]=when;patch\[['"]Lead caliente['"]\]=true;\}/);
+  assert.doesNotMatch(webhook,/patch\[['"]Lead caliente['"]\]=true[^}]*else/s);
+});
 test('rebote, baja y spam suprimen futuros envíos antes de Resend',()=>{
-  assert.match(WORKER,/suppressedStates=new Set\(\['Rebote','Baja','Spam'\]\)/);
-  assert.match(WORKER,/suppressedEmails\.has\(email\)/);
+  assert.match(PROXY,/suppressedStates=new Set\(\['Rebote','Baja','Spam'\]\)/);
+  assert.match(PROXY,/suppressedEmails\.has\(email\)/);
 });
-test.todo('la programación debe incluir hora, zona America/Santiago, lease y lock para impedir dos workers enviando la misma campaña');
+test('programación guarda hora/zona y el servidor aplica lease, lock y due check',()=>{
+  const schedule=block('async function nlSchedule(', '// Corrige dominios');
+  assert.match(schedule,/HH:MM/);
+  assert.match(schedule,/America\/Santiago/);
+  assert.match(schedule,/PROGRAMACION NEWSLETTER/);
+  assert.match(PROXY,/newsletter-lock:/);
+  assert.match(PROXY,/10\*60\*1000/);
+  assert.match(PROXY,/NEWSLETTER_LOCKED/);
+  assert.match(PROXY,/NEWSLETTER_NOT_DUE/);
+  assert.match(PROXY,/schedule\.zone!==['"]America\/Santiago['"]/);
+});
 test('la baja GET no muta y POST exige token firmado',()=>{
   const unsub=block('async function handleNewsletterUnsubscribe(', '/* ── Newsletter: helpers', WORKER);
   assert.match(unsub,/request\.method===["']GET["']/);
@@ -261,5 +280,6 @@ test('la UI declara y usa una sola ruta autoritativa de envío',()=>{
   const send=block('async function nlDestSend(', 'function _nlEstBadge');
   assert.match(send,/\/newsletter\/send/);
   assert.doesNotMatch(send,/MAIL\.post/);
-  assert.match(WORKER,/tls-newsletter-send/);
+  assert.match(PROXY,/tls-newsletter-send/);
+  assert.match(ACCESS,/path===['"]\/newsletter\/send['"][\s\S]*method===['"]POST['"][\s\S]*admin/);
 });
