@@ -42,9 +42,10 @@ async function redesLoad(force){
     // Lecturas tolerantes: distingue "tabla no existe" (estado guía) de un error de red (toast).
     state._socialPostsErr=false; state._socialIntErr=false;
     const isMissing=e=>/not ?found|could ?not|no such|table|404|NOT_FOUND|invalid permissions|not authorized|403/i.test(String((e&&e.message)||''));
-    state.socialPosts = await airtableFetch('Social_Posts',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialPostsErr=true;else toast('No se pudieron cargar publicaciones: '+e.message,'error');return [];});
-    state.socialInteractions = await airtableFetch('Social_Interactions',200).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialIntErr=true;else toast('No se pudieron cargar interacciones: '+e.message,'error');return [];});
-    state.socialMetrics = await airtableFetch('Social_Metrics',365).then(r=>r.records).catch(()=>[]);
+    state.socialPosts = await airtableFetch('Social_Posts',2000).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialPostsErr=true;else toast('No se pudieron cargar publicaciones: '+e.message,'error');return [];});
+    state.socialInteractions = await airtableFetch('Social_Interactions',2000).then(r=>r.records).catch(e=>{if(isMissing(e))state._socialIntErr=true;else toast('No se pudieron cargar interacciones: '+e.message,'error');return [];});
+    state.socialMetrics = await airtableFetch('Social_Metrics',5000).then(r=>r.records).catch(()=>[]);
+    state.socialAutomations = await airtableFetch('Automations',50).then(r=>r.records).catch(()=>[]);
     _redesLoaded=true;
     renderRedesKpis(); redesSetView(_redesView); renderRedesInbox(); renderRedesMetrics(); renderRedesBestTimes(); renderRedesRecycle();
   }finally{ _redesLoadBusy=false; }
@@ -225,11 +226,17 @@ const _redesIsImg=url=>/\.(jpe?g|png|gif|webp|avif|bmp)(\?|#|$)/i.test(url||'');
 
 async function redesSetEstado(id,estado){
   const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  if(estado==='Publicado'){
+    const f=p.fields||{};
+    if(!f['External Post ID']||!/^https:\/\//i.test(String(f['Permalink']||''))||!f['Fecha publicación']){
+      toast('Publicado solo se confirma con ID externo, permalink HTTPS y fecha devueltos por la plataforma','error');
+      return;
+    }
+  }
   try{
     const fields={'Estado':estado};
-    if(estado==='Publicado'&&!p.fields['Fecha publicación']) fields['Fecha publicación']=new Date().toISOString();
     await _redesWrite('Social_Posts','PATCH',id,fields);
-    p.fields['Estado']=estado; if(fields['Fecha publicación']) p.fields['Fecha publicación']=fields['Fecha publicación'];
+    Object.assign(p.fields,fields);
     toast('Estado actualizado ✓','success'); renderRedesKpis(); renderRedesPosts();
   }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
 }
@@ -652,39 +659,32 @@ function redesCopyReply(id){
   navigator.clipboard.writeText(i.fields['Respuesta sugerida']||'').then(()=>toast('Copiado ✓','success')).catch(()=>toast('No se pudo copiar','error'));
 }
 async function redesMarkInteraction(id,estado){
-  try{ await _redesWrite('Social_Interactions','PATCH',id,{'Estado':estado});
-    const i=(state.socialInteractions||[]).find(x=>x.id===id); if(i) i.fields['Estado']=estado;
-    toast('Actualizado ✓','success'); renderRedesKpis(); renderRedesInbox();
+  const i=(state.socialInteractions||[]).find(x=>x.id===id);if(!i)return;
+  const fields={'Estado':estado};
+  if(estado==='Respondido'){
+    const channel=(prompt('Canal donde se envió la respuesta (Instagram DM, comentario, LinkedIn, etc.):',i.fields['Red']||'')||'').trim();
+    const replyId=(prompt('ID externo de la respuesta confirmado por la plataforma:','')||'').trim();
+    if(!channel||replyId.length<3){toast('Respondido requiere canal e ID externo confirmado','error');return;}
+    fields['Fecha respuesta']=new Date().toISOString();fields['Canal respuesta']=channel;fields['External reply ID']=replyId;
+  }
+  try{
+    await _redesWrite('Social_Interactions','PATCH',id,fields);Object.assign(i.fields,fields);
+    toast('Actualizado ✓','success');renderRedesKpis();renderRedesInbox();
   }catch(e){toast('No se pudo actualizar: '+e.message,'error');}
 }
 async function redesInteractionToLead(id){
-  if(_redesLeadCreated.has(id)){toast('Ya creaste el lead para esta interacción','info');return;}
-  const i=(state.socialInteractions||[]).find(x=>x.id===id); if(!i) return;
-  const f=i.fields;
+  if(_redesLeadCreated.has(id)){toast('Este lead ya fue procesado','info');return;}
+  const i=(state.socialInteractions||[]).find(x=>x.id===id);if(!i)return;
+  if(i.fields?.['Lead creado']&&i.fields?.['Cliente ID']){_redesLeadCreated.add(id);toast('Lead ya enlazado al CRM','info');return;}
+  const cfg=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!cfg?.url||!cfg?.key){toast('Proxy seguro no configurado','error');return;}
   try{
-    const cli=await _redesWrite('Clientes','POST',null,{
-      'Contacto':f['Usuario']||'Lead redes','Empresa':f['Usuario']?('@'+f['Usuario']):'Lead redes sociales',
-      'Validado':false,'Origen lead':'Redes sociales',
-      'Notas internas':`Lead desde ${f['Red']||'redes'} (${f['Tipo']||'interacción'}):\n"${f['Mensaje']||''}"`
-    });
-    _redesLeadCreated.add(id);
-    // Encola para que LEAD_AGENT lo califique (mismo pipeline desacoplado que web/LinkedIn/Google Ads).
-    let encolado=false;
-    if(cli&&cli.id){
-      try{
-        await _redesWrite('Agent_Queue','POST',null,{
-          'Evento':'social.lead_received','Entidad':'Cliente','ID entidad':cli.id,
-          'Agente':'LEAD_AGENT','Estado':'Pendiente','Prioridad':'Alta',
-          'Source':(f['Red']||'redes').toLowerCase(),
-          'Input JSON':JSON.stringify({source:'redes',red:f['Red']||'',usuario:f['Usuario']||'',mensaje:f['Mensaje']||'',intencion:f['Intención']||''}),
-          'Fecha creación':new Date().toISOString()
-        });
-        encolado=true;
-      }catch(_){}
-    }
-    await _redesWrite('Social_Interactions','PATCH',id,{'Estado':'Respondido','Lead creado':true});
-    if(i){ i.fields['Estado']='Respondido'; i.fields['Lead creado']=true; }
-    toast(encolado?'Lead creado y encolado para scoring ✓':'Lead creado en Clientes ✓','success'); renderRedesKpis(); renderRedesInbox();
+    const r=await fetch(cfg.url.replace(/\/$/,'')+'/social/lead',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify({interactionId:id})});
+    const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    Object.assign(i.fields,{'Lead creado':true,'Cliente ID':d.clienteId||'','Agent Queue ID':d.queueId||''});
+    _redesLeadCreated.add(id);toast(d.replayed?'Lead ya existente y recuperado ✓':'Lead creado y encolado ✓','success');
+    renderRedesKpis();renderRedesInbox();
   }catch(e){toast('No se pudo crear el lead: '+e.message,'error');}
 }
 
@@ -726,7 +726,7 @@ async function _redesRunGenerate(agentId,input,media,pedidoNum){
     const started=typeof beginAgentResultRun==='function'?beginAgentResultRun(agentId):Date.now();
     const out=await callAgentClaude(agentId,cfg.sys,full);
     const meta=typeof agentResultMeta==='function'?agentResultMeta(agentId,started):{};
-    _redesLastGen=out; _redesLastAgent=agentId; _redesLastMedia=media||''; _redesLastPedido=pedidoNum||'';
+    _redesLastGen=out; _redesLastAgent=agentId; _redesLastMedia=media||''; _redesLastPedido=pedidoNum||''; _redesLastMeta=meta||{}; _redesLastPrompt={input,full,generatedAt:new Date().toISOString()};
     try{AGENT_LOG.add(cfg.label,input,out,meta);}catch(_){}
     // CAPTION/CONTENT producen contenido por red → guardable (single o split). Estratega/Tendencias = planes.
     const multiNet=['CAPTION_AGENT','CONTENT'].includes(agentId);
@@ -744,7 +744,9 @@ async function _redesRunGenerate(agentId,input,media,pedidoNum){
 }
 function _redesBaseFields(agentId){
   const cfg=AGENTES_CFG.find(a=>a.id===agentId);
-  const f={'Estado':'Borrador','Agente':cfg?cfg.label:agentId,'Objetivo':'Captar leads'};
+  const actor=(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||'';
+  const audit={agent:agentId,promptVersion:'social-v1',generatedAt:_redesLastPrompt?.generatedAt||new Date().toISOString(),model:_redesLastMeta?.model||_redesLastMeta?.modelId||'central-proxy',approvedBy:actor||null,prompt:String(_redesLastPrompt?.input||'').slice(0,1500)};
+  const f={'Estado':'Borrador','Agente':cfg?cfg.label:agentId,'Objetivo':'Captar leads','IA auditoría':JSON.stringify(audit)};
   if(_redesLastMedia) f['Media URL']=_redesLastMedia;
   if(_redesLastPedido) f['Pedido']=_redesLastPedido;
   return f;
@@ -844,17 +846,18 @@ function _redesEngTrend(mets){
     </svg></div>`;
 }
 function _redesBuildMetricsContext(){
-  const mets=(state.socialMetrics||[]), posts=(state.socialPosts||[]), inter=(state.socialInteractions||[]);
-  const since=new Date(Date.now()-7*86400000);
-  const lines=['=== DATOS DE REDES (últimos 7 días) ==='];
-  const agg={};
-  mets.filter(m=>{const d=m.fields['Fecha'];return d&&new Date(d)>=since;}).forEach(m=>{const r=m.fields['Red']||'—';const a=agg[r]=agg[r]||{Alcance:0,Impresiones:0,Engagement:0,Clics:0,Seg:0,Leads:0};a.Alcance+=m.fields['Alcance']||0;a.Impresiones+=m.fields['Impresiones']||0;a.Engagement+=m.fields['Engagement']||0;a.Clics+=m.fields['Clics']||0;a.Seg+=m.fields['Seguidores nuevos']||0;a.Leads+=m.fields['Leads']||0;});
-  if(Object.keys(agg).length) Object.entries(agg).forEach(([r,a])=>lines.push(`${r}: alcance ${a.Alcance}, impresiones ${a.Impresiones}, engagement ${a.Engagement}, clics ${a.Clics}, seguidores nuevos ${a.Seg}, leads ${a.Leads}`));
-  else lines.push('(sin métricas en Social_Metrics esta semana — dilo y propón qué medir y cómo conectarlo)');
-  const pubWeek=posts.filter(p=>{const d=p.fields['Fecha publicación']||p.fields['Fecha programada'];return d&&new Date(d)>=since;});
-  lines.push(`\nPublicaciones (últimos 7 días): ${pubWeek.length}`);
-  pubWeek.slice(0,15).forEach(p=>lines.push(`- [${p.fields['Red']||'—'}] ${(p.fields['Estado']||'')} · ${String(p.fields['Copy']||'').replace(/\n/g,' ').slice(0,70)}`));
-  lines.push(`\nInteracciones cargadas: ${inter.length} · Leads detectados: ${inter.filter(i=>i.fields['Es lead']===true).length}`);
+  const mets=state.socialMetrics||[],posts=state.socialPosts||[],inter=state.socialInteractions||[];
+  const now=new Date(),since=new Date(now.getTime()-7*86400000);
+  const inRange=d=>{const t=Date.parse(d||'');return Number.isFinite(t)&&t>=since.getTime()&&t<=now.getTime();};
+  const lines=['=== DATOS DE REDES (ventana cerrada: últimos 7 días) ==='],agg={};
+  mets.filter(m=>inRange(m.fields?.Fecha)).forEach(m=>{const f=m.fields||{},r=f.Red||'—',a=agg[r]=agg[r]||{Alcance:0,Impresiones:0,Engagement:0,Clics:0,Seg:0,Leads:0};a.Alcance+=f.Alcance||0;a.Impresiones+=f.Impresiones||0;a.Engagement+=f.Engagement||0;a.Clics+=f.Clics||0;a.Seg+=f['Seguidores nuevos']||0;a.Leads+=f.Leads||0;});
+  if(Object.keys(agg).length)Object.entries(agg).forEach(([r,a])=>lines.push(`${r}: alcance ${a.Alcance}, impresiones ${a.Impresiones}, engagement ${a.Engagement}, clics ${a.Clics}, seguidores nuevos ${a.Seg}, leads ${a.Leads}`));
+  else lines.push('(sin métricas observadas en la ventana)');
+  const pubWeek=posts.filter(p=>p.fields?.Estado==='Publicado'&&inRange(p.fields?.['Fecha publicación']));
+  lines.push(`\nPublicaciones confirmadas: ${pubWeek.length}`);
+  pubWeek.slice(0,15).forEach(p=>lines.push(`- [${p.fields?.Red||'—'}] ${String(p.fields?.Copy||'').replace(/\n/g,' ').slice(0,70)}`));
+  const interWeek=inter.filter(i=>inRange(i.fields?.Fecha));
+  lines.push(`\nInteracciones: ${interWeek.length} · Leads detectados: ${interWeek.filter(i=>i.fields?.['Es lead']===true).length}`);
   return lines.join('\n');
 }
 async function redesWeeklyReport(){
@@ -1653,9 +1656,18 @@ async function nlGenerateFromPedido(){
 // ── Mejor momento para publicar (día desde Social_Metrics + hora sugerida por red) ──
 function _redesBestByWeekday(){
   const acc={};
-  (state.socialMetrics||[]).forEach(m=>{const r=m.fields['Red'],d=m.fields['Fecha'];if(!r||!d)return;const wd=new Date(d).getDay();(acc[r]=acc[r]||[0,0,0,0,0,0,0])[wd]+=m.fields['Engagement']||0;});
+  (state.socialMetrics||[]).forEach(m=>{
+    const f=m.fields||{},r=f['Red'],d=f['Fecha'];if(!r||!d)return;
+    const wd=new Date(d).getDay(),eng=Number(f['Engagement'])||0,reach=Number(f['Alcance'])||0;
+    const rows=acc[r]=acc[r]||Array.from({length:7},()=>({eng:0,reach:0,count:0}));
+    rows[wd].eng+=eng;rows[wd].reach+=reach;rows[wd].count++;
+  });
   const best={};
-  Object.entries(acc).forEach(([r,arr])=>{let bi=-1,bv=-1;arr.forEach((v,i)=>{if(v>bv){bv=v;bi=i;}});if(bv>0)best[r]=bi;});
+  Object.entries(acc).forEach(([r,rows])=>{
+    let bi=-1,bv=-1;
+    rows.forEach((x,i)=>{const score=x.reach>0?x.eng/x.reach:(x.count?x.eng/x.count:0);if(score>bv){bv=score;bi=i;}});
+    if(bv>0)best[r]=bi;
+  });
   return best;
 }
 function renderRedesBestTimes(){
@@ -1682,31 +1694,33 @@ function redesDateUseBest(){
 async function redesAutoSchedule(){
   const fRed=document.getElementById('redesFiltroRed')?.value||'';
   const drafts=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Borrador'&&(!fRed||p.fields['Red']===fRed));
-  if(!drafts.length){toast('No hay borradores para programar','info');return;}
-  if(!confirm(`¿Auto-programar ${drafts.length} borrador(es), 1 por día desde mañana a la mejor hora por red?`)) return;
-  const start=new Date(); start.setHours(0,0,0,0);
-  let ok=0;
+  if(!drafts.length){toast('No hay borradores para revisar','info');return;}
+  if(!confirm(`¿Preparar ${drafts.length} borrador(es) para revisión editorial y sugerir fecha/hora? No se publicarán automáticamente.`)) return;
+  const start=new Date();start.setHours(0,0,0,0);let ok=0;
   for(let i=0;i<drafts.length;i++){
-    const p=drafts[i], red=p.fields['Red']||'Instagram', hr=REDES_BEST_HOUR[red]||18;
-    const d=new Date(start); d.setDate(d.getDate()+1+i); d.setHours(hr,0,0,0);
-    try{ await _redesWrite('Social_Posts','PATCH',p.id,{'Estado':'Programado','Fecha programada':d.toISOString()}); p.fields['Estado']='Programado'; p.fields['Fecha programada']=d.toISOString(); ok++; }catch(e){}
+    const p=drafts[i],red=p.fields['Red']||'Instagram',hr=REDES_BEST_HOUR[red]||18;
+    const d=new Date(start);d.setDate(d.getDate()+1+i);d.setHours(hr,0,0,0);
+    const audit={status:'pending_review',suggestedAt:d.toISOString(),zone:'America/Santiago',source:'auto-schedule'};
+    try{
+      const fields={'Estado':'En revisión','Aprobación editorial':JSON.stringify(audit)};
+      await _redesWrite('Social_Posts','PATCH',p.id,fields);Object.assign(p.fields,fields);ok++;
+    }catch(e){}
   }
-  if(ok){ toast(`Programados ${ok} borradores ✓`,'success'); renderRedesKpis(); redesApplyFilters(); }
-  else toast('No se pudo programar','error');
+  if(ok){toast(`En revisión: ${ok} borrador(es) ✓`,'success');renderRedesKpis();redesApplyFilters();}
+  else toast('No se pudo preparar la revisión','error');
 }
 
 // ── Modo automático: panel de estado + piloto automático de contenido ──
 let _redesBusyAuto=false;
 // ¿Qué está fluyendo solo? Se deriva de la frescura de los datos (últimos 7 días).
 function _redesAutoStatus(){
-  const now=Date.now(), WK=7*86400000;
-  const fresh=(recs,fld)=>(recs||[]).some(r=>{const d=(r.fields&&r.fields[fld])||r.createdTime;return d&&now-new Date(d).getTime()<WK;});
-  const posts=(state.socialPosts||[]);
-  return {
-    listen:(state.socialInteractions||[]).length>0 && fresh(state.socialInteractions,'Fecha'),
-    metrics:(state.socialMetrics||[]).length>0 && fresh(state.socialMetrics,'Fecha'),
-    publish: posts.some(p=>(p.fields['Estado']||'')==='Publicado' && p.fields['Fecha publicación'] && now-new Date(p.fields['Fecha publicación']).getTime()<WK)
+  const rows=state.socialAutomations||[],now=Date.now(),MAX=30*60*1000;
+  const alive=id=>{
+    const r=rows.find(x=>String(x.fields?.ID||'')===id),f=r?.fields||{};
+    const t=Date.parse(f.UltimaEjecucion||f['Ultima Ejecucion']||'')||0;
+    return !!r&&/activ|trabaj/i.test(String(f.Estado||''))&&t>0&&(now-t)<=MAX;
   };
+  return {listen:alive('social-listen'),metrics:alive('social-metrics'),publish:alive('social-publish')};
 }
 function renderRedesAutoPanel(){
   const el=document.getElementById('redesAutoPanel'); if(!el) return;
@@ -1754,7 +1768,7 @@ async function _redesFillGapsCore(gaps){
         const out=await callAgentClaude('CAPTION_AGENT',cfg.sys,`${cfg.pre||''}Crea UN post breve de Instagram para The Lab Solutions para publicar el ${fecha}. Elige un producto (neón LED, impresión 3D, trofeos/medallas, señalética) con gancho y llamado a la acción. Termina con una línea "HASHTAGS: ..." con 3-5 hashtags.`);
         const mh=out.match(/HASHTAGS?:\s*([^\n]+)/i); hashtags=mh?mh[1].trim():''; copy=mh?out.replace(/HASHTAGS?:\s*[^\n]+/i,'').trim():out.trim();
       }
-      const rec=await _redesWrite('Social_Posts','POST',null,{Red:red,Estado:'Programado','Fecha programada':d.toISOString(),Copy:(copy||'').slice(0,9000),Hashtags:(hashtags||'').slice(0,1000),Agente:'CAPTION_AGENT · auto',Objetivo:'Captar leads'});
+      const rec=await _redesWrite('Social_Posts','POST',null,{Red:red,Estado:'En revisión',Copy:(copy||'').slice(0,9000),Hashtags:(hashtags||'').slice(0,1000),Agente:'CAPTION_AGENT · auto',Objetivo:'Captar leads','Aprobación editorial':JSON.stringify({status:'pending_review',suggestedAt:d.toISOString(),zone:'America/Santiago',source:'fill-gaps'}),'IA auditoría':JSON.stringify({agent:'CAPTION_AGENT',generatedAt:new Date().toISOString(),promptVersion:'social-v1',model:'via central proxy'})});
       if(rec&&rec.id){ state.socialPosts=state.socialPosts||[]; state.socialPosts.unshift(rec); ok++; toast(`Autopilot: ${ok}/${gaps.length} generado(s)…`,'info'); }
     }catch(e){}
   }
@@ -1765,7 +1779,7 @@ async function redesFillGaps(){
   const gaps=_redesGaps(7);
   if(!gaps.length){ toast('✅ No hay huecos en los próximos 7 días','info'); return; }
   if(!_redesDemo && !_redesHasData()){ toast('Conecta Airtable (o usa el modo demo) para guardar los posts','error'); return; }
-  if(!confirm(`¿Generar y programar ${gaps.length} publicación(es) de Instagram — una por cada día sin contenido de los próximos 7 — a la mejor hora?`)) return;
+  if(!confirm(`¿Generar y enviar a revisión ${gaps.length} publicación(es) de Instagram — una por cada día sin contenido de los próximos 7 — a la mejor hora?`)) return;
   _redesBusyAuto=true;
   try{ const ok=await _redesFillGapsCore(gaps);
     if(ok){ toast(`🤖 ${ok} publicación(es) generada(s) y programada(s) ✓`,'success'); renderRedesKpis(); redesApplyFilters(); }
@@ -1814,16 +1828,24 @@ function redesOpenEdit(id){
 }
 function redesCloseEdit(){ _redesEditId=null; const m=document.getElementById('redesEditModal'); if(m) m.style.display='none'; }
 async function redesSaveEdit(){
-  if(!_redesEditId) return;
-  const p=(state.socialPosts||[]).find(x=>x.id===_redesEditId); if(!p) return;
-  const g=eid=>document.getElementById(eid)?.value||'';
-  const fields={'Red':g('redesEditRed'),'Estado':g('redesEditEstado'),'Objetivo':g('redesEditObjetivo'),'Copy':g('redesEditCopy').slice(0,9000),'Hashtags':g('redesEditHashtags').slice(0,1000),'Media URL':g('redesEditMedia'),'Link':g('redesEditLink')};
-  const feRaw=g('redesEditFecha'); if(feRaw){const d=new Date(feRaw);if(!isNaN(d.getTime()))fields['Fecha programada']=d.toISOString();}
-  try{
-    await _redesWrite('Social_Posts','PATCH',_redesEditId,fields);
-    Object.assign(p.fields,fields);
-    toast('Publicación guardada ✓','success'); redesCloseEdit(); renderRedesKpis(); redesApplyFilters(); renderRedesRecycle();
-  }catch(e){toast('No se pudo guardar: '+e.message,'error');}
+  if(!_redesEditId)return;
+  const p=(state.socialPosts||[]).find(x=>x.id===_redesEditId);if(!p)return;
+  const g=eid=>document.getElementById(eid)?.value||'',estado=g('redesEditEstado');
+  const media=g('redesEditMedia').trim(),link=g('redesEditLink').trim();
+  const validUrl=u=>!u||/^https:\/\//i.test(u);
+  if(!validUrl(media)||!validUrl(link)){toast('Media URL y Link deben usar HTTPS','error');return;}
+  if(estado==='Publicado'&&(!p.fields['External Post ID']||!/^https:\/\//i.test(String(p.fields['Permalink']||''))||!p.fields['Fecha publicación'])){
+    toast('No puedes marcar Publicado sin evidencia devuelta por la plataforma','error');return;
+  }
+  const fields={'Red':g('redesEditRed'),'Estado':estado,'Objetivo':g('redesEditObjetivo'),'Copy':g('redesEditCopy').slice(0,9000),'Hashtags':g('redesEditHashtags').slice(0,1000),'Media URL':media,'Link':link};
+  const feRaw=g('redesEditFecha');if(feRaw){const d=new Date(feRaw);if(!isNaN(d.getTime()))fields['Fecha programada']=d.toISOString();}
+  if(estado==='Programado'){
+    const actor=(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||'';
+    fields['Aprobación editorial']=JSON.stringify({status:'approved',approvedAt:new Date().toISOString(),approvedBy:actor,zone:'America/Santiago'});
+    fields['Idempotency key']=p.fields['Idempotency key']||('social-post/'+_redesEditId);
+  }
+  try{await _redesWrite('Social_Posts','PATCH',_redesEditId,fields);Object.assign(p.fields,fields);toast('Publicación guardada ✓','success');redesCloseEdit();renderRedesKpis();redesApplyFilters();renderRedesRecycle();}
+  catch(e){toast('No se pudo guardar: '+e.message,'error');}
 }
 async function redesDeletePost(){
   if(!_redesEditId) return;
