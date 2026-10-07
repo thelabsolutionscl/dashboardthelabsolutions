@@ -6,6 +6,8 @@ on:
     paths:
       - 'index.html'
       - 'js/**.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'tests/remuneraciones-wiring.test.js'
       - 'tests/remuneraciones-engine.test.js'
       - 'tests/remuneraciones-dias.test.js'
@@ -17,6 +19,8 @@ on:
     paths:
       - 'index.html'
       - 'js/**.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'tests/remuneraciones-wiring.test.js'
       - 'tests/remuneraciones-dias.test.js'
       - 'tests/remuneraciones-personas.test.js'
