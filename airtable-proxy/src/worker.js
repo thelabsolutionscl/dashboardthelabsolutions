@@ -3308,7 +3308,7 @@ export class CrmMutationGuard {
         const evalId='SE-'+crypto.randomUUID();
         const scores=supplierScores(p.scores||{},Number(p.incidents||0));
         const row=await officeCreate(this.env,'SupplierEvaluations',{
-          ID:evalId,'Supplier ID':supplierId,Estado:status,Motivo:motive,Evidencia:evidence,
+          ID:evalId,'Supplier ID':supplierId,Proveedor:[supplierId],Estado:status,Motivo:motive,Evidencia:evidence,
           'Checklist JSON':JSON.stringify(checklist),'Calidad':scores.quality,'Puntualidad':scores.onTime,
           Precio:scores.price,Respuesta:scores.response,Incidentes:scores.incidents,'Score derivado':scores.score,
           Fecha:new Date().toISOString(),Responsable:actor.email
@@ -4051,7 +4051,7 @@ function supplierNormalizePrice(p,supplierId,actor){
   const currency=String(p.currency||'CLP').toUpperCase();if(!/^[A-Z]{3}$/.test(currency))throw new Error('Moneda inválida');
   const tax=Math.max(0,Math.min(1,Number(p.taxRate??0.19)));
   return {
-    ID:'SP-'+crypto.randomUUID(),'Supplier ID':supplierId,'Supplier Name':supplierNormText(p.supplierName),
+    ID:'SP-'+crypto.randomUUID(),'Supplier ID':supplierId,Proveedor:[supplierId],'Supplier Name':supplierNormText(p.supplierName),
     'Item Key':supplierItemKey(item,unit),Item:item,SKU:supplierNormText(p.sku),Currency:currency,Unit:unit,
     'Net Price':Math.round(net*100)/100,'Tax Rate':tax,'Min Qty':Math.max(0,Number(p.minQty||0)),
     'Vigencia desde':String(p.validFrom||officeDateCL()).slice(0,10),'Vigencia hasta':p.validTo?String(p.validTo).slice(0,10):'',
@@ -4106,18 +4106,41 @@ async function supplierEnsureSchema(env){
       }
     }
   }
-  return{ok:true,created,tables:Object.keys(SUPPLIER_TABLE_SCHEMAS)};
+  meta=await get();
+  const supplierTable=(meta.tables||[]).find(t=>t.name==='Proveedores');
+  if(!supplierTable)throw new Error('Proveedores table missing');
+  const linkTargets=['SupplierPrices','PurchaseOrders','SupplierEvaluations','Pedidos','Facturas','Inventario'];
+  for(const name of linkTargets){
+    const table=(meta.tables||[]).find(t=>t.name===name);if(!table)continue;
+    if((table.fields||[]).some(x=>x.name==='Proveedores'))continue;
+    const r=await fetch(metaUrl+'/'+table.id+'/fields',{method:'POST',headers:officeHeaders(env),
+      body:JSON.stringify({name:'Proveedores',type:'multipleRecordLinks',options:{linkedTableId:supplierTable.id}})});
+    if(!r.ok)throw new Error('link '+name+' '+r.status);
+  }
+  return{ok:true,created,tables:Object.keys(SUPPLIER_TABLE_SCHEMAS),linked:linkTargets};
 }
 async function supplierSnapshot(env){
-  const [suppliers,prices,pos,items,evaluations,categories]=await Promise.all([
+  const [suppliers,prices,pos,items,evaluations,categories,pedidos]=await Promise.all([
     officeList(env,'Proveedores',{max:10000}),
     officeList(env,'SupplierPrices',{max:10000}),
     officeList(env,'PurchaseOrders',{max:10000}),
     officeList(env,'PurchaseOrderItems',{max:20000}),
     officeList(env,'SupplierEvaluations',{max:10000}),
-    officeList(env,'SupplierCategories',{max:2000})
+    officeList(env,'SupplierCategories',{max:2000}),
+    officeList(env,'Pedidos',{max:10000})
   ]);
-  return{ok:true,suppliers,prices,purchaseOrders:pos,purchaseOrderItems:items,evaluations,categories,fetchedAt:new Date().toISOString()};
+  const byName=new Map();
+  for(const rec of suppliers){const k=supplierNormText(rec.fields?.Nombre).toLowerCase();if(!k)continue;
+    const arr=byName.get(k)||[];arr.push(rec.id);byName.set(k,arr);}
+  for(const rec of pedidos){
+    if(Array.isArray(rec.fields?.Proveedores)&&rec.fields.Proveedores.length)continue;
+    const names=String(rec.fields?.Proveedor||'').split(',').map(x=>supplierNormText(x).toLowerCase()).filter(Boolean);
+    const ids=[];let ambiguous=false;
+    for(const name of names){const hits=byName.get(name)||[];if(hits.length!==1){ambiguous=true;break;}ids.push(hits[0]);}
+    if(ids.length&&!ambiguous){try{await officePatch(env,'Pedidos',rec.id,{Proveedores:[...new Set(ids)]});rec.fields.Proveedores=[...new Set(ids)];}catch(_){}}
+  }
+  return{ok:true,suppliers,prices,purchaseOrders:pos,purchaseOrderItems:items,evaluations,categories,pedidos,fetchedAt:new Date().toISOString()};
+
 }
 
 const OFFICE_BASE_ID='app1YtD74AqiPWQhy';
@@ -6208,7 +6231,7 @@ async function heartbeat(env) {
         const totals=supplierPoTotals(items);
         const poId='PO-'+crypto.randomUUID();
         const row=await officeCreate(this.env,'PurchaseOrders',{
-          ID:poId,'Número':number,'Supplier ID':supplierId,'Supplier Name':String(supplier.fields?.Nombre||''),
+          ID:poId,'Número':number,'Supplier ID':supplierId,Proveedor:[supplierId],'Supplier Name':String(supplier.fields?.Nombre||''),
           Moneda:String(p.currency||'CLP').toUpperCase(),'Condiciones de pago':String(p.paymentTerms||'').slice(0,500),
           Estado:'Borrador',Neto:totals.net,Impuesto:totals.tax,Total:totals.total,Revisión:1,
           'Creada en':new Date().toISOString(),'Creada por':actor.email
