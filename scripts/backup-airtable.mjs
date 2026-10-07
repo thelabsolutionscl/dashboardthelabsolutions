@@ -35,9 +35,9 @@ if (!TOKEN) {
   console.error('Falta AIRTABLE_TOKEN');
   process.exit(1);
 }
-if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length < 24) {
+if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length < 32) {
   await writeFile('backup/resumen.txt',
-    '⚠ RESPALDO BLOQUEADO: falta BACKUP_ENCRYPTION_KEY (mínimo 24 caracteres). No se subieron datos de clientes.\n');
+    '⚠ RESPALDO BLOQUEADO: falta BACKUP_ENCRYPTION_KEY (mínimo 32 caracteres). No se subieron datos de clientes.\n');
   console.error('BACKUP_ENCRYPTION_KEY ausente o demasiado corta — prohibido subir CRM sin cifrar a un repositorio público.');
   process.exit(1);
 }
