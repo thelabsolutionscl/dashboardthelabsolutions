@@ -1020,9 +1020,11 @@ async function nlSubRemove(id){
 let _nlDest=null; // estado del modal: {campId, seg, exclude:Set<clientId>, extra:[{nombre,email}]}
 function _nlDestKey(id){return 'nl_dest_'+id;}
 function _nlGetDest(id){
-  try{const j=JSON.parse(localStorage.getItem(_nlDestKey(id))||'null');if(j)return j;}catch(_){}
   const c=(state.nlCampaigns||[]).find(x=>x.id===id);
-  return {seg:(c&&c.fields['Segmento objetivo'])?String(c.fields['Segmento objetivo']):'',exclude:[],extra:[]};
+  const notes=String(c?.fields?.Notas||'');
+  const m=notes.match(/(?:^|\n)\[AUDIENCIA NEWSLETTER\]\s*(\{[^\n]*\})/);
+  if(m){try{const j=JSON.parse(m[1]);if(j&&j.version===1)return j;}catch(_){}}
+  return {seg:(c&&c.fields['Segmento objetivo'])?String(c.fields['Segmento objetivo']):'',exclude:[],extra:[],noResend:false};
 }
 // Segmentos: por rubro (texto) o inteligentes (prefijo @: aperturistas, no-abrieron, clicaron, inactivos)
 function _nlBaseDest(seg){
@@ -1046,7 +1048,7 @@ function _nlSmartSegOptions(sel){
 function _nlDestResolve(seg,exclude,extra){
   const ex=exclude instanceof Set?exclude:new Set(exclude||[]);const out=[],seen=new Set();
   _nlBaseDest(seg).forEach(c=>{if(ex.has(c.id))return;const em=String(c.fields['Email']||'').toLowerCase();if(seen.has(em))return;seen.add(em);out.push({id:c.id,nombre:c.fields['Empresa']||c.fields['Contacto']||em,email:c.fields['Email']});});
-  (extra||[]).forEach(e=>{const em=String(e.email||'').toLowerCase();if(!em||seen.has(em))return;seen.add(em);out.push({id:null,nombre:e.nombre||e.email,email:e.email});});
+  (extra||[]).forEach(e=>{const em=String(e.email||'').toLowerCase();if(!em||seen.has(em))return;seen.add(em);out.push({id:e.id||null,nombre:e.nombre||e.email,email:e.email});});
   return out;
 }
 function nlDestCount(id){const d=_nlGetDest(id);return _nlDestResolve(d.seg,d.exclude,d.extra).length;}
