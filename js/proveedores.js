@@ -219,6 +219,12 @@ function _supplierPedidoIds(pedido){
   return [...new Set(names.map(n=>_supplierByName(n)?.id).filter(Boolean))];
 }
 function _supplierPedidos(supplierId){return (state.pedidos||[]).filter(p=>_supplierPedidoIds(p).includes(supplierId));}
+function _safeSupplierEmail(v){const x=String(v||'').trim();return validEmail(x)?x:'';}
+function _safeSupplierPhone(v){const x=String(v||'').trim();return validPhone(x)?x:'';}
+function _safeSupplierUrl(v){
+  const raw=String(v||'').trim();if(!raw)return '';
+  try{const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);return u.protocol==='https:'&&!u.username&&!u.password?u.href:'';}catch(_){return '';}
+}
 function _supplierFindDuplicate({id='',nombre='',rut='',email=''}) {
   const nr=_normSupplierRut(rut),ne=_normSupplierEmail(email),nn=_normSupplierText(nombre);
   return (state.proveedores||[]).find(p=>{
@@ -272,16 +278,16 @@ function buildProveedorCard(p){
   const estadoPost=f['Estado postulación']||'';
   const rep=parseInt(f['Reputación'])||0;
   const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'Sin dato';
-  const tel=(f['Teléfono']||'').replace(/\s/g,'');
-  const email=f['Email']||'';
-  const web=f['Sitio Web']||'';
+  const tel=_safeSupplierPhone(f['Teléfono']);
+  const email=_safeSupplierEmail(f['Email']);
+  const web=_safeSupplierUrl(f['Sitio Web']);
   const cats=pvCat(f)||'Sin categoría';
   const supplierId=_supplierId(p);
   const pedidosTodos=_supplierPedidos(supplierId);
   const pedidosActivos=pedidosTodos.filter(x=>!['Despachado','Completado','Cancelado'].includes(x.fields['Estado pedido']||''));
 
   const cls=estado==='Bloqueado'?'is-blocked':estado==='Inactivo'?'is-inactive':estadoPost==='ENTREVISTAR'?'is-review':'';
-  const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;
+  const wa=_safeSupplierPhone(f['WhatsApp'])||tel;
   return `<article class="op-record pv-card ${cls}" data-id="${id}">
     <header>
       <div>
@@ -304,7 +310,7 @@ function buildProveedorCard(p){
       <span><small>Gestión</small>${escapeHtml(f['Condiciones de pago']||'Condición de pago sin registrar')}</span>
       <div class="pv-card-actions">
         ${wa?`<a class="op-button" href="https://wa.me/${escapeHtml(wa.replace(/^\+/,'').replace(/\D/g,''))}" target="_blank" rel="noopener">WhatsApp</a>`:''}
-        ${web?`<a class="op-button" href="${escapeHtml(web.startsWith('http')?web:'https://'+web)}" target="_blank" rel="noopener">Web</a>`:''}
+        ${web?`<a class="op-button" href="${escapeHtml(web)}" target="_blank" rel="noopener">Web</a>`:''}
         <button type="button" class="op-button op-primary" onclick="openEditProveedor('${id}')">Ver / editar</button>
       </div>
     </footer>
@@ -313,9 +319,9 @@ function buildProveedorCard(p){
 
 function buildProveedorRow(p){
   const f=p.fields,id=p.id;
-  const tel=(f['Teléfono']||'').replace(/\s/g,'');
-  const email=f['Email']||'';
-  const web=f['Sitio Web']||'';
+  const tel=_safeSupplierPhone(f['Teléfono']);
+  const email=_safeSupplierEmail(f['Email']);
+  const web=_safeSupplierUrl(f['Sitio Web']);
   const telCell=tel?`<a href="tel:${tel}" onclick="event.stopPropagation()" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Llamar">📞 ${escapeHtml(f['Teléfono']||'')}</a>`:'<span style="color:var(--text3)">—</span>';
   const emailCell=email?`<a href="mailto:${email}" onclick="event.stopPropagation()" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Enviar correo">✉ ${escapeHtml(email)}</a>`:'<span style="color:var(--text3)">—</span>';
   const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'—';
@@ -333,7 +339,7 @@ function buildProveedorRow(p){
   const rowBorderStyle=estado==='Bloqueado'?';border-left:3px solid var(--danger)':estado==='Inactivo'?';border-left:3px solid rgba(255,255,255,0.1)':estadoPost==='ENTREVISTAR'?';border-left:3px solid #ffaa00':'';
   return`<tr data-id="${id}" onclick="toggleProveedorFicha('${id}')" style="cursor:pointer${rowBorderStyle}" class="${selectedProveedores.has(id)?'row-selected':''}${_flashCls(id)}">
     <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="row-chk" data-id="${id}" ${selectedProveedores.has(id)?'checked':''} onchange="toggleProveedorRow(this)" style="cursor:pointer;accent-color:var(--accent)"></td>
-    <td class="pv-nombre"><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}${estadoPost?estadoPostPill(estadoPost):''}</td>
+    <td class="pv-nombre"><div style="font-weight:600;font-size:12px">${escapeHtml(f['Nombre']||'—')}</div><div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">${id}</div>${f['RUT']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['RUT'])}</div>`:''}${estadoPost?estadoPostPill(estadoPost):''}</td>
     <td class="pv-cat">${pvCatBadge(pvCat(f)||'—')}</td>
     <td class="pv-contacto"><div style="font-size:12px">${escapeHtml(f['Contacto']||'—')}</div>${f['Cargo']?`<div style="font-size:10px;color:var(--text3)">${escapeHtml(f['Cargo'])}</div>`:''}</td>
     <td class="pv-tel">${telCell}</td>
@@ -348,9 +354,9 @@ function buildProveedorRow(p){
     <td colspan="11" style="padding:0;background:var(--surface2)">
       <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border2);border-bottom:2px solid var(--border)">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          ${(()=>{const wa=(f['WhatsApp']||'').replace(/\s/g,'')||tel;return wa?`<a href="https://wa.me/${wa.replace(/^\+/,'').replace(/^56/,'56')}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="color:#25d366;border-color:rgba(37,211,102,0.3);font-size:11px">💬 WhatsApp</a>`:'';})()}
+          ${(()=>{const wa=_safeSupplierPhone(f['WhatsApp'])||tel;return wa?`<a href="https://wa.me/${wa.replace(/^\+/,'').replace(/^56/,'56')}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="color:#25d366;border-color:rgba(37,211,102,0.3);font-size:11px">💬 WhatsApp</a>`:'';})()}
           ${email?`<a href="mailto:${escapeHtml(email)}" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px">✉ Email</a>`:''}
-          ${web?`<a href="${escapeHtml(web.startsWith('http')?web:'https://'+web)}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Sitio web</a>`:''}
+          ${web?`<a href="${escapeHtml(web)}" target="_blank" onclick="event.stopPropagation()" class="btn btn-ghost btn-sm" style="font-size:11px"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-web"/></svg> Sitio web</a>`:''}
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditProveedor('${id}')" style="font-size:11px;margin-left:auto"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-edit"/></svg> Editar ficha completa</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
@@ -414,13 +420,27 @@ function _pvPostBtns(id,current){
 async function setProvEstadoPost(id,estado){
   const p=state.proveedores.find(x=>x.id===id);if(!p)return;
   const old=p.fields['Estado postulación']||'';
-  p.fields['Estado postulación']=estado;
+  const reason=(document.getElementById('pvmotivo-'+id)?.value||'').trim();
+  if(['APROBADO','RECHAZADO'].includes(estado)&&reason.length<8){
+    toast('Para aprobar o rechazar debes escribir un motivo de al menos 8 caracteres.','error');return;
+  }
+  let evidence='';
+  if(['APROBADO','RECHAZADO'].includes(estado)){
+    evidence=(prompt('Evidencia / referencia de la decisión (documento, prueba, entrevista, cotización, etc.):','')||'').trim();
+    if(evidence.length<3){toast('Debes registrar una evidencia o referencia.','error');return;}
+  }
+  const actor=AUTH.getUser()?.username||AUTH.getUser()?.name||'usuario';
+  const at=new Date().toISOString();
+  const audit=`[${at}] EVALUACIÓN PROVEEDOR · ${old||'SIN ESTADO'} → ${estado} · Responsable: ${actor} · Motivo: ${reason||'—'}${evidence?' · Evidencia: '+evidence:''}`;
+  const prevNotes=String(p.fields['Notas']||'').trim();
+  const fields={'Estado postulación':estado,'Motivo evaluación':reason,'Notas':prevNotes?(prevNotes+'\n\n'+audit):audit};
+  p.fields['Estado postulación']=estado;p.fields['Motivo evaluación']=reason;p.fields['Notas']=fields['Notas'];
   const cont=document.getElementById('pvpostbtns-'+id);if(cont)cont.innerHTML=_pvPostBtns(id,estado);
   try{
-    await airtableWrite('Proveedores','PATCH',id,{'Estado postulación':estado});
-    toast('Postulación → '+estado,'success');
+    await airtableWrite('Proveedores','PATCH',id,fields);
+    toast('Postulación → '+estado+' · evaluación auditada','success');
   }catch(e){
-    p.fields['Estado postulación']=old;
+    p.fields['Estado postulación']=old;p.fields['Notas']=prevNotes;
     const c2=document.getElementById('pvpostbtns-'+id);if(c2)c2.innerHTML=_pvPostBtns(id,old);
     toast('Error: '+e.message,'error');
   }
@@ -598,20 +618,22 @@ function updateProveedoresBulkBar(){
 }
 function clearProveedoresSelection(){selectedProveedores.clear();document.querySelectorAll('#proveedoresTableBody .row-chk').forEach(c=>{c.checked=false;c.closest('tr')?.classList.remove('row-selected');});const sa=document.getElementById('proveedoresSelectAll');if(sa){sa.checked=false;sa.indeterminate=false;}updateProveedoresBulkBar();}
 async function bulkDeleteProveedores(){
-  const ids=[...selectedProveedores];if(!ids.length) return;
-  const nombres=ids.map(id=>state.proveedores.find(p=>p.id===id)?.fields['Nombre']||id).join(', ');
-  if(!confirm(`¿Eliminar ${ids.length} proveedor${ids.length!==1?'es':''}?\n${nombres}`)) return;
-  let ok=0,err=0;
+  const ids=[...selectedProveedores];if(!ids.length)return;
+  if(!confirm(`Procesar ${ids.length} proveedor(es): los que tengan dependencias se archivarán y solo los huérfanos se eliminarán.`))return;
+  let deleted=0,archived=0,errors=[];
   for(const id of ids){
+    const rec=_supplierById(id);if(!rec)continue;
     try{
-      const rec=state.proveedores.find(x=>x.id===id);
-      await airtableDelete('Proveedores',id);
-      state.proveedores=state.proveedores.filter(x=>x.id!==id);
-      selectedProveedores.delete(id);ok++;
-    }catch(e){err++;}
+      const deps=_supplierDependencies(id);
+      if(deps.total){await airtableWrite('Proveedores','PATCH',id,{'Estado':'Inactivo'});rec.fields['Estado']='Inactivo';archived++;}
+      else{await airtableDelete('Proveedores',id);state.proveedores=state.proveedores.filter(x=>x.id!==id);deleted++;}
+      selectedProveedores.delete(id);
+    }catch(e){errors.push({id,nombre:rec.fields?.['Nombre']||id,error:String(e?.message||e)});}
   }
-  err?toast(`${ok} eliminados, ${err} con error`,'info'):toast(`✓ ${ok} proveedor${ok!==1?'es':''} eliminados`,'success');
   clearProveedoresSelection();renderProveedores();
+  const msg=`${deleted} eliminados · ${archived} archivados${errors.length?' · '+errors.length+' con error':''}`;
+  toast(msg,errors.length?'info':'success');
+  if(errors.length)console.warn('[Proveedores] errores en operación masiva',errors);
 }
 async function bulkEditProveedorEstado(){
   const estado=document.getElementById('proveedoresBulkEstado')?.value;if(!estado){toast('Selecciona un estado primero','error');return;}
