@@ -111,7 +111,7 @@ test('la ficha conecta pedidos, evaluación e historial de precios', () => {
   assert.match(render, /state\.proveedores/);
   assert.match(render, /buildProveedorRow/, 'el listado debe delegar la ficha en buildProveedorRow');
   const ficha = fn('buildProveedorRow');
-  assert.match(ficha, /state\.pedidos/);
+  assert.match(ficha, /_supplierPedidos\(supplierId\)/);
   assert.match(ficha, /Pedidos activos vinculados/);
   assert.match(ficha, /Estado postulación/);
   assert.match(ficha, /_preciosProvFichaHtml/);
@@ -127,7 +127,8 @@ test('el formulario público aplica controles antiabuso y crea postulación', ()
   assert.match(handler, /rateLimited\([^)]*["']proveedor["'][^)]*5[^)]*60/);
   assert.match(handler, /Falta el nombre del proveedor/);
   assert.match(handler, /Falta email o teléfono/);
-  assert.match(handler, /airtableCreateTolerant\([^)]*["']Proveedores["']/);
+  assert.match(handler, /SUPPLIER_APPLICATION_GUARD/);
+  assert.match(WORKER, /supplierApplicationProcess[\s\S]*airtableCreateTolerant\(env,[\s\S]*["']Proveedores["']/);
   assert.match(handler, /ENTREVISTAR/);
   assert.match(handler, /sendProveedorNotification/);
 });
@@ -151,7 +152,7 @@ test('órdenes de compra calculan, respaldan y generan documento', () => {
   assert.match(fn('_ocBackup'), /_monitorUpsert\(['"]ORDENES_COMPRA['"]/);
   assert.match(fn('_ocNextNum'), /OC-/);
   const save = fn('guardarOC');
-  assert.match(save, /estado\s*:\s*['"]Emitida['"]/);
+  assert.match(save, /estado:id\?\(arr\.find[\s\S]*'Borrador'\):'Borrador'/);
   assert.match(save, /_ocSaveArr/);
   const calc = fn('ocCalc');
   assert.match(calc, /0\.19/);
