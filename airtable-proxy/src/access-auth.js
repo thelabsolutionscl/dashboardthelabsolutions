@@ -21,13 +21,19 @@ const ACCESS_VIEWER_TABLES=new Set([
   'Maquinas_Eventos','Maquinas_Mant'
 ]);
 const ACCESS_WRITE_TABLES={
-  finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas','Proveedores','Reportes']),
+  finance:new Set(['Clientes','Cotizaciones','Pedidos','Facturas','Proveedores','Reportes',
+    'SupplierPrices','PurchaseOrders','PurchaseOrderItems','PurchaseOrderEvents','SupplierEvaluations']),
 };
 const ACCESS_OPERATOR_WRITE_METHODS=Object.freeze({
   Clientes:new Set(['POST','PATCH']),
   Cotizaciones:new Set(['POST','PATCH']),
   Pedidos:new Set(['POST','PATCH']),
   Proveedores:new Set(['POST','PATCH']),
+  SupplierPrices:new Set(['POST','PATCH']),
+  PurchaseOrders:new Set(['POST','PATCH']),
+  PurchaseOrderItems:new Set(['POST','PATCH']),
+  PurchaseOrderEvents:new Set(['POST']),
+  SupplierEvaluations:new Set(['POST']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
   Maquinas_Mant:new Set(['POST']),
@@ -40,7 +46,7 @@ const ACCESS_FINANCE_TABLES=new Set([
 const ACCESS_ALLOWED_TABLES=new Set([
   'Clientes','Cotizaciones','Pedidos','Facturas','Inventario','Maquinas',
   'Maquinas_Eventos','Maquinas_Mant','Equipo_Eventos','Monitor Sistema',
-  'Proveedores','Reportes',
+  'Proveedores','SupplierPrices','PurchaseOrders','PurchaseOrderItems','PurchaseOrderEvents','SupplierEvaluations','Reportes',
   'Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones','Presupuestos',
   'Prestamos','Préstamos','Ventas','Caja',
   // Explicitly observed dashboard tables: admin needs these at Access cutover.
