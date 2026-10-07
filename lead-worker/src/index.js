@@ -1389,6 +1389,8 @@ async function supplierApplicationProcess(env,payload){
 }
 
 async function handleProveedor(request, env, ctx, cors) {
+  if(!env.PUBLIC_LEAD_KEY)console.warn('[proveedor] PUBLIC_LEAD_KEY no configurada');
+  if(!env.TURNSTILE_SECRET)console.warn('[proveedor] TURNSTILE_SECRET no configurada');
   // 1) Clave compartida (anti-bot básico)
   if (env.PUBLIC_LEAD_KEY) {
     const key = request.headers.get("X-Public-Lead-Key") || "";
