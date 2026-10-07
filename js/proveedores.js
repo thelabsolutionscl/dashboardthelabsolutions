@@ -1053,11 +1053,15 @@ function _ocSaveArr(arr){_listaGuardar(_OC_KEY,arr);}
 async function _ocBackup(){return false;}
 function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
 async function _supplierProxyPost(path,body){
-  const cfg=window.PROXY_CONFIG||{},base=String(cfg.base||cfg.url||window.AIRTABLE_PROXY_URL||'').replace(/\/$/,'');
-  const key=cfg.key||window.AIRTABLE_PROXY_KEY||'';
-  if(!base||!key)throw Error('proxy seguro no configurado');
+  let cfg=null;try{cfg=typeof _proxyCfg==='function'?_proxyCfg():null;}catch(_){}
+  if(!cfg?.url||!cfg?.key)throw Error('proxy seguro no configurado');
+  const u=new URL(cfg.url);
+  if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.search||u.hash||
+     (u.protocol==='http:'&&!['localhost','127.0.0.1'].includes(u.hostname)))
+    throw Error('proxy seguro inválido');
+  const base=(u.origin+u.pathname).replace(/\/$/,'');
   const r=await fetch(base+path,{method:'POST',credentials:'include',redirect:'error',
-    headers:{'X-App-Key':key,'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+    headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify(body||{})});
   const d=await r.json().catch(()=>({error:'Respuesta inválida del proxy'}));
   if(!r.ok)throw Object.assign(new Error(d?.error||'Operación rechazada'),{status:r.status,data:d});
   return d;
