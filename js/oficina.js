@@ -831,201 +831,139 @@ async function renderOficina(){
   finally{ _oficinaBusy=false; if(_ofPendingRender){ _ofPendingRender=false; setTimeout(()=>{ try{renderOficina();}catch(e){} },0); } }
 }
 
+async function _ofFetchSnapshot(force=false){
+  if(!force&&_ofRunsCache.data&&Date.now()-_ofRunsCache.t<_OF_CACHE_MS)return _ofRunsCache.data;
+  const cfg=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!cfg?.url||!cfg?.key)throw new Error('Proxy seguro requerido para Oficina Virtual');
+  const r=await fetch(cfg.url.replace(/\/$/,'')+'/office/snapshot',{credentials:'include',redirect:'error',
+    headers:{'X-App-Key':cfg.key,'Accept':'application/json'}});
+  if(!r.ok)throw new Error('Office snapshot HTTP '+r.status);
+  const d=await r.json();if(!d?.ok||!Array.isArray(d.runs))throw new Error('Snapshot Oficina inválido');
+  _ofRunsCache={t:Date.now(),data:d};return d;
+}
+function _ofChileDay(ts){
+  const d=ts instanceof Date?ts:new Date(ts||Date.now());
+  if(!Number.isFinite(d.getTime()))return'';
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+}
+function _ofChileWeekday(ts){
+  const d=ts instanceof Date?ts:new Date(ts||Date.now());
+  return new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',weekday:'long'}).format(d);
+}
+function _ofRunState(run){
+  const state=String(run?.state||'completed').toLowerCase(),hb=Date.parse(run?.heartbeatAt||'')||0;
+  const last=Date.parse(run?.finishedAt||run?.time||run?.startedAt||'')||0;
+  if(state==='running'){
+    if(hb&&Date.now()-hb<=60000)return{cls:'of-work',lbl:'Trabajando'};
+    return{cls:'of-error',lbl:'Ejecución sin heartbeat'};
+  }
+  if(state==='error')return{cls:'of-error',lbl:'Con falla'};
+  if(state==='cancelled')return{cls:'of-off',lbl:'Cancelado'};
+  if(last&&Date.now()-last<24*3600000)return{cls:'of-active',lbl:'Activo hoy'};
+  return{cls:'of-off',lbl:'En reposo'};
+}
 async function _renderOficina(){
   _ofErr=false;
-  // 1) Ejecuciones: historial local + Airtable (con caché corta de 25s)
-  let runs=[];
-  try{AGENT_LOG._load();runs=(AGENT_LOG._runs||[]).map(r=>({agent:r.agent,input:r.input,output:r.output,time:r.time}));}catch(e){}
-  if(_ofHasData()){
-    if(_ofRunsCache.data && Date.now()-_ofRunsCache.t<_OF_CACHE_MS){
-      runs=[...runs,..._ofRunsCache.data];
-    }else{
-      try{
-        const res=await airtableFetch('Agent_Log',100);
-        const remote=(res.records||[]).map(r=>({agent:r.fields['Agente']||'',input:r.fields['Consulta']||'',output:r.fields['Resultado']||'',time:r.fields['Fecha']||r.createdTime||''}));
-        _ofRunsCache={t:Date.now(),data:remote};
-        runs=[...runs,...remote];
-      }catch(e){ _ofErr=true; if(_ofRunsCache.data) runs=[...runs,..._ofRunsCache.data]; }
-    }
-  }
-  // Normalizar tiempo y deduplicar
-  const seen=new Set();
-  runs=runs.map(r=>({...r,t:Date.parse(r.time||'')||0}))
-           .filter(r=>{const k=r.agent+'|'+(r.t||(r.input||'').slice(0,12))+'|'+(r.input||'').slice(0,30);if(seen.has(k))return false;seen.add(k);return true;})
-           .sort((a,b)=>b.t-a.t);
-  const byAgent={};
-  runs.forEach(r=>{(byAgent[r.agent]=byAgent[r.agent]||[]).push(r);});
-
-  // 2) Cola pendiente (con caché corta para no refetch en cada render/cambio de vista)
-  let queueLen=_agentQueue.length;
-  if(_ofHasData()&&!queueLen){
-    if(_ofQueueCache.len!=null && Date.now()-_ofQueueCache.t<_OF_CACHE_MS){ queueLen=_ofQueueCache.len; }
-    else { try{const q=await airtableFetch(AGENT_QUEUE_TABLE,200);queueLen=(q.records||[]).length;_ofQueueCache={t:Date.now(),len:queueLen};}catch(e){_ofErr=true;if(_ofQueueCache.len!=null)queueLen=_ofQueueCache.len;} }
-  }
-
-  // 3) Telemetría de automatizaciones (tabla Automations) — con caché corta
-  const autoState={};
-  if(_ofHasData()){
-    if(_ofAutoCache.data && Date.now()-_ofAutoCache.t<_OF_CACHE_MS){ Object.assign(autoState,_ofAutoCache.data); }
-    else {
-      try{ const a=await airtableFetch('Automations',50); const fresh={}; (a.records||[]).forEach(r=>{const k=(r.fields['ID']||r.fields['Nombre']||'').toString().toLowerCase();if(k)fresh[k]=r.fields;}); Object.assign(autoState,fresh); _ofAutoCache={t:Date.now(),data:fresh}; }
-      catch(e){_ofErr=true; if(_ofAutoCache.data) Object.assign(autoState,_ofAutoCache.data);}
-    }
-  }
-
-  // ── Modelo: agentes IA (incluye agentes presentes en logs aunque no estén en CFG — B7) ──
+  let snap;
+  try{snap=await _ofFetchSnapshot(false);}
+  catch(e){_ofErr=true;snap=_ofRunsCache.data||null;}
+  const runs=(snap?.runs||[]).map(r=>Object.assign({},r,{t:Date.parse(r.time||r.finishedAt||r.startedAt||'')||0}))
+    .sort((a,b)=>b.t-a.t);
+  const byAgent={};runs.forEach(r=>{(byAgent[r.agent]=byAgent[r.agent]||[]).push(r);});
+  const queueLen=Number(snap?.queue?.pending_count||0);
+  const coverage=!!snap?.coverage?.complete30d;
   let working=0;
+
   const cfgLabels=new Set(AGENTES_CFG.map(a=>a.label));
-  const extraIA=Object.keys(byAgent).filter(l=>l && !cfgLabels.has(l)).map(l=>({id:l,label:l,icon:'🤖'}));
+  const extraIA=Object.keys(byAgent).filter(l=>l&&!cfgLabels.has(l)).map(l=>({id:l,label:l,icon:'🤖'}));
   const iaModel=[...AGENTES_CFG,...extraIA].map(a=>{
-    const list=byAgent[a.label]||[];
-    const last=list[0], lastT=last?last.t:0;
-    let cls,lbl;
-    if(_ofActive.has(a.label)){ cls='of-work'; lbl='Trabajando'; }      // B5: en vivo, mientras ejecuta
-    else { const st=_ofStatus(lastT); cls=st.cls; lbl=st.lbl;
-      const errT=_ofAgentErrors[a.label]||0;                            // B-C10: fallo reciente sin ejecución posterior → Con falla
-      if(errT && Date.now()-errT<_OF_AGENT_ERR_MS && errT>lastT){ cls='of-error'; lbl=_OF_STATE_LBL['of-error']; }
-    }
-    if(cls==='of-work') working++;
-    const today=list.filter(r=>_ofSameDay(r.t)).length;
-    const count30=list.filter(r=>r.t && Date.now()-r.t<2592e6).length;   // ejecuciones últimos 30 días
-    // 😴 Agente "dormido": era regular (≥3 ejecuciones entre hace 21 y 7 días) pero lleva >7 días
-    // sin actividad — anomalía simple por reglas, alimenta las alertas.
-    const prev14=list.filter(r=>r.t && r.t<Date.now()-7*864e5 && r.t>Date.now()-21*864e5).length;
-    const sleepy=!!(lastT && Date.now()-lastT>7*864e5 && prev14>=3 && cls!=='of-work');
-    return {clickIA:true, id:a.id, label:a.label, icon:a.icon||'🤖', role:'Agente IA · '+_ofCat(a).name,
-      cls, lbl, sleepy, task:last?(last.input||last.output||''):'Sin tareas recientes',
-      count30, stats:today+' hoy · '+_ofAgo(lastT), spark:_ofSpark(list)};
+    const list=byAgent[a.label]||byAgent[a.id]||[],last=list[0],lastT=last?.t||0;
+    const running=list.find(r=>String(r.state||'').toLowerCase()==='running'&&
+      Date.parse(r.heartbeatAt||'')&&Date.now()-Date.parse(r.heartbeatAt)<=60000);
+    const failed=list.find(r=>String(r.state||'').toLowerCase()==='error'&&r.t>lastT-600000);
+    let st=running?{cls:'of-work',lbl:'Trabajando'}:failed?{cls:'of-error',lbl:'Con falla'}:_ofRunState(last);
+    if(st.cls==='of-work')working++;
+    const today=list.filter(r=>_ofChileDay(r.t)===_ofChileDay()).length;
+    const count30=list.length;
+    const prev14=list.filter(r=>{const age=Date.now()-r.t;return age>7*86400000&&age<21*86400000;}).length;
+    const sleepy=!!(lastT&&Date.now()-lastT>7*86400000&&prev14>=3&&st.cls!=='of-work');
+    return{clickIA:true,id:a.id,label:a.label,icon:a.icon||'🤖',role:'Agente IA · '+_ofCat(a).name,
+      cls:st.cls,lbl:st.lbl,sleepy,task:last?(last.input||last.output||''):'Sin tareas recientes',
+      count30,stats:today+' hoy · '+_ofAgo(lastT),spark:_ofSpark(list),coverage};
   });
-  // 👑 Empleado del mes: el agente con MÁS ejecuciones en los últimos 30 días (si hay actividad)
-  { let _bi=-1,_bv=0; iaModel.forEach((m,i)=>{ if((m.count30||0)>_bv){_bv=m.count30;_bi=i;} }); if(_bi>=0&&_bv>0) iaModel[_bi].top=true; }
-  // Anuncio DIARIO del empleado del mes con su persona (idea 8): "👑 Sherlock Holmes (Prospección)"
+  // Ranking de volumen, no evaluación de desempeño.
+  if(coverage){let bi=-1,bv=0;iaModel.forEach((m,i)=>{if((m.count30||0)>bv){bv=m.count30;bi=i;}});
+    if(bi>=0&&bv>0){iaModel[bi].top=true;iaModel[bi].topLabel='Mayor volumen de ejecuciones';}}
   try{
-    const topM=iaModel.find(m=>m.top);
-    if(topM){ const k='thelab_oficina_empday', today=new Date().toDateString();
-      if(localStorage.getItem(k)!==today){ localStorage.setItem(k,today);
-        const idn=agentIdentity(topM.label);
-        toast('👑 Empleado del mes: '+(idn.persona?idn.persona+' ('+idn.rol+')':idn.rol)+' · '+(topM.count30||0)+' ejecuciones en 30 días','success');
-      } }
+    const topM=coverage&&iaModel.find(m=>m.top);
+    if(topM){const k='thelab_oficina_volday',today=_ofChileDay();
+      if(localStorage.getItem(k)!==today){localStorage.setItem(k,today);
+        const idn=agentIdentity(topM.label);toast('📈 Mayor volumen 30 días: '+(idn.persona||idn.rol)+' · '+topM.count30+' ejecuciones','info');}}
   }catch(e){}
 
-  // ── Modelo: automatizaciones (data-driven: CFG + filas extra de la tabla) ──
-  const cfgIds=new Set(AUTOMATIONS_CFG.map(a=>a.id.toLowerCase()));
-  const extraAuto=Object.keys(autoState).filter(k=>!cfgIds.has(k)).map(k=>({id:k,label:autoState[k]['Nombre']||k,icon:'⚙️',tipo:autoState[k]['Tipo']||'Automatización',role:autoState[k]['Tipo']||'Automatización'}));
+  const autoRows=snap?.automations||[],known=new Set(AUTOMATIONS_CFG.map(a=>a.id.toLowerCase()));
+  const extraAuto=autoRows.filter(x=>!known.has(String(x.id).toLowerCase())).map(x=>({id:x.id,label:x.name||x.id,icon:'⚙️',tipo:x.type||'Automatización'}));
   let autoToday=0;
   const autoModel=[...AUTOMATIONS_CFG,...extraAuto].map(a=>{
-    const f=autoState[a.id.toLowerCase()]||autoState[(a.label||'').toLowerCase()]||null;
-    let cls='of-off', lbl='Sin telemetría', task=a.role, stats=a.tipo;
-    if(f){
-      const lastT=Date.parse(f['UltimaEjecucion']||f['Ultima Ejecucion']||f['Fecha']||'')||0;
-      const st=_ofEstadoAutomatizacion(a,f);
-      cls=st.cls; lbl=st.lbl;
-      if(cls==='of-work') working++;
-      task=(f['TareaActual']||f['Tarea Actual']||a.role).toString();
-      const ej=Number(f['EjecucionesHoy']||f['Ejecuciones Hoy']||0); autoToday+=ej;   // B2
-      stats=(ej?ej+' hoy · ':'')+_ofAgo(lastT);
+    const x=autoRows.find(r=>String(r.id).toLowerCase()===String(a.id).toLowerCase());
+    let cls='of-off',lbl='Sin telemetría',task=a.role,stats=a.tipo||a.role;
+    if(x){
+      cls=x.state==='healthy'?'of-active':x.state==='down'?'of-error':x.state==='degraded'?'of-off':x.state==='paused'?'of-off':'of-off';
+      lbl=x.label||x.state;task=x.task||a.role;
+      const ej=x.today_verified?Number(x.today||0):0;autoToday+=ej;
+      stats=(x.today_verified&&ej?ej+' hoy · ':'')+(x.last?_ofAgo(Date.parse(x.last)):'sin señal');
     }
-    if(a.id==='lead-worker'&&queueLen){ if(cls==='of-off'){cls='of-active';lbl='En cola';} task=queueLen+' tarea(s) en Agent_Queue'; stats=queueLen+' pendientes'; }
-    return {clickIA:false, id:a.id, label:a.label, icon:a.icon||'⚙️', role:a.tipo||a.role, cls, lbl, task, stats};
+    return{clickIA:false,id:a.id,label:a.label||x?.name||a.id,icon:a.icon||'⚙️',role:a.tipo||a.role||x?.type,
+      cls,lbl,task,stats,health:x?.state||'unknown'};
   });
 
-  // ── Impresoras 3D (tabla Maquinas) — con caché corta ──
-  let printersRaw=[];
-  if(_ofHasData()){
-    if(_ofMaqCache.data && Date.now()-_ofMaqCache.t<_OF_CACHE_MS){ printersRaw=_ofMaqCache.data; }
-    else { try{ const mq=await airtableFetch('Maquinas',200); printersRaw=(mq.records||[]).map(r=>({id:r.fields.id||r.id,nombre:r.fields.nombre||'',num:r.fields.num||0,numG:r.fields.numG||r.fields.num||0,modelo:r.fields.modelo||'',color:r.fields.color||'#3aa0ff',estado:r.fields.estado||'disponible'})); _ofMaqCache={t:Date.now(),data:printersRaw}; }
-      catch(e){ _ofErr=true; if(_ofMaqCache.data)printersRaw=_ofMaqCache.data; else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS))printersRaw=MAQUINAS; } }
-  } else if(typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)){ printersRaw=MAQUINAS; }
+  const invRows=snap?.inventory||[];
+  _ofInv=invRows.map(r=>{const f=r.fields||{},stock=+f['Stock actual']||0,ro=+f['Punto de reorden']||0;
+    return{mat:String(f.Material||'—'),stock,unidad:String(f.Unidad||''),sev:stock<=0?3:(ro>0&&stock<=ro?2:0)};}).sort((a,b)=>b.sev-a.sev);
 
-  // ── Inventario (bobinas dinámicas del estante FILAMENTOS) — con caché corta ──
-  // sev: 3 = sin stock · 2 = bajo el punto de reorden · 0 = ok (misma regla que la pestaña Inventario)
-  {
-    const _mapInv=recs=>(recs||[]).map(r=>{ const f=r.fields||{}; const stock=+f['Stock actual']||0, ro=+f['Punto de reorden']||0;
-      return {mat:String(f['Material']||'—'), stock, unidad:String(f['Unidad']||''), sev:stock<=0?3:((ro>0&&stock<=ro)?2:0)}; }).sort((a,b)=>b.sev-a.sev);
-    if(_ofHasData()){
-      if(_ofInvCache.data && Date.now()-_ofInvCache.t<_OF_CACHE_MS){ _ofInv=_ofInvCache.data; }
-      else { try{ const iv=await airtableFetch('Inventario',200); _ofInv=_mapInv(iv.records); _ofInvCache={t:Date.now(),data:_ofInv}; }
-        catch(e){ if(_ofInvCache.data)_ofInv=_ofInvCache.data; } }   // el estante es decorativo: un fallo aquí no marca _ofErr
-    } else if(typeof state!=='undefined'&&state.inventario&&state.inventario.length){ _ofInv=_mapInv(state.inventario); }
-    else _ofInv=[];
-  }
-  const _liveP=(typeof _printerStatus!=='undefined')?_printerStatus:{};
-  const printerModel=printersRaw.map(p=>{
-    // Telemetría EN VIVO del bridge (si la pestaña Impresoras la ha poblado): manda sobre el estado de Airtable
-    const lv=_liveP[String(p.id)]||null;
-    let cls,lbl,progress=null,eta=0;
-    if(lv && lv.state){ const activity=window.MachineActivity?.derive?.(lv,{operation:window.MachineActivityStore?.get?.(String(p.id))||null})||null,ls=activity?.state||lv.state;
-      if(ls==='printing'){ cls='of-work'; lbl='Imprimiendo'; progress=(typeof lv.progress==='number'?lv.progress:-1); eta=lv.eta||0; }
-      else if(ls==='paused'){ cls='of-active'; lbl='En pausa'; progress=(typeof lv.progress==='number'?lv.progress:null); }
-      else if(ls==='calibrating'){ cls='of-active'; lbl='Calibrando'; }
-      else if(ls==='gcode'){ cls='of-active'; lbl='Ejecutando G-code'; }
-      else if(ls==='error'||ls==='shutdown'){ cls='of-error'; lbl='Con falla'; }
-      else if(ls==='offline'||ls==='noip'){ cls='of-off'; lbl='Sin conexión'; }
-      else if(ls==='connecting'){ cls='of-active'; lbl='Conectando'; }
-      else if(ls==='cancelled'){ cls='of-active'; lbl='Impresión cancelada'; }
-      else if(activity?.available){ cls='of-off'; lbl='Disponible'; }
-      else { cls='of-active'; lbl=activity?.label||'Estado no confirmado'; }
-    } else { cls=_ofPrinterCls(p.estado); lbl=_ofPrinterLbl(p.estado); if(cls==='of-work') progress=-1; }   // sin bridge: barra indeterminada si "imprimiendo"
+  const printerModel=(snap?.printers||[]).map(p=>{
+    let cls=p.telemetry==='down'?'of-error':p.telemetry==='unknown'?'of-off':_ofPrinterCls(p.state);
+    let lbl=p.telemetry==='unknown'?'Sin telemetría':p.telemetry==='down'?'Telemetría caída':_ofPrinterLbl(p.state);
     if(cls==='of-work')working++;
-    const pct=(progress!=null&&progress>=0)?(' · '+progress+'%'):'';
-    return {clickIA:false, isPrinter:true, id:String(p.id), label:(p.nombre||('Impresora '+(p.num||''))).toString(), icon:'🖨️', img:_ofSafeUrl(_ofModelImg(p.modelo,p.nombre)), cam:!!(typeof printerCamUrl==='function'&&printerCamUrl(p.id)), role:'Impresora 3D · '+(p.modelo||p.nombre||''), cls, lbl, progress, eta, task:(p.modelo||'Impresora 3D')+' · '+lbl+pct, stats:''+(p.modelo||''), num:p.numG||p.num||0};
-  }).sort((a,b)=>{ const rk=m=>{const s=((m.label||'')+' '+(m.role||'')).toLowerCase(); if(/k2\s*plus/.test(s))return 3; if(/giga|orangestorm/.test(s))return 4; if(/ender/.test(s))return 2; if(/k2/.test(s))return 1; if(/k1/.test(s))return 0; return 5;}; return rk(a)-rk(b)||(a.num-b.num); });
+    return{clickIA:false,isPrinter:true,id:String(p.id),label:p.name||('Impresora '+(p.num||'')),icon:'🖨️',
+      img:_ofSafeUrl(_ofModelImg(p.model,p.name)),cam:!!p.cam,role:'Impresora 3D · '+(p.model||''),
+      cls,lbl,progress:null,eta:0,task:(p.model||'Impresora 3D')+' · '+lbl,stats:p.lastTelemetry?_ofAgo(Date.parse(p.lastTelemetry)):'sin señal',
+      num:p.num||0,telemetry:p.telemetry};
+  }).sort((a,b)=>a.num-b.num);
   const extraDepts=printerModel.length?[{name:'Impresoras 3D',color:'#3aa0ff',members:printerModel}]:[];
 
-  // Guardar el modelo para el panel de detalle de agente (clic en un trabajador)
-  _ofModel={byAgent, iaModel, autoModel, printerModel};
-
-  // ── KPIs ── (ejecuciones hoy = todas las del log + las de automatizaciones — B2/B7)
-  const runsToday=runs.filter(r=>_ofSameDay(r.t)).length + autoToday;
-  const totalWorkers=iaModel.length+autoModel.length+printerModel.length;
-  const kpis=document.getElementById('oficinaKpis');
-  // Insight del día: hoy vs el mismo día de la semana pasada + hora pico + líder
-  const _ins=_ofDayInsight(runs);
+  _ofModel={byAgent,iaModel,autoModel,printerModel,incidents:snap?.incidents||[],coverage,source:snap?.source||{},health:snap?.health||'unknown'};
+  const runsToday=runs.filter(r=>_ofChileDay(r.t)===_ofChileDay()).length+autoToday,totalWorkers=iaModel.length+autoModel.length+printerModel.length;
+  const kpis=document.getElementById('oficinaKpis'),_ins=_ofDayInsight(runs);
   const _trend=(_ins.delta!=null)?`<span class="of-kpi-trend" style="color:${_ins.delta>=0?'var(--success)':'var(--warn)'}">${_ins.delta>=0?'▲':'▼'}${Math.abs(_ins.delta)}%</span>`:'';
-  // KPIs accionables: cada tarjeta salta a lo relevante (filtro de tarjetas, feed, cola…) — clic + teclado
   const _kpi=(k,val,lbl,live,hint)=>`<div class="of-kpi of-kpi-act ${live?'live':''}" role="button" tabindex="0" data-kpi="${k}" onclick="ofKpiClick('${k}')" onkeydown="ofKey(event)" title="${hint}"><div class="of-kpi-val" data-k="${k}">${val}</div><div class="of-kpi-lbl">${lbl}</div></div>`;
-  if(kpis) kpis.innerHTML=
-    _kpi('workers',totalWorkers,'👥 Trabajadores',false,'Ver todo el equipo')
-    +_kpi('working',working,'⚡ Trabajando ahora',working,'Ver sólo quién trabaja ahora')
-    +_kpi('runsToday',runsToday,'🔄 Ejecuciones hoy '+_trend,runsToday,'Ir a la actividad de hoy')
-    +_kpi('queue',queueLen,'📥 En cola',queueLen,'Ver la cola de tareas pendientes');
-  _ofAnimateKpis({workers:totalWorkers,working,runsToday,queue:queueLen});   // count-up al cambiar (idea 4)
-  _ofQueueSnap=queueLen;                                                      // para el peek de la cola desde el KPI
-  // Frescura a nivel equipo: marca del run más reciente (👥 último trabajo hace Xm) — distinta del "actualizado hace Xs"
-  _ofTeamLastT=(runs&&runs.length&&runs[0].t)?runs[0].t:0; _ofTickTeamLast();
-  _ofKpiSnap={working,runsToday,queue:queueLen};                              // snapshot para la pantalla de pared del 3D
-  _ofTickBoard();
+  if(kpis)kpis.innerHTML=_kpi('workers',totalWorkers,'👥 Trabajadores',false,'Ver todo el equipo')+
+    _kpi('working',working,'⚡ Trabajando ahora',working,'Solo ejecuciones abiertas con heartbeat fresco')+
+    _kpi('runsToday',runsToday,'🔄 Ejecuciones hoy '+_trend,runsToday,'Ventana America/Santiago')+
+    _kpi('queue',queueLen,'📥 Pendientes',queueLen,'Solo Agent_Queue Estado=Pendiente');
+  _ofAnimateKpis({workers:totalWorkers,working,runsToday,queue:queueLen});_ofQueueSnap=queueLen;
+  _ofTeamLastT=runs[0]?.t||0;_ofTickTeamLast();_ofKpiSnap={working,runsToday,queue:queueLen};_ofTickBoard();
   try{_ofRenderBloqueos();}catch(e){}
-  // Franja de insight bajo los KPIs (comparación vs semana pasada, pico y líder del día)
+
   const insEl=document.getElementById('oficinaInsight');
   if(insEl){
-    if(_ins.today||_ins.lastWeek){
-      const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-      const parts=[`Hoy: <b>${_ins.today}</b> ejecuciones`];
-      if(_ins.delta!=null) parts.push(`<b style="color:${_ins.delta>=0?'var(--success)':'var(--warn)'}">${_ins.delta>=0?'▲':'▼'} ${Math.abs(_ins.delta)}%</b> vs el ${DIAS[new Date().getDay()]} pasado (${_ins.lastWeek})`);
-      if(_ins.peak!=null) parts.push(`pico a las ${_ins.peak}h`);
-      if(_ins.leader){ const idn=agentIdentity(_ins.leader); parts.push(`líder: <b>${escapeHtml(idn.persona||idn.rol)}</b> (${_ins.leaderN})`); }
-      insEl.innerHTML='💡 '+parts.join(' · '); insEl.style.display='';
-    } else insEl.style.display='none';
+    const cov=coverage?'cobertura 30d completa':'cobertura incompleta';
+    insEl.innerHTML='💡 '+runsToday+' ejecuciones hoy · '+cov+' · salud '+escapeHtml(snap?.health||'unknown');
+    insEl.style.display='';
   }
-
-  // Aviso de estado de datos: sin acceso (ni token ni proxy) la oficina se ve "muerta" sin explicación (B-U12)
   const errEl=document.getElementById('oficinaErr');
   if(errEl){
-    if(!_ofHasData()){ errEl.textContent='🔌 Sin conexión a Airtable configurada — la oficina muestra solo datos locales. Configura el token (o el proxy) para ver la actividad real del equipo.'; errEl.style.display=''; }
-    else if(_ofErr){ errEl.textContent='⚠ Sin conexión con Airtable — mostrando los últimos datos conocidos.'; errEl.style.display=''; }
+    const bad=Object.entries(snap?.source||{}).filter(([,v])=>!v.ok).map(([k])=>k);
+    if(_ofErr||!snap){errEl.textContent='⚠ Snapshot compartido no disponible — no se mostrará actividad local como si fuera global.';errEl.style.display='';}
+    else if(snap.health!=='healthy'||bad.length){errEl.textContent='⚠ Salud degradada'+(bad.length?': '+bad.join(', '):'')+'. Revisa incidencias y frescura por fuente.';errEl.style.display='';}
     else errEl.style.display='none';
   }
-  _ofApplyPrefs();                                                            // tema de escena + densidad persistidos
-  _ofRenderAlerts(iaModel,autoModel,printerModel);                           // alertas accionables (idea 6)
-  ofUpdateDockBadge(working);   // badge del dock con el conteo completo (IA+auto+impresoras)
-
-  if(_ofView==='iso') _ofRenderIso(iaModel,autoModel,extraDepts);
-  else if(_ofView==='floor') _ofRenderFloor(iaModel,autoModel,extraDepts);
+  _ofApplyPrefs();_ofRenderAlerts(iaModel,autoModel,printerModel);ofUpdateDockBadge(working);
+  if(_ofView==='iso')_ofRenderIso(iaModel,autoModel,extraDepts);
+  else if(_ofView==='floor')_ofRenderFloor(iaModel,autoModel,extraDepts);
   else _ofRenderCards(iaModel,autoModel,extraDepts);
-  _ofRenderFeed(runs);
-  _ofRenderCharts(runs,iaModel,[...autoModel,...printerModel]);
-  _ofLastRenderT=Date.now(); _ofTickUpdated();   // marca de frescura "actualizado hace Xs" (idea U-8)
+  _ofRenderFeed(runs);_ofRenderCharts(runs,iaModel,[...autoModel,...printerModel]);
+  _ofLastRenderT=Date.now();_ofTickUpdated();
 }
 let _ofLastRenderT=0;
 let _ofKpiSnap=null;   // {working,runsToday,queue} — para la pantalla de pared del 3D (se muta sin rebuild)
