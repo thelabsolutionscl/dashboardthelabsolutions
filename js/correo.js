@@ -1292,6 +1292,8 @@ const MAIL={
     this._cmpRecompraCli=opts._recompraCli||null; // sacar de Recompra SOLO tras envío exitoso
     this._cmpFuCotId=opts._fuCotId||null;   // registrar seguimiento de cotización al enviar
     this._cmpPdPedido=opts._pdPedidoId||null;   // marcar pedido post-entrega gestionado al enviar
+    this._cmpSupplierPoId=opts._supplierPoId||null;
+    this._cmpSupplierPoNumber=opts._supplierPoNumber||null;
     this._cmpFromName=opts._fromName||null;   // fuerza el nombre del remitente para este borrador
     this._cmpFromEmail=opts._fromEmail||null;   // fuerza la casilla desde la que sale (p.ej. hola@)
     this.fillContactsDatalist();
@@ -1322,6 +1324,8 @@ const MAIL={
     this._cmpRecompraCli=null;
     this._cmpFuCotId=null;
     this._cmpPdPedido=null;
+    this._cmpSupplierPoId=null;
+    this._cmpSupplierPoNumber=null;
     this._cmpFromName=null;
     this._cmpFromEmail=null;
   },
@@ -1664,6 +1668,12 @@ const MAIL={
         if(this._cmpFuCotId){try{if(typeof fuMarkDone==='function') await fuMarkDone(this._cmpFuCotId,'correo');}catch(e){}this._cmpFuCotId=null;}
         // Post-entrega: si el borrador vino de la bandeja POST-ENTREGA, márcalo gestionado
         if(this._cmpPdPedido){try{if(typeof pdMarkDone==='function') pdMarkDone(this._cmpPdPedido,'correo',true);}catch(e){}this._cmpPdPedido=null;}
+        // OC proveedor: solo cambia a Enviada tras confirmación real de mail-api/Resend.
+        if(this._cmpSupplierPoId){
+          try{if(typeof supplierPoMarkSent==='function')await supplierPoMarkSent(this._cmpSupplierPoId,to,data.provider_id||'');}
+          catch(e){toast('Correo enviado, pero la OC quedó pendiente de registrar: '+e.message,'error');}
+          this._cmpSupplierPoId=null;this._cmpSupplierPoNumber=null;
+        }
         this._cmpFromName=null;this._cmpFromEmail=null;
         this._cmpAtts=[];this._cmpPend=0;this.renderCmpAtts();
         setTimeout(()=>this.closeCompose(),1500);
