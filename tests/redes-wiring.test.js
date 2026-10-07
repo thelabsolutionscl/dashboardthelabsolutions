@@ -193,16 +193,16 @@ test('métricas y reporte semanal usan datos observados y transporte de Correo',
   assert.match(fn('redesEmailReport'), /MAIL\.post/);
 });
 
-test('el webhook social autentica, normaliza y registra interacciones', () => {
-  assert.match(WORKER, /url\.pathname\s*===\s*["']\/webhooks\/social["']/);
-  const social = fn('handleSocial', WORKER);
-  assert.match(social, /X-Social-Webhook-Key/);
-  assert.match(social, /SOCIAL_WEBHOOK_KEY/);
-  assert.match(social, /Social_Interactions/);
-  assert.match(social, /normalizeSocial/);
-  assert.match(social, /createLeadAndQueue/);
-  assert.match(fn('normalizeSocial', WORKER), /Instagram/);
-  assert.match(fn('socialIsComplaint', WORKER), /reclamo|problema/);
+test('el webhook social autentica, normaliza y registra vía guard idempotente', () => {
+  const social=fn('handleSocial',WORKER);
+  const guarded=fn('socialProcessGuarded',WORKER);
+  assert.match(social,/SOCIAL_WEBHOOK_KEY/);
+  assert.match(social,/SOCIAL_EVENT_GUARD/);
+  assert.match(social,/normalizeSocial/);
+  assert.match(social,/externalEventId/);
+  assert.match(guarded,/Social_Interactions/);
+  assert.match(guarded,/External event ID/);
+  assert.match(guarded,/airtableCreateTolerant/);
 });
 
 test('RBAC acota las escrituras sociales del rol marketing', () => {
