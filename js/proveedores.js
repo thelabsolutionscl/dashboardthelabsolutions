@@ -239,6 +239,7 @@ function _supplierResolveId(value){
 }
 function filterProveedores(){renderProveedores(true);}
 function renderProveedores(skipAnalytics){
+  if(!_supplierStructuredReady&&!_supplierStructuredLoading)_supplierStructuredHydrate().then(ok=>{if(ok)renderProveedores(true);});
   const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase();
   const cat=document.getElementById('proveedorCatFilter')?.value||'';
   let list=state.proveedores.filter(p=>{
@@ -438,6 +439,12 @@ async function setProvEstadoPost(id,estado){
   const cont=document.getElementById('pvpostbtns-'+id);if(cont)cont.innerHTML=_pvPostBtns(id,estado);
   try{
     await airtableWrite('Proveedores','PATCH',id,fields);
+    await airtableWrite('SupplierEvaluations','POST',null,{
+      'Evaluation ID':crypto.randomUUID(),'Proveedor':[id],'Supplier ID':id,
+      'Estado anterior':old||'','Estado nuevo':estado,'Motivo':reason||'',
+      'Evidencia':evidence||'','Responsable':actor,'Fecha':at,'Notas':audit
+    });
+    await _supplierStructuredHydrate(true);
     toast('Postulación → '+estado+' · evaluación auditada','success');
   }catch(e){
     p.fields['Estado postulación']=old;p.fields['Notas']=prevNotes;
@@ -499,7 +506,7 @@ async function createProveedor(){
     'Notas':document.getElementById('np-notas')?.value||''
   };
   Object.keys(fields).forEach(k=>{if(fields[k]===null||fields[k]==='') delete fields[k];});
-  const refresh=async()=>{const pvRes=await airtableFetch('Proveedores',500);state.proveedores=pvRes.records||[];renderProveedores();};
+  const refresh=async()=>{const pvRes=await airtableFetch('Proveedores',2000);state.proveedores=pvRes.records||[];renderProveedores();};
   const safeFields={'Nombre':fields['Nombre'],'Categoría':fields['Categoría']};
   if(fields['Contacto']) safeFields['Contacto']=fields['Contacto'];
   if(fields['Estado']) safeFields['Estado']=fields['Estado'];
@@ -733,13 +740,71 @@ function exportToCSV(t){
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${t}-${hoyCL()}.csv`;a.click();URL.revokeObjectURL(url);toast(`✓ ${t}.csv descargado`,'success');
 }
 
+let _supplierStructuredReady=false,_supplierStructuredLoading=null;
+let _supplierPriceRows=[],_supplierPoRows=[],_supplierPoItemRows=[],_supplierEvaluationRows=[];
+async function _supplierStructuredHydrate(force=false){
+  if(_supplierStructuredReady&&!force)return true;
+  if(_supplierStructuredLoading&&!force)return _supplierStructuredLoading;
+  _supplierStructuredLoading=(async()=>{
+    const [prices,pos,items,evals]=await Promise.all([
+      airtableFetch('SupplierPrices',1000),
+      airtableFetch('PurchaseOrders',1000),
+      airtableFetch('PurchaseOrderItems',2000),
+      airtableFetch('SupplierEvaluations',2000)
+    ]);
+    _supplierPriceRows=prices.records||[];
+    _supplierPoRows=pos.records||[];
+    _supplierPoItemRows=items.records||[];
+    _supplierEvaluationRows=evals.records||[];
+    _supplierStructuredReady=true;return true;
+  })().catch(e=>{console.warn('[Proveedores] datos estructurados no disponibles:',e.message);return false;})
+    .finally(()=>{_supplierStructuredLoading=null;});
+  return _supplierStructuredLoading;
+}
+function _supplierPriceFromRow(r){
+  const f=r?.fields||{},supplierId=f['Supplier ID']||(Array.isArray(f['Proveedor'])?f['Proveedor'][0]:'');
+  return {id:r.id,recordId:r.id,priceId:f['Price ID']||r.id,supplierId,
+    prov:_supplierById(supplierId)?.fields?.['Nombre']||'',item:f['Descripción']||f['SKU / Material']||'',
+    sku:f['SKU / Material']||'',precio:Number(f['Precio neto']||0),moneda:f['Moneda']||'CLP',
+    unidad:f['Unidad']||'unidad',impuesto:Number(f['Impuesto (%)']||0),exento:!!f['Exento'],
+    minimoCompra:f['Mínimo compra']??null,fecha:f['Vigente desde']||'',
+    vigenteDesde:f['Vigente desde']||'',vigenteHasta:f['Vigente hasta']||'',
+    fuente:f['Documento fuente']||'',nota:f['Documento fuente']||'',
+    createdAt:f['Fecha registro']||r.createdTime||'',activo:f['Activo']!==false,structured:true};
+}
+function _supplierPoFromRow(r){
+  const f=r?.fields||{},supplierId=f['Supplier ID']||(Array.isArray(f['Proveedor'])?f['Proveedor'][0]:'');
+  const items=_supplierPoItemRows.filter(it=>{
+    const rel=it.fields?.['Orden de compra'];return Array.isArray(rel)&&rel.includes(r.id);
+  }).map(it=>{const x=it.fields||{};return{id:it.id,item:x['Descripción']||x['SKU / Material']||'',
+    sku:x['SKU / Material']||'',cantidad:Number(x['Cantidad']||0),unidad:x['Unidad']||'unidad',
+    precio:Number(x['Precio neto unitario']||0),moneda:x['Moneda']||f['Moneda']||'CLP',
+    impuesto:Number(x['Impuesto (%)']||0),exento:!!x['Exento'],
+    cantidadRecibida:Number(x['Cantidad recibida']||0),estadoRecepcion:x['Estado recepción']||'Pendiente'};});
+  return {id:r.id,recordId:r.id,numero:f['N° OC']||'',supplierId,
+    proveedor:_supplierById(supplierId)?.fields?.['Nombre']||'',fecha:f['Fecha']||'',
+    estado:f['Estado']||'Borrador',moneda:f['Moneda']||'CLP',
+    condiciones:f['Condiciones de pago']||'',neto:Number(f['Neto']||0),
+    impuesto:Number(f['Impuesto']||0),total:Number(f['Total']||0),notas:f['Notas']||'',
+    autor:f['Autor']||'',aprobador:f['Aprobador']||'',fechaAprobacion:f['Fecha aprobación']||'',
+    destinatario:f['Destinatario']||'',fechaEnvio:f['Fecha envío']||'',
+    fechaAceptacion:f['Fecha aceptación']||'',fechaCierre:f['Fecha cierre']||'',
+    revision:Number(f['Revisión']||0),items,structured:true,ts:Date.parse(r.createdTime||f['Fecha']||0)||0};
+}
+function _supplierLegacyPrices(){return _listaVivos(_PRECIOS_PROV_KEY);}
+function _supplierLegacyPOs(){return _listaVivos(_OC_KEY);}
+
 // ── HISTORIAL DE PRECIOS DE PROVEEDORES (N5) ──────────────────────────
 // Registro compartido de cotizaciones/precios por proveedor e ítem, para
 // comparar y elegir el mejor precio por ítem. localStorage + respaldo en
 // Airtable (Monitor Sistema · PRECIOS_PROV) para sobrevivir a limpiar caché.
 const _PRECIOS_PROV_KEY='thelab_precios_prov_v1';
-function _preciosProv(){return _listaVivos(_PRECIOS_PROV_KEY);}
-function _preciosProvSaveArr(arr){_listaGuardar(_PRECIOS_PROV_KEY,arr);_preciosProvBackup();}
+function _preciosProv(){
+  const structured=_supplierPriceRows.map(_supplierPriceFromRow).filter(x=>x.activo);
+  const legacy=_supplierLegacyPrices().filter(x=>!structured.some(y=>y.priceId===x.id||y.id===x.id));
+  return [...structured,...legacy];
+}
+function _preciosProvSaveArr(arr){_listaGuardar(_PRECIOS_PROV_KEY,arr);}
 async function _preciosProvBackup(){
   try{
     const notes=localStorage.getItem(_PRECIOS_PROV_KEY)||'[]';
@@ -760,7 +825,7 @@ function _preciosDeProv(prov){
     return supplierId&&id===supplierId;
   }).sort((a,b)=>_normItem(a.item).localeCompare(_normItem(b.item))||String(b.fecha||'').localeCompare(String(a.fecha||'')));
 }
-function addPrecioProv(prov){
+async function addPrecioProv(prov){
   const supplierId=_supplierResolveId(prov);const supplier=_supplierById(supplierId);if(!supplier){toast('Proveedor no encontrado','error');return;}
   const nombre=String(supplier.fields?.['Nombre']||'').trim();
   const item=(prompt('Ítem o material cotizado (ej: PLA 1kg negro, Impresión A3, Corte láser MDF 3mm):')||'').trim();
@@ -775,20 +840,33 @@ function addPrecioProv(prov){
   const nota=(prompt('Nota opcional (condición, mínimo de compra, etc.):','')||'').trim();
   const p=supplier;
   const cat=pvCat(p.fields||{});
-  const arr=_preciosProv();
-  arr.push({id:crypto.randomUUID(),supplierId,prov:nombre,cat,item,sku:_normItem(item),precio,moneda:'CLP',unidad,impuesto:19,minimoCompra:null,fecha,vigenteDesde:fecha,fuente:nota||'',nota,createdAt:new Date().toISOString()});
-  _preciosProvSaveArr(arr);
+  const priceId=crypto.randomUUID(),actor=AUTH.getUser()?.username||'';
+  try{
+    await airtableWrite('SupplierPrices','POST',null,{
+      'Price ID':priceId,'Proveedor':[supplierId],'Supplier ID':supplierId,
+      'SKU / Material':_normItem(item),'Descripción':item,'Moneda':'CLP','Unidad':unidad,
+      'Precio neto':precio,'Impuesto (%)':19,'Exento':false,'Vigente desde':fecha,
+      'Documento fuente':nota,'Autor':actor,'Fecha registro':new Date().toISOString(),'Activo':true
+    });
+    await _supplierStructuredHydrate(true);
+  }catch(e){toast('No se pudo registrar el precio: '+e.message,'error');return;}
   toast('✓ Precio registrado','success');
   try{renderProveedores();}catch(e){}
   const box=document.getElementById('preciosProv-'+(p?p.id:''));
   if(p) try{const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(supplierId);}catch(e){}
 }
-function delPrecioProv(id){
-  const arr=_preciosProv();const rec=arr.find(x=>x.id===id);
-  _preciosProvSaveArr(arr.filter(x=>x.id!==id));
+async function delPrecioProv(id){
+  const rec=_preciosProv().find(x=>x.id===id);
+  if(rec?.structured){
+    try{await airtableWrite('SupplierPrices','PATCH',id,{'Activo':false});await _supplierStructuredHydrate(true);}
+    catch(e){toast('No se pudo desactivar el precio: '+e.message,'error');return;}
+  }else{
+    const arr=_supplierLegacyPrices();_preciosProvSaveArr(arr.filter(x=>x.id!==id));
+  }
   try{renderProveedores();}catch(e){}
   if(rec){const sid=rec.supplierId||_supplierResolveId(rec.prov);const p=_supplierById(sid);if(p){const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(sid);}}
 }
+
 // HTML del historial de precios de un proveedor (con tendencia vs. registro anterior del mismo ítem)
 function _preciosProvFichaHtml(prov){
   const supplierId=_supplierResolveId(prov);const supplier=_supplierById(supplierId);const list=_preciosDeProv(supplierId);
@@ -858,13 +936,13 @@ function renderMejorPrecio(){
 // Genera órdenes de compra formales a un proveedor con ítems, totales (IVA),
 // PDF imprimible y envío. Reutiliza los precios registrados (N5) como ayuda.
 const _OC_KEY='thelab_oc_v1';
-function _ocAll(){return _listaVivos(_OC_KEY);}
-function _ocSaveArr(arr){_listaGuardar(_OC_KEY,arr);_ocBackup();}
-async function _ocBackup(){
-  try{const notes=localStorage.getItem(_OC_KEY)||'[]';
-    await _monitorUpsert('ORDENES_COMPRA',notes,'ocRecordId');
-  }catch(e){}
+function _ocAll(){
+  const structured=_supplierPoRows.map(_supplierPoFromRow);
+  const legacy=_supplierLegacyPOs().filter(x=>!structured.some(y=>y.numero&&y.numero===x.numero));
+  return [...structured,...legacy];
 }
+function _ocSaveArr(arr){_listaGuardar(_OC_KEY,arr);}
+async function _ocBackup(){return false;}
 function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
 async function _ocReserveNum(){
   try{
@@ -924,63 +1002,94 @@ function ocCalc(){
   return {neto,iva,total:neto+iva};
 }
 async function guardarOC(conPDF){
-  const supplierId=document.getElementById('ocProveedor').value;const supplier=_supplierById(supplierId);
+  const supplierId=document.getElementById('ocProveedor').value,supplier=_supplierById(supplierId);
   if(!supplier){toast('Selecciona un proveedor','error');return;}
   const proveedor=supplier.fields?.['Nombre']||supplierId;
   const items=_ocRows().filter(x=>x.item&&x.cantidad>0).map(x=>({item:x.item,cantidad:x.cantidad,precio:x.precio}));
   if(!items.length){toast('Agrega al menos un ítem con cantidad','error');return;}
-  // El total tiene que salir de los MISMOS ítems que se guardan. Antes venía de
-  // ocCalc(), que suma TODAS las filas del formulario —incluida una con números
-  // pero sin nombre—, así que el PDF podía mostrar un total mayor que la suma de
-  // las líneas visibles: el proveedor veía un número que no le cuadraba. Un ítem
-  // con cantidad pero sin nombre no se guarda, luego tampoco puede sumar.
-  const neto=items.reduce((s,x)=>s+Math.round(x.cantidad*x.precio),0);
-  const total=neto+Math.round(neto*0.19);
+  const neto=items.reduce((sum,x)=>sum+Math.round(x.cantidad*x.precio),0),impuesto=Math.round(neto*.19),total=neto+impuesto;
   const fantasmas=_ocRows().filter(x=>x.cantidad>0&&x.precio>0&&!x.item).length;
-  if(fantasmas) toast(`⚠ ${fantasmas} fila(s) con precio pero sin nombre no se incluyeron. Ponles nombre o bórralas.`,'info');
-  const arr=_ocAll();const id=document.getElementById('ocId').value;
-  let oc;
-  const base={supplierId,proveedor,fecha:document.getElementById('ocFecha').value||hoyCL(),notas:(document.getElementById('ocNotas').value||'').trim(),items:items.map(x=>({...x,unidad:'unidad',moneda:'CLP',impuesto:19})),moneda:'CLP',condiciones:supplier.fields?.['Condiciones de pago']||'',neto,total,estado:id?(arr.find(x=>x.id===id)?.estado||'Borrador'):'Borrador',updatedAt:new Date().toISOString()};
-  if(id){oc=arr.find(x=>x.id===id);if(oc)Object.assign(oc,base);}
-  else{oc={id:crypto.randomUUID(),numero:await _ocReserveNum(),ts:Date.now(),createdAt:new Date().toISOString(),historial:[{estado:'Borrador',fecha:new Date().toISOString(),actor:AUTH.getUser()?.username||'usuario'}],...base};arr.push(oc);}
-  _ocSaveArr(arr);closeOCModal();toast(`✓ Orden de compra ${oc.numero} guardada`,'success');
-  try{renderOCList();}catch(e){}
-  if(conPDF) try{generarOCPDF(oc.id);}catch(e){}
+  if(fantasmas)toast(`⚠ ${fantasmas} fila(s) con precio pero sin nombre no se incluyeron.`,'info');
+  const id=document.getElementById('ocId').value,existing=id?_ocAll().find(x=>x.id===id):null;
+  if(existing&&!existing.structured){toast('Esta OC es legacy. Crea una nueva OC estructurada para modificarla sin perder historial.','error');return;}
+  const actor=AUTH.getUser()?.username||'',fecha=document.getElementById('ocFecha').value||hoyCL();
+  const notas=(document.getElementById('ocNotas').value||'').trim();
+  let ocId=id,numero=existing?.numero||'',revision=(existing?.revision||0)+1;
+  try{
+    if(id){
+      await airtableWrite('PurchaseOrders','PATCH',id,{
+        'Proveedor':[supplierId],'Supplier ID':supplierId,'Fecha':fecha,'Moneda':'CLP',
+        'Condiciones de pago':supplier.fields?.['Condiciones de pago']||'','Neto':neto,
+        'Impuesto':impuesto,'Total':total,'Notas':notas,'Revisión':revision
+      });
+      // Existing items are immutable purchase evidence: editing a saved OC is blocked once items exist.
+      if((existing.items||[]).length)throw new Error('Los ítems de una OC ya guardada no se editan; cancela y crea una nueva versión.');
+    }else{
+      numero=await _ocReserveNum();
+      const created=await airtableWrite('PurchaseOrders','POST',null,{
+        'N° OC':numero,'Proveedor':[supplierId],'Supplier ID':supplierId,'Estado':'Borrador',
+        'Fecha':fecha,'Moneda':'CLP','Condiciones de pago':supplier.fields?.['Condiciones de pago']||'',
+        'Neto':neto,'Impuesto':impuesto,'Total':total,'Notas':notas,'Autor':actor,
+        'Idempotency key':crypto.randomUUID(),'Revisión':1
+      });
+      ocId=created?.id;if(!/^rec[A-Za-z0-9]{14}$/.test(String(ocId||'')))throw new Error('Airtable no confirmó la OC creada');
+      for(const [idx,it] of items.entries()){
+        await airtableWrite('PurchaseOrderItems','POST',null,{
+          'Item ID':numero+'-'+String(idx+1).padStart(3,'0'),'Orden de compra':[ocId],
+          'Proveedor':[supplierId],'Supplier ID':supplierId,'SKU / Material':_normItem(it.item),
+          'Descripción':it.item,'Cantidad':it.cantidad,'Unidad':'unidad','Moneda':'CLP',
+          'Precio neto unitario':it.precio,'Impuesto (%)':19,'Exento':false,
+          'Cantidad recibida':0,'Estado recepción':'Pendiente','Fecha registro':new Date().toISOString()
+        });
+      }
+      await airtableWrite('PurchaseOrderEvents','POST',null,{
+        'Event ID':crypto.randomUUID(),'Orden de compra':[ocId],'Tipo':'creación',
+        'Estado anterior':'','Estado nuevo':'Borrador','Actor':actor,'Fecha':new Date().toISOString(),
+        'Motivo':'OC creada','Evidencia':'','Revisión':1
+      });
+    }
+    await _supplierStructuredHydrate(true);
+    closeOCModal();renderOCList();toast(`✓ Orden de compra ${numero} guardada`,'success');
+    if(conPDF)generarOCPDF(ocId);
+  }catch(e){toast('No se pudo guardar la OC: '+e.message,'error');}
 }
-function delOC(id){if(!confirm('¿Eliminar esta orden de compra?'))return;_ocSaveArr(_ocAll().filter(x=>x.id!==id));renderOCList();}
-function generarOCPDF(id){
-  const oc=_ocAll().find(x=>x.id===id);if(!oc){toast('OC no encontrada','error');return;}
-  const esc=s=>escapeHtml(String(s==null?'':s));const clp=n=>formatCLP(Math.round(n||0));
-  const pv=(state.proveedores||[]).find(p=>String(p.fields['Nombre']||'')===oc.proveedor);
-  const rows=(oc.items||[]).map(it=>`<tr><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3">${esc(it.item)}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:center">${it.cantidad}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:right">${clp(it.precio)}</td><td style="padding:7px 10px;border-bottom:1px solid #f0f0f3;text-align:right">${clp(it.cantidad*it.precio)}</td></tr>`).join('');
-  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(oc.numero)} — ${esc(oc.proveedor)}</title>
-<style>@page{size:A4;margin:16mm}*{box-sizing:border-box}body{font-family:-apple-system,system-ui,'Segoe UI',Arial,sans-serif;color:#111;margin:0}</style></head><body>
-<div style="max-width:720px;margin:0 auto">
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #00b3a4;padding-bottom:12px;margin-bottom:18px">
-    <div><div style="font-size:11px;letter-spacing:.2em;color:#8a8a92;text-transform:uppercase">The Lab Solutions</div><div style="font-size:24px;font-weight:800;margin-top:4px">Orden de compra</div></div>
-    <div style="text-align:right"><div style="font-size:16px;font-weight:800;color:#00947f">${esc(oc.numero)}</div><div style="font-size:11px;color:#8a8a92">${esc(oc.fecha)}</div></div>
-  </div>
-  <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px">
-    <div><div style="font-size:10px;color:#8a8a92;text-transform:uppercase">Proveedor</div><div style="font-weight:700;font-size:15px">${esc(oc.proveedor)}</div>${pv&&pv.fields['Email']?`<div style="color:#555">${esc(pv.fields['Email'])}</div>`:''}${pv&&pv.fields['Teléfono']?`<div style="color:#555">${esc(pv.fields['Teléfono'])}</div>`:''}</div>
-    <div style="text-align:right"><div style="font-size:10px;color:#8a8a92;text-transform:uppercase">Comprador</div><div style="font-weight:700">The Lab Solutions</div><div style="color:#555">hola@thelab.solutions</div></div>
-  </div>
-  <table style="width:100%;border-collapse:collapse;font-size:13px">
-    <thead><tr style="color:#8a8a92;font-size:11px;text-transform:uppercase"><th style="text-align:left;padding:0 10px 6px">Ítem</th><th style="text-align:center;padding:0 10px 6px">Cant.</th><th style="text-align:right;padding:0 10px 6px">P. unit.</th><th style="text-align:right;padding:0 10px 6px">Subtotal</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div style="display:flex;justify-content:flex-end;margin-top:14px">
-    <table style="font-size:13px"><tr><td style="padding:3px 14px;color:#8a8a92">Neto</td><td style="padding:3px 0;text-align:right;font-weight:700">${clp(oc.neto)}</td></tr>
-    <tr><td style="padding:3px 14px;color:#8a8a92">IVA 19%</td><td style="padding:3px 0;text-align:right;font-weight:700">${clp(Math.round(oc.neto*0.19))}</td></tr>
-    <tr style="border-top:2px solid #111"><td style="padding:6px 14px;font-weight:800">TOTAL</td><td style="padding:6px 0;text-align:right;font-weight:800;color:#00947f;font-size:16px">${clp(oc.total)}</td></tr></table>
-  </div>
-  ${oc.notas?`<div style="margin-top:16px;padding:12px 16px;background:#f6f8fa;border-radius:10px;font-size:12.5px;color:#444"><b>Notas:</b> ${esc(oc.notas)}</div>`:''}
-  <div style="margin-top:22px;text-align:center;font-size:10.5px;color:#a0a0a8">The Lab Solutions · dashboard.thelab.solutions</div>
-</div>
-<script>window.onload=function(){window.focus();setTimeout(function(){window.print();},250);};<\/script></body></html>`;
-  const w=window.open('','_blank');if(!w){toast('Permite las ventanas emergentes para el PDF','error');return;}
-  w.document.open();w.document.write(html);w.document.close();
-  toast('🧾 Orden de compra generada','success');
+
+async function delOC(id){
+  const oc=_ocAll().find(x=>x.id===id);if(!oc)return;
+  if(oc.structured){
+    if(!confirm('Las OC auditables no se eliminan. ¿Marcar esta OC como Cancelada?'))return;
+    try{await cambiarEstadoOC(id,'Cancelada','Cancelación manual','');}
+    catch(e){toast('Error: '+e.message,'error');}
+    return;
+  }
+  if(!confirm('¿Eliminar esta OC legacy?'))return;
+  _ocSaveArr(_supplierLegacyPOs().filter(x=>x.id!==id));renderOCList();toast('OC legacy eliminada','info');
 }
+async function cambiarEstadoOC(id,nuevo,motivo='',evidencia=''){
+  const oc=_ocAll().find(x=>x.id===id);if(!oc?.structured)throw Error('OC estructurada no encontrada');
+  const transitions={
+    'Borrador':['Aprobación','Cancelada'],'Aprobación':['Aprobada','Borrador','Cancelada'],
+    'Aprobada':['Enviada','Cancelada'],'Enviada':['Aceptada','Cancelada'],
+    'Aceptada':['Recibida parcial','Recibida total','Cancelada'],
+    'Recibida parcial':['Recibida total','Cancelada'],'Recibida total':['Facturada','Cerrada'],
+    'Facturada':['Pagada','Cerrada'],'Pagada':['Cerrada'],'Cerrada':[],'Cancelada':[]
+  };
+  if(!(transitions[oc.estado]||[]).includes(nuevo))throw Error('Transición no permitida: '+oc.estado+' → '+nuevo);
+  const actor=AUTH.getUser()?.username||'',now=new Date().toISOString(),revision=(oc.revision||0)+1;
+  const fields={'Estado':nuevo,'Revisión':revision};
+  if(nuevo==='Aprobada'){fields['Aprobador']=actor;fields['Fecha aprobación']=now;}
+  if(nuevo==='Enviada')fields['Fecha envío']=now;
+  if(nuevo==='Aceptada')fields['Fecha aceptación']=now;
+  if(['Cerrada','Cancelada'].includes(nuevo))fields['Fecha cierre']=now;
+  await airtableWrite('PurchaseOrders','PATCH',id,fields);
+  await airtableWrite('PurchaseOrderEvents','POST',null,{
+    'Event ID':crypto.randomUUID(),'Orden de compra':[id],'Tipo':'estado',
+    'Estado anterior':oc.estado,'Estado nuevo':nuevo,'Actor':actor,'Fecha':now,
+    'Motivo':motivo||'Cambio de estado','Evidencia':evidencia||'','Revisión':revision
+  });
+  await _supplierStructuredHydrate(true);renderOCList();
+}
+
 function renderOCList(){
   const el=document.getElementById('ocList');if(!el)return;
   const arr=_ocAll().slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
