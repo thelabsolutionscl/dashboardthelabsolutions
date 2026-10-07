@@ -1210,9 +1210,10 @@ async function ocCambiarEstadoUI(id,nuevo){
   if(['Aprobada','Enviada','Aceptada','Facturada','Pagada','Cerrada','Cancelada'].includes(nuevo))
     evidencia=(prompt('Evidencia o referencia (opcional salvo envío):','')||'').trim();
   if(nuevo==='Enviada'){
-    const email=(prompt('Email destinatario de la OC:',oc.destinatario||_supplierById(oc.supplierId)?.fields?.['Email']||'')||'').trim();
-    if(!validEmail(email)){toast('Email destinatario inválido','error');return;}
-    _ocTransitionRecipient.set(id,email);
+    await enviarOC(id);return;
+  }
+  if(['Facturada','Pagada'].includes(nuevo)&&evidencia.length<3){
+    toast('Para '+nuevo+' debes registrar N° de factura, comprobante o referencia.','error');return;
   }
   try{await cambiarEstadoOC(id,nuevo,motivo,evidencia);toast('OC → '+nuevo,'success');}
   catch(e){toast('No se pudo cambiar la OC: '+e.message,'error');}
@@ -1236,6 +1237,47 @@ async function registrarRecepcionOC(id,forzarTotal=false){
   await _supplierStructuredHydrate(true);
   if(oc.estado!==target)await cambiarEstadoOC(id,target,'Recepción registrada','Cantidades por ítem actualizadas');
   else renderOCList();
+}
+function _ocDocumentHtml(oc){
+  const supplier=_supplierById(oc.supplierId),sf=supplier?.fields||{};
+  const rows=(oc.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(it.item||'')}</td><td style="text-align:right">${Number(it.cantidad||0)}</td><td>${escapeHtml(it.unidad||'unidad')}</td><td style="text-align:right">${formatCLP(it.precio||0)}</td><td style="text-align:right">${formatCLP(Number(it.cantidad||0)*Number(it.precio||0))}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(oc.numero||'Orden de compra')}</title>
+  <style>body{font-family:Arial,sans-serif;color:#111;margin:36px;line-height:1.4}h1{font-size:22px;margin:0 0 4px}.meta{color:#555;font-size:12px;margin-bottom:24px}.box{border:1px solid #ddd;padding:14px;margin:14px 0}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border-bottom:1px solid #ddd;padding:8px;font-size:12px;text-align:left}th{background:#f5f5f5}.totals{margin-left:auto;width:280px;margin-top:20px}.totals div{display:flex;justify-content:space-between;padding:5px 0}.total{font-weight:700;font-size:16px;border-top:2px solid #111;margin-top:5px;padding-top:8px}@media print{button{display:none}}</style></head>
+  <body><h1>Orden de compra ${escapeHtml(oc.numero||'')}</h1><div class="meta">The Lab Solutions · ${escapeHtml(oc.fecha||'')}</div>
+  <div class="box"><strong>Proveedor:</strong> ${escapeHtml(sf['Nombre']||oc.proveedor||'')}<br>${sf['RUT']?`<strong>RUT:</strong> ${escapeHtml(sf['RUT'])}<br>`:''}${sf['Contacto']?`<strong>Contacto:</strong> ${escapeHtml(sf['Contacto'])}<br>`:''}${sf['Email']?`<strong>Email:</strong> ${escapeHtml(sf['Email'])}<br>`:''}<strong>Condiciones:</strong> ${escapeHtml(oc.condiciones||sf['Condiciones de pago']||'—')}</div>
+  <table><thead><tr><th>#</th><th>Ítem</th><th style="text-align:right">Cant.</th><th>Unidad</th><th style="text-align:right">Neto unit.</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="totals"><div><span>Neto</span><b>${formatCLP(oc.neto||0)}</b></div><div><span>IVA</span><b>${formatCLP(oc.impuesto||0)}</b></div><div class="total"><span>Total</span><b>${formatCLP(oc.total||0)}</b></div></div>
+  ${oc.notas?`<div class="box"><strong>Notas:</strong><br>${escapeHtml(oc.notas)}</div>`:''}
+  <button onclick="window.print()">Imprimir / Guardar PDF</button></body></html>`;
+}
+function generarOCPDF(id){
+  const oc=_ocAll().find(x=>x.id===id);if(!oc){toast('OC no encontrada','error');return;}
+  const win=window.open('','_blank','noopener,noreferrer');
+  if(!win){toast('El navegador bloqueó la ventana del documento','error');return;}
+  win.document.open();win.document.write(_ocDocumentHtml(oc));win.document.close();
+}
+async function enviarOC(id){
+  const oc=_ocAll().find(x=>x.id===id);if(!oc?.structured){toast('Solo se pueden enviar OC estructuradas','error');return;}
+  if(oc.estado!=='Aprobada'){toast('La OC debe estar Aprobada antes de enviarse','error');return;}
+  const supplier=_supplierById(oc.supplierId),email=_safeSupplierEmail(supplier?.fields?.['Email']||'');
+  if(!email){toast('El proveedor no tiene un email válido','error');return;}
+  if(typeof MAIL==='undefined'||typeof MAIL.openCompose!=='function'){toast('Módulo Correo no disponible','error');return;}
+  const items=(oc.items||[]).map(it=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #ddd">${escapeHtml(it.item||'')}</td><td style="padding:6px 8px;border-bottom:1px solid #ddd;text-align:right">${Number(it.cantidad||0)} ${escapeHtml(it.unidad||'unidad')}</td><td style="padding:6px 8px;border-bottom:1px solid #ddd;text-align:right">${formatCLP(Number(it.cantidad||0)*Number(it.precio||0))}</td></tr>`).join('');
+  const body=`<p>Estimados ${escapeHtml(supplier?.fields?.['Nombre']||'proveedor')},</p><p>Enviamos nuestra orden de compra <strong>${escapeHtml(oc.numero)}</strong>.</p><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px 8px">Ítem</th><th style="text-align:right;padding:6px 8px">Cantidad</th><th style="text-align:right;padding:6px 8px">Subtotal</th></tr></thead><tbody>${items}</tbody></table><p><strong>Total: ${formatCLP(oc.total||0)}</strong></p><p>Condiciones de pago: ${escapeHtml(oc.condiciones||supplier?.fields?.['Condiciones de pago']||'según acuerdo')}.</p><p>Por favor confirmar recepción y aceptación de esta OC.</p>`;
+  switchTab('correo');
+  setTimeout(()=>{
+    MAIL.init();
+    MAIL.openCompose({title:'Enviar orden de compra',to:email,
+      subject:`Orden de compra ${oc.numero} — The Lab Solutions`,body,
+      _supplierPoId:id,_supplierPoNumber:oc.numero});
+  },150);
+}
+async function supplierPoMarkSent(id,to,providerId){
+  const oc=_ocAll().find(x=>x.id===id);if(!oc?.structured)return;
+  _ocTransitionRecipient.set(id,to);
+  const evidence=providerId?`Resend ID: ${providerId}`:'Correo confirmado por mail-api';
+  await cambiarEstadoOC(id,'Enviada','Correo enviado al proveedor',evidence);
+  toast(`✓ ${oc.numero} enviada y registrada`,'success');
 }
 function renderOCList(){
   const el=document.getElementById('ocList');if(!el)return;
