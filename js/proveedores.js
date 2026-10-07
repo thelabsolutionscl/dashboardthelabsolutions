@@ -318,6 +318,7 @@ function renderProveedores(skipAnalytics){
     return matchSearch&&matchCat;
   });
   const sorted=getSortedProveedores(list);
+  renderSupplierApplications();
   const count=document.getElementById('proveedoresCount');if(count) count.textContent=`${sorted.length} proveedor${sorted.length!==1?'es':''}`;
   const tbody=document.getElementById('proveedoresTableBody');if(!tbody) return;
   const tableWrap=tbody.closest('.table-wrap')||tbody.closest('table')?.parentElement;
@@ -340,6 +341,75 @@ function renderProveedores(skipAnalytics){
   try{renderMejorPrecio();}catch(e){}
   try{renderOCList();}catch(e){}
   _applySortIndicators();
+}
+function _supplierApplicationField(f,name){return String(f?.[name]||'').trim();}
+function renderSupplierApplications(){
+  const tbody=document.getElementById('proveedoresTableBody');if(!tbody)return;
+  const wrap=tbody.closest('.table-wrap')||tbody.closest('table')?.parentElement;if(!wrap)return;
+  let panel=document.getElementById('supplierApplicationsPanel');
+  if(!panel){panel=document.createElement('section');panel.id='supplierApplicationsPanel';wrap.before(panel);}
+  const pending=_supplierApplicationRows.filter(r=>!['Convertida','Rechazada'].includes(String(r.fields?.['Estado']||'')))
+    .sort((a,b)=>String(b.fields?.['Fecha postulación']||b.createdTime||'').localeCompare(String(a.fields?.['Fecha postulación']||a.createdTime||'')));
+  if(!pending.length){panel.innerHTML='';panel.style.display='none';return;}
+  panel.style.display='block';
+  panel.innerHTML=`<div class="card" style="margin-bottom:16px"><div class="card-header"><span class="card-title">📥 Postulaciones web</span><span class="badge badge-yellow" style="margin-left:auto">${pending.length}</span></div>
+    <div style="padding:4px 0">${pending.map(r=>{const f=r.fields||{},email=_safeSupplierEmail(f['Email']),phone=_safeSupplierPhone(f['Teléfono']);
+      return `<div style="display:flex;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid var(--border)">
+        <div style="flex:1;min-width:0"><div style="font-weight:650;font-size:12px">${escapeHtml(f['Nombre']||'Sin nombre')}</div>
+          <div style="font-size:10.5px;color:var(--text3)">${escapeHtml(f['RUT']||'Sin RUT')}${email?' · '+escapeHtml(email):''}${phone?' · '+escapeHtml(phone):''}${f['Categoría']?' · '+escapeHtml(f['Categoría']):''}</div>
+          ${f['Productos']?`<div style="font-size:10.5px;color:var(--text2);margin-top:3px">${escapeHtml(f['Productos'])}</div>`:''}
+        </div>
+        <span class="badge badge-yellow">${escapeHtml(f['Estado']||'Pendiente')}</span>
+        <button class="btn btn-ghost btn-sm" data-id="${r.id}" onclick="reviewSupplierApplication(this.dataset.id,'reject')">Rechazar</button>
+        <button class="btn btn-primary btn-sm" data-id="${r.id}" onclick="reviewSupplierApplication(this.dataset.id,'convert')">Convertir a proveedor</button>
+      </div>`;}).join('')}</div></div>`;
+}
+async function reviewSupplierApplication(id,action){
+  const app=_supplierApplicationRows.find(r=>r.id===id);if(!app)return;
+  const f=app.fields||{},actor=AUTH.getUser()?.username||'',now=new Date().toISOString();
+  const motivo=(prompt(action==='reject'?'Motivo del rechazo:':'Motivo / criterio de aprobación:','')||'').trim();
+  if(motivo.length<5){toast('Registra un motivo de al menos 5 caracteres.','error');return;}
+  const evidencia=(prompt('Evidencia o referencia (entrevista, cotización, muestra, etc.):','')||'').trim();
+  if(action==='reject'){
+    try{
+      await airtableWrite('SupplierApplications','PATCH',id,{
+        'Estado':'Rechazada','Revisado por':actor,'Fecha revisión':now,'Motivo':motivo,'Evidencia':evidencia
+      });
+      await _supplierStructuredHydrate(true);renderSupplierApplications();toast('Postulación rechazada y auditada','success');
+    }catch(e){toast('No se pudo rechazar: '+e.message,'error');}
+    return;
+  }
+  const nombre=_supplierApplicationField(f,'Nombre'),rut=_supplierApplicationField(f,'RUT'),email=_supplierApplicationField(f,'Email');
+  let supplier=_supplierFindDuplicate({nombre,rut,email}),supplierId=supplier?.id||'';
+  try{
+    if(!supplierId){
+      const cats=String(f['Categoría']||'').split(',').map(x=>x.trim()).filter(Boolean);
+      const fields={
+        'Nombre':nombre,'Categoría':cats.length?cats:['Otro'],'Contacto':_supplierApplicationField(f,'Contacto'),
+        'Cargo':_supplierApplicationField(f,'Cargo'),'Teléfono':_supplierApplicationField(f,'Teléfono'),
+        'WhatsApp':_supplierApplicationField(f,'WhatsApp'),'Email':email,'Sitio Web':_supplierApplicationField(f,'Sitio Web'),
+        'RUT':rut,'Comuna':_supplierApplicationField(f,'Comuna'),'Región':_supplierApplicationField(f,'Región'),
+        'Estado':'Activo','Productos':_supplierApplicationField(f,'Productos'),
+        'Notas':'Convertido desde postulación '+(f['Application ID']||id),
+        'Estado postulación':'APROBADO','Motivo evaluación':motivo
+      };
+      const created=await airtableWrite('Proveedores','POST',null,fields);
+      supplierId=created?.id||'';
+      if(!/^rec[A-Za-z0-9]{14}$/.test(supplierId))throw Error('Airtable no confirmó el proveedor creado');
+    }
+    await airtableWrite('SupplierApplications','PATCH',id,{
+      'Estado':'Convertida','Proveedor':[supplierId],'Supplier ID':supplierId,
+      'Revisado por':actor,'Fecha revisión':now,'Motivo':motivo,'Evidencia':evidencia
+    });
+    await airtableWrite('SupplierEvaluations','POST',null,{
+      'Evaluation ID':crypto.randomUUID(),'Proveedor':[supplierId],'Supplier ID':supplierId,
+      'Estado anterior':'Postulación','Estado nuevo':'APROBADO','Motivo':motivo,'Evidencia':evidencia,
+      'Responsable':actor,'Fecha':now,'Notas':'Conversión explícita de SupplierApplication '+id
+    });
+    const pvRes=await airtableFetch('Proveedores',2000);state.proveedores=pvRes.records||[];
+    await _supplierStructuredHydrate(true);renderProveedores();
+    toast(supplier?'Postulación vinculada al proveedor existente':'Postulación convertida a proveedor','success');
+  }catch(e){toast('No se pudo convertir la postulación: '+e.message,'error');}
 }
 function buildProveedorCard(p){
   const f=p.fields||{},id=p.id;
@@ -835,18 +905,19 @@ function exportToCSV(t){
 }
 
 let _supplierStructuredReady=false,_supplierStructuredLoading=null;
-let _supplierPriceRows=[],_supplierPoRows=[],_supplierPoItemRows=[],_supplierPoEventRows=[],_supplierEvaluationRows=[];
+let _supplierPriceRows=[],_supplierPoRows=[],_supplierPoItemRows=[],_supplierPoEventRows=[],_supplierEvaluationRows=[],_supplierApplicationRows=[];
 async function _supplierStructuredHydrate(force=false){
   if(_supplierStructuredReady&&!force)return true;
   if(_supplierStructuredLoading&&!force)return _supplierStructuredLoading;
   _supplierStructuredLoading=(async()=>{
-    const [prices,pos,items,events,evals,categories]=await Promise.all([
+    const [prices,pos,items,events,evals,categories,applications]=await Promise.all([
       airtableFetch('SupplierPrices',1000),
       airtableFetch('PurchaseOrders',1000),
       airtableFetch('PurchaseOrderItems',2000),
       airtableFetch('PurchaseOrderEvents',3000),
       airtableFetch('SupplierEvaluations',2000),
-      airtableFetch('SupplierCategories',1000)
+      airtableFetch('SupplierCategories',1000),
+      airtableFetch('SupplierApplications',1000)
     ]);
     _supplierPriceRows=prices.records||[];
     _supplierPoRows=pos.records||[];
@@ -854,6 +925,7 @@ async function _supplierStructuredHydrate(force=false){
     _supplierPoEventRows=events.records||[];
     _supplierEvaluationRows=evals.records||[];
     _supplierCategoryRows=categories.records||[];
+    _supplierApplicationRows=applications.records||[];
     _supplierStructuredReady=true;return true;
   })().catch(e=>{console.warn('[Proveedores] datos estructurados no disponibles:',e.message);return false;})
     .finally(()=>{_supplierStructuredLoading=null;});
