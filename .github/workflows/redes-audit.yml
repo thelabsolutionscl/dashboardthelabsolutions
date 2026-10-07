@@ -8,10 +8,14 @@ on:
       - 'js/redes.js'
       - 'js/linkedin.js'
       - 'lead-worker/src/index.js'
+      - 'lead-worker/wrangler.toml'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'docs/REDES_SOCIALES.md'
       - 'docs/audits/REDES_SOCIALES.md'
       - 'tests/redes.test.js'
       - 'tests/redes-wiring.test.js'
+      - 'tests/social-idempotency.test.js'
       - 'tests/linkedin-leads.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/redes-audit.yml'
@@ -21,10 +25,14 @@ on:
       - 'js/redes.js'
       - 'js/linkedin.js'
       - 'lead-worker/src/index.js'
+      - 'lead-worker/wrangler.toml'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'docs/REDES_SOCIALES.md'
       - 'docs/audits/REDES_SOCIALES.md'
       - 'tests/redes.test.js'
       - 'tests/redes-wiring.test.js'
+      - 'tests/social-idempotency.test.js'
       - 'tests/linkedin-leads.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/redes-audit.yml'
@@ -54,9 +62,14 @@ jobs:
           node --check js/redes.js
           node --check js/linkedin.js
           node --check lead-worker/src/index.js
+          node --check airtable-proxy/src/worker.js
+          node --check airtable-proxy/src/access-auth.js
 
       - name: Audit social wiring and safety
         run: node --test tests/redes-wiring.test.js
+
+      - name: Audit social idempotency and publishing guard
+        run: node --test tests/social-idempotency.test.js
 
       - name: Run social logic tests
         run: |

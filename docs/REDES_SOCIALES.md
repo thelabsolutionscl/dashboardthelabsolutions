@@ -1,16 +1,62 @@
-# Redes Sociales — Sección y Agentes IA
+# Redes Sociales — operación segura
 
-Módulo de redes sociales del dashboard: planificar, generar y programar contenido,
-responder comentarios/DMs con IA y convertir interacciones en leads del CRM.
-Se apoya en la misma arquitectura que el resto del sistema (agentes Claude +
-Airtable como memoria + Make para publicar y escuchar).
+El dashboard administra el ciclo editorial; los conectores externos son responsables del transporte y deben
+devolver evidencia verificable. Airtable conserva el estado compartido y los IDs externos.
 
-> Relación con lo existente: la tabla **`Contenido`** (de `CONTENT_AGENT`) sigue
-> siendo el espacio **editorial / de ideas**. La nueva tabla **`Social_Posts`** es
-> la **cola de publicación**: una fila = una publicación lista para programar o
-> publicar. Una idea de `Contenido` puede aterrizar como uno o varios `Social_Posts`.
+## Contrato productivo vigente
 
----
+### Ingesta de comentarios y DMs
+
+`POST /webhooks/social` con header `X-Social-Webhook-Key`.
+
+Campos obligatorios:
+- `red`
+- `external_event_id`
+- `platform_user_id`
+- `timestamp` original de la plataforma
+
+Campos recomendados: `platform_post_id`, `tipo`, `usuario`, `mensaje`, `intencion`, `esLead`.
+
+La misma combinación `red + external_event_id` es idempotente. Un reintento no debe generar una nueva fila,
+Cliente ni tarea.
+
+### Publicación
+
+Solo un post con `Estado = Programado`, `Aprobación editorial.status = approved` e `Idempotency key`
+válida puede reservar transporte.
+
+1. Reservar:
+   `POST /webhooks/social/publish/reserve`
+   con `post_record_id` e `idempotency_key`.
+2. Publicar en la API de la red.
+3. Confirmar:
+   `POST /webhooks/social/publish`
+   con `post_record_id`, `idempotency_key`, `external_post_id`, `permalink` HTTPS y `published_at`.
+4. Si el proveedor falla, enviar el mismo endpoint con `error` para liberar el lease y registrar el intento.
+
+La reserva dura 10 minutos. `Publicado` se considera real únicamente con la confirmación del paso 3.
+
+### Métricas
+
+`POST /webhooks/social/metrics` con red, fecha y métricas. El Worker hace upsert de
+`Social_Metrics` usando `Período = YYYY-MM-DD · Red`.
+
+### Estado de integraciones
+
+Los endpoints anteriores actualizan `Automations` con IDs:
+- `social-listen`
+- `social-metrics`
+- `social-publish`
+
+El dashboard usa esos heartbeats para mostrar salud real.
+
+### Flujo editorial
+
+`Borrador → En revisión → Programado → Publicado`.
+
+Los agentes y el piloto solo crean/preparan contenido hasta `En revisión`. Pasar a `Programado`
+es una aprobación humana explícita y deja evidencia en Airtable.
+
 
 ## 1. Dónde vive en el dashboard
 

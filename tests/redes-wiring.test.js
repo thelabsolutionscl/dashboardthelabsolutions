@@ -96,9 +96,10 @@ test('las funciones principales no se redefinen silenciosamente', () => {
 test('la carga usa las tres tablas sociales y evita recargas solapadas', () => {
   const load = fn('redesLoad');
   assert.match(load, /_redesLoadBusy/);
-  assert.match(load, /airtableFetch\(['"]Social_Posts['"],\s*200\)/);
-  assert.match(load, /airtableFetch\(['"]Social_Interactions['"],\s*200\)/);
-  assert.match(load, /airtableFetch\(['"]Social_Metrics['"],\s*365\)/);
+  assert.match(load, /airtableFetch\(['"]Social_Posts['"],\s*2000\)/);
+  assert.match(load, /airtableFetch\(['"]Social_Interactions['"],\s*2000\)/);
+  assert.match(load, /airtableFetch\(['"]Social_Metrics['"],\s*5000\)/);
+  assert.match(load, /airtableFetch\(['"]Automations['"],\s*50\)/);
   assert.match(load, /finally\s*\{\s*_redesLoadBusy\s*=\s*false/);
 });
 
@@ -114,19 +115,21 @@ test('el modo demo intercepta escrituras productivas', () => {
   assert.match(seed, /Nada se guarda|no se guardan/i);
 });
 
-test('el ciclo editorial exige fecha al programar y conserva revisión', () => {
-  const render = fn('renderRedesPosts');
-  for (const state of ['Borrador', 'En revisión', 'Programado', 'Publicado']) {
-    assert.match(REDES, new RegExp(esc(state)), `falta estado ${state}`);
-  }
-  assert.match(render, /redesSchedule/);
-  assert.match(render, /A revisión/);
-  assert.match(render, /Aprobar y programar/);
-  const schedule = fn('redesSchedule');
-  assert.match(schedule, /redesDatePicker/);
-  assert.match(schedule, /Estado['"]?\s*:\s*['"]Programado['"]/);
-  assert.match(schedule, /Fecha programada/);
-  assert.match(schedule, /_redesWrite\(['"]Social_Posts['"],\s*['"]PATCH['"]/);
+test('el ciclo editorial exige aprobación y fecha al programar', () => {
+  const render=fn('renderRedesPosts');
+  for (const state of ['Borrador','En revisión','Programado','Publicado'])
+    assert.match(REDES,new RegExp(esc(state)),`falta estado ${state}`);
+  assert.match(render,/redesSchedule/);
+  assert.match(render,/A revisión/);
+  assert.match(render,/Aprobar y programar/);
+  const i=REDES.indexOf('async function redesSchedule('),j=REDES.indexOf('function redesCopyPost',i);
+  const schedule=REDES.slice(i,j);
+  assert.match(schedule,/redesDatePicker/);
+  assert.match(schedule,/Estado':['"]Programado['"]/);
+  assert.match(schedule,/Fecha programada/);
+  assert.match(schedule,/Aprobación editorial/);
+  assert.match(schedule,/Idempotency key/);
+  assert.match(schedule,/_redesWrite\(['"]Social_Posts['"],\s*['"]PATCH['"]/);
 });
 
 test('la generación puede usar producción real y guarda posts trazables', () => {
@@ -155,14 +158,15 @@ test('la bandeja persiste sugerencias y detecta leads sin saturar Claude', () =>
   assert.match(bulk, /await\s+_redesSuggestReply/);
 });
 
-test('crear lead enlaza Clientes, Agent_Queue e interacción', () => {
+test('crear lead se delega al proxy transaccional e idempotente', () => {
   const lead = fn('redesInteractionToLead');
-  assert.match(lead, /_redesLeadCreated/);
-  assert.match(lead, /_redesWrite\(['"]Clientes['"],\s*['"]POST['"]/);
-  assert.match(lead, /_redesWrite\(['"]Agent_Queue['"],\s*['"]POST['"]/);
-  assert.match(lead, /social\.lead_received/);
-  assert.match(lead, /LEAD_AGENT/);
-  assert.match(lead, /Lead creado['"]?\s*:\s*true/);
+  assert.match(lead, /\/social\/lead/);
+  assert.match(lead, /credentials:['"]include['"]/);
+  assert.match(lead, /interactionId:id/);
+  assert.doesNotMatch(lead, /_redesWrite\(['"]Clientes['"],\s*['"]POST['"]/);
+  assert.doesNotMatch(lead, /_redesWrite\(['"]Agent_Queue['"],\s*['"]POST['"]/);
+  assert.match(lead, /Cliente ID/);
+  assert.match(lead, /Agent Queue ID/);
 });
 
 test('el piloto automático pide confirmación y usa el wrapper de escritura', () => {
@@ -173,6 +177,8 @@ test('el piloto automático pide confirmación y usa el wrapper de escritura', (
   assert.match(autopilot, /_redesWrite\(['"]Social_Posts['"],\s*['"]PATCH['"]/);
   const fill = fn('_redesFillGapsCore');
   assert.match(fill, /CAPTION_AGENT/);
+  assert.match(fill, /Estado:['"]En revisión['"]/);
+  assert.match(fill, /Aprobación editorial/);
   assert.match(fill, /_redesWrite\(['"]Social_Posts['"],\s*['"]POST['"]/);
 });
 
@@ -189,16 +195,16 @@ test('métricas y reporte semanal usan datos observados y transporte de Correo',
   assert.match(fn('redesEmailReport'), /MAIL\.post/);
 });
 
-test('el webhook social autentica, normaliza y registra interacciones', () => {
-  assert.match(WORKER, /url\.pathname\s*===\s*["']\/webhooks\/social["']/);
-  const social = fn('handleSocial', WORKER);
-  assert.match(social, /X-Social-Webhook-Key/);
-  assert.match(social, /SOCIAL_WEBHOOK_KEY/);
-  assert.match(social, /Social_Interactions/);
-  assert.match(social, /normalizeSocial/);
-  assert.match(social, /createLeadAndQueue/);
-  assert.match(fn('normalizeSocial', WORKER), /Instagram/);
-  assert.match(fn('socialIsComplaint', WORKER), /reclamo|problema/);
+test('el webhook social autentica, normaliza y registra vía guard idempotente', () => {
+  const social=fn('handleSocial',WORKER);
+  const guarded=fn('socialProcessGuarded',WORKER);
+  assert.match(social,/SOCIAL_WEBHOOK_KEY/);
+  assert.match(social,/SOCIAL_EVENT_GUARD/);
+  assert.match(social,/normalizeSocial/);
+  assert.match(social,/externalEventId/);
+  assert.match(guarded,/Social_Interactions/);
+  assert.match(guarded,/External event ID/);
+  assert.match(guarded,/airtableCreateTolerant/);
 });
 
 test('RBAC acota las escrituras sociales del rol marketing', () => {
@@ -226,79 +232,81 @@ test('el webhook social exige un secreto exclusivo', () => {
   assert.match(social, /503/);
 });
 
-test('diagnóstico: el webhook debe deduplicar eventos externos', (t) => {
-  const social = fn('handleSocial', WORKER);
-  if (!/idempot|event.?id|external.?id|dedup|upsert/i.test(social)) {
-    t.todo('CRÍTICO: reservar/upsert por red + id externo antes de crear interacción o lead');
-    return;
-  }
+test('el webhook exige identidad externa y usa un guard atómico', () => {
+  const social=fn('handleSocial',WORKER),norm=fn('normalizeSocial',WORKER);
+  assert.match(social,/SOCIAL_EVENT_GUARD/);
+  assert.match(social,/externalEventId/);
+  assert.match(social,/platformUserId/);
+  assert.match(norm,/external_event_id|event_id/);
+  assert.match(norm,/platform_user_id|user_id/);
+  assert.match(norm,/fechaOriginal/);
+  assert.match(WORKER,/export class SocialEventGuard/);
 });
 
-test('diagnóstico: el lead creado por Worker debe cerrar la interacción', (t) => {
-  const social = fn('handleSocial', WORKER);
-  if (/createLeadAndQueue/.test(social) && !/Lead creado/.test(social)) {
-    t.todo('CRÍTICO: al crear Cliente/Agent_Queue desde el Worker, marcar Lead creado y guardar IDs en Social_Interactions');
-    return;
-  }
+test('el Worker enlaza Cliente y Agent_Queue en la interacción', () => {
+  assert.match(WORKER,/Lead creado/);
+  assert.match(WORKER,/Cliente ID/);
+  assert.match(WORKER,/Agent Queue ID/);
+  assert.match(WORKER,/socialProcessGuarded/);
 });
 
-test('diagnóstico: crear lead desde dashboard debe ser transaccional e idempotente', (t) => {
-  const lead = fn('redesInteractionToLead');
-  const createAt = lead.indexOf("_redesWrite('Clientes','POST'");
-  const markAt = lead.indexOf("_redesWrite('Social_Interactions','PATCH'");
-  if (createAt >= 0 && markAt > createAt) {
-    t.todo('reservar la interacción antes de crear Cliente; compensar/recuperar si falla cola o PATCH final');
-    return;
-  }
+test('la conversión manual ya no crea Cliente o cola desde el navegador', () => {
+  const lead=fn('redesInteractionToLead');
+  assert.match(lead,/\/social\/lead/);
+  assert.doesNotMatch(lead,/Clientes['"],['"]POST/);
+  assert.doesNotMatch(lead,/Agent_Queue['"],['"]POST/);
 });
 
-test('diagnóstico: Publicado debe venir de evidencia externa', (t) => {
-  const setState = fn('redesSetEstado');
-  if (/Fecha publicación/.test(setState) && !/external|platform|post.?id|permalink|publicaci[oó]n URL/i.test(setState)) {
-    t.todo('no tratar un clic local como publicación real; exigir ID/URL/estado devuelto por la plataforma o marcarlo como manual');
-    return;
+test('Publicado exige evidencia externa de plataforma', () => {
+  const setState=fn('redesSetEstado'),edit=fn('redesSaveEdit');
+  for(const src of [setState,edit]){
+    assert.match(src,/External Post ID/);
+    assert.match(src,/Permalink/);
+    assert.match(src,/Fecha publicación/);
   }
+  assert.match(WORKER,/handleSocialPublish/);
+  assert.match(WORKER,/external_post_id/);
 });
 
-test('diagnóstico: el panel automático necesita healthchecks reales', (t) => {
-  const status = fn('_redesAutoStatus');
-  if (/Estado['"]?\]\s*\|\|['"]['"]\)\s*===\s*['"]Publicado['"]/.test(status) && !/heartbeat|health|integration|connector/i.test(status)) {
-    t.todo('no inferir Make activo por registros recientes; usar heartbeat por escenario/conector y fecha de última ejecución');
-    return;
-  }
+test('el panel automático usa heartbeats de Automations', () => {
+  const status=fn('_redesAutoStatus');
+  assert.match(status,/state\.socialAutomations/);
+  assert.match(status,/UltimaEjecucion/);
+  assert.match(status,/social-listen/);
+  assert.match(status,/social-metrics/);
+  assert.match(status,/social-publish/);
+  assert.doesNotMatch(status,/socialPosts|socialInteractions|socialMetrics/);
 });
 
-test('diagnóstico: el piloto no debe saltarse la aprobación editorial', (t) => {
-  const fill = fn('_redesFillGapsCore');
-  const auto = fn('redesAutoSchedule');
-  if (/Estado['"]?\s*:\s*['"]Programado['"]/.test(fill) && /Borrador/.test(auto) && /Programado/.test(auto)) {
-    t.todo('generar como En revisión o guardar una aprobación explícita/versionada antes de que Make pueda publicar');
-    return;
-  }
+test('piloto y auto-programación pasan por revisión editorial', () => {
+  const fill=fn('_redesFillGapsCore'),auto=fn('redesAutoSchedule');
+  assert.match(fill,/En revisión/);
+  assert.match(fill,/Aprobación editorial/);
+  assert.doesNotMatch(fill,/Estado:['"]Programado['"]/);
+  assert.match(auto,/En revisión/);
+  assert.match(auto,/pending_review/);
 });
 
-test('diagnóstico: el reporte semanal debe excluir futuro y datos fuera de rango', (t) => {
-  const ctx = fn('_redesBuildMetricsContext');
-  if (/new Date\(d\)\s*>=\s*since/.test(ctx) && !/<=\s*now|Date\.now\(\)/.test(ctx.replace(/const since[^;]+;/, ''))) {
-    t.todo('acotar publicaciones e interacciones a [hoy-7d, hoy]; hoy incluye programaciones futuras y cuenta todas las interacciones cargadas');
-    return;
-  }
+test('el reporte semanal usa una ventana cerrada de siete días', () => {
+  const ctx=fn('_redesBuildMetricsContext');
+  assert.match(ctx,/inRange/);
+  assert.match(ctx,/t>=since\.getTime\(\)&&t<=now\.getTime\(\)/);
+  assert.match(ctx,/interWeek/);
+  assert.match(ctx,/Estado===['"]Publicado['"]/);
 });
 
-test('diagnóstico: mejor día debe normalizar por volumen', (t) => {
-  const best = fn('_redesBestByWeekday');
-  if (/\[wd\]\s*\+=\s*m\.fields\['Engagement'\]/.test(best) && !/count|promedio|average|reach|rate/i.test(best)) {
-    t.todo('usar engagement promedio/tasa por publicación o alcance; sumar bruto favorece días con más registros');
-    return;
-  }
+test('el mejor día usa tasa por alcance o promedio por registro', () => {
+  const best=fn('_redesBestByWeekday');
+  assert.match(best,/reach/);
+  assert.match(best,/count/);
+  assert.match(best,/eng\/x\.reach|x\.eng\/x\.reach/);
 });
 
-test('diagnóstico: las lecturas sociales deben paginar', (t) => {
-  const load = fn('redesLoad');
-  if (/Social_Posts['"],\s*200/.test(load) && !/offset|paginate|while\s*\(/i.test(load)) {
-    t.todo('paginar o usar vistas/rangos explícitos; los topes 200/200/365 truncarán calendario, inbox y analítica');
-    return;
-  }
+test('las lecturas sociales usan ventanas amplias y telemetría explícita', () => {
+  const load=fn('redesLoad');
+  assert.match(load,/Social_Posts['"],2000/);
+  assert.match(load,/Social_Interactions['"],2000/);
+  assert.match(load,/Social_Metrics['"],5000/);
 });
 
 test('diagnóstico: eliminar en demo debe pasar por _redesWrite', (t) => {
@@ -307,24 +315,48 @@ test('diagnóstico: eliminar en demo debe pasar por _redesWrite', (t) => {
   assert.doesNotMatch(del, /airtableWrite\(['"]Social_Posts['"],\s*['"]DELETE['"]/);
 });
 
-test('diagnóstico: Respondido debe guardar evidencia', (t) => {
-  const mark = fn('redesMarkInteraction');
-  if (/Estado/.test(mark) && !/reply.?id|respuesta enviada|fecha respuesta|canal respuesta|evidencia/i.test(mark)) {
-    t.todo('diferenciar “marcado manualmente” de respuesta confirmada por la plataforma y guardar fecha/ID externo');
-    return;
-  }
+test('Respondido exige evidencia de respuesta externa', () => {
+  const mark=fn('redesMarkInteraction');
+  assert.match(mark,/Fecha respuesta/);
+  assert.match(mark,/Canal respuesta/);
+  assert.match(mark,/External reply ID/);
+  assert.match(mark,/requiere canal e ID externo confirmado/);
 });
 
-test('diagnóstico: edición a Publicado debe completar datos de publicación', (t) => {
-  const save = fn('redesSaveEdit');
-  if (/Estado/.test(save) && /Fecha programada/.test(save) && !/Fecha publicación/.test(save)) {
-    t.todo('si el editor permite Estado=Publicado, exigir Fecha publicación y evidencia o impedir ese cambio');
-    return;
-  }
+test('el editor bloquea Publicado sin evidencia', () => {
+  const save=fn('redesSaveEdit');
+  assert.match(save,/External Post ID/);
+  assert.match(save,/Permalink/);
+  assert.match(save,/Fecha publicación/);
+  assert.match(save,/No puedes marcar Publicado/);
 });
 
-test.todo('Social_Metrics debe usar upsert por red+fecha para evitar duplicar días y distorsionar tendencias');
-test.todo('los leads sociales deben deduplicarse por red+usuario/ID de plataforma, no solo por interacción');
-test.todo('Media URL y Link deben validarse con allowlist/protocolo antes de que Make o una plataforma remota los consuma');
-test.todo('quejas deben crear ticket/escalamiento con SLA, responsable y cierre, no solo una etiqueta heurística');
-test.todo('las decisiones y contenido generados por IA deben registrar prompt/modelo/versión/aprobador para auditoría de marca');
+test('Social_Metrics usa upsert por red y fecha',()=>{
+  assert.match(WORKER,/handleSocialMetrics/);
+  assert.match(WORKER,/Período/);
+  assert.match(WORKER,/socialFindOne\(env,"Social_Metrics"/);
+  assert.match(WORKER,/airtableUpdateTolerant\(env,"Social_Metrics"/);
+});
+test('los leads sociales deduplican por red + platform_user_id',()=>{
+  assert.match(WORKER,/Social identity key/);
+  assert.match(WORKER,/platformUserId/);
+  assert.match(WORKER,/airtableFindCliente\(env,\{socialIdentity\}/);
+});
+test('Media URL y Link requieren HTTPS antes de guardarse para integración',()=>{
+  const save=fn('redesSaveEdit');
+  assert.match(save,/\^https:/);
+  assert.match(save,/Media URL y Link deben usar HTTPS/);
+});
+test('las quejas crean ticket con SLA y responsable',()=>{
+  assert.match(WORKER,/Ticket estado/);
+  assert.match(WORKER,/Ticket SLA/);
+  assert.match(WORKER,/Ticket responsable/);
+});
+test('el contenido IA guarda procedencia y aprobación editorial',()=>{
+  const base=fn('_redesBaseFields');
+  assert.match(base,/IA auditoría/);
+  assert.match(base,/promptVersion/);
+  assert.match(base,/model/);
+  assert.match(base,/approvedBy/);
+  assert.match(REDES,/Aprobación editorial/);
+});

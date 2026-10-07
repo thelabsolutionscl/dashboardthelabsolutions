@@ -2392,7 +2392,8 @@ export class CrmMutationGuard {
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
                   ?this._handleSharedFinance(request):path==='/visual-ai-guard'
                     ?this._handleVisualAiGuard(request):path==='/newsletter-send'
-                      ?this._handleNewsletterSend(request):path==='/scoped-patch'
+                      ?this._handleNewsletterSend(request):path==='/social-lead'
+                        ?this._handleSocialLead(request):path==='/scoped-patch'
                   ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
@@ -2730,6 +2731,66 @@ export class CrmMutationGuard {
       revisions:Object.fromEntries(Object.entries(verified.revisions).filter(([name])=>wanted.has(name)))},200);
   }
 
+
+  async _handleSocialLead(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Social lead guard unavailable'},503);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid social lead request'},422);}
+    const actor=p?.actor;
+    if(!actor||!(actor.role==='admin'||actor.email==='marketing@thelab.solutions')||
+       typeof p.interactionId!=='string'||!/^rec[A-Za-z0-9]{14}$/.test(p.interactionId))
+      return this._json({error:'Social lead denied'},403);
+    const storageKey='social-lead:'+p.interactionId,prior=await this.state.storage.get(storageKey);
+    if(prior?.ok)return this._json({...prior,replayed:true},200);
+    const H={Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,'Content-Type':'application/json'};
+    const base=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/';
+    const getJson=async r=>{let d={};try{d=await r.json();}catch(_){}return d;};
+    const ir=await fetch(base+encodeURIComponent('Social_Interactions')+'/'+p.interactionId,{headers:H,redirect:'manual'});
+    if(!ir.ok)return this._json({error:'Social interaction unavailable'},ir.status===404?404:503);
+    const inter=await getJson(ir),f=inter.fields||{};
+    if(f['Lead creado']===true&&f['Cliente ID']){
+      const done={ok:true,clienteId:String(f['Cliente ID']),queueId:String(f['Agent Queue ID']||''),interactionId:p.interactionId};
+      await this.state.storage.put(storageKey,done);return this._json({...done,replayed:true},200);
+    }
+    const red=String(f.Red||'redes'),platformUser=String(f['Platform user ID']||'').trim();
+    const identity=platformUser?(red+':'+platformUser).toLowerCase():'interaction:'+p.interactionId;
+    const esc=v=>String(v||'').replace(/'/g,"\\'");
+    const cq=new URLSearchParams({maxRecords:'1',filterByFormula:`LOWER({Social identity key} & "")=LOWER('${esc(identity)}')`});
+    let cr=await fetch(base+encodeURIComponent('Clientes')+'?'+cq,{headers:H,redirect:'manual'});
+    if(!cr.ok)return this._json({error:'Client identity lookup unavailable'},503);
+    let cdata=await getJson(cr),clienteId=cdata.records?.[0]?.id||'';
+    if(!clienteId){
+      const body={fields:{Empresa:String(f.Usuario||'Lead redes sociales').slice(0,200),
+        Contacto:String(f.Usuario||'Lead redes').slice(0,200),'Origen lead':'Redes sociales',
+        Validado:false,'Social identity key':identity,
+        'Notas internas':('Lead desde '+red+' ('+String(f.Tipo||'interacción')+'): '+String(f.Mensaje||'')).slice(0,90000)},
+        typecast:true};
+      cr=await fetch(base+encodeURIComponent('Clientes'),{method:'POST',headers:H,redirect:'manual',body:JSON.stringify(body)});
+      if(!cr.ok)return this._json({error:'Client create failed'},503);
+      clienteId=(await getJson(cr)).id||'';
+    }
+    const campaign='interaction:'+p.interactionId;
+    const qq=new URLSearchParams({maxRecords:'1',filterByFormula:`AND({Evento}='social.lead_received',{Campaign}='${campaign}')`});
+    let qr=await fetch(base+encodeURIComponent('Agent_Queue')+'?'+qq,{headers:H,redirect:'manual'});
+    if(!qr.ok)return this._json({error:'Social queue lookup unavailable'},503);
+    let qdata=await getJson(qr),queueId=qdata.records?.[0]?.id||'';
+    if(!queueId){
+      const qb={fields:{Evento:'social.lead_received',Entidad:'Cliente','ID entidad':clienteId,
+        Agente:'LEAD_AGENT',Estado:'Pendiente',Prioridad:'Alta',Source:red.toLowerCase(),Campaign:campaign,
+        'Input JSON':JSON.stringify({source:'redes',interactionId:p.interactionId,red,usuario:f.Usuario||'',mensaje:f.Mensaje||'',intencion:f['Intención']||''}),
+        'Fecha creación':new Date().toISOString()},typecast:true};
+      qr=await fetch(base+encodeURIComponent('Agent_Queue'),{method:'POST',headers:H,redirect:'manual',body:JSON.stringify(qb)});
+      if(!qr.ok)return this._json({error:'Social queue create failed'},503);
+      queueId=(await getJson(qr)).id||'';
+    }
+    const patch={fields:{'Lead creado':true,'Cliente ID':clienteId,'Agent Queue ID':queueId}};
+    const pr=await fetch(base+encodeURIComponent('Social_Interactions')+'/'+p.interactionId,{
+      method:'PATCH',headers:H,redirect:'manual',body:JSON.stringify(patch)});
+    if(!pr.ok)return this._json({error:'Social interaction link uncertain',code:'SOCIAL_LEAD_LINK_UNCERTAIN'},503);
+    const done={ok:true,clienteId,queueId,interactionId:p.interactionId};
+    await this.state.storage.put(storageKey,done);
+    return this._json({...done,replayed:false},201);
+  }
 
   async _handleNewsletterSend(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN||!this.env.RESEND_API_KEY||
@@ -3550,7 +3611,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3563,6 +3624,29 @@ export default {
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
+    if(url.pathname==='/social/lead'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search||request.method!=='POST')return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||(authorized.identity.role!=='admin'&&authorized.identity.email!=='marketing@thelab.solutions'))
+        return json({error:'Social lead role denied'},403,headers);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>1000)
+        return json({error:'Social lead expects bounded JSON'},415,headers);
+      let body;try{body=JSON.parse(await request.text());}catch(_){return json({error:'Invalid social lead JSON'},422,headers);}
+      if(!body||Object.keys(body).some(k=>k!=='interactionId')||
+         typeof body.interactionId!=='string'||!/^rec[A-Za-z0-9]{14}$/.test(body.interactionId))
+        return json({error:'Invalid social interaction'},422,headers);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Social lead guard unavailable'},503,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-social-leads'));
+        const guarded=await stub.fetch('https://crm-write.internal/social-lead',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({interactionId:body.interactionId,
+            actor:{email:authorized.identity.email,role:authorized.identity.role}})});
+        const h=new Headers(guarded.headers);Object.entries(headers).forEach(([k,v])=>h.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers:h});
+      }catch(_){return json({error:'Social lead guard unavailable'},503,headers);}
+    }
+
     if(url.pathname==='/newsletter/send'){
       const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
       if(url.search)return json({error:'Newsletter query parameters not allowed'},422,scopedHeaders);

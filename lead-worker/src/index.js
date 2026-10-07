@@ -158,6 +158,15 @@ export default {
       if (request.method === "POST" && url.pathname === "/webhooks/social") {
         return await handleSocial(request, env, ctx, cors);
       }
+      if (request.method === "POST" && url.pathname === "/webhooks/social/metrics") {
+        return await handleSocialMetrics(request, env, cors);
+      }
+      if (request.method === "POST" && url.pathname === "/webhooks/social/publish/reserve") {
+        return await handleSocialPublishReserve(request, env, cors);
+      }
+      if (request.method === "POST" && url.pathname === "/webhooks/social/publish") {
+        return await handleSocialPublish(request, env, cors);
+      }
 
       // Piloto automático de Google Ads: aprobación/rechazo desde el email
       if (url.pathname === "/ads/decision") {
@@ -1935,115 +1944,257 @@ async function syncLinkedinInboundProspect(env, norm, clienteId) {
  * marcada como lead, además crea Cliente + Agent_Queue (mismo pipeline).
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleSocial(request, env, ctx, cors) {
-  // El webhook puede crear interacciones, Clientes y tareas. PUBLIC_LEAD_KEY
-  // viaja en la web pública y jamás puede autorizar estas mutaciones.
-  const provided = request.headers.get("X-Social-Webhook-Key") || "";
-  const expected = String(env.SOCIAL_WEBHOOK_KEY || "").trim();
-  if (!expected) {
-    return json({ ok: false, error: "Webhook social no configurado" }, 503, cors);
-  }
-  if (!timingSafeEqual(provided, expected)) {
-    return json({ ok: false, error: "No autorizado" }, 401, cors);
-  }
-
-  const body = await readJson(request);
-  if (!body) return json({ ok: false, error: "JSON inválido" }, 400, cors);
-
-  const s = normalizeSocial(body);
-  if (!s.usuario && !s.mensaje) {
-    return json({ ok: false, error: "Faltan datos (usuario/mensaje)" }, 400, cors);
-  }
-
-  // 1) Siempre: registra la interacción en Social_Interactions (best-effort).
-  let interactionId = null;
-  try {
-    const inter = await airtableCreateTolerant(
-      env,
-      "Social_Interactions",
-      stripEmpty({
-        Red: s.red,
-        Tipo: s.tipo,
-        Usuario: s.usuario,
-        Mensaje: s.mensaje,
-        Intención: s.intencion,
-        "Es lead": s.esLead || undefined,
-        Queja: s.queja || undefined,
-        Estado: "Pendiente",
-        Fecha: s.fecha,
-      })
-    );
-    interactionId = inter?.id || null;
-  } catch (e) {
-    console.error("[leads-worker] Social_Interactions:", e.message);
-  }
-
-  // 2) Si viene marcada como lead, crea Cliente + Agent_Queue (sin email no hay
-  //    auto-reply; el LEAD_AGENT lo pre-scorea si AUTO_PROCESS_LEADS está activo).
-  if (s.esLead) {
-    const norm = {
-      name: s.usuario,
-      company: s.usuario ? "@" + s.usuario : "Lead redes sociales",
-      message: s.mensaje,
-      service: s.service,
-      red: s.red,
-      tipo: s.tipo,
-      intencion: s.intencion,
-      campaign: s.campaign,
-      interactionId,
-    };
-    return await createLeadAndQueue(env, ctx, cors, {
-      norm,
-      agente: "LEAD_AGENT",
-      evento: "social.lead_received",
-      source: s.source,
-      campaign: s.campaign,
+  const provided=request.headers.get("X-Social-Webhook-Key")||"";
+  const expected=String(env.SOCIAL_WEBHOOK_KEY||"").trim();
+  if(!expected)return json({ok:false,error:"Webhook social no configurado"},503,cors);
+  if(!timingSafeEqual(provided,expected))return json({ok:false,error:"No autorizado"},401,cors);
+  if(!env.SOCIAL_EVENT_GUARD)return json({ok:false,error:"Guard social no configurado"},503,cors);
+  const body=await readJson(request);
+  if(!body)return json({ok:false,error:"JSON inválido"},400,cors);
+  const social=normalizeSocial(body);
+  if(!social.externalEventId||!social.platformUserId||!social.red||!social.fechaOriginal)
+    return json({ok:false,error:"external_event_id, platform_user_id, red y timestamp original son obligatorios"},422,cors);
+  if(!social.usuario&&!social.mensaje)return json({ok:false,error:"Faltan datos (usuario/mensaje)"},400,cors);
+  const eventKey=(social.red+":"+social.externalEventId).toLowerCase();
+  try{
+    const stub=env.SOCIAL_EVENT_GUARD.get(env.SOCIAL_EVENT_GUARD.idFromName(eventKey));
+    const r=await stub.fetch("https://social-guard.internal/process",{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({social,eventKey})
     });
+    const out=await r.json().catch(()=>({}));
+    return json(out,r.status,cors);
+  }catch(e){
+    console.error("[social-guard]",e?.message||e);
+    return json({ok:false,error:"Guard social no disponible"},503,cors);
   }
-
-  return json({ ok: true, interactionId, lead: false }, 200, cors);
 }
 
 function normalizeSocial(b) {
-  const redRaw = (str(b.red) || str(b.network) || "").toLowerCase();
-  const redMap = {
-    instagram: "Instagram", ig: "Instagram",
-    facebook: "Facebook", fb: "Facebook",
-    linkedin: "LinkedIn",
-    tiktok: "TikTok", tt: "TikTok",
-  };
-  const red = redMap[redRaw] || str(b.red) || str(b.network) || "";
-  const tipoRaw = (str(b.tipo) || str(b.type) || "comentario").toLowerCase();
-  const tipo =
-    tipoRaw.startsWith("dm") || tipoRaw.includes("message") || tipoRaw.includes("mensaje")
-      ? "DM"
-      : tipoRaw.includes("menc") || tipoRaw.includes("mention")
-      ? "Mención"
-      : "Comentario";
-  const esLead = /^(s[ií]|true|1)$/i.test(String(b.esLead ?? b.es_lead ?? "").trim());
-  const mensaje = str(b.mensaje) || str(b.message) || str(b.text) || str(b.comment);
-  const intencion = str(b.intencion) || str(b.intent);
+  const redRaw=(str(b.red)||str(b.network)||"").toLowerCase();
+  const redMap={instagram:"Instagram",ig:"Instagram",facebook:"Facebook",fb:"Facebook",
+    linkedin:"LinkedIn",tiktok:"TikTok",tt:"TikTok"};
+  const red=redMap[redRaw]||str(b.red)||str(b.network)||"";
+  const tipoRaw=(str(b.tipo)||str(b.type)||"comentario").toLowerCase();
+  const tipo=tipoRaw.startsWith("dm")||tipoRaw.includes("message")||tipoRaw.includes("mensaje")
+    ?"DM":tipoRaw.includes("menc")||tipoRaw.includes("mention")?"Mención":"Comentario";
+  const esLead=/^(s[ií]|true|1)$/i.test(String(b.esLead??b.es_lead??"").trim());
+  const mensaje=str(b.mensaje)||str(b.message)||str(b.text)||str(b.comment);
+  const intencion=str(b.intencion)||str(b.intent);
+  const fechaOriginal=str(b.timestamp)||str(b.occurred_at)||str(b.fecha)||str(b.date);
   return {
-    red,
-    tipo,
-    usuario: str(b.usuario) || str(b.username) || str(b.from) || str(b.user),
-    mensaje,
-    intencion,
-    esLead,
-    queja: socialIsComplaint(mensaje, intencion),
-    service: str(b.service),
-    source: redRaw || "redes",
-    campaign: str(b.campaign),
-    fecha: str(b.fecha) || str(b.date) || new Date().toISOString(),
+    red,tipo,usuario:str(b.usuario)||str(b.username)||str(b.from)||str(b.user),
+    mensaje,intencion,esLead,queja:socialIsComplaint(mensaje,intencion),
+    service:str(b.service),source:redRaw||"redes",campaign:str(b.campaign),
+    fecha:fechaOriginal||new Date().toISOString(),fechaOriginal,
+    externalEventId:str(b.external_event_id)||str(b.event_id)||str(b.externalEventId),
+    platformUserId:str(b.platform_user_id)||str(b.user_id)||str(b.platformUserId),
+    platformPostId:str(b.platform_post_id)||str(b.post_id)||str(b.platformPostId)
   };
 }
 
-// Detección simple de queja (sentimiento negativo) para disparar el aviso por WhatsApp.
-// Espeja la heurística del dashboard (_redesSentiment).
-function socialIsComplaint(mensaje, intencion) {
-  if (/soporte|queja|reclamo/i.test(intencion || "")) return true;
-  return /problema|reclamo|p[eé]simo|pesimo|terrible|malo|mala|horrible|estafa|fraude|no lleg|no me lleg|roto|rota|da[ñn]ad|atras|tarde|nunca lleg|enojad|molest|deficiente|denunci|devoluci|no funciona|no sirve/i.test(
-    mensaje || ""
-  );
+function socialIsComplaint(mensaje,intencion){
+  if(/soporte|queja|reclamo/i.test(intencion||""))return true;
+  return /problema|reclamo|p[eé]simo|pesimo|terrible|malo|mala|horrible|estafa|fraude|no lleg|no me lleg|roto|rota|da[ñn]ad|atras|tarde|nunca lleg|enojad|molest|deficiente|denunci|devoluci|no funciona|no sirve/i.test(mensaje||"");
+}
+function socialEsc(v){return String(v||"").replace(/'/g,"\\'");}
+async function socialFindOne(env,table,formula,fields=[]){
+  const q=new URLSearchParams({maxRecords:"1",filterByFormula:formula});
+  for(const f of fields)q.append("fields[]",f);
+  const r=await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent(table)}?${q}`,{
+    headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+  if(!r.ok)throw new Error(await airtableErr(r));
+  return (await r.json())?.records?.[0]||null;
+}
+async function socialHeartbeat(env,id,label,task){
+  try{
+    const row=await socialFindOne(env,"Automations",`{ID}='${socialEsc(id)}'`);
+    const fields={Nombre:label,ID:id,Tipo:"Social integration",Estado:"Activo",
+      TareaActual:task,UltimaEjecucion:new Date().toISOString()};
+    if(row)await airtableUpdateTolerant(env,"Automations",row.id,fields);
+    else await airtableCreateTolerant(env,"Automations",fields);
+  }catch(e){console.error("[social-heartbeat]",e?.message||e);}
+}
+async function socialProcessGuarded(env,s,eventKey){
+  if(!env.AIRTABLE_TOKEN||!env.AIRTABLE_BASE_ID)throw new Error("Airtable no configurado");
+  let inter=await socialFindOne(env,"Social_Interactions",
+    `AND({Red}='${socialEsc(s.red)}',{External event ID}='${socialEsc(s.externalEventId)}')`);
+  const existed=!!inter;
+  if(!inter){
+    const ticket=s.queja?{
+      "Ticket estado":"Abierto",
+      "Ticket SLA":new Date(Date.now()+4*60*60*1000).toISOString(),
+      "Ticket responsable":"Atención / Operaciones"
+    }:{};
+    inter=await airtableCreateTolerant(env,"Social_Interactions",stripEmpty({
+      Red:s.red,Tipo:s.tipo,Usuario:s.usuario,Mensaje:s.mensaje,Intención:s.intencion,
+      "Es lead":s.esLead||undefined,Queja:s.queja||undefined,Estado:"Pendiente",Fecha:s.fecha,
+      "External event ID":s.externalEventId,"Platform user ID":s.platformUserId,
+      "Platform post ID":s.platformPostId,...ticket
+    }));
+  }
+  const interactionId=inter?.id;
+  let clienteId=inter?.fields?.["Cliente ID"]||"",queueId=inter?.fields?.["Agent Queue ID"]||"";
+  if(s.esLead&&interactionId){
+    const socialIdentity=(s.red+":"+s.platformUserId).toLowerCase();
+    if(!clienteId){
+      clienteId=await airtableFindCliente(env,{socialIdentity});
+      if(!clienteId){
+        const cli=await airtableCreateTolerant(env,"Clientes",buildClienteFields({
+          name:s.usuario,company:s.usuario?"@"+s.usuario:"Lead redes sociales",message:s.mensaje,
+          service:s.service,red:s.red,tipo:s.tipo,intencion:s.intencion,campaign:s.campaign,
+          interactionId,socialIdentity
+        },s.source));
+        clienteId=cli?.id||"";
+      }
+    }
+    if(clienteId&&!queueId){
+      const existingQ=await socialFindOne(env,"Agent_Queue",
+        `AND({Evento}='social.lead_received',{Campaign}='${socialEsc(eventKey)}')`);
+      if(existingQ)queueId=existingQ.id;
+      else{
+        const q=await airtableCreateTolerant(env,"Agent_Queue",{
+          Evento:"social.lead_received",Entidad:"Cliente","ID entidad":clienteId,Agente:"LEAD_AGENT",
+          Estado:"Pendiente",Prioridad:"Alta",Source:s.source,Campaign:eventKey,
+          "Input JSON":JSON.stringify({source:"redes",interactionId,external_event_id:s.externalEventId,
+            platform_user_id:s.platformUserId,red:s.red,usuario:s.usuario,mensaje:s.mensaje,intencion:s.intencion}).slice(0,95000),
+          "Fecha creación":new Date().toISOString()
+        });
+        queueId=q?.id||"";
+      }
+    }
+    await airtableUpdateTolerant(env,"Social_Interactions",interactionId,stripEmpty({
+      "Lead creado":!!clienteId,"Cliente ID":clienteId,"Agent Queue ID":queueId
+    }));
+  }
+  await socialHeartbeat(env,"social-listen","Social Listen","Evento "+eventKey);
+  return {ok:true,interactionId,lead:!!s.esLead,clienteId:clienteId||null,queueId:queueId||null,eventKey,replayed:existed};
+}
+async function socialAuth(request,env){
+  const expected=String(env.SOCIAL_WEBHOOK_KEY||"").trim();
+  const provided=request.headers.get("X-Social-Webhook-Key")||"";
+  return !!expected&&timingSafeEqual(provided,expected);
+}
+async function handleSocialMetrics(request,env,cors){
+  if(!(await socialAuth(request,env)))return json({ok:false,error:"No autorizado"},401,cors);
+  const b=await readJson(request);if(!b)return json({ok:false,error:"JSON inválido"},400,cors);
+  const red=normalizeSocial({red:b.red||b.network,external_event_id:"metric",platform_user_id:"metric",
+    timestamp:b.fecha||b.date||new Date().toISOString()}).red;
+  const fecha=str(b.fecha)||str(b.date);
+  if(!red||!/^\d{4}-\d{2}-\d{2}/.test(fecha))return json({ok:false,error:"red y fecha son obligatorios"},422,cors);
+  const day=fecha.slice(0,10),key=day+" · "+red;
+  const fields={"Período":key,Red:red,Fecha:day,Alcance:numOrNull(b.alcance),
+    Impresiones:numOrNull(b.impresiones),Engagement:numOrNull(b.engagement),Clics:numOrNull(b.clics),
+    "Seguidores nuevos":numOrNull(b.seguidores_nuevos??b.followers_new),Leads:numOrNull(b.leads)};
+  const existing=await socialFindOne(env,"Social_Metrics",`{Período}='${socialEsc(key)}'`);
+  const row=existing?await airtableUpdateTolerant(env,"Social_Metrics",existing.id,stripEmpty(fields))
+                    :await airtableCreateTolerant(env,"Social_Metrics",stripEmpty(fields));
+  await socialHeartbeat(env,"social-metrics","Social Metrics","Snapshot "+key);
+  return json({ok:true,id:row?.id||existing?.id||null,upserted:!!existing,key},200,cors);
+}
+async function handleSocialPublishReserve(request,env,cors){
+  if(!(await socialAuth(request,env)))return json({ok:false,error:"No autorizado"},401,cors);
+  if(!env.SOCIAL_EVENT_GUARD)return json({ok:false,error:"Guard social no configurado"},503,cors);
+  const b=await readJson(request);if(!b)return json({ok:false,error:"JSON inválido"},400,cors);
+  const postId=str(b.post_record_id)||str(b.postId),idem=str(b.idempotency_key)||str(b.idempotencyKey);
+  if(!/^rec[A-Za-z0-9]{14}$/.test(postId)||!/^social-post\/rec[A-Za-z0-9]{14}$/.test(idem))
+    return json({ok:false,error:"post_record_id / idempotency_key inválidos"},422,cors);
+  const postUrl=`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Social_Posts")}/${postId}`;
+  const rr=await fetch(postUrl,{headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+  if(!rr.ok)return json({ok:false,error:"Post no encontrado"},rr.status===404?404:503,cors);
+  const post=await rr.json(),f=post.fields||{};
+  let approval;try{approval=JSON.parse(String(f["Aprobación editorial"]||""));}catch(_){}
+  if(f.Estado!=="Programado"||approval?.status!=="approved"||String(f["Idempotency key"]||"")!==idem)
+    return json({ok:false,error:"Post no aprobado/programado o idempotency key no coincide"},409,cors);
+  const stub=env.SOCIAL_EVENT_GUARD.get(env.SOCIAL_EVENT_GUARD.idFromName("publish:"+postId));
+  const gate=await stub.fetch("https://social-guard.internal/publish-reserve",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({postId,idempotencyKey:idem})});
+  const out=await gate.json().catch(()=>({}));
+  return json(out,gate.status,cors);
+}
+async function handleSocialPublish(request,env,cors){
+  if(!(await socialAuth(request,env)))return json({ok:false,error:"No autorizado"},401,cors);
+  if(!env.SOCIAL_EVENT_GUARD)return json({ok:false,error:"Guard social no configurado"},503,cors);
+  const b=await readJson(request);if(!b)return json({ok:false,error:"JSON inválido"},400,cors);
+  const postId=str(b.post_record_id)||str(b.postId),externalId=str(b.external_post_id)||str(b.externalPostId);
+  const permalink=str(b.permalink),publishedAt=str(b.published_at)||str(b.timestamp);
+  const idem=str(b.idempotency_key)||str(b.idempotencyKey);
+  if(!/^rec[A-Za-z0-9]{14}$/.test(postId)||!/^social-post\/rec[A-Za-z0-9]{14}$/.test(idem))
+    return json({ok:false,error:"post_record_id / idempotency_key inválidos"},422,cors);
+  const currentUrl=`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Social_Posts")}/${postId}`;
+  const rr=await fetch(currentUrl,{headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+  if(!rr.ok)return json({ok:false,error:"Post no encontrado"},rr.status===404?404:503,cors);
+  const post=await rr.json(),attempts=Math.max(0,Number(post.fields?.["Intentos publicación"])||0)+1;
+  if(String(post.fields?.["Idempotency key"]||"")!==idem)
+    return json({ok:false,error:"Idempotency key no coincide"},409,cors);
+  const stub=env.SOCIAL_EVENT_GUARD.get(env.SOCIAL_EVENT_GUARD.idFromName("publish:"+postId));
+  if(b.error){
+    const failGate=await stub.fetch("https://social-guard.internal/publish-fail",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({postId,idempotencyKey:idem})});
+    if(!failGate.ok)return json({ok:false,error:"Publicación no estaba reservada"},409,cors);
+    await airtableUpdateTolerant(env,"Social_Posts",postId,{"Estado transporte":"Error",
+      "Intentos publicación":attempts,"Error publicación":String(b.error).slice(0,5000)});
+    await socialHeartbeat(env,"social-publish","Social Publish","Último intento con error");
+    return json({ok:false,postId,state:"Error"},207,cors);
+  }
+  let parsed;try{parsed=new URL(permalink);}catch(_){}
+  if(!externalId||!parsed||parsed.protocol!=="https:"||!publishedAt||!Number.isFinite(Date.parse(publishedAt)))
+    return json({ok:false,error:"external_post_id, permalink HTTPS y published_at son obligatorios"},422,cors);
+  const commitGate=await stub.fetch("https://social-guard.internal/publish-commit",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({postId,idempotencyKey:idem,externalId,permalink,publishedAt})});
+  if(!commitGate.ok)return json({ok:false,error:"Publicación no estaba reservada o ya cerrada"},409,cors);
+  await airtableUpdateTolerant(env,"Social_Posts",postId,{Estado:"Publicado","Fecha publicación":publishedAt,
+    "External Post ID":externalId,Permalink:permalink,"Estado transporte":"Confirmado",
+    "Intentos publicación":attempts,"Error publicación":""});
+  await socialHeartbeat(env,"social-publish","Social Publish","Publicación confirmada "+externalId);
+  return json({ok:true,postId,external_post_id:externalId,permalink},200,cors);
+}
+
+export class SocialEventGuard {
+  constructor(state,env){this.state=state;this.env=env;}
+  async fetch(request){
+    if(request.method!=="POST")return Response.json({ok:false,error:"Method not allowed"},{status:405});
+    const path=new URL(request.url).pathname;
+    let p;try{p=await request.json();}catch(_){return Response.json({ok:false,error:"Invalid JSON"},{status:422});}
+    if(path==="/publish-reserve"){
+      if(!/^rec[A-Za-z0-9]{14}$/.test(String(p?.postId||""))||typeof p?.idempotencyKey!=="string")
+        return Response.json({ok:false,error:"Invalid publish reserve"},{status:422});
+      const done=await this.state.storage.get("publish-result");
+      if(done)return Response.json({...done,replayed:true});
+      const lease=await this.state.storage.get("publish-lease"),now=Date.now();
+      if(lease?.expiresAt>now){
+        if(lease.idempotencyKey===p.idempotencyKey)
+          return Response.json({ok:true,reserved:true,replayed:true,expiresAt:lease.expiresAt});
+        return Response.json({ok:false,error:"Publish locked",code:"SOCIAL_PUBLISH_LOCKED"},{status:409});
+      }
+      const row={postId:p.postId,idempotencyKey:p.idempotencyKey,expiresAt:now+10*60*1000};
+      await this.state.storage.put("publish-lease",row);
+      return Response.json({ok:true,reserved:true,replayed:false,expiresAt:row.expiresAt});
+    }
+    if(path==="/publish-commit"||path==="/publish-fail"){
+      const lease=await this.state.storage.get("publish-lease");
+      if(!lease||lease.idempotencyKey!==p?.idempotencyKey||lease.postId!==p?.postId)
+        return Response.json({ok:false,error:"Publish reservation missing"},{status:409});
+      if(path==="/publish-commit"){
+        const result={ok:true,postId:p.postId,idempotencyKey:p.idempotencyKey,externalId:p.externalId,
+          permalink:p.permalink,publishedAt:p.publishedAt,committedAt:new Date().toISOString()};
+        await this.state.storage.put("publish-result",result);
+        await this.state.storage.delete("publish-lease");
+        return Response.json(result);
+      }
+      await this.state.storage.delete("publish-lease");
+      return Response.json({ok:true,released:true});
+    }
+    if(!p?.social||typeof p.eventKey!=="string")return Response.json({ok:false,error:"Invalid social event"},{status:422});
+    const done=await this.state.storage.get("result");
+    if(done)return Response.json({...done,replayed:true});
+    try{
+      const result=await socialProcessGuarded(this.env,p.social,p.eventKey);
+      await this.state.storage.put("result",result);
+      return Response.json(result);
+    }catch(e){
+      return Response.json({ok:false,error:"Social event processing failed",detail:String(e?.message||e).slice(0,500)},{status:503});
+    }
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -2083,6 +2234,7 @@ function buildClienteFields(norm, source) {
     // Columnas tolerantes: si no existen en la base, se descartan sin romper.
     GCLID: norm.gclid,
     "Campaña Ads": norm.utmCampaign,
+    "Social identity key": norm.socialIdentity,
     // Los registros nuevos entran como LEAD (categoría). El equipo los valida
     // luego marcando el campo "Validado" en el dashboard, que los pasa a CLIENTE.
     Validado: false,
@@ -2747,7 +2899,7 @@ async function airtableUpdate(env, table, recordId, fields) {
 }
 
 // Busca un Cliente existente por email o teléfono (dedupe). Best-effort.
-async function airtableFindCliente(env, { email, phone, linkedinUrl }) {
+async function airtableFindCliente(env, { email, phone, linkedinUrl, socialIdentity }) {
   const esc = (s) => String(s).replace(/'/g, "\\'");
   const clauses = [];
   if (email) clauses.push(`LOWER(TRIM({Email}))=LOWER('${esc(String(email).trim())}')`);
@@ -2756,6 +2908,7 @@ async function airtableFindCliente(env, { email, phone, linkedinUrl }) {
   if (phoneDigits)
     clauses.push(`RIGHT(REGEX_REPLACE({Teléfono} & "", "[^0-9]", ""), ${phoneDigits.length}) = '${phoneDigits}'`);
   if (linkedinUrl) clauses.push(`LOWER({LinkedIn URL} & "")=LOWER('${esc(String(linkedinUrl).trim())}')`);
+  if (socialIdentity) clauses.push(`LOWER({Social identity key} & "")=LOWER('${esc(String(socialIdentity).trim())}')`);
   if (!clauses.length) return null;
   const formula = clauses.length > 1 ? `OR(${clauses.join(",")})` : clauses[0];
   const url =

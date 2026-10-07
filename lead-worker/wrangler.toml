@@ -78,6 +78,16 @@ WA_GRAPH_VERSION = "v25.0"
 binding = "RL"
 id = "c148848321344f60939fa71a51d050c6"
 
+# Serializa cada evento social por red+external_event_id. Evita duplicar
+# interacción, Cliente y Agent_Queue ante reintentos concurrentes.
+[[durable_objects.bindings]]
+name = "SOCIAL_EVENT_GUARD"
+class_name = "SocialEventGuard"
+
+[[migrations]]
+tag = "v1-social-event-guard"
+new_sqlite_classes = ["SocialEventGuard"]
+
 # ── SECRETOS (NO escribir valores aquí) ────────────────────────────────
 # Configurar con:  npx wrangler secret put NOMBRE
 #   AIRTABLE_TOKEN          (PAT de Airtable con scope data.records:write)
