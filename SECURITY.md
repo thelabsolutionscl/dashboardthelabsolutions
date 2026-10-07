@@ -20,6 +20,7 @@ server-side:
 - Airtable → `<worker>/<BASE_ID>/…` con header `X-App-Key`
 - Claude (agentes, KAI con streaming, slicer, resumen diario) → `<worker>/anthropic/v1/messages`
 - OpenAI (visión e imágenes) → solo rutas permitidas bajo `<worker>/openai/v1/...`
+- ElevenLabs (voz de KAI) → `<worker>/tts/elevenlabs`; la API key vive solo como `ELEVENLABS_API_KEY` del Worker
 
 El Worker exige `X-App-Key` **y** que el `Origin` sea el dashboard
 (`ALLOWED_ORIGINS`). Esto limita llamadas desde otros sitios en un navegador,
@@ -36,6 +37,7 @@ limita el impacto económico, pero NO reemplaza la autenticación server-side.
 | `PROXY_KEY` | Alto si está publicada | Pendiente: autenticación de usuario server-side y cuotas; Origin no basta |
 | `BASE_ID` de Airtable | Ninguno sin token | — |
 | `OPENAI_TOKEN` | Alto | Vive solo como secret del Worker. El dashboard no acepta ni persiste OpenAI keys; el proxy limita endpoints, modelos, tamaño/calidad y comparte el hard cap diario de IA. |
+| `ELEVENLABS_API_KEY` | Alto | Vive solo como secret del Worker; KAI no acepta ni persiste la clave en el navegador. |
 | `GOOGLE_CLIENT_ID`, URLs e identificadores públicos de SII/Ads | Bajo | No autorizan operaciones por sí mismos |
 | `SII_WORKER_KEY`, `PORTAL_ADMIN_KEY`, `PRINTER_TUNNEL_TOKEN` | Crítico | Todavía pueden quedar incrustados en HTML público; deben sustituirse por sesiones y permisos server-side antes de considerarse protegidos |
 
@@ -141,9 +143,7 @@ BACKUP_ENCRYPTION_KEY='CLAVE_DEL_GESTOR' \
 ```
 
 No subir el JSON restaurado a GitHub. Si se cambia la clave en el futuro,
-conservar la anterior para descifrar los respaldos creados con ella. Revisar
-y borrar cualquier artifact HISTÓRICO en texto plano que haya sido generado
-antes de esta corrección: el cambio no protege los archivos ya publicados.
+conservar la anterior para descifrar los respaldos creados con ella. Revisar y borrar cualquier artifact HISTÓRICO en texto plano generado antes de esta corrección. El workflow manual `Migrar respaldos antiguos cifrados` cifra y verifica primero cada artifact legado y solo después elimina el original; no borrar copias antes de comprobar el artifact cifrado nuevo.
 
 ## Pasos pendientes de una sola vez (recomendado)
 

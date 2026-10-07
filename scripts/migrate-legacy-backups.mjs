@@ -22,7 +22,7 @@ export function isLegacyArtifact(a) {
   return a && a.expired === false && Number.isSafeInteger(a.id) && LEGACY_NAME.test(String(a.name));
 }
 export function encryptLegacy(original, passphrase, artifact) {
-  if (!passphrase || passphrase.length < 24) throw new Error('BACKUP_ENCRYPTION_KEY inválida');
+  if (!passphrase || passphrase.length < 32) throw new Error('BACKUP_ENCRYPTION_KEY inválida');
   const payload = JSON.parse(Buffer.isBuffer(original) ? original.toString('utf8') : String(original));
   if (!payload || !payload.tablas || typeof payload.tablas !== 'object' ||
       Array.isArray(payload.tablas) || !Object.keys(payload.tablas).length ||
@@ -59,7 +59,7 @@ const output='backup-migrated';
 function validateEnvironment() {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error('GITHUB_REPOSITORY inválido');
   if (!token) throw new Error('Falta GITHUB_TOKEN');
-  if (!secret || secret.trim().length<24) throw new Error('Falta BACKUP_ENCRYPTION_KEY válida');
+  if (!secret || secret.trim().length<32) throw new Error('Falta BACKUP_ENCRYPTION_KEY válida');
   // Nunca aceptar un API endpoint alternativo en producción para descargar
   // datos privados o enviar el token GitHub a terceros.
   if (API!=='https://api.github.com') throw new Error('GitHub API no oficial');

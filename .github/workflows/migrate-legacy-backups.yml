@@ -40,8 +40,8 @@ jobs:
             echo "::error::Confirmación inválida. No se descargó ni borró ningún artifact."
             exit 1
           fi
-          if [ "${#BACKUP_ENCRYPTION_KEY}" -lt 24 ]; then
-            echo "::error::Primero configura BACKUP_ENCRYPTION_KEY en GitHub Actions (mínimo 24 caracteres)."
+          if [ "${#BACKUP_ENCRYPTION_KEY}" -lt 32 ]; then
+            echo "::error::Primero configura BACKUP_ENCRYPTION_KEY en GitHub Actions (mínimo 32 caracteres)."
             exit 1
           fi
 
