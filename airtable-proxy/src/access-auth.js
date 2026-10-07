@@ -256,6 +256,7 @@ function accessAllows(identity,method,path){
   if(path==='/mail/session')return ['POST','DELETE'].includes(method)&&['sales','operator','finance','admin'].includes(identity.role);
   if(path==='/mail/rpc')return method==='POST'&&['sales','operator','finance','admin'].includes(identity.role);
   if(path==='/supplier/purchase-order/reserve')return method==='POST'&&['operator','finance','admin'].includes(identity.role);
+  if(path==='/supplier/purchase-order/transition')return method==='POST'&&['operator','finance','admin'].includes(identity.role);
   if(path==='/shared/problems')return ['GET','POST'].includes(method);
   if(path==='/shared/machineops')return ['operator','admin'].includes(identity.role)&&
     ['GET','PUT'].includes(method);
