@@ -99,6 +99,10 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
     'Categoría':'text','Orden':'number','Color':'text','Activo':'flag',
     'Actualizado':'datetime','Autor':'email'
   }),
+  SupplierApplications:Object.freeze({
+    'Estado':'select','Proveedor':'links','Supplier ID':'record-ref','Revisado por':'email',
+    'Fecha revisión':'datetime','Motivo':'notes','Evidencia':'notes'
+  }),
   // Machine tables are operational, but they are no longer a generic Airtable
   // write tunnel for signed operators. Identity/config fields stay immutable.
   Maquinas:Object.freeze({
@@ -128,6 +132,7 @@ const OPERATOR_WRITE_METHODS=Object.freeze({
   PurchaseOrderEvents:new Set(['POST']),
   SupplierEvaluations:new Set(['POST']),
   SupplierCategories:new Set(['POST','PATCH']),
+  SupplierApplications:new Set(['PATCH']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
   Maquinas_Mant:new Set(['POST']),
@@ -234,6 +239,7 @@ function operatorWritePayloadAllowed(table,method,payload){
         PurchaseOrderEvents:['Event ID','Orden de compra','Tipo','Fecha'],
         SupplierEvaluations:['Evaluation ID','Proveedor','Supplier ID','Estado nuevo','Fecha'],
         SupplierCategories:['Categoría','Orden','Color','Activo'],
+        SupplierApplications:['Application ID','Nombre','Email','Teléfono','RUT','Estado'],
         Maquinas_Eventos:['maquina_id','fecha','tipo'],
         Maquinas_Mant:['maquina_id','tipo','fecha','ts'],
         Equipo_Eventos:['persona_id','fecha','tipo']
@@ -1749,6 +1755,12 @@ const OPERATOR_READ_FIELDS=Object.freeze({
     'Incidentes','Notas'
   ]),
   SupplierCategories:new Set(['Categoría','Orden','Color','Activo','Actualizado','Autor']),
+  SupplierApplications:new Set([
+    'Application ID','Nombre','Contacto','Cargo','Email','Teléfono','WhatsApp','Sitio Web',
+    'RUT','Comuna','Región','Categoría','Productos','Mensaje','Estado','Proveedor',
+    'Supplier ID','Idempotency key','Fecha postulación','Revisado por','Fecha revisión',
+    'Motivo','Evidencia'
+  ]),
   Maquinas:new Set([...VIEWER_READ_FIELDS.Maquinas,'ip','cam']),
   Maquinas_Eventos:new Set([...VIEWER_READ_FIELDS.Maquinas_Eventos,'desc','pedido_id']),
   Maquinas_Mant:new Set([...VIEWER_READ_FIELDS.Maquinas_Mant,'notas','ts']),
