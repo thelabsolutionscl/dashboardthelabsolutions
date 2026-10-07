@@ -90,18 +90,17 @@ test('crear y editar validan identidad antes de escribir en Airtable', () => {
   assert.match(edit, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]PATCH['"]/);
 });
 
-test('reputación y postulación aplican actualización optimista con rollback', () => {
-  const rep = fn('updateRepProveedor');
-  const post = fn('setProvEstadoPost');
-  assert.match(rep, /Reputación/);
-  assert.match(rep, /airtableWrite\(['"]Proveedores['"]\s*,\s*['"]PATCH['"]/);
-  assert.match(rep, /catch[\s\S]*old/);
-  assert.match(post, /Estado postulación/);
-  assert.match(post, /catch[\s\S]*old/);
-  assert.match(PROV, /ENTREVISTAR/);
-  assert.match(PROV, /APROBADO/);
-  assert.match(PROV, /RECHAZADO/);
-  assert.match(fn('saveProvMotivo'), /Motivo evaluación/);
+test('reputación se registra como evaluación histórica y postulación conserva rollback', () => {
+  const rep=fn('updateRepProveedor'),post=fn('setProvEstadoPost');
+  assert.match(rep,/airtableWrite\('SupplierEvaluations','POST'/);
+  assert.match(rep,/_supplierDerivedReputation/);
+  assert.match(rep,/airtableWrite\('Proveedores','PATCH',id,\{'Reputación':derived\}\)/);
+  assert.match(post,/Estado postulación/);
+  assert.match(post,/catch[\s\S]*old/);
+  assert.match(PROV,/ENTREVISTAR/);
+  assert.match(PROV,/APROBADO/);
+  assert.match(PROV,/RECHAZADO/);
+  assert.match(fn('saveProvMotivo'),/Motivo evaluación/);
 });
 
 test('la ficha conecta pedidos, evaluación e historial de precios', () => {
@@ -133,18 +132,16 @@ test('el formulario público aplica controles antiabuso y crea postulación', ()
   assert.match(handler, /sendProveedorNotification/);
 });
 
-test('precios se comparan por ítem y tienen respaldo best-effort', () => {
-  // La lectura pasa por el helper de listas compartidas: guarda igual en el
-  // navegador, pero filtra los borrados y permite fusionar con el otro equipo
-  // en vez de pisarlo (ver tests/listas-compartidas.test.js).
-  assert.match(fn('_preciosProv'), /_listaVivos\(_PRECIOS_PROV_KEY\)/);
-  assert.match(fn('_preciosProvSaveArr'), /_listaGuardar\(_PRECIOS_PROV_KEY/);
-  assert.match(fn('_preciosProvSaveArr'), /_preciosProvBackup/);
-  assert.match(fn('_preciosProvBackup'), /_monitorUpsert\(['"]PRECIOS_PROV['"]/);
-  assert.match(fn('_mejorPrecioPorItem'), /precio\s*<\s*best\[key\]\.precio/);
-  // La clave incluye la UNIDAD: no se comparan precios de unidades distintas.
-  assert.match(fn('_mejorPrecioPorItem'), /_precioKey\(p\.item,p\.unidad\)/);
-  assert.match(fn('renderMejorPrecio'), /ultimoPorProv|último precio por proveedor/);
+test('precios estructurados conservan compatibilidad legacy sin volver a escribir blobs', () => {
+  const read=fn('_preciosProv'),save=fn('_preciosProvSaveArr');
+  assert.match(read,/_supplierPriceRows\.map\(_supplierPriceFromRow\)/);
+  assert.match(read,/_supplierLegacyPrices\(\)/);
+  assert.match(save,/_listaGuardar\(_PRECIOS_PROV_KEY/);
+  assert.doesNotMatch(save,/_monitorUpsert|_preciosProvBackup/);
+  assert.match(fn('addPrecioProv'),/airtableWrite\('SupplierPrices','POST'/);
+  assert.match(fn('_mejorPrecioPorItem'),/precio\s*<\s*best\[key\]\.precio/);
+  assert.match(fn('_mejorPrecioPorItem'),/_precioKey\(p\.item,p\.unidad\)/);
+  assert.match(fn('renderMejorPrecio'),/ultimoPorProv|último precio por proveedor/);
 });
 
 test('órdenes de compra calculan, persisten por filas y generan documento imprimible', () => {
