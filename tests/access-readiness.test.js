@@ -105,6 +105,7 @@ test('unapproved proxy URLs do not receive service credentials',async()=>{
 test('post-cutover catches any leaked browser master secret in published HTML',async()=>{
  const {checkAccessReadiness}=await import(script.href);
  const base={...cfg,stage:'post',siiAccessMode:'true',
+   proxyKey:'proxy-master-test-123456',
    siiWorkerKey:'test-secret-exposed-123456',
    portalAdminKey:'portal-master-test-123456',
    printerTunnelToken:'printer-master-test-123456'};
