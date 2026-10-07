@@ -1,6 +1,6 @@
 /* js/redes.js — módulo extraído de index.html (carga en el mismo punto). */
 // ── REDES SOCIALES ─────────────────────────────────────────────
-let _redesLoaded=false, _redesLastGen='', _redesLastAgent='', _redesLastMedia='';
+let _redesLoaded=false, _redesLastGen='', _redesLastAgent='', _redesLastMedia='', _redesLastMeta=null, _redesLastPrompt=null;
 let _redesView='lista', _redesCalMonth=null, _redesReportText='', _redesDateResolve=null, _redesLastPedido='';
 let _redesReplyBusy=false, _redesLoadBusy=false;   // guards anti-concurrencia (carga y llamadas a Claude)
 let _redesEditId=null, _redesDateRed='';           // edición inline y red del modal de fecha
