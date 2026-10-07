@@ -1392,6 +1392,14 @@ async function handleProveedor(request, env, ctx, cors) {
 
   const nombre=str(body.name)||str(body.company),email=supplierNormEmailPublic(str(body.email)),phone=str(body.phone);
   const rut=supplierNormRutPublic(str(body.rut));
+  if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({ok:false,error:"Email inválido"},400,cors);
+  const phoneDigits=String(phone||'').replace(/\D/g,'');
+  if(phone&&!(phoneDigits.length>=8&&phoneDigits.length<=12))return json({ok:false,error:"Teléfono inválido"},400,cors);
+  const rawWebsite=str(body.website);
+  if(rawWebsite){
+    try{const u=new URL(/^https?:\/\//i.test(rawWebsite)?rawWebsite:'https://'+rawWebsite);if(!['http:','https:'].includes(u.protocol))throw Error();}
+    catch(_){return json({ok:false,error:"Sitio web inválido"},400,cors);}
+  }
   if(!nombre)return json({ok:false,error:"Falta el nombre del proveedor"},400,cors);
   if(!email&&!phone)return json({ok:false,error:"Falta email o teléfono"},400,cors);
   const provided=request.headers.get("Idempotency-Key")||str(body.idempotencyKey);
