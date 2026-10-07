@@ -2139,14 +2139,18 @@ function clearMbPrinterTunnel(){
 }
 function saveMbElevenLabsKey(){
   try{localStorage.removeItem('elevenlabs_key');}catch(_){}
-  const inp=document.getElementById('mbElevenLabsKey');if(inp){inp.value='';inp.disabled=true;inp.placeholder='Administrada en servidor';}
-  const st=document.getElementById('mbElevenLabsStatus');if(st)st.textContent='Credencial protegida en backend';
+  const inp=document.getElementById('mbElevenLabsKey');
+  if(inp){inp.value='';inp.disabled=true;inp.placeholder='Administrada en servidor';}
+  const st=document.getElementById('mbElevenLabsStatus');
+  if(st)st.textContent='Credencial protegida en backend';
   toast('ElevenLabs ahora se configura únicamente en el servidor seguro','info');
 }
 function clearMbElevenLabsKey(){
   try{localStorage.removeItem('elevenlabs_key');}catch(_){}
-  const inp=document.getElementById('mbElevenLabsKey');if(inp){inp.value='';inp.disabled=true;inp.placeholder='Administrada en servidor';}
-  const st=document.getElementById('mbElevenLabsStatus');if(st)st.textContent='Credencial protegida en backend';
+  const inp=document.getElementById('mbElevenLabsKey');
+  if(inp){inp.value='';inp.disabled=true;inp.placeholder='Administrada en servidor';}
+  const st=document.getElementById('mbElevenLabsStatus');
+  if(st)st.textContent='Credencial protegida en backend';
 }
 document.addEventListener('click',function(e){
   const dd=document.getElementById('nuevoDropdown');
