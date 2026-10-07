@@ -265,13 +265,22 @@ function redesDateCancel(){
 // Programa una publicación CON fecha/hora (sin fecha, Make no sabría cuándo publicar).
 async function redesSchedule(id,presetIso){
   const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
+  const media=String(p.fields['Media URL']||'').trim(),link=String(p.fields['Link']||'').trim();
+  if((media&&!/^https:\/\//i.test(media))||(link&&!/^https:\/\//i.test(link))){
+    toast('Media URL y Link deben usar HTTPS antes de aprobar','error');return;
+  }
   _redesDateRed=p.fields['Red']||'';
   const iso=presetIso||await redesDatePicker('¿Cuándo publicar este post?',p.fields['Fecha programada']||null);
   if(!iso) return;
+  const actor=(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||'';
+  const approval={status:'approved',approvedAt:new Date().toISOString(),approvedBy:actor,scheduledAt:iso,zone:'America/Santiago'};
+  const fields={'Estado':'Programado','Fecha programada':iso,
+    'Aprobación editorial':JSON.stringify(approval),
+    'Idempotency key':p.fields['Idempotency key']||('social-post/'+id),
+    'Estado transporte':'Pendiente'};
   try{
-    await _redesWrite('Social_Posts','PATCH',id,{'Estado':'Programado','Fecha programada':iso});
-    p.fields['Estado']='Programado'; p.fields['Fecha programada']=iso;
-    toast('Programado para '+_redesFmtFecha(iso)+' ✓','success'); renderRedesKpis(); redesApplyFilters();
+    await _redesWrite('Social_Posts','PATCH',id,fields);Object.assign(p.fields,fields);
+    toast('Aprobado y programado para '+_redesFmtFecha(iso)+' ✓','success');renderRedesKpis();redesApplyFilters();
   }catch(e){toast('No se pudo programar: '+e.message,'error');}
 }
 function redesCopyPost(id){
@@ -1730,15 +1739,15 @@ function renderRedesAutoPanel(){
   const row=(ic,name,on,txt,action)=>`<div class="redes-auto-row"><span class="ic">${ic}</span><div class="rt"><b>${name}</b><span>${txt}</span></div><span class="redes-auto-pill ${on?'on':'off'}">${on?'🟢 activo':'⚪ manual'}</span>${action||''}</div>`;
   el.innerHTML=`
     <div class="redes-auto-head">
-      <div><b>🤖 Modo automático</b><div class="s">Qué trabaja solo y qué necesita conectarse con Make.</div></div>
+      <div><b>🤖 Modo automático</b><div class="s">Estado real por heartbeat. La IA prepara contenido; publicar requiere aprobación.</div></div>
       <button class="btn btn-primary btn-sm" style="background:#ec4899;border-color:#ec4899;color:#fff" onclick="redesAutopilot()" title="Genera y programa contenido para los días que te faltan, en un clic">🤖 Piloto automático</button>
     </div>
     <div class="redes-auto-rows">
       ${row('✍️','Generación de contenido',true,'IA lista — copy y hashtags por red al instante.',gaps?`<button class="btn btn-ghost btn-sm" onclick="redesFillGaps()">Rellenar ${gaps} hueco(s)</button>`:'')}
-      ${row('📅','Programación',true,drafts?`${drafts} borrador(es) listos para auto-programar.`:'Sin borradores por programar.',drafts?`<button class="btn btn-ghost btn-sm" onclick="redesAutoSchedule()">Auto-programar</button>`:'')}
+      ${row('📅','Programación',true,drafts?`${drafts} borrador(es) listos para revisión.`:'Sin borradores por programar.',drafts?`<button class="btn btn-ghost btn-sm" onclick="redesAutoSchedule()">Preparar revisión</button>`:'')}
       ${row('👂','Escucha de comentarios/DMs',s.listen,s.listen?'Interacciones llegando a la bandeja.':'Sin interacciones recientes — conéctalo con Make.',s.listen?'':guideBtn)}
       ${row('📊','Métricas',s.metrics,s.metrics?'Recibiendo alcance y engagement.':'Sin métricas recientes — conéctalas con Make.',s.metrics?'':guideBtn)}
-      ${row('📤','Publicación',s.publish,s.publish?'Publicando automáticamente vía Make.':'Asistida: generas y publicas a mano (o conéctala).',s.publish?'':guideBtn)}
+      ${row('📤','Publicación',s.publish,s.publish?'Conector de publicación reportando heartbeat.':'Sin heartbeat reciente del conector de publicación.',s.publish?'':guideBtn)}
     </div>`;
 }
 // Copys de ejemplo para el piloto en modo demo (sin llamadas reales a la IA)
@@ -1792,22 +1801,22 @@ async function redesAutopilot(){
   const gaps=_redesGaps(7);
   const drafts=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Borrador');
   const plan=[];
-  if(gaps.length) plan.push(`Generar y programar ${gaps.length} post(s) para los días sin contenido`);
-  if(drafts.length) plan.push(`Auto-programar ${drafts.length} borrador(es) que ya tienes`);
+  if(gaps.length) plan.push(`Generar y enviar a revisión ${gaps.length} post(s) para los días sin contenido`);
+  if(drafts.length) plan.push(`Enviar a revisión ${drafts.length} borrador(es) que ya tienes`);
   if(!plan.length){ toast('✅ Todo al día: sin huecos ni borradores por programar','success'); return; }
   if(!_redesDemo && !_redesHasData()){ toast('Conecta Airtable (o usa el modo demo) para que el piloto guarde el contenido','error'); return; }
   if(!confirm('🤖 Piloto automático\n\n• '+plan.join('\n• ')+'\n\n¿Ejecutar ahora?')) return;
   _redesBusyAuto=true;
   try{
     let gen=0; if(gaps.length) gen=await _redesFillGapsCore(gaps);
-    // Programar los borradores restantes DESPUÉS de la semana de huecos (para no chocar de día)
+    // El piloto solo sugiere fechas: un humano debe aprobar antes de Programado.
     const rem=(state.socialPosts||[]).filter(p=>(p.fields['Estado']||'')==='Borrador');
     const start=new Date(); start.setHours(0,0,0,0); let sch=0;
     for(let i=0;i<rem.length;i++){ const p=rem[i], red=p.fields['Red']||'Instagram', hr=REDES_BEST_HOUR[red]||18;
       const d=new Date(start); d.setDate(d.getDate()+8+i); d.setHours(hr,0,0,0);
-      try{ await _redesWrite('Social_Posts','PATCH',p.id,{'Estado':'Programado','Fecha programada':d.toISOString()}); p.fields['Estado']='Programado'; p.fields['Fecha programada']=d.toISOString(); sch++; }catch(e){}
+      try{ const fields={'Estado':'En revisión','Aprobación editorial':JSON.stringify({status:'pending_review',suggestedAt:d.toISOString(),zone:'America/Santiago',source:'autopilot'})}; await _redesWrite('Social_Posts','PATCH',p.id,fields); Object.assign(p.fields,fields); sch++; }catch(e){}
     }
-    toast(`🤖 Piloto automático: ${gen} generado(s) · ${sch} programado(s) ✓`,'success');
+    toast(`🤖 Piloto automático: ${gen} generado(s) · ${sch} en revisión ✓`,'success');
     renderRedesKpis(); redesApplyFilters();
     if(_redesView==='lista') redesSetView('semana');   // muestra el resultado en el calendario
   }finally{ _redesBusyAuto=false; }
