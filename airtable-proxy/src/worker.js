@@ -95,6 +95,10 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
     'Responsable':'email','Fecha':'datetime','Calidad':'number','Puntualidad':'number',
     'Precio':'number','Respuesta':'number','Incidentes':'number','Notas':'notes'
   }),
+  SupplierCategories:Object.freeze({
+    'Categoría':'text','Orden':'number','Color':'text','Activo':'flag',
+    'Actualizado':'datetime','Autor':'email'
+  }),
   // Machine tables are operational, but they are no longer a generic Airtable
   // write tunnel for signed operators. Identity/config fields stay immutable.
   Maquinas:Object.freeze({
@@ -123,6 +127,7 @@ const OPERATOR_WRITE_METHODS=Object.freeze({
   PurchaseOrderItems:new Set(['POST','PATCH']),
   PurchaseOrderEvents:new Set(['POST']),
   SupplierEvaluations:new Set(['POST']),
+  SupplierCategories:new Set(['POST','PATCH']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
   Maquinas_Mant:new Set(['POST']),
@@ -228,6 +233,7 @@ function operatorWritePayloadAllowed(table,method,payload){
         PurchaseOrderItems:['Item ID','Orden de compra','Proveedor','Supplier ID','Descripción','Cantidad'],
         PurchaseOrderEvents:['Event ID','Orden de compra','Tipo','Fecha'],
         SupplierEvaluations:['Evaluation ID','Proveedor','Supplier ID','Estado nuevo','Fecha'],
+        SupplierCategories:['Categoría','Orden','Color','Activo'],
         Maquinas_Eventos:['maquina_id','fecha','tipo'],
         Maquinas_Mant:['maquina_id','tipo','fecha','ts'],
         Equipo_Eventos:['persona_id','fecha','tipo']
@@ -1742,6 +1748,7 @@ const OPERATOR_READ_FIELDS=Object.freeze({
     'Evidencia','Responsable','Fecha','Calidad','Puntualidad','Precio','Respuesta',
     'Incidentes','Notas'
   ]),
+  SupplierCategories:new Set(['Categoría','Orden','Color','Activo','Actualizado','Autor']),
   Maquinas:new Set([...VIEWER_READ_FIELDS.Maquinas,'ip','cam']),
   Maquinas_Eventos:new Set([...VIEWER_READ_FIELDS.Maquinas_Eventos,'desc','pedido_id']),
   Maquinas_Mant:new Set([...VIEWER_READ_FIELDS.Maquinas_Mant,'notas','ts']),
