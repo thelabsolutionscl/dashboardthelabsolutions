@@ -43,6 +43,11 @@ function _officeExecutionFail(started,error){
   _officeExecPost({action:'error',executionId:rec.executionId,error:String(error?.message||error||'Error')}).catch(()=>{});
   _officeAgentRuns.delete(started);return rec.executionId;
 }
+function officeExecutionFailByAgent(agent){
+  const key=String(agent||'').toLowerCase();
+  for(const [started,r] of _officeAgentRuns){if(String(r.agentId||'').toLowerCase()===key){_officeExecutionFail(started,'Ejecución reportada con error');return true;}}
+  return false;
+}
 function agentResultMeta(agentId,started,extra){
   const rec=_officeAgentRuns.get(started),executionId=rec?.executionId||'';
   return Object.assign({agentId,executionId,startedAt:new Date(started).toISOString(),elapsedMs:Math.max(0,Date.now()-started),
@@ -1700,7 +1705,7 @@ const AGENT_LOG={
   add(agent,input,output,meta){
     this._load();
     const u=typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser():null;
-    const safeMeta=meta?{agentId:meta.agentId||(typeof _agentVisualId==='function'?_agentVisualId(agent):agent),demo:!!meta.demo,model:meta.model||meta.usage?.model||'',elapsedMs:meta.elapsedMs??null,dataSource:meta.dataSource||'',subject:String(meta.subject||input||'').split('\n')[0].slice(0,120),timestamp:meta.timestamp||new Date().toISOString(),usage:meta.usage?{input_tokens:meta.usage.input_tokens||0,output_tokens:meta.usage.output_tokens||0,cache_creation_input_tokens:meta.usage.cache_creation_input_tokens||0,cache_read_input_tokens:meta.usage.cache_read_input_tokens||0,total_tokens:meta.usage.total_tokens||0,cost_usd:meta.usage.cost_usd||0}:null}:null;
+    const safeMeta=meta?{agentId:meta.agentId||(typeof _agentVisualId==='function'?_agentVisualId(agent):agent),executionId:meta.executionId||'',startedAt:meta.startedAt||'',demo:!!meta.demo,model:meta.model||meta.usage?.model||'',elapsedMs:meta.elapsedMs??null,dataSource:meta.dataSource||'',subject:String(meta.subject||input||'').split('\n')[0].slice(0,120),timestamp:meta.timestamp||new Date().toISOString(),usage:meta.usage?{input_tokens:meta.usage.input_tokens||0,output_tokens:meta.usage.output_tokens||0,cache_creation_input_tokens:meta.usage.cache_creation_input_tokens||0,cache_read_input_tokens:meta.usage.cache_read_input_tokens||0,total_tokens:meta.usage.total_tokens||0,cost_usd:meta.usage.cost_usd||0}:null}:null;
     const execId=safeMeta?.executionId||meta?.executionId||'';
     const entry={id:execId||Date.now(),executionId:execId,agent,input:(input||'').substring(0,300),output:String(output||'').substring(0,1200),time:new Date().toISOString(),user:u?.name||u?.username||'—',meta:safeMeta};
     if(execId&&meta?.elapsedMs!=null){try{_officeExecutionFinish(Number(meta.startedAt?Date.parse(meta.startedAt):0)||Array.from(_officeAgentRuns.entries()).find(([,v])=>v.executionId===execId)?.[0],output);}catch(_){}}
