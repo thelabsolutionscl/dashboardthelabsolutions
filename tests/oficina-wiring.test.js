@@ -173,8 +173,9 @@ test('feed y detalle escapan la consulta antes de mostrarla', () => {
   assert.match(feed, /substring\(0,120\)/);
   assert.match(feed, /ofFeedView/);
   const open = fn('_ofOpenRun');
-  assert.match(open, /escapeHtml\(String\(r\.input\)\)/);
-  assert.match(open, /formatAgentReport\(r\.output\)/);
+  assert.match(open, /_ofRunVisibleText\(r,false\)/);
+  assert.match(open, /escapeHtml\(input\)/);
+  assert.match(open, /formatAgentReport\(output\)/);
 });
 
 test('URLs de imágenes se restringen antes de entrar a la escena', () => {
