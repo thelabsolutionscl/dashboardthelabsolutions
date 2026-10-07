@@ -6,7 +6,7 @@ name: Automatización semanal
 #
 # Secrets que usa:
 #   AIRTABLE        (PAT de Airtable del backup, scope schema+records read)
-#   BACKUP_ENCRYPTION_KEY (mínimo 24 caracteres, distinto de las API keys)
+#   BACKUP_ENCRYPTION_KEY (mínimo 32 caracteres, distinto de las API keys)
 #   RESEND_API_KEY  (opcional; sin él no se envía el resumen)
 #   RESEND_FROM     (opcional; fallback: The Lab Solutions <hola@thelab.solutions>)
 #   REPORT_EMAIL    (opcional; sin él no se envía el resumen)
