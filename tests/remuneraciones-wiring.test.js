@@ -14,6 +14,9 @@ const MODULES = fs.existsSync(JS_DIR)
       .map(name => fs.readFileSync(path.join(JS_DIR, name), 'utf8')).join('\n')
   : '';
 const SOURCE = `${INDEX}\n${MODULES}`;
+const ENGINE = fs.readFileSync(path.join(ROOT, 'js', 'remuneraciones-engine.js'), 'utf8');
+const WORKER = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'worker.js'), 'utf8');
+const ACCESS = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'access-auth.js'), 'utf8');
 
 function esc(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -88,22 +91,66 @@ test('la liquidación y configuración de sueldo están implementadas', () => {
   assert.match(SOURCE, /function remSaveSueldos\(/);
   assert.match(SOURCE, /REM_SUELDO_KEY=['"]rem_sueldos_v1['"]/);
 });
-test.todo('centralizar y versionar la tasa de comisión por vendedor, contrato y vigencia');
-test.todo('reconocer comisión ganada con una política explícita de cobro, pago y reversas');
-test.todo('calcular neto desde datos tributarios reales y no dividiendo siempre por 1.19');
-test.todo('excluir o separar cotizaciones vencidas del pipeline potencial');
-test.todo('aplicar probabilidad, vigencia y etapa al pipeline potencial');
-test.todo('proteger remuneraciones con autorización de datos en backend, no solo filtro del navegador');
+test('centraliza y versiona la tasa por vendedor, contrato y vigencia', () => {
+  assert.match(ENGINE, /DEFAULT_RULE[\s\S]*version:1[\s\S]*rate:0\.035[\s\S]*validFrom/);
+  assert.match(ENGINE, /function resolveRule\(/);
+  assert.match(WORKER, /function sharedRemRule\(/);
+});
+test('usa estados explícitos de estimación, devengo, aprobación, pago y reversa', () => {
+  for (const status of ['estimated','accrued','approved','paid','reversed']) assert.match(ENGINE, new RegExp(status));
+  assert.match(ENGINE, /function paidRatio\(/);
+  assert.match(ENGINE, /function isReversed\(/);
+});
+test('el motor autoritativo exige base tributaria real', () => {
+  assert.match(ENGINE, /function taxNet\(/);
+  assert.match(ENGINE, /Monto neto \(CLP\)/);
+  assert.doesNotMatch(ENGINE, /\/\s*1\.19/);
+});
+test('el pipeline autoritativo excluye potencial pleno vencido', () => {
+  assert.match(ENGINE, /if\(due&&due<now\)return 0/);
+  assert.match(ENGINE, /vencidas sin potencial pleno/);
+});
+test('el pipeline aplica probabilidad por etapa y vigencia', () => {
+  assert.match(ENGINE, /solicitada[^\n]*\.35/);
+  assert.match(ENGINE, /enviada[^\n]*\.65/);
+  assert.match(ENGINE, /aprobad[^\n]*\.9/);
+});
+test('remuneraciones tienen autorización y scope por vendedor en backend', () => {
+  assert.match(ACCESS, /path==='\/shared\/remunerations'/);
+  assert.match(WORKER, /function sharedRemScope\(/);
+  assert.match(WORKER, /identity\.role!=='sales'/);
+  assert.match(WORKER, /sellerEmail/);
+});
 test('demo limita remuneraciones al vendedor ficticio y usa almacenamiento de sesión', () => {
   assert.match(SOURCE, /window\._DEMO_MODE\?personas\.filter\(p=>p\.id===['"]florencia['"]\)/);
   assert.match(SOURCE, /u\.role!==['"]demo['"]\)return vendorOwnsRecord/);
   assert.match(SOURCE, /window\._DEMO_MODE\?sessionStorage:localStorage/);
   assert.match(SOURCE, /window\._DEMO_MODE&&!sueldos\[['"]Florencia Cancino['"]\]/);
 });
-test.todo('cerrar períodos y registrar aprobaciones, ajustes, reversas y auditoría');
-test.todo('exportar CSV con escape RFC 4180, BOM UTF-8 y nombre de período/vendedor');
-test.todo('usar zona America/Santiago y una definición empresarial de inicio de semana');
-test.todo('distinguir sueldo base, comisión estimada, devengada, aprobada y pagada');
+test('períodos cerrados quedan protegidos y auditados', () => {
+  assert.match(WORKER, /REM_PERIOD_STATES/);
+  assert.match(WORKER, /function sharedRemProtected\(/);
+  assert.match(WORKER, /Closed remuneration period is immutable/);
+  assert.match(WORKER, /next\.audit=/);
+  assert.match(WORKER, /action:'reopen'/);
+});
+test('CSV autoritativo aplica RFC4180, BOM, metadatos y auditoría de exportación', () => {
+  assert.match(ENGINE, /\\uFEFF/);
+  assert.match(ENGINE, /replace\(\/"\/g,'""'\)/);
+  assert.match(ENGINE, /\['Período','Vendedor','Pedido'/);
+  assert.match(ENGINE, /shared\/remunerations\/audit/);
+});
+test('períodos usan America/Santiago y semana desde lunes', () => {
+  assert.match(ENGINE, /TZ='America\/Santiago'/);
+  assert.match(ENGINE, /function mondayKey\(/);
+  assert.match(ENGINE, /\(dow\+6\)%7/);
+});
+test('UI separa sueldo base de los estados de comisión', () => {
+  assert.match(ENGINE, /Resumen comercial auditable/);
+  assert.match(ENGINE, /no constituye una liquidación legal/);
+  assert.match(ENGINE, /baseSalaries/);
+  for (const label of ['Estimada','Devengada','Aprobada','Pagada','Revertida']) assert.match(ENGINE, new RegExp(label));
+});
 
 test('la comisión del KPI y la de Remuneraciones miden el mismo período', () => {
   // La comisión se gana al ENTREGAR. Remuneraciones (el módulo que paga) filtra
@@ -125,6 +172,7 @@ test('la comisión del KPI y la de Remuneraciones miden el mismo período', () =
     /_remPeriodo==='mes'[\s\S]{0,200}?p\.fields\['Fecha entrega'\]/,
     'Remuneraciones debe seguir filtrando el mes por Fecha entrega',
   );
-  // Misma tasa en los tres cálculos (KPI, panel y CSV).
-  assert.equal(count(/const TASA=0\.035;/g, INDEX), 3, 'la tasa de comisión debe ser única en los tres puntos');
+  // La tasa autoritativa ya no se repite en KPI/tabla/CSV: vive en una regla versionada.
+  assert.match(ENGINE, /DEFAULT_RULE[\s\S]*rate:0\.035/);
+  assert.match(SOURCE, /remuneraciones-engine\.js/);
 });
