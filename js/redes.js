@@ -1294,7 +1294,7 @@ function _nlEmailHtml(f){
 function _nlShowPreview(html){
   const m=document.getElementById('nlPreviewModal'), fr=document.getElementById('nlPreviewFrame');
   if(!m||!fr) return;
-  fr.setAttribute('sandbox','');fr.setAttribute('referrerpolicy','no-referrer');fr.srcdoc=html; m.style.display='flex';
+  fr.setAttribute('sandbox','');fr.setAttribute('referrerpolicy','no-referrer');const csp='<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:">';fr.srcdoc=String(html||'').replace(/<head>/i,'<head>'+csp); m.style.display='flex';
 }
 function nlPreview(id){
   const c=(state.nlCampaigns||[]).find(x=>x.id===id); if(!c){toast('Campaña no encontrada','error');return;}
