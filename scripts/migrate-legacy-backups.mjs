@@ -59,7 +59,7 @@ const output='backup-migrated';
 function validateEnvironment() {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error('GITHUB_REPOSITORY inválido');
   if (!token) throw new Error('Falta GITHUB_TOKEN');
-  if (!secret || secret.trim().length<24) throw new Error('Falta BACKUP_ENCRYPTION_KEY válida');
+  if (!secret || secret.trim().length<32) throw new Error('Falta BACKUP_ENCRYPTION_KEY válida');
   // Nunca aceptar un API endpoint alternativo en producción para descargar
   // datos privados o enviar el token GitHub a terceros.
   if (API!=='https://api.github.com') throw new Error('GitHub API no oficial');
