@@ -58,8 +58,8 @@ const OPERATOR_WRITE_FIELDS=Object.freeze({
     'Nombre':'text','Categoría':'choices','Contacto':'text',
     'Cargo':'text','Teléfono':'phone','Email':'email',
     'Sitio Web':'url','Comuna':'text','Región':'text',
-    'Reputación':'number','Estado':'text','Plazo de entrega (días)':'number',
-    'Productos':'notes','WhatsApp':'phone','Estado postulación':'select'
+    'Estado':'text','Plazo de entrega (días)':'number',
+    'Productos':'notes','WhatsApp':'phone'
   }),
   // Machine tables are operational, but they are no longer a generic Airtable
   // write tunnel for signed operators. Identity/config fields stay immutable.
@@ -4315,20 +4315,23 @@ function supplierPoTransitionAllowed(a,b){
   return (SUPPLIER_PO_TRANSITIONS[String(a)]||[]).includes(String(b));
 }
 async function supplierDependencies(env,supplierId){
-  const tables=[
-    ['SupplierPrices','Supplier ID'],['PurchaseOrders','Supplier ID'],
-    ['SupplierEvaluations','Supplier ID'],['Pedidos','Proveedor ID']
-  ];
-  const result={};let total=0;
-  for(const [table,field] of tables){
+  const result={SupplierPrices:0,PurchaseOrders:0,SupplierEvaluations:0,Pedidos:0,Facturas:0,Inventario:0};
+  for(const table of ['SupplierPrices','PurchaseOrders','SupplierEvaluations']){
     try{
-      const rows=await officeList(env,table,{
-        formula:"{"+field+"}='"+officeEsc(supplierId)+"'",max:5000
-      });
-      result[table]=rows.length;total+=rows.length;
-    }catch(_){result[table]=0;}
+      const rows=await officeList(env,table,{max:10000});
+      result[table]=rows.filter(r=>String(r.fields?.['Supplier ID']||'')===supplierId||
+        (Array.isArray(r.fields?.Proveedores)&&r.fields.Proveedores.includes(supplierId))).length;
+    }catch(_){}
   }
-  return{...result,total};
+  for(const table of ['Pedidos','Facturas','Inventario']){
+    try{
+      const rows=await officeList(env,table,{max:10000});
+      result[table]=rows.filter(r=>
+        Array.isArray(r.fields?.Proveedores)&&r.fields.Proveedores.includes(supplierId)
+      ).length;
+    }catch(_){}
+  }
+  return{...result,total:Object.values(result).reduce((a,b)=>a+b,0)};
 }
 async function supplierEnsureSchema(env){
   const metaUrl=AIRTABLE_BASE+'/v0/meta/bases/'+OFFICE_BASE_ID+'/tables';
