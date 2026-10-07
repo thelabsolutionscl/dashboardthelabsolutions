@@ -154,12 +154,15 @@ test('RBAC declara acceso y escritura específica para Newsletter', () => {
   assert.match(SOURCE, /marketing/);
 });
 
-test('diagnóstico: el envío directo debe crear Newsletter_Envios antes de enviar', (t) => {
-  const send = block('async function nlDestSend(', 'function _nlEstBadge');
-  if (!/_redesWrite\(['"]Newsletter_Envios['"]/.test(send)) {
-    t.todo('CRÍTICO: crear/upsert una fila por campaña+destinatario antes del envío para tracking e idempotencia');
-    return;
-  }
+test('el envío reserva Newsletter_Envios antes del transporte y omite confirmados', () => {
+  const reserve=block('async function _nlReserveEnvio(', 'async function nlDestSend');
+  const send=block('async function nlDestSend(', 'function _nlEstBadge');
+  assert.match(reserve, /Newsletter_Envios['"],['"]POST/);
+  assert.match(reserve, /Envío/);
+  assert.match(reserve, /Enviado.*Entregado.*Abierto.*Click/s);
+  assert.ok(send.indexOf('_nlReserveEnvio') < send.indexOf("MAIL.post({action:'send'"));
+  assert.match(send, /Newsletter_Envios['"],['"]PATCH/);
+  assert.match(send, /Estado:'Enviado'/);
 });
 
 test('el secreto HMAC del newsletter es obligatorio y exclusivo', () => {
@@ -170,40 +173,67 @@ test('el secreto HMAC del newsletter es obligatorio y exclusivo', () => {
   assert.match(sign, /if \(!secret\) throw new Error\(["']NEWSLETTER_SECRET no configurado["']\)/);
 });
 
-test('diagnóstico: la selección de destinatarios debe persistir junto a la campaña', (t) => {
-  const save = block('function nlDestSave(', 'async function nlDestSend');
-  if (/localStorage\.setItem/.test(save) && !/Newsletter_Campañas/.test(save)) {
-    t.todo('guardar segmento, exclusiones, extras y noResend en backend/versionados por campaña');
-    return;
-  }
+test('la selección de destinatarios se versiona en Newsletter_Campañas', () => {
+  const save=block('async function nlDestSave(', 'function _nlEnvioKey');
+  assert.doesNotMatch(save,/localStorage\.setItem/);
+  assert.match(save,/Newsletter_Campañas['"],['"]PATCH/);
+  assert.match(save,/AUDIENCIA NEWSLETTER/);
+  assert.match(save,/savedAt/);
+  assert.match(save,/savedBy/);
+  assert.match(save,/exclude/);
+  assert.match(save,/extra/);
+  assert.match(save,/noResend/);
 });
 
-test('diagnóstico: el filtro anti-reenvío debe cubrir también envíos directos', (t) => {
-  const recent = block('function _nlRecentRecipients(', '// ── (1) Analítica');
-  const send = block('async function nlDestSend(', 'function _nlEstBadge');
-  if (/state\.nlEnvios/.test(recent) && !/Newsletter_Envios/.test(send)) {
-    t.todo('hoy noResend consulta Newsletter_Envios, pero nlDestSend no registra allí sus envíos');
-    return;
-  }
+test('el filtro anti-reenvío cubre envíos directos trazados', () => {
+  const recent=block('function _nlRecentRecipients(', '// ── (1) Analítica');
+  const send=block('async function nlDestSend(', 'function _nlEstBadge');
+  assert.match(recent,/state\.nlEnvios/);
+  assert.match(send,/_nlReserveEnvio/);
+  assert.match(send,/Newsletter_Envios/);
 });
 
-test('diagnóstico: una campaña parcial no debe cerrarse silenciosamente como enviada', (t) => {
-  const send = block('async function nlDestSend(', 'function _nlEstBadge');
-  if (/fail\+\+/.test(send) && /Estado['"]?:['"]Enviada['"]/.test(send) && /catch\(_\)\{\}/.test(send)) {
-    t.todo('mantener estado Parcial/Error, detalle por destinatario y reanudación idempotente; no silenciar el PATCH final');
-    return;
-  }
+test('una campaña parcial queda pausada y conserva errores por destinatario', () => {
+  const send=block('async function nlDestSend(', 'function _nlEstBadge');
+  assert.match(send,/finalState=fail\?['"]Pausada['"]:['"]Enviada['"]/);
+  assert.match(send,/ERROR transporte/);
+  assert.match(send,/no se pudo cerrar la campaña/);
+  assert.doesNotMatch(send,/catch\(_\)\{\}\s*toast/);
 });
 
 test.todo('cada envío debe llevar enlace de baja firmado y personalizado, no solo un mailto genérico');
 test.todo('agregar headers List-Unsubscribe y List-Unsubscribe-Post para clientes compatibles');
-test.todo('los emails extra no deben saltarse el consentimiento: exigir opt-in registrado o flujo de confirmación');
-test.todo('marcar Enviada manualmente debe requerir evidencia de envío o quedar como cierre administrativo diferenciado');
+test('los emails extra exigen opt-in vigente en Clientes',()=>{
+  const add=block('function nlDestAddExtra(', 'function nlDestRemoveExtra');
+  assert.match(add,/Suscrito newsletter/);
+  assert.match(add,/Baja newsletter/);
+  assert.match(add,/Email válido/);
+  assert.match(add,/state\.clientes/);
+});
+test('Enviada no puede marcarse manualmente sin evidencia de transporte',()=>{
+  const set=block('async function nlSetEstado(', '// Modal date-picker');
+  assert.match(set,/estado===['"]Enviada['"]/);
+  assert.match(set,/solo lo establece un transporte con evidencia/);
+  assert.match(REDES,/Cerrar administrativamente/);
+});
 test.todo('el tracking debe correlacionar por id/tag de Newsletter_Envios, nunca solo por email');
 test.todo('un clic de baja, privacidad o recursos técnicos no debe convertir al destinatario en lead caliente');
 test.todo('rebotes y quejas deben suprimir automáticamente futuros envíos y actualizar Email válido/Baja');
 test.todo('la programación debe incluir hora, zona America/Santiago, lease y lock para impedir dos workers enviando la misma campaña');
-test.todo('el endpoint de baja no debe mutar por GET rastreable sin protección contra scanners; usar token opaco y one-click POST compatible');
-test.todo('la vista previa HTML debe usar iframe sandbox sin scripts y bloquear recursos remotos por defecto');
+test('la baja GET no muta y POST exige token firmado',()=>{
+  const unsub=block('async function handleNewsletterUnsubscribe(', '/* ── Newsletter: helpers', WORKER);
+  assert.match(unsub,/request\.method===["']GET["']/);
+  assert.match(unsub,/request\.method===["']POST["']/);
+  assert.match(unsub,/nlVerify\(env, ["']unsubscribe["']/);
+  const getAt=unsub.indexOf('request.method==="GET"');
+  const updateAt=unsub.indexOf('airtableUpdateTolerant');
+  assert.ok(getAt>=0&&updateAt>getAt);
+  assert.match(unsub,/<form method="post"/);
+});
+test('la vista previa usa iframe sandbox y no envía referrer',()=>{
+  const preview=block('function _nlShowPreview(', 'function nlPreview');
+  assert.match(preview,/setAttribute\(['"]sandbox['"],['"]['"]\)/);
+  assert.match(preview,/referrerpolicy/);
+});
 test.todo('la gestión manual de suscriptores debe conservar fuente, fecha y evidencia del consentimiento');
 test.todo('documentación y UI deben declarar una sola ruta autoritativa de envío: dashboard o Make, no ambas sin conciliación');
