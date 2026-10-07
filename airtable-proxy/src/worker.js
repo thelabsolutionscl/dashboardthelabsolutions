@@ -4381,6 +4381,47 @@ export default {
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
 
+    if(url.pathname==='/suppliers/bootstrap'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||authorized.identity.role!=='admin')return json({error:'Admin required'},403,headers);
+      try{
+        const out=await supplierEnsureSchema(env);
+        try{await officeAudit(env,authorized.identity,'bootstrap','suppliers','schema','Supplier schema ensured');}catch(_){}
+        return json(out,200,headers);
+      }catch(e){return json({error:'Supplier schema bootstrap failed',detail:String(e?.message||e).slice(0,300)},503,headers);}
+    }
+    if(url.pathname==='/suppliers/snapshot'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity)return json({error:'Cloudflare Access required'},401,headers);
+      try{return json(await supplierSnapshot(env),200,headers);}
+      catch(e){return json({error:'Supplier snapshot unavailable',detail:String(e?.message||e).slice(0,300)},503,headers);}
+    }
+    if(url.pathname==='/suppliers/mutate'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,headers);
+      if(!authorized.identity||!env.CRM_MUTATION_GUARD)return json({error:'Supplier mutation unavailable'},503,headers);
+      let body;try{const raw=await request.text();if(raw.length>500000)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid supplier mutation'},422,headers);}
+      if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'Invalid supplier mutation'},422,headers);
+      const mutationId=String(body.mutationId||'');
+      if(!/^[A-Za-z0-9._:-]{12,160}$/.test(mutationId))return json({error:'mutationId required'},422,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-supplier-ops'));
+        const guarded=await stub.fetch('https://crm-write.internal/supplier-ops',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...body,actor:{email:authorized.identity.email,role:authorized.identity.role}})
+        });
+        const outHeaders=new Headers(guarded.headers);Object.entries(headers).forEach(([k,v])=>outHeaders.set(k,v));
+        if(guarded.ok){
+          try{await officeAudit(env,authorized.identity,'supplier:'+String(body.op||''),'suppliers',mutationId,
+            'Mutación auditable de proveedores');}catch(_){}
+        }
+        return new Response(guarded.body,{status:guarded.status,headers:outHeaders});
+      }catch(_){return json({error:'Supplier mutation guard unavailable'},503,headers);}
+    }
+
     if(url.pathname==='/office/snapshot'){
       const headers={...CORS,'Cache-Control':'private, no-store'};
       if(request.method!=='GET')return json({error:'Method not allowed'},405,headers);
