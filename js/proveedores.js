@@ -1252,7 +1252,8 @@ function _ocDocumentHtml(oc){
 }
 function generarOCPDF(id){
   const oc=_ocAll().find(x=>x.id===id);if(!oc){toast('OC no encontrada','error');return;}
-  const win=window.open('','_blank','noopener,noreferrer');
+  const win=window.open('','_blank');
+  if(win)try{win.opener=null;}catch(_){}
   if(!win){toast('El navegador bloqueó la ventana del documento','error');return;}
   win.document.open();win.document.write(_ocDocumentHtml(oc));win.document.close();
 }
@@ -1269,7 +1270,7 @@ async function enviarOC(id){
     MAIL.init();
     MAIL.openCompose({title:'Enviar orden de compra',to:email,
       subject:`Orden de compra ${oc.numero} — The Lab Solutions`,body,
-      _supplierPoId:id,_supplierPoNumber:oc.numero});
+      _supplierPoId:id,_supplierPoNumber:oc.numero,_idempotencyKey:'supplier-po-'+id});
   },150);
 }
 async function supplierPoMarkSent(id,to,providerId){
