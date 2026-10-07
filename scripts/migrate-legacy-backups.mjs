@@ -22,7 +22,7 @@ export function isLegacyArtifact(a) {
   return a && a.expired === false && Number.isSafeInteger(a.id) && LEGACY_NAME.test(String(a.name));
 }
 export function encryptLegacy(original, passphrase, artifact) {
-  if (!passphrase || passphrase.length < 24) throw new Error('BACKUP_ENCRYPTION_KEY inválida');
+  if (!passphrase || passphrase.length < 32) throw new Error('BACKUP_ENCRYPTION_KEY inválida');
   const payload = JSON.parse(Buffer.isBuffer(original) ? original.toString('utf8') : String(original));
   if (!payload || !payload.tablas || typeof payload.tablas !== 'object' ||
       Array.isArray(payload.tablas) || !Object.keys(payload.tablas).length ||
