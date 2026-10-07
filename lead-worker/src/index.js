@@ -139,8 +139,12 @@ export default {
         return await handleNewsletterConfirm(request, env);
       }
 
-      if (request.method === "GET" && url.pathname === "/newsletter/unsubscribe") {
+      if ((request.method === "GET" || request.method === "POST") && url.pathname === "/newsletter/unsubscribe") {
         return await handleNewsletterUnsubscribe(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/newsletter/resend-webhook") {
+        return await handleNewsletterResendWebhook(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/webhooks/google-ads") {
@@ -1614,17 +1618,112 @@ async function handleNewsletterConfirm(request, env) {
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleNewsletterUnsubscribe(request, env) {
   const url = new URL(request.url);
-  const email = str(url.searchParams.get("e"));
-  if (!email) return htmlPage("Enlace inválido", "Falta el correo en el enlace de baja.", false);
+  let email="",token="";
+  if(request.method==="POST"){
+    const type=String(request.headers.get("Content-Type")||"");
+    if(type.includes("application/x-www-form-urlencoded")){
+      const raw=await request.text(),form=new URLSearchParams(raw);email=str(form.get("e"));token=str(form.get("t"));
+    }else{
+      const body=await readJson(request);email=str(body?.e||body?.email);token=str(body?.t||body?.token);
+    }
+  }else{
+    email=str(url.searchParams.get("e"));token=str(url.searchParams.get("t"));
+  }
+  if (!email || !(await nlVerify(env, "unsubscribe", email, token))) {
+    return htmlPage("Enlace inválido", "La baja requiere un enlace personal válido.", false, 400);
+  }
+  if(request.method==="GET"){
+    const action=escapeHtmlW(url.origin+"/newsletter/unsubscribe");
+    const e=escapeHtmlW(email),t=escapeHtmlW(token);
+    const page=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirmar baja — The Lab Solutions</title></head><body style="margin:0;background:#0b0b0c;color:#e8e8ea;font-family:system-ui,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center"><main style="max-width:460px;padding:40px 28px;text-align:center">${logoHeader(true)}<h1 style="font-size:22px">Confirmar baja</h1><p style="color:#b6b6bd">Abrir este enlace no modifica tu suscripción. Confirma para dejar de recibir el newsletter.</p><form method="post" action="${action}"><input type="hidden" name="e" value="${e}"><input type="hidden" name="t" value="${t}"><button type="submit" style="border:0;border-radius:9px;background:#00b3a4;color:#06231f;font-weight:700;padding:12px 20px;cursor:pointer">Darme de baja</button></form></main></body></html>`;
+    return new Response(page,{status:200,headers:{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
+  }
   if (env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
     try {
       const id = await airtableFindCliente(env, { email });
       if (id) await airtableUpdateTolerant(env, "Clientes", id, stripEmpty({ "Baja newsletter": true, "Suscrito newsletter": false }));
     } catch (e) {
       console.error("[leads-worker] unsubscribe:", e.message);
+      return htmlPage("No pudimos procesar la baja", "Inténtalo nuevamente. Tu suscripción no se modificó.", false, 503);
     }
   }
   return htmlPage("Te diste de baja", "Ya no recibirás más correos del newsletter. Si fue un error, puedes volver a suscribirte en thelab.solutions.", true);
+}
+
+async function newsletterVerifyResendWebhook(request, raw, env) {
+  const secret=String(env.RESEND_WEBHOOK_SECRET||'').trim();
+  const id=String(request.headers.get('svix-id')||''),ts=String(request.headers.get('svix-timestamp')||'');
+  const sig=String(request.headers.get('svix-signature')||'');
+  if(!secret||!id||!/^\d{10,13}$/.test(ts)||!sig)return false;
+  const sec=Number(ts.length>10?ts.slice(0,10):ts);
+  if(!Number.isFinite(sec)||Math.abs(Math.floor(Date.now()/1000)-sec)>300)return false;
+  let keyRaw;
+  try{
+    const encoded=secret.startsWith('whsec_')?secret.slice(6):secret;
+    const bin=atob(encoded.replace(/-/g,'+').replace(/_/g,'/'));keyRaw=Uint8Array.from(bin,c=>c.charCodeAt(0));
+  }catch(_){return false;}
+  const key=await crypto.subtle.importKey('raw',keyRaw,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const out=new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(id+'.'+ts+'.'+raw)));
+  let bin='';for(const b of out)bin+=String.fromCharCode(b);
+  const expected=btoa(bin);
+  return sig.split(/\s+/).some(part=>part.startsWith('v1,')&&timingSafeEqual(part.slice(3),expected));
+}
+function newsletterTags(data){
+  if(data?.tags&&typeof data.tags==='object'&&!Array.isArray(data.tags))return data.tags;
+  const out={};for(const t of Array.isArray(data?.tags)?data.tags:[])if(t?.name)out[t.name]=String(t.value||'');
+  return out;
+}
+function newsletterClickUrl(data){
+  return str(data?.click?.link||data?.click?.url||data?.link||data?.url||'');
+}
+function newsletterCommercialClick(url){
+  if(!/^https:\/\//i.test(url))return false;
+  try{
+    const u=new URL(url),p=(u.pathname+' '+u.search).toLowerCase();
+    if(/newsletter\/unsubscribe|unsubscribe|privacidad|privacy|preferencias|preferences/.test(p))return false;
+    return true;
+  }catch(_){return false;}
+}
+async function handleNewsletterResendWebhook(request, env) {
+  if(!env.AIRTABLE_TOKEN||!env.AIRTABLE_BASE_ID||!env.RESEND_WEBHOOK_SECRET)
+    return json({ok:false,error:'Newsletter webhook no configurado'},503,{});
+  const raw=await request.text();
+  if(raw.length>250000||!(await newsletterVerifyResendWebhook(request,raw,env)))
+    return json({ok:false,error:'Firma webhook inválida'},401,{});
+  let ev;try{ev=JSON.parse(raw);}catch(_){return json({ok:false,error:'JSON inválido'},400,{});}
+  const eventId=String(request.headers.get('svix-id')||'');
+  if(env.RL&&eventId){
+    const k='resend:webhook:'+eventId;
+    if(await env.RL.get(k))return json({ok:true,duplicate:true},200,{});
+    await env.RL.put(k,'1',{expirationTtl:7*86400});
+  }
+  const tags=newsletterTags(ev.data),envioId=String(tags.envio_id||'');
+  if(!/^rec[A-Za-z0-9]{14}$/.test(envioId))return json({ok:true,ignored:'missing_envio_id'},200,{});
+  const H={Authorization:'Bearer '+env.AIRTABLE_TOKEN};
+  const recordUrl=`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent('Newsletter_Envios')}/${envioId}`;
+  const rr=await fetch(recordUrl,{headers:H});
+  if(!rr.ok)return json({ok:false,error:'Envío no encontrado'},rr.status===404?404:503,{});
+  const envio=await rr.json(),f=envio.fields||{},type=String(ev.type||''),when=str(ev.created_at)||new Date().toISOString();
+  const patch={};
+  if(type==='email.delivered')patch.Estado='Entregado';
+  else if(type==='email.opened'){patch.Estado='Abierto';patch['Fecha apertura']=when;}
+  else if(type==='email.clicked'){
+    const link=newsletterClickUrl(ev.data),commercial=newsletterCommercialClick(link);
+    patch.Notas=(String(f.Notas||'')+'\n[CLICK] '+(link||'URL no informada')+(commercial?' · comercial':' · técnico/no clasificable')).slice(-95000);
+    if(commercial){patch.Estado='Click';patch['Fecha click']=when;patch['Lead caliente']=true;}
+  }else if(type==='email.bounced'||type==='email.suppressed'){
+    patch.Estado='Rebote';patch.Notas=(String(f.Notas||'')+'\n['+type+'] '+when).slice(-95000);
+  }else if(type==='email.complained'){
+    patch.Estado='Spam';patch.Notas=(String(f.Notas||'')+'\n[COMPLAINT] '+when).slice(-95000);
+  }else return json({ok:true,ignored:type||'unknown'},200,{});
+  if(Object.keys(patch).length)await airtableUpdateTolerant(env,'Newsletter_Envios',envioId,patch);
+  if((type==='email.bounced'||type==='email.suppressed'||type==='email.complained')&&Array.isArray(f.Cliente)&&f.Cliente[0]){
+    const cf=type==='email.complained'
+      ?{'Baja newsletter':true,'Suscrito newsletter':false}
+      :{'Email válido':false,'Suscrito newsletter':false};
+    await airtableUpdateTolerant(env,'Clientes',f.Cliente[0],cf);
+  }
+  return json({ok:true,event:type,envioId},200,{});
 }
 
 /* ── Newsletter: helpers de token HMAC (sin estado), página HTML y email ── */

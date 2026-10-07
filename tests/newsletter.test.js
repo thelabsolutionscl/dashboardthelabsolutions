@@ -124,13 +124,12 @@ test('las entradas de más de 60 días se podan al registrar', () => {
 
 // ── El envío registra, la prueba no ─────────────────────────────────────
 
-test('nlDestSend registra a quién le llegó', () => {
+test('nlDestSend delega el envío al transporte autoritativo', () => {
   const fn = bloque('async function nlDestSend(');
-  assert.match(fn, /const enviados=\[\]/);
-  assert.match(fn, /enviados\.push\(list\[i\]\.email\)/, 'solo los que salieron OK');
-  assert.match(fn, /_nlRecordSent\(enviados\)/);
-  // El push va dentro de la rama de éxito, no en el fallo.
-  assert.match(fn, /if\(r&&!r\.error\)\{ok\+\+;enviados\.push/);
+  assert.match(fn, /\/newsletter\/send/);
+  assert.match(fn, /campaignId:c\.id/);
+  assert.match(fn, /credentials:'include'/);
+  assert.doesNotMatch(fn, /MAIL\.post|enviados\.push|_nlRecordSent/);
 });
 
 test('el envío de PRUEBA no ensucia el registro', () => {

@@ -8,8 +8,11 @@ on:
       - 'js/redes.js'
       - 'js/correo.js'
       - 'lead-worker/src/index.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'docs/NEWSLETTER.md'
       - 'tests/newsletter-wiring.test.js'
+      - 'tests/access-newsletter-send.test.js'
       - 'tests/correo-wiring.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/newsletter-audit.yml'
@@ -19,8 +22,11 @@ on:
       - 'js/redes.js'
       - 'js/correo.js'
       - 'lead-worker/src/index.js'
+      - 'airtable-proxy/src/worker.js'
+      - 'airtable-proxy/src/access-auth.js'
       - 'docs/NEWSLETTER.md'
       - 'tests/newsletter-wiring.test.js'
+      - 'tests/access-newsletter-send.test.js'
       - 'tests/correo-wiring.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/newsletter-audit.yml'
@@ -50,9 +56,14 @@ jobs:
           node --check js/redes.js
           node --check js/correo.js
           node --check lead-worker/src/index.js
+          node --check airtable-proxy/src/worker.js
+          node --check airtable-proxy/src/access-auth.js
 
       - name: Audit newsletter wiring and consent
         run: node --test tests/newsletter-wiring.test.js
+
+      - name: Audit newsletter concurrency and server transport
+        run: node --test tests/access-newsletter-send.test.js
 
       - name: Audit mail transport dependency
         run: |

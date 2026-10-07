@@ -103,3 +103,9 @@ id = "c148848321344f60939fa71a51d050c6"
 #   WA_VERIFY_TOKEN         (WhatsApp Meta — texto al azar que se repite al configurar el webhook)
 #   WA_NOTIFY_KEY           (avisos WhatsApp — clave de /notify/printer y /notify/test;
 #                            el mismo valor va en PRINT_NOTIFY_KEY del farm-controller)
+
+# Newsletter tracking Resend (secretos, configurar con wrangler secret put):
+#   NEWSLETTER_SECRET       HMAC compartido con airtable-proxy para confirmación/baja
+#   RESEND_API_KEY          doble opt-in del formulario web
+#   RESEND_WEBHOOK_SECRET   firma whsec_... del webhook /newsletter/resend-webhook
+# El envío masivo NO vive en este Worker; lo ejecuta airtable-proxy /newsletter/send.

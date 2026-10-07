@@ -2391,7 +2391,8 @@ export class CrmMutationGuard {
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
                   ?this._handleSharedFinance(request):path==='/visual-ai-guard'
-                    ?this._handleVisualAiGuard(request):path==='/scoped-patch'
+                    ?this._handleVisualAiGuard(request):path==='/newsletter-send'
+                      ?this._handleNewsletterSend(request):path==='/scoped-patch'
                   ?this._handleScopedPatch(request):this._handle(request));
     this._queue = run.catch(() => {});
     return run;
@@ -2729,6 +2730,142 @@ export class CrmMutationGuard {
       revisions:Object.fromEntries(Object.entries(verified.revisions).filter(([name])=>wanted.has(name)))},200);
   }
 
+
+  async _handleNewsletterSend(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN||!this.env.RESEND_API_KEY||
+       !this.env.NEWSLETTER_SECRET||!this.env.NEWSLETTER_UNSUBSCRIBE_BASE)
+      return this._json({error:'Newsletter transport unavailable'},503);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid newsletter send request'},422);}
+    if(!p?.actor||p.actor.role!=='admin'||
+       typeof p.campaignId!=='string'||!/^rec[A-Za-z0-9]{14}$/.test(p.campaignId))
+      return this._json({error:'Newsletter send denied'},403);
+    const lockKey='newsletter-lock:'+p.campaignId,now=Date.now(),lease=await this.state.storage.get(lockKey);
+    if(lease&&Number(lease)>now)return this._json({error:'Newsletter campaign already sending',code:'NEWSLETTER_LOCKED'},409);
+    await this.state.storage.put(lockKey,now+10*60*1000);
+    const H={Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,Accept:'application/json'};
+    const j=async r=>{let d={};try{d=await r.json();}catch(_){}return d;};
+    try{
+      const base=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/';
+      const campRes=await fetch(base+encodeURIComponent('Newsletter_Campañas')+'/'+p.campaignId,{headers:H,redirect:'manual'});
+      if(!campRes.ok)return this._json({error:'Campaign unavailable'},campRes.status===404?404:503);
+      const camp=await j(campRes),f=camp.fields||{},notes=String(f.Notas||'');
+      const match=notes.match(/(?:^|\n)\[AUDIENCIA NEWSLETTER\]\s*(\{[^\n]*\})/);
+      let snapshot;try{snapshot=match?JSON.parse(match[1]):null;}catch(_){}
+      if(!snapshot||snapshot.version!==1||!Array.isArray(snapshot.approved)||snapshot.approved.length<1||snapshot.approved.length>500)
+        return this._json({error:'Campaign has no approved audience snapshot',code:'AUDIENCE_NOT_APPROVED'},409);
+      const scheduleMatch=notes.match(/(?:^|\n)\[PROGRAMACION NEWSLETTER\]\s*(\{[^\n]*\})/);
+      let schedule;try{schedule=scheduleMatch?JSON.parse(scheduleMatch[1]):null;}catch(_){}
+      if(schedule){
+        if(schedule.zone!=='America/Santiago'||typeof schedule.local!=='string'||
+           !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/.test(schedule.local))
+          return this._json({error:'Invalid newsletter schedule',code:'NEWSLETTER_SCHEDULE_INVALID'},422);
+        const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',
+          day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+        const val=t=>parts.find(x=>x.type===t)?.value||'';
+        const localNow=val('year')+'-'+val('month')+'-'+val('day')+'T'+val('hour')+':'+val('minute');
+        if(localNow<schedule.local)return this._json({error:'Newsletter campaign is not due yet',
+          code:'NEWSLETTER_NOT_DUE',scheduled_local:schedule.local,zone:schedule.zone},409);
+      }
+      const subject=String(f.Asunto||f.Campaña||'Newsletter').slice(0,200);
+      const baseHtml=String(f['Cuerpo HTML']||'');
+      if(!baseHtml||baseHtml.length>100000)return this._json({error:'Campaign HTML missing or too large'},422);
+
+      let allEnvios=[],offset='';
+      do{
+        const q=new URLSearchParams({pageSize:'100'});
+        for(const fld of ['Envío','Campaña','Cliente','Email','Estado','Notas'])q.append('fields[]',fld);
+        if(offset)q.set('offset',offset);
+        const rr=await fetch(base+encodeURIComponent('Newsletter_Envios')+'?'+q,{headers:H,redirect:'manual'});
+        if(!rr.ok)return this._json({error:'Newsletter send ledger unavailable'},503);
+        const dd=await j(rr);allEnvios.push(...(dd.records||[]));offset=dd.offset||'';
+      }while(offset&&allEnvios.length<2000);
+
+      const terminal=new Set(['Enviado','Entregado','Abierto','Click']);
+      const suppressedStates=new Set(['Rebote','Baja','Spam']);
+      const suppressedEmails=new Set(allEnvios.filter(r=>suppressedStates.has(r.fields?.Estado))
+        .map(r=>String(r.fields?.Email||'').trim().toLowerCase()).filter(Boolean));
+      let sent=0,skipped=0,failed=0,suppressed=0;
+      const results=[];
+      for(const item of snapshot.approved){
+        const clientId=String(item?.id||''),approvedEmail=String(item?.email||'').trim().toLowerCase();
+        if(!/^rec[A-Za-z0-9]{14}$/.test(clientId)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(approvedEmail)){
+          failed++;results.push({email:approvedEmail,status:'invalid-approved-entry'});continue;
+        }
+        const cr=await fetch(base+encodeURIComponent('Clientes')+'/'+clientId+'?'+new URLSearchParams([
+          ['fields[]','Email'],['fields[]','Suscrito newsletter'],['fields[]','Baja newsletter'],
+          ['fields[]','Email válido'],['fields[]','Industria / Rubro']
+        ]),{headers:H,redirect:'manual'});
+        if(!cr.ok){failed++;results.push({email:approvedEmail,status:'client-unavailable'});continue;}
+        const client=await j(cr),cf=client.fields||{},email=String(cf.Email||'').trim().toLowerCase();
+        if(email!==approvedEmail||cf['Suscrito newsletter']!==true||cf['Baja newsletter']===true||
+           cf['Email válido']!==true||suppressedEmails.has(email)){
+          suppressed++;results.push({email:approvedEmail,status:'suppressed'});continue;
+        }
+        const key=p.campaignId+'_'+clientId;
+        let envio=allEnvios.find(r=>String(r.fields?.['Envío']||'')===key);
+        if(envio&&terminal.has(envio.fields?.Estado)){skipped++;results.push({email,status:'already-sent',id:envio.id});continue;}
+        if(!envio){
+          const create=await fetch(base+encodeURIComponent('Newsletter_Envios'),{
+            method:'POST',headers:{...H,'Content-Type':'application/json'},redirect:'manual',
+            body:JSON.stringify({fields:{'Envío':key,'Campaña':[p.campaignId],'Cliente':[clientId],
+              'Email':email,'Rubro':String(cf['Industria / Rubro']||''),'Notas':'Reservado por transporte autoritativo'}})
+          });
+          if(!create.ok){failed++;results.push({email,status:'reserve-failed'});continue;}
+          envio=await j(create);allEnvios.push(envio);
+        }
+        const enc=new TextEncoder(),secret=enc.encode(String(this.env.NEWSLETTER_SECRET));
+        const hk=await crypto.subtle.importKey('raw',secret,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+        const sig=new Uint8Array(await crypto.subtle.sign('HMAC',hk,enc.encode('unsubscribe:'+email)));
+        let token='';for(const b of sig)token+=String.fromCharCode(b);
+        token=btoa(token).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        const unsub=String(this.env.NEWSLETTER_UNSUBSCRIBE_BASE).replace(/\/$/,'')+
+          '/newsletter/unsubscribe?e='+encodeURIComponent(email)+'&t='+encodeURIComponent(token);
+        let html=baseHtml.replace(/mailto:hola@thelab\.solutions\?subject=BAJA%20newsletter/gi,unsub);
+        if(html===baseHtml)html=baseHtml.replace(/<\/body>/i,
+          '<p style="font-size:11px"><a href="'+unsub+'">Darme de baja</a></p></body>');
+        const payload={from:String(this.env.RESEND_FROM||'The Lab Solutions <hola@thelab.solutions>'),
+          to:[email],subject,html,
+          headers:{'List-Unsubscribe':'<'+unsub+'>','List-Unsubscribe-Post':'List-Unsubscribe=One-Click'},
+          tags:[{name:'envio_id',value:String(envio.id)},{name:'campaign_id',value:p.campaignId}]};
+        let rr;
+        try{rr=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'manual',
+          headers:{Authorization:'Bearer '+this.env.RESEND_API_KEY,'Content-Type':'application/json',
+            'Idempotency-Key':'newsletter/'+envio.id},
+          body:JSON.stringify(payload)});}
+        catch(_){
+          failed++;await fetch(base+encodeURIComponent('Newsletter_Envios')+'/'+envio.id,{
+            method:'PATCH',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({fields:{
+              'Notas':'PENDING_RECONCILIATION · idempotency newsletter/'+envio.id}})}).catch(()=>{});
+          results.push({email,status:'uncertain',id:envio.id});continue;
+        }
+        const rd=await j(rr);
+        if(!rr.ok){
+          failed++;await fetch(base+encodeURIComponent('Newsletter_Envios')+'/'+envio.id,{
+            method:'PATCH',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify({fields:{
+              'Notas':('ERROR Resend '+rr.status+' '+String(rd?.message||rd?.error||'')).slice(0,900)}})}).catch(()=>{});
+          results.push({email,status:'rejected',id:envio.id});continue;
+        }
+        const patch={Estado:'Enviado','Fecha envío':new Date().toISOString(),
+          'Notas':('resend_id='+String(rd?.id||'')+' · idempotency=newsletter/'+envio.id).slice(0,900)};
+        const pr=await fetch(base+encodeURIComponent('Newsletter_Envios')+'/'+envio.id,{
+          method:'PATCH',headers:{...H,'Content-Type':'application/json'},redirect:'manual',
+          body:JSON.stringify({fields:patch})});
+        if(!pr.ok){failed++;results.push({email,status:'sent-ledger-uncertain',id:envio.id});continue;}
+        sent++;results.push({email,status:'sent',id:envio.id,resendId:String(rd?.id||'')});
+      }
+      const finalState=(failed||suppressed)?'Pausada':'Enviada';
+      const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      const campaignPatch={'Estado':finalState,'Enviados':sent+skipped,'Fecha envío':f['Fecha envío']||day,
+        'Notas':(notes+'\n[TRANSPORTE NEWSLETTER] '+JSON.stringify({at:new Date().toISOString(),sent,skipped,failed,suppressed})).slice(-95000)};
+      const cp=await fetch(base+encodeURIComponent('Newsletter_Campañas')+'/'+p.campaignId,{
+        method:'PATCH',headers:{...H,'Content-Type':'application/json'},redirect:'manual',
+        body:JSON.stringify({fields:campaignPatch})});
+      if(!cp.ok)return this._json({error:'Emails processed but campaign close is uncertain',
+        code:'NEWSLETTER_CLOSE_UNCERTAIN',sent,skipped,failed,suppressed,results},503);
+      return this._json({ok:failed===0&&suppressed===0,state:finalState,sent,skipped,failed,suppressed,results},
+        failed||suppressed?207:200);
+    }finally{await this.state.storage.delete(lockKey);}
+  }
 
   async _handleVisualAiGuard(request){
     if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
@@ -3413,7 +3550,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -3426,6 +3563,32 @@ export default {
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
     }
+    if(url.pathname==='/newsletter/send'){
+      const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search)return json({error:'Newsletter query parameters not allowed'},422,scopedHeaders);
+      if(request.method!=='POST')return json({error:'Method not allowed'},405,scopedHeaders);
+      if(!authorized.identity)return json({error:'Newsletter send requires Cloudflare Access'},503,scopedHeaders);
+      if(authorized.identity.role!=='admin')return json({error:'Newsletter send role denied'},403,scopedHeaders);
+      if(!/^application\/json(?:;|$)/i.test(String(request.headers.get('Content-Type')||''))||
+         Number(request.headers.get('Content-Length')||0)>2000)
+        return json({error:'Newsletter send expects bounded JSON'},415,scopedHeaders);
+      let body;try{body=JSON.parse(await request.text());}catch(_){return json({error:'Invalid newsletter send JSON'},422,scopedHeaders);}
+      if(!body||Object.keys(body).some(k=>k!=='campaignId')||typeof body.campaignId!=='string'||
+         !/^rec[A-Za-z0-9]{14}$/.test(body.campaignId))
+        return json({error:'Invalid newsletter campaign'},422,scopedHeaders);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Newsletter send guard unavailable'},503,scopedHeaders);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-newsletter-send'));
+        const guarded=await stub.fetch('https://crm-write.internal/newsletter-send',{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+            campaignId:body.campaignId,actor:{email:authorized.identity.email,role:authorized.identity.role}
+          })
+        });
+        const headers=new Headers(guarded.headers);Object.entries(scopedHeaders).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Newsletter send guard unavailable'},503,scopedHeaders);}
+    }
+
     if(url.pathname==='/visual-ai/rpc'){
       const headers={...CORS,'Cache-Control':'private, no-store'};
       if(!authorized.identity||!visualAiActorAllowed(authorized.identity))

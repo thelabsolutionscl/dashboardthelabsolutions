@@ -13,6 +13,10 @@ compatibility_date = "2024-09-01"
 #   wrangler secret put APP_KEY           ← passphrase que elijas (mínimo 20 chars)
 #   wrangler secret put ADS_MAKE_SHELL_URL ← webhook Make para crear cascarones Ads
 #   wrangler secret put ADS_MAKE_SHELL_KEY ← clave privada del webhook Ads
+#   wrangler secret put RESEND_API_KEY       ← transporte Newsletter server-side
+#   wrangler secret put NEWSLETTER_SECRET    ← HMAC de bajas (mismo valor que lead-worker)
+#   wrangler secret put NEWSLETTER_UNSUBSCRIBE_BASE ← origen HTTPS público del lead-worker
+#   wrangler secret put RESEND_FROM          ← opcional; remitente verificado
 #
 # Deploy:
 #   cd airtable-proxy && npx wrangler deploy

@@ -1,5 +1,49 @@
 # Auditoría de NEWSLETTER
 
+## Actualización 2026-10-06 — cierre funcional de #103
+
+La arquitectura observada en agosto fue reemplazada por una ruta autoritativa y trazable.
+
+### Transporte
+
+- El navegador **ya no envía campañas reales con `MAIL.post`**. Solo aprueba la audiencia y dispara `POST /newsletter/send`.
+- `/newsletter/send` vive en el proxy autenticado y exige **Cloudflare Access + rol admin**.
+- El Durable Object `tls-newsletter-send` serializa la campaña y aplica lease/lock.
+- La audiencia aprobada se congela en `Newsletter_Campañas.Notas` como `[AUDIENCIA NEWSLETTER]`; el servidor revalida cada Cliente justo antes del envío.
+- Antes de Resend se crea/reserva `Newsletter_Envios` con clave estable `campaña + cliente`.
+- Resend recibe `Idempotency-Key: newsletter/<Newsletter_Envios id>`, tag `envio_id`, baja individual firmada y headers `List-Unsubscribe`.
+- Reintentos omiten estados terminales; resultados inciertos quedan `PENDING_RECONCILIATION`; campañas parciales quedan `Pausada`, nunca falsamente `Enviada`.
+- Rebote, baja y spam forman lista de supresión obligatoria para el siguiente lote.
+
+### Consentimiento y baja
+
+- Los emails puntuales solo pueden corresponder a un Cliente con opt-in vigente y email válido.
+- El alta manual exige evidencia; conserva fuente, fecha, usuario y texto de evidencia en `Notas internas`.
+- `NEWSLETTER_SECRET` sigue siendo obligatorio y exclusivo.
+- `GET /newsletter/unsubscribe` solo muestra confirmación. La mutación ocurre por `POST` con token HMAC válido, evitando bajas provocadas por scanners.
+
+### Programación
+
+- La programación conserva día, **hora** y zona `America/Santiago` en `[PROGRAMACION NEWSLETTER]`.
+- El transporte server-side rechaza `NEWSLETTER_NOT_DUE` si aún no se alcanza esa hora.
+- Dos disparos concurrentes se serializan y el segundo omite destinatarios ya confirmados.
+
+### Tracking
+
+- El `lead-worker` expone `POST /newsletter/resend-webhook`.
+- Verifica la firma Svix de Resend sobre el body crudo y deduplica por `svix-id`.
+- Correlaciona exclusivamente mediante el tag `envio_id`, no por email.
+- Rebotes/supresiones deshabilitan el email; quejas dan baja.
+- Un click solo marca `Lead caliente` cuando la URL HTTPS es comercial. Baja, privacidad, preferencias o clicks sin URL clasificable no crean leads.
+
+### Vista previa
+
+El iframe usa `sandbox`, `no-referrer` y CSP local: no ejecuta scripts ni carga recursos remotos por defecto.
+
+### Dependencias de cutover
+
+No se envió ninguna campaña real durante esta auditoría. Para activar producción faltan únicamente secretos/configuración externa: desplegar el proxy con `RESEND_API_KEY`, `NEWSLETTER_SECRET`, `NEWSLETTER_UNSUBSCRIBE_BASE`; configurar `RESEND_WEBHOOK_SECRET` en el lead-worker; registrar el webhook de Resend hacia `/newsletter/resend-webhook`; y mantener **desactivado** el antiguo escenario Make que enviaba campañas. El mismo `NEWSLETTER_SECRET` debe configurarse en proxy y lead-worker.
+
 Fecha: 2026-08-02
 
 ## Alcance
@@ -36,7 +80,10 @@ Se revisaron conjuntamente:
 - La analítica deriva aperturas, clics y mejor horario desde eventos observados.
 - Existe RBAC específico para la sección y para escrituras de marketing.
 
-## Hallazgos
+## Hallazgos originales (histórico)
+
+> El diagnóstico siguiente se conserva como evidencia del estado inicial; la actualización superior describe el estado corregido.
+
 
 ### Críticos
 
