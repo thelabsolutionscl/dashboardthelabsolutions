@@ -25,12 +25,17 @@ test('la base tributaria usa neto/IVA explícito y nunca infiere dividiendo por 
   assert.equal(Engine.taxNet({'Monto neto (CLP)':84500,'Monto total (CLP)':100555}).amount,84500);
 });
 
-test('una comisión distingue estimada, devengada, pagada y revertida',()=>{
+test('una comisión distingue estimada, devengada y revertida; paid exige evento autoritativo',()=>{
   const base={id:'recA',fields:{'N° Pedido':'PED-1','Fecha entrega':'2026-10-06','Monto neto (CLP)':100000,'Monto total (CLP)':119000}};
   assert.equal(Engine.deriveOrder(base,{rules:[Engine.DEFAULT_RULE],events:[]}).status,'estimated');
   assert.equal(Engine.deriveOrder({id:'recB',fields:{...base.fields,'DTE N°':'33-10'}},{rules:[Engine.DEFAULT_RULE],events:[]}).status,'accrued');
-  assert.equal(Engine.deriveOrder({id:'recC',fields:{...base.fields,'DTE N°':'33-11','Estado pago':'Pagado'}},{rules:[Engine.DEFAULT_RULE],events:[]}).status,'paid');
+  assert.equal(Engine.deriveOrder({id:'recC',fields:{...base.fields,'DTE N°':'33-11','Estado pago':'Pagado'}},{rules:[Engine.DEFAULT_RULE],events:[]}).status,'accrued');
   assert.equal(Engine.deriveOrder({id:'recD',fields:{...base.fields,'Estado pedido':'Cancelado'}},{rules:[Engine.DEFAULT_RULE],events:[]}).status,'reversed');
+  const paid={id:'pay-1',sourceId:'recA',order:'PED-1',sellerEmail:'v@thelab.solutions',seller:'V',
+    period:'2026-10',date:'2026-10-06',eligibleNet:100000,commission:3500,status:'paid',
+    ruleId:'commission-standard',ruleVersion:1,ruleRate:.035,basis:'neto',verifiedBase:true,paymentRatio:1,
+    eventAt:'2026-10-06T12:00:00Z',updatedAt:'2026-10-06T12:00:00Z',reversalOf:'',reason:'',invoice:'33-1',payment:'pagada'};
+  assert.equal(Engine.deriveOrder(base,{rules:[Engine.DEFAULT_RULE],events:[paid]}).status,'paid');
 });
 
 test('reglas net_paid prorratean pagos parciales y las reversas usan monto explícito',()=>{
