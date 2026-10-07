@@ -119,7 +119,7 @@ function deriveOrder(order,doc=shared){
   if(rule.basis==='net_invoiced'&&!invoiced)eligibleBase=0;
   let status='estimated';
   if(reversed)status='reversed';
-  else if(base.verified&&invoiced)status=ratio>=1?'paid':'accrued';
+  else if(base.verified&&invoiced&&(rule.basis!=='net_paid'||ratio>0))status='accrued';
   const explicitReverse=num(f['Monto nota crédito neto (CLP)']||f['Monto nota credito neto (CLP)']||
     f['Monto devolución neto (CLP)']||f['Monto devolucion neto (CLP)']||f['Monto reversado neto (CLP)']);
   const eligible=status==='reversed'?-Math.min(base.amount,explicitReverse>0?explicitReverse:base.amount):eligibleBase;
