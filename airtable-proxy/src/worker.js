@@ -791,18 +791,47 @@ const SHARED_MAIL_RECORDS=Object.freeze({
   'sent-addresses':'MAIL_SENT_ADDRESSES',
   templates:'MAIL_TEMPLATES'
 });
+function mailSharedAccountMap(env){
+  try{
+    const raw=String(env.MAIL_SHARED_ACCOUNT_MAP||'').trim();
+    if(!raw)return {};
+    const parsed=JSON.parse(raw);
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return {};
+    return parsed;
+  }catch(_){return {};}
+}
+function mailAuthorizedAccounts(identity,env){
+  if(!identity||typeof identity!=='object')return [];
+  const email=String(identity.email||'').toLowerCase();
+  const role=String(identity.role||'');
+  const out=[];
+  if(/^[^\s@]+@thelab\.solutions$/.test(email))out.push(email);
+  const map=mailSharedAccountMap(env);
+  for(const [account,grants] of Object.entries(map)){
+    if(!/^[^\s@]+@thelab\.solutions$/.test(String(account).toLowerCase())||!Array.isArray(grants))continue;
+    const allowed=grants.some(g=>{
+      const v=String(g||'').toLowerCase();
+      return v===role||v===email||v==='email:'+email||v==='role:'+role;
+    });
+    if(allowed)out.push(String(account).toLowerCase());
+  }
+  return [...new Set(out)].sort();
+}
+function mailApiEndpoint(env){
+  const raw=String(env.MAIL_API_URL||'https://mail-api.thelab.solutions/mail-api.php');
+  let u;try{u=new URL(raw);}catch(_){return null;}
+  if(u.protocol!=='https:'||u.hostname!=='mail-api.thelab.solutions'||u.username||u.password||
+     u.search||u.hash||u.pathname!=='/mail-api.php')return null;
+  return u.toString();
+}
 function sharedMailEmailAllowed(email){
   return typeof email==='string'&&email.length<=254&&email===email.toLowerCase()&&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
-function sharedMailMailboxAllowed(identity,account,legacy){
+function sharedMailMailboxAllowed(identity,account,legacy,env){
   if(!sharedMailEmailAllowed(account))return false;
   if(legacy)return true;
-  if(!identity||typeof identity!=='object'||!sharedMailEmailAllowed(identity.email))return false;
-  if(account===identity.email||account==='hola@thelab.solutions')return true;
-  if(identity.role==='admin'&&account.endsWith('@thelab.solutions'))return true;
-  if(identity.role==='finance'&&account==='pagos@thelab.solutions')return true;
-  return false;
+  return mailAuthorizedAccounts(identity,env).includes(account);
 }
 function sharedMailSignatureAllowed(value){
   return typeof value==='string'&&value.length<=60000&&
@@ -2589,7 +2618,9 @@ export class CrmMutationGuard {
         ?this._handleAdsShell(request):path==='/shared-calendar'
         ?this._handleSharedCalendar(request):path==='/shared-agenda'
           ?this._handleSharedAgenda(request):path==='/shared-mail'
-            ?this._handleSharedMail(request):path==='/shared-machineops'
+            ?this._handleSharedMail(request):path==='/mail-session'
+              ?this._handleMailSession(request):path==='/mail-rpc'
+                ?this._handleMailRpc(request):path==='/shared-machineops'
               ?this._handleSharedMachineOps(request):path==='/shared-simulation'
                 ?this._handleSharedSimulation(request):path==='/shared-finance'
                   ?this._handleSharedFinance(request):path==='/shared-remunerations'
@@ -2737,6 +2768,75 @@ export class CrmMutationGuard {
     return this._json({ok:true,scope,revision:verified.revision,data:verified.data},200);
   }
 
+
+  _mailSessionKey(actor,account){
+    return 'mail-session:'+String(actor?.email||'').toLowerCase()+':'+String(account||'').toLowerCase();
+  }
+  async _mailPost(account,password,params){
+    const endpoint=mailApiEndpoint(this.env);
+    if(!endpoint)return {response:null,error:'Mail API misconfigured'};
+    const fd=new URLSearchParams();
+    fd.set('user',account);fd.set('pass',password);
+    for(const [k,v] of Object.entries(params||{}))fd.set(k,String(v??''));
+    try{
+      const response=await fetch(endpoint,{method:'POST',redirect:'manual',
+        headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8',
+          'Origin':'https://dashboard.thelab.solutions'},
+        body:fd.toString()});
+      return {response};
+    }catch(_){return {response:null,error:'Mail API unavailable'};}
+  }
+  async _handleMailSession(request){
+    if(!['POST','DELETE'].includes(request.method))return this._json({error:'Method not allowed'},405);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid mail session JSON'},422);}
+    const actor=p?.actor,account=String(p?.account||'').toLowerCase();
+    if(!actor||typeof actor.email!=='string'||!['sales','operator','finance','admin'].includes(actor.role)||
+       !sharedMailEmailAllowed(account)||!Array.isArray(p.allowedAccounts)||!p.allowedAccounts.includes(account))
+      return this._json({error:'Mailbox not authorized'},403);
+    const key=this._mailSessionKey(actor,account);
+    if(request.method==='DELETE'){
+      await this.state.storage.delete(key);
+      return this._json({ok:true,account},200);
+    }
+    const password=String(p?.password||'');
+    if(!password||password.length>512)return this._json({error:'Mailbox password required'},422);
+    const probe=await this._mailPost(account,password,{action:'folders'});
+    if(!probe.response)return this._json({error:probe.error||'Mail API unavailable'},503);
+    let data;try{data=await probe.response.json();}catch(_){return this._json({error:'Mail API invalid response'},502);}
+    if(!probe.response.ok||data?.error)return this._json({error:'Credenciales de correo inválidas o cuenta no disponible.'},401);
+    const ttl=4*60*60*1000,expiresAt=Date.now()+ttl;
+    await this.state.storage.put(key,{password,expiresAt,account,actorEmail:actor.email});
+    return this._json({ok:true,account,expiresAt,build:data?.build||null},201);
+  }
+  async _handleMailRpc(request){
+    if(request.method!=='POST')return this._json({error:'Method not allowed'},405);
+    let p;try{p=await request.json();}catch(_){return this._json({error:'Invalid mail RPC JSON'},422);}
+    const actor=p?.actor,account=String(p?.account||'').toLowerCase(),params=p?.params;
+    if(!actor||typeof actor.email!=='string'||!['sales','operator','finance','admin'].includes(actor.role)||
+       !sharedMailEmailAllowed(account)||!Array.isArray(p.allowedAccounts)||!p.allowedAccounts.includes(account)||
+       !params||typeof params!=='object'||Array.isArray(params))
+      return this._json({error:'Mail RPC denied'},403);
+    const action=String(params.action||'');
+    const allowed=new Set(['folders','list','snippets','read','search','attachment','sent_addrs',
+      'mark','spam','trash','send','resend_status']);
+    if(!allowed.has(action))return this._json({error:'Mail action denied'},403);
+    const key=this._mailSessionKey(actor,account);
+    const session=await this.state.storage.get(key);
+    if(!session||typeof session.password!=='string'||Number(session.expiresAt||0)<=Date.now()){
+      if(session)await this.state.storage.delete(key);
+      return this._json({error:'MAIL_SESSION_REQUIRED',account},401);
+    }
+    const safe={...params};
+    delete safe.user;delete safe.pass;
+    const out=await this._mailPost(account,session.password,safe);
+    if(!out.response)return this._json({error:out.error||'Mail API unavailable'},503);
+    const text=await out.response.text();
+    let body;try{body=JSON.parse(text);}catch(_){return this._json({error:'Mail API invalid response'},502);}
+    if(action==='send'&&body?.ok){
+      body.account=account;
+    }
+    return this._json(body,out.response.status||200);
+  }
 
   async _handleSharedMail(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
@@ -4057,7 +4157,7 @@ export default {
     const authorized=await accessAuthorize(request,env,
       leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname==='/visual-ai/rpc'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname);
     if(authorized.response){
       const headers=new Headers(authorized.response.headers);
@@ -4503,6 +4603,55 @@ export default {
     }
 
 
+    if(url.pathname==='/mail/accounts'){
+      const h={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='GET'||url.search)return json({error:'Method not allowed'},405,h);
+      if(!authorized.identity)return json({error:'Cloudflare Access required'},401,h);
+      const accounts=mailAuthorizedAccounts(authorized.identity,env);
+      return json({ok:true,accounts},200,h);
+    }
+    if(url.pathname==='/mail/session'){
+      const h={...CORS,'Cache-Control':'private, no-store'};
+      if(!authorized.identity)return json({error:'Cloudflare Access required'},401,h);
+      if(!['POST','DELETE'].includes(request.method)||url.search)return json({error:'Method not allowed'},405,h);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Mail session guard unavailable'},503,h);
+      let body;try{body=await request.json();}catch(_){return json({error:'Invalid mail session JSON'},422,h);}
+      const account=String(body?.account||'').toLowerCase(),allowedAccounts=mailAuthorizedAccounts(authorized.identity,env);
+      if(!allowedAccounts.includes(account))return json({error:'Mailbox scope denied'},403,h);
+      if(request.method==='POST'&&(typeof body.password!=='string'||body.password.length<1||body.password.length>512))
+        return json({error:'Mailbox password required'},422,h);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-mail-session:'+authorized.identity.email));
+        const guarded=await stub.fetch('https://crm-write.internal/mail-session',{method:request.method,
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({account,password:body.password||'',
+            allowedAccounts,actor:{email:authorized.identity.email,role:authorized.identity.role}})});
+        const headers=new Headers(guarded.headers);Object.entries(h).forEach(([k,v])=>headers.set(k,v));
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Mail session guard unavailable'},503,h);}
+    }
+    if(url.pathname==='/mail/rpc'){
+      const h={...CORS,'Cache-Control':'private, no-store'};
+      if(request.method!=='POST'||url.search)return json({error:'Method not allowed'},405,h);
+      if(!authorized.identity||!env.CRM_MUTATION_GUARD)return json({error:'Mail RPC unavailable'},503,h);
+      let body;try{const raw=await request.text();if(raw.length>32000000)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid mail RPC JSON'},422,h);}
+      const account=String(body?.account||'').toLowerCase(),allowedAccounts=mailAuthorizedAccounts(authorized.identity,env);
+      if(!allowedAccounts.includes(account)||!body.params||typeof body.params!=='object'||Array.isArray(body.params))
+        return json({error:'Mailbox scope denied'},403,h);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-mail-session:'+authorized.identity.email));
+        const guarded=await stub.fetch('https://crm-write.internal/mail-rpc',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({account,params:body.params,allowedAccounts,
+            actor:{email:authorized.identity.email,role:authorized.identity.role}})});
+        const headers=new Headers(guarded.headers);Object.entries(h).forEach(([k,v])=>headers.set(k,v));
+        if(body.params.action==='send'&&guarded.ok){
+          try{await officeAudit(env,authorized.identity,'export','correo-envio',account,
+            'Envío aceptado por mail-api');}catch(_){}
+        }
+        return new Response(guarded.body,{status:guarded.status,headers});
+      }catch(_){return json({error:'Mail RPC unavailable'},503,h);}
+    }
+
     // Shared mail metadata gets a narrow resource endpoint. Signatures and
     // sent-recipient history are mailbox-scoped; templates are company-wide.
     if(url.pathname==='/shared/mail'){
@@ -4519,7 +4668,7 @@ export default {
       if(resource==='templates'&&account)
         return json({error:'Templates do not accept a mailbox'},422,scopedHeaders);
       if(resource!=='templates'&&!sharedMailMailboxAllowed(
-        authorized.identity,account,authorized.legacy===true))
+        authorized.identity,account,authorized.legacy===true,env))
         return json({error:'Mailbox scope denied'},403,scopedHeaders);
       if(request.method==='GET'){
         const current=await sharedMailLoad(env,resource,account);
