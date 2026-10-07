@@ -102,7 +102,8 @@ La segunda es una puerta explícita independiente: poner solo
 fiscal a medio configurar. Además, `PROXY_URL` tiene que ser HTTPS en un
 subdominio de `thelab.solutions` (por ejemplo
 `https://proxy.thelab.solutions`); una URL `workers.dev` de otro sitio,
-con path o query, tampoco pasa la puerta de activación. No hacerlo antes
+con path o query, tampoco pasa la puerta de activación. El Custom Domain
+`proxy.thelab.solutions` ya es el endpoint canónico del despliegue. No hacerlo antes
 de las comprobaciones previas: el próximo deploy de GitHub Pages pasará el
 formulario de Finanzas al proxy para emisión, consulta de folios y carga de
 CAF, y **dejará de insertar SII_WORKER_KEY en el HTML**. Si hay un error
@@ -221,8 +222,8 @@ El flujo manual **Verify Access rollout (read-only)** permite revisar
 configuración antes y después del corte, sin modificar Airtable, llamar a un
 modelo ni emitir o consultar documentos en el SII con una sesión autorizada.
 
-Preparación: `PROXY_URL` y `PROXY_KEY` deben estar configurados como
-secretos de GitHub Actions. Para validar el acceso entre Workers, añadir
+Preparación: `PROXY_URL` usa el endpoint canónico versionado
+`https://proxy.thelab.solutions`; solo `PROXY_KEY` permanece como secreto de GitHub Actions durante la transición legacy. Para validar el acceso entre Workers, añadir
 temporalmente los secretos `PREFLIGHT_CF_CLIENT_ID` y
 `PREFLIGHT_CF_CLIENT_SECRET` del token dedicado a leads. Los valores nunca
 se imprimen. Este duplicado en GitHub solo es necesario para la prueba; se
