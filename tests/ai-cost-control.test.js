@@ -48,7 +48,7 @@ test('proxy aplica hard cap atómico de US$0.50, US$0.10 por solicitud y una con
 test('lead-worker no posee key Anthropic y entra al mismo proxy protegido',()=>{
   assert.match(LEAD_CONF,/AUTO_PROCESS_LEADS = "false"/);
   assert.match(LEAD_CONF,/AUTO_PROCESS_DAILY_CAP = "25"/);
-  assert.match(LEAD_CONF,/AI_PROXY_URL = "https:\/\/airtable-proxy\./);
+  assert.match(LEAD_CONF,/AI_PROXY_URL = "https:\/\/proxy\.thelab\.solutions"/);
   assert.doesNotMatch(LEAD_CONF,/ANTHROPIC_API_KEY|AI_DAILY_BUDGET_USD/);
   assert.match(LEAD,/env\.AI_PROXY_URL/);
   assert.match(LEAD,/env\.AI_PROXY_KEY/);
