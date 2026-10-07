@@ -25,9 +25,10 @@ test('sombreado no aplana cada triangulo a un unico promedio',()=>{
   assert.doesNotMatch(SRC,/diff=Math\.min\(1,diff\/3\);spec=spec\/3\*0\.5/);
 });
 
-test('costura de triangulos es subpixel y no remarca la triangulacion',()=>{
-  assert.match(SRC,/lineWidth=0\.35/);
-  assert.doesNotMatch(SRC,/lineWidth=1;ctx\.lineJoin='round';ctx\.stroke\(\); \/\/ tapa costuras/);
+test('costura de triangulos tapa grietas de antialias sin usar un color de arista',()=>{
+  assert.match(SRC,/lineWidth=1\.25/);
+  assert.match(SRC,/ctx\.strokeStyle=paint/);
+  assert.match(SRC,/ctx\.lineCap='round'/);
 });
 
 test('al soltar la rotacion se fuerza un repintado final',()=>{
