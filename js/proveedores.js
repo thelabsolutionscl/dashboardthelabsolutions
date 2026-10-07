@@ -234,7 +234,7 @@ function getSortedProveedores(list){
     else if(k==='categoria'){va=pvCat(fa).toLowerCase();vb=pvCat(fb).toLowerCase();}
     else if(k==='contacto'){va=(fa['Contacto']||'').toLowerCase();vb=(fb['Contacto']||'').toLowerCase();}
     else if(k==='comuna'){va=(fa['Comuna']||'').toLowerCase();vb=(fb['Comuna']||'').toLowerCase();}
-    else if(k==='rep'){va=parseInt(fa['Reputación'])||0;vb=parseInt(fb['Reputación'])||0;}
+    else if(k==='rep'){va=_supplierDerivedReputation(a.id,fa['Reputación']);vb=_supplierDerivedReputation(b.id,fb['Reputación']);}
     else if(k==='estado'){va=(fa['Estado']||'').toLowerCase();vb=(fb['Estado']||'').toLowerCase();}
     else if(k==='plazo'){va=parseInt(fa['Plazo de entrega (días)'])||0;vb=parseInt(fb['Plazo de entrega (días)'])||0;}
     else{va='';vb='';}
@@ -270,6 +270,29 @@ function _safeSupplierUrl(v){
   const raw=String(v||'').trim();if(!raw)return '';
   try{const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);return u.protocol==='https:'&&!u.username&&!u.password?u.href:'';}catch(_){return '';}
 }
+function _supplierEvaluationRowsFor(id){
+  return _supplierEvaluationRows.filter(r=>{
+    const f=r.fields||{};return f['Supplier ID']===id||(Array.isArray(f['Proveedor'])&&f['Proveedor'].includes(id));
+  });
+}
+function _supplierDerivedReputation(id,legacy=0){
+  const rows=_supplierEvaluationRowsFor(id),scores=[];
+  for(const r of rows){
+    const f=r.fields||{},vals=['Calidad','Puntualidad','Precio','Respuesta']
+      .map(k=>Number(f[k]||0)).filter(v=>v>=1&&v<=5);
+    if(!vals.length)continue;
+    const incidents=Math.max(0,Number(f['Incidentes']||0));
+    scores.push(Math.max(1,Math.min(5,vals.reduce((a,b)=>a+b,0)/vals.length-incidents*.25)));
+  }
+  if(!scores.length)return Number(legacy||0);
+  return Math.round((scores.reduce((a,b)=>a+b,0)/scores.length)*10)/10;
+}
+function _lockSupplierRepInputs(){
+  for(const id of ['np-rep','epRep']){
+    const el=document.getElementById(id);if(!el)continue;
+    el.disabled=true;el.title='La reputación se calcula desde evaluaciones históricas.';
+  }
+}
 function _supplierFindDuplicate({id='',nombre='',rut='',email=''}) {
   const nr=_normSupplierRut(rut),ne=_normSupplierEmail(email),nn=_normSupplierText(nombre);
   return (state.proveedores||[]).find(p=>{
@@ -284,6 +307,7 @@ function _supplierResolveId(value){
 }
 function filterProveedores(){renderProveedores(true);}
 function renderProveedores(skipAnalytics){
+  _lockSupplierRepInputs();
   if(!_supplierStructuredReady&&!_supplierStructuredLoading)_supplierStructuredHydrate().then(ok=>{if(ok)renderProveedores(true);});
   const search=(document.getElementById('proveedorSearch')?.value||'').toLowerCase();
   const cat=document.getElementById('proveedorCatFilter')?.value||'';
@@ -322,7 +346,7 @@ function buildProveedorCard(p){
   const nombre=f['Nombre']||'—';
   const estado=f['Estado']||'Activo';
   const estadoPost=f['Estado postulación']||'';
-  const rep=parseInt(f['Reputación'])||0;
+  const rep=_supplierDerivedReputation(id,f['Reputación']);
   const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'Sin dato';
   const tel=_safeSupplierPhone(f['Teléfono']);
   const email=_safeSupplierEmail(f['Email']);
@@ -371,8 +395,8 @@ function buildProveedorRow(p){
   const telCell=tel?`<a href="tel:${tel}" onclick="event.stopPropagation()" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Llamar">📞 ${escapeHtml(f['Teléfono']||'')}</a>`:'<span style="color:var(--text3)">—</span>';
   const emailCell=email?`<a href="mailto:${email}" onclick="event.stopPropagation()" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none" title="Enviar correo">✉ ${escapeHtml(email)}</a>`:'<span style="color:var(--text3)">—</span>';
   const plazo=f['Plazo de entrega (días)']?`${f['Plazo de entrega (días)']} días`:'—';
-  const rep=parseInt(f['Reputación'])||0;
-  const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${rep})">★</span>`).join('');
+  const rep=_supplierDerivedReputation(id,f['Reputación']);
+  const starsHtml=[1,2,3,4,5].map(n=>`<span onclick="event.stopPropagation();updateRepProveedor('${id}',${n})" style="cursor:pointer;font-size:14px;color:${n<=rep?'#facc15':'var(--text3)'};line-height:1" title="${n} estrella${n>1?'s':''}" onmouseenter="highlightStars(this,${n})" onmouseleave="resetStars(this.parentElement,${Math.round(rep)})">★</span>`).join('');
   const starsCell=`<div style="display:flex;gap:1px;align-items:center" id="stars-${id}">${starsHtml}</div>`;
   const nombre=f['Nombre']||'';
   const supplierId=_supplierId(p);
@@ -441,19 +465,34 @@ function toggleProveedorFicha(id){
 function highlightStars(el,n){const wrap=el.parentElement;wrap.querySelectorAll('span').forEach((s,i)=>{s.style.color=i<n?'#facc15':'var(--text3)';});}
 function resetStars(wrap,rep){wrap.querySelectorAll('span').forEach((s,i)=>{s.style.color=i<rep?'#facc15':'var(--text3)';});}
 async function updateRepProveedor(id,rep){
-  const p=state.proveedores.find(x=>x.id===id);if(!p) return;
-  const old=p.fields['Reputación'];
-  p.fields['Reputación']=rep;
-  const wrap=document.getElementById('stars-'+id);
-  if(wrap) resetStars(wrap,rep);
+  const p=_supplierById(id);if(!p)return;
+  const ask=(label,def)=>{const raw=prompt(label,String(def));if(raw===null)return null;const n=Number(raw);return Number.isFinite(n)&&n>=1&&n<=5?n:null;};
+  const calidad=ask('Calidad (1–5):',rep);if(calidad===null)return;
+  const puntualidad=ask('Puntualidad (1–5):',rep);if(puntualidad===null)return;
+  const precio=ask('Precio / competitividad (1–5):',rep);if(precio===null)return;
+  const respuesta=ask('Respuesta / servicio (1–5):',rep);if(respuesta===null)return;
+  const incRaw=prompt('Incidentes asociados a esta evaluación (0 si ninguno):','0');if(incRaw===null)return;
+  const incidentes=Math.max(0,Math.min(100,parseInt(incRaw)||0));
+  const motivo=(prompt('Motivo / entrega evaluada:','Evaluación de proveedor')||'').trim();
+  if(motivo.length<5){toast('Describe brevemente qué entrega o servicio estás evaluando.','error');return;}
+  const evidencia=(prompt('Evidencia o referencia (pedido, OC, factura, fecha, etc.):','')||'').trim();
+  const actor=AUTH.getUser()?.username||'',now=new Date().toISOString();
   try{
-    await airtableWrite('Proveedores','PATCH',id,{'Reputación':rep});
-    toast(`★ ${rep}/5 guardado`,'success');
-  }catch(e){
-    if(p) p.fields['Reputación']=old;
-    toast('Error: '+e.message,'error');
-  }
+    await airtableWrite('SupplierEvaluations','POST',null,{
+      'Evaluation ID':crypto.randomUUID(),'Proveedor':[id],'Supplier ID':id,
+      'Estado anterior':p.fields['Estado postulación']||'','Estado nuevo':p.fields['Estado postulación']||'',
+      'Motivo':motivo,'Evidencia':evidencia,'Responsable':actor,'Fecha':now,
+      'Calidad':calidad,'Puntualidad':puntualidad,'Precio':precio,'Respuesta':respuesta,
+      'Incidentes':incidentes,'Notas':'Evaluación operativa'
+    });
+    await _supplierStructuredHydrate(true);
+    const derived=_supplierDerivedReputation(id,p.fields['Reputación']);
+    await airtableWrite('Proveedores','PATCH',id,{'Reputación':derived});
+    p.fields['Reputación']=derived;renderProveedores();
+    toast(`★ Reputación recalculada: ${derived.toFixed(1)}/5`,'success');
+  }catch(e){toast('No se pudo guardar la evaluación: '+e.message,'error');}
 }
+
 // ── Postulación de proveedor (Estado postulación + Motivo evaluación) ──────
 function _pvPostColor(s){return s==='APROBADO'?'#00d4aa':s==='RECHAZADO'?'#ff4444':s==='ENTREVISTAR'?'#ffaa00':'#888888';}
 function estadoPostPill(s){if(!s)return '';const c=_pvPostColor(s);return `<span style="display:inline-block;margin-top:3px;font-size:9px;font-weight:700;letter-spacing:0.5px;color:${c};border:1px solid ${c}55;background:${c}1a;border-radius:4px;padding:1px 6px">${s}</span>`;}
@@ -543,7 +582,6 @@ async function createProveedor(){
     'RUT':document.getElementById('np-rut')?.value||'',
     'Comuna':document.getElementById('np-comuna')?.value||'',
     'Región':document.getElementById('np-region')?.value||'',
-    'Reputación':parseInt(document.getElementById('np-rep')?.value)||null,
     'Estado':document.getElementById('np-estado')?.value||'Activo',
     'Condiciones de pago':document.getElementById('np-condpago')?.value||'',
     'Plazo de entrega (días)':parseInt(document.getElementById('np-plazo')?.value)||null,
@@ -601,7 +639,8 @@ function openEditProveedor(id){
   document.getElementById('epRut').value=f['RUT']||'';
   document.getElementById('epComuna').value=f['Comuna']||'';
   document.getElementById('epRegion').value=f['Región']||'';
-  document.getElementById('epRep').value=f['Reputación']||'';
+  document.getElementById('epRep').value=_supplierDerivedReputation(id,f['Reputación'])||'';
+  _lockSupplierRepInputs();
   document.getElementById('epEstado').value=f['Estado']||'Activo';
   document.getElementById('epCondPago').value=f['Condiciones de pago']||'';
   document.getElementById('epPlazo').value=f['Plazo de entrega (días)']||'';
@@ -637,7 +676,6 @@ async function saveEditProveedor(){
     'RUT':document.getElementById('epRut').value||'',
     'Comuna':document.getElementById('epComuna').value||'',
     'Región':document.getElementById('epRegion').value||'',
-    'Reputación':parseInt(document.getElementById('epRep').value)||null,
     'Estado':document.getElementById('epEstado').value||'Activo',
     'Condiciones de pago':document.getElementById('epCondPago').value||'',
     'Plazo de entrega (días)':parseInt(document.getElementById('epPlazo').value)||null,
@@ -782,6 +820,7 @@ function exportToCSV(t){
   if(!rows.length){toast('Sin datos','error');return;}
   const csvSafe=v=>{let x=String(v??'');if(/^[=+\-@]/.test(x))x="'"+x;const z=x.replace(/"/g,'""');return/[",\n]/.test(z)?`"${z}"`:z;};
   const csv=[headers.join(','),...rows.map(r=>r.map(csvSafe).join(','))].join('\n');
+  if(typeof officeAuditAction==='function')void officeAuditAction('export','proveedores-csv','',`Exportación ${t}: ${rows.length} filas`);
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${t}-${hoyCL()}.csv`;a.click();URL.revokeObjectURL(url);toast(`✓ ${t}.csv descargado`,'success');
 }
 
@@ -1136,6 +1175,52 @@ async function cambiarEstadoOC(id,nuevo,motivo='',evidencia=''){
   await _supplierStructuredHydrate(true);renderOCList();
 }
 
+function _ocAllowedNext(estado){
+  const m={
+    'Borrador':['Aprobación','Cancelada'],'Aprobación':['Aprobada','Borrador','Cancelada'],
+    'Aprobada':['Enviada','Cancelada'],'Enviada':['Aceptada','Cancelada'],
+    'Aceptada':['Recibida parcial','Recibida total','Cancelada'],
+    'Recibida parcial':['Recibida total','Cancelada'],'Recibida total':['Facturada','Cerrada'],
+    'Facturada':['Pagada','Cerrada'],'Pagada':['Cerrada'],'Cerrada':[],'Cancelada':[]
+  };return m[estado]||[];
+}
+async function ocCambiarEstadoUI(id,nuevo){
+  if(!nuevo)return;
+  const oc=_ocAll().find(x=>x.id===id);if(!oc)return;
+  if(['Recibida parcial','Recibida total'].includes(nuevo)){await registrarRecepcionOC(id,nuevo==='Recibida total');return;}
+  let motivo=(prompt('Motivo / comentario del cambio de estado:',nuevo)||'').trim();
+  if(!motivo)motivo=nuevo;
+  let evidencia='';
+  if(['Aprobada','Enviada','Aceptada','Facturada','Pagada','Cerrada','Cancelada'].includes(nuevo))
+    evidencia=(prompt('Evidencia o referencia (opcional salvo envío):','')||'').trim();
+  if(nuevo==='Enviada'){
+    const email=(prompt('Email destinatario de la OC:',oc.destinatario||_supplierById(oc.supplierId)?.fields?.['Email']||'')||'').trim();
+    if(!validEmail(email)){toast('Email destinatario inválido','error');return;}
+    try{await airtableWrite('PurchaseOrders','PATCH',id,{'Destinatario':email});}catch(e){toast(e.message,'error');return;}
+  }
+  try{await cambiarEstadoOC(id,nuevo,motivo,evidencia);toast('OC → '+nuevo,'success');}
+  catch(e){toast('No se pudo cambiar la OC: '+e.message,'error');}
+}
+async function registrarRecepcionOC(id,forzarTotal=false){
+  const oc=_ocAll().find(x=>x.id===id);if(!oc?.structured)throw Error('OC estructurada no encontrada');
+  if(!['Aceptada','Recibida parcial'].includes(oc.estado))throw Error('La OC debe estar Aceptada o parcialmente recibida');
+  let any=false,all=true;
+  for(const it of oc.items||[]){
+    const ordered=Number(it.cantidad||0),prev=Number(it.cantidadRecibida||0);
+    const raw=prompt(`Cantidad recibida de “${it.item}” (pedido: ${ordered}):`,String(forzarTotal?ordered:prev));
+    if(raw===null){all=false;continue;}
+    const qty=Math.max(0,Math.min(ordered,Number(raw)||0));
+    any=any||qty>0;all=all&&qty>=ordered;
+    await airtableWrite('PurchaseOrderItems','PATCH',it.id,{
+      'Cantidad recibida':qty,'Estado recepción':qty<=0?'Pendiente':qty>=ordered?'Recibido':'Parcial'
+    });
+  }
+  if(!any)throw Error('No se registró ninguna recepción');
+  const target=all?'Recibida total':'Recibida parcial';
+  await _supplierStructuredHydrate(true);
+  if(oc.estado!==target)await cambiarEstadoOC(id,target,'Recepción registrada','Cantidades por ítem actualizadas');
+  else renderOCList();
+}
 function renderOCList(){
   const el=document.getElementById('ocList');if(!el)return;
   const arr=_ocAll().slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
@@ -1145,8 +1230,9 @@ function renderOCList(){
       <span class="mono" style="color:var(--accent);flex-shrink:0">${escapeHtml(o.numero||'—')}</span>
       <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(_supplierById(o.supplierId)?.fields?.['Nombre']||o.proveedor||'—')}</div><div style="font-size:10.5px;color:var(--text3)">${escapeHtml(o.fecha||'')} · ${(o.items||[]).length} ítem(s) · ${escapeHtml(o.estado||'Emitida')}</div></div>
       <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent3);flex-shrink:0">${formatCLP(o.total||0)}</span>
+      ${o.structured&&_ocAllowedNext(o.estado).length?`<select class="btn btn-ghost btn-sm" style="max-width:145px" onchange="ocCambiarEstadoUI('${o.id}',this.value);this.value=''"><option value="">Cambiar estado…</option>${_ocAllowedNext(o.estado).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}</select>`:''}
       <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="PDF" data-id="${o.id}" onclick="generarOCPDF(this.dataset.id)">📄</button>
-      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Editar" data-id="${o.id}" onclick="openOCModal(null,this.dataset.id)">✎</button>
-      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--danger)" title="Eliminar" data-id="${o.id}" onclick="delOC(this.dataset.id)">✕</button>
+      ${!o.structured?`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" title="Editar legacy" data-id="${o.id}" onclick="openOCModal(null,this.dataset.id)">✎</button>`:''}
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--danger)" title="${o.structured?'Cancelar':'Eliminar'}" data-id="${o.id}" onclick="delOC(this.dataset.id)">✕</button>
     </div>`).join('')}</div></div>`;
 }
