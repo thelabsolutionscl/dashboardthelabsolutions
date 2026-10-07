@@ -24,6 +24,8 @@
  *   POST /portal/cotizacion/decision (cliente — aprueba/rechaza su cotización)
  *   POST /webhooks/google-ads   (Google Lead Form — clave GOOGLE_ADS_WEBHOOK_KEY)
  *   POST /webhooks/linkedin     (LinkedIn vía Make/Zapier — clave LINKEDIN_WEBHOOK_KEY)
+ *   GET|POST /webhooks/linkedin/official (LinkedIn Lead Sync oficial — challenge + X-LI-Signature)
+ *   GET|POST|DELETE /linkedin/subscriptions (admin Lead Sync — clave LINKEDIN_ADMIN_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
  *   POST /notify/printer        (farm-controller — impresión con error/finalizada → WhatsApp; clave WA_NOTIFY_KEY)
  *   POST /notify/test           (prueba de WhatsApp a nicanor/gustavo; clave WA_NOTIFY_KEY)
@@ -65,6 +67,11 @@ export default {
             time: new Date().toISOString(),
             airtable: !!env.AIRTABLE_TOKEN,
             autoProcess: env.AUTO_PROCESS_LEADS === "true",
+            linkedinOfficial: {
+              webhook: !!env.LINKEDIN_CLIENT_SECRET,
+              api: !!(env.LINKEDIN_ACCESS_TOKEN || (env.LINKEDIN_REFRESH_TOKEN && env.LINKEDIN_CLIENT_ID && env.LINKEDIN_CLIENT_SECRET)),
+              version: env.LINKEDIN_API_VERSION || "202609",
+            },
           },
           200,
           cors
@@ -149,6 +156,14 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/webhooks/google-ads") {
         return await handleGoogleAds(request, env, ctx, cors);
+      }
+
+      if (url.pathname === "/webhooks/linkedin/official" && (request.method === "GET" || request.method === "POST")) {
+        return await handleLinkedinOfficial(request, env, ctx, cors, url);
+      }
+
+      if (url.pathname === "/linkedin/subscriptions" && ["GET","POST","DELETE"].includes(request.method)) {
+        return await handleLinkedinSubscriptions(request, env, cors, url);
       }
 
       if (request.method === "POST" && url.pathname === "/webhooks/linkedin") {
@@ -1875,6 +1890,300 @@ async function handleGoogleAds(request, env, ctx, cors) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+ * RUTA: GET|POST /webhooks/linkedin/official
+ *
+ * Lead Sync oficial. GET resuelve el challenge de LinkedIn. POST verifica
+ * X-LI-Signature sobre el body RAW, deduplica por leadGenFormResponse+occurredAt
+ * y luego descarga el Lead Form Response con r_marketing_leadgen_automation.
+ * ══════════════════════════════════════════════════════════════════════ */
+async function hmacHex(secret, message) {
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(String(secret || "")),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(String(message))));
+  return [...sig].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function linkedinAccessToken(env) {
+  const now = Date.now();
+  if (env.RL) {
+    try {
+      const cached = JSON.parse((await env.RL.get("linkedin:oauth:access")) || "null");
+      if (cached?.access_token && Number(cached.expires_at) > now + 5 * 60 * 1000) return cached.access_token;
+    } catch (_) {}
+  }
+  const clientId = String(env.LINKEDIN_CLIENT_ID || "").trim();
+  const clientSecret = String(env.LINKEDIN_CLIENT_SECRET || "").trim();
+  let refreshToken = String(env.LINKEDIN_REFRESH_TOKEN || "").trim();
+  if (env.RL) {
+    try {
+      const saved = JSON.parse((await env.RL.get("linkedin:oauth:refresh")) || "null");
+      if (saved?.refresh_token) refreshToken = saved.refresh_token;
+    } catch (_) {}
+  }
+  if (clientId && clientSecret && refreshToken) {
+    const form = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+    const r = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.access_token) {
+        const ttl = Math.max(600, Number(d.expires_in) || 3600);
+        if (env.RL) {
+          await env.RL.put("linkedin:oauth:access", JSON.stringify({
+            access_token: d.access_token, expires_at: now + ttl * 1000,
+          }), { expirationTtl: ttl }).catch(() => {});
+          if (d.refresh_token) {
+            const refreshTtl = Math.max(86400, Number(d.refresh_token_expires_in) || 365 * 86400);
+            await env.RL.put("linkedin:oauth:refresh", JSON.stringify({
+              refresh_token: d.refresh_token, expires_at: now + refreshTtl * 1000,
+            }), { expirationTtl: refreshTtl }).catch(() => {});
+          }
+        }
+        return d.access_token;
+      }
+    }
+    console.error("[linkedin-official] refresh token rejected", r.status);
+  }
+  return String(env.LINKEDIN_ACCESS_TOKEN || "").trim();
+}
+
+function linkedinAnswerValue(answer) {
+  const d = answer?.answerDetails || answer?.accepted || {};
+  const text = d?.textQuestionAnswer?.answer;
+  if (text != null) return str(text);
+  const choices = d?.multipleChoiceAnswer?.options;
+  return Array.isArray(choices) ? choices.map(str).filter(Boolean).join(", ") : "";
+}
+
+function linkedinLeadToNorm(lead) {
+  const questions = lead?.form?.content?.questions || [];
+  const qById = new Map(questions.map((q) => [String(q.questionId), q]));
+  const values = Object.create(null), custom = [];
+  for (const answer of lead?.formResponse?.answers || []) {
+    const q = qById.get(String(answer?.questionId)) || {};
+    const value = linkedinAnswerValue(answer);
+    if (!value) continue;
+    const predefined = str(q.predefinedField).toUpperCase();
+    if (predefined) values[predefined] = value;
+    else {
+      const label = str(q.label) || str(q.name) || ("Pregunta " + str(answer?.questionId));
+      custom.push(label + ": " + value);
+    }
+  }
+  const first = values.FIRST_NAME || "", last = values.LAST_NAME || "";
+  const email = values.WORK_EMAIL || values.EMAIL || "";
+  const campaign = str(lead?.leadMetadataInfo?.sponsoredLeadMetadataInfo?.campaign?.name) ||
+    str(lead?.leadMetadata?.sponsoredLeadMetadata?.campaign);
+  const campaignId = str(lead?.leadMetadataInfo?.sponsoredLeadMetadataInfo?.campaign?.id) ||
+    str(lead?.leadMetadata?.sponsoredLeadMetadata?.campaign);
+  const serviceLine = custom.find((x) => /servicio|service|proyecto|necesit|cotiz/i.test(x)) || "";
+  const service = serviceLine.includes(":") ? serviceLine.split(":").slice(1).join(":").trim() : "";
+  const formId = str(lead?.form?.id) || str(lead?.versionedLeadGenFormUrn);
+  const landing = str(lead?.form?.content?.postSubmissionInfo?.callToAction?.callToActionTarget?.landingPageUrl);
+  return normalizeLinkedin({
+    name: [first, last].filter(Boolean).join(" "),
+    company: values.COMPANY_NAME,
+    email,
+    phone: values.PHONE_NUMBER,
+    jobTitle: values.JOB_TITLE,
+    industry: values.INDUSTRY,
+    service,
+    message: custom.join("\n"),
+    campaign,
+    campaignName: campaign,
+    linkedinLeadId: str(lead?.id),
+    linkedinCampaignId: campaignId,
+    linkedinLeadGenFormId: formId,
+    linkedinUrl: values.LINKEDIN_PROFILE_LINK,
+    landingUrl: landing,
+  });
+}
+
+async function fetchLinkedinLeadResponse(env, leadId) {
+  const token = await linkedinAccessToken(env);
+  if (!token) throw new Error("LINKEDIN_ACCESS_TOKEN/REFRESH_TOKEN no configurado");
+  const version = String(env.LINKEDIN_API_VERSION || "202609").replace(/\D/g, "").slice(0, 6) || "202609";
+  const fields = "ownerInfo,associatedEntityInfo,leadMetadataInfo,owner,leadType,versionedLeadGenFormUrn,id,submittedAt,testLead,formResponse,form:(hiddenFields,creationLocale,name,id,content)";
+  const r = await fetch("https://api.linkedin.com/rest/leadFormResponses/" + encodeURIComponent(leadId) +
+    "?fields=" + encodeURIComponent(fields), {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Linkedin-Version": version,
+        "X-Restli-Protocol-Version": "2.0.0",
+        Accept: "application/json",
+      },
+    });
+  if (!r.ok) throw new Error("LinkedIn Lead Sync API " + r.status);
+  const lead = await r.json();
+  if (!lead?.id) throw new Error("LinkedIn devolvió un lead inválido");
+  return lead;
+}
+
+async function handleLinkedinOfficial(request, env, ctx, cors, url) {
+  const secret = String(env.LINKEDIN_CLIENT_SECRET || "").trim();
+  if (!secret) return json({ ok: false, error: "LinkedIn oficial no configurado" }, 503, cors);
+
+  if (request.method === "GET") {
+    const challengeCode = String(url.searchParams.get("challengeCode") || "");
+    if (!challengeCode || challengeCode.length > 200) return json({ ok: false, error: "challengeCode requerido" }, 400, cors);
+    const challengeResponse = await hmacHex(secret, challengeCode);
+    return json({ challengeCode, challengeResponse }, 200, cors);
+  }
+
+  if (!env.RL) return json({ ok: false, error: "KV requerido para deduplicación LinkedIn" }, 503, cors);
+  const raw = await request.text();
+  if (!raw || raw.length > 512000) return json({ ok: false, error: "Payload LinkedIn inválido" }, 413, cors);
+  const provided = String(request.headers.get("X-LI-Signature") || "").toLowerCase();
+  const expected = await hmacHex(secret, "hmacsha256=" + raw);
+  if (!provided || !timingSafeEqual(provided, expected))
+    return json({ ok: false, error: "Firma LinkedIn inválida" }, 401, cors);
+
+  let notification;try { notification = JSON.parse(raw); } catch (_) { return json({ ok: false, error: "JSON LinkedIn inválido" }, 400, cors); }
+  if (!notification || notification.type !== "LEAD_ACTION")
+    return json({ ok: true, ignored: true }, 200, cors);
+  const urn = str(notification.leadGenFormResponse), occurredAt = String(notification.occurredAt || "");
+  if (!/^urn:li:leadGenFormResponse:[A-Za-z0-9._-]+$/.test(urn) || !/^\d{1,20}$/.test(occurredAt))
+    return json({ ok: false, error: "Notificación LinkedIn inválida" }, 400, cors);
+  const dedupeKey = "linkedin:official:" + urn.slice(-160) + ":" + occurredAt;
+  const previous = await env.RL.get(dedupeKey);
+  if (previous) return json({ ok: true, duplicate: true }, 200, cors);
+
+  if (notification.leadAction === "DELETED") {
+    await env.RL.put(dedupeKey, JSON.stringify({ action: "DELETED", at: new Date().toISOString() }), { expirationTtl: 90 * 86400 });
+    ctx.waitUntil(logLinkedinInboundEvent(env, {
+      leadId: urn.split(":").pop(), detail: "Lead Sync notification DELETED", actor: "LinkedIn Lead Sync"
+    }));
+    return json({ ok: true, deleted: true }, 200, cors);
+  }
+  if (notification.leadAction !== "CREATED")
+    return json({ ok: true, ignored: true }, 200, cors);
+
+  const leadId = urn.split(":").pop();
+  let lead;
+  try { lead = await fetchLinkedinLeadResponse(env, leadId); }
+  catch (e) {
+    console.error("[linkedin-official] fetch response", e.message);
+    return json({ ok: false, error: "No se pudo descargar el Lead Form Response" }, 503, cors);
+  }
+  const norm = linkedinLeadToNorm(lead);
+  if (!norm.name && !norm.company && !norm.email && !norm.phone)
+    return json({ ok: false, error: "Lead oficial sin identidad utilizable" }, 422, cors);
+
+  const response = await createLeadAndQueue(env, ctx, cors, {
+    norm,
+    agente: "LINKEDIN_AGENT",
+    evento: "linkedin.official_lead_received",
+    source: "linkedin",
+    campaign: norm.campaign || norm.utmCampaign,
+  });
+  const result = await response.clone().json().catch(() => null);
+  if (!response.ok || !result?.ok) return response;
+
+  await env.RL.put(dedupeKey, JSON.stringify({
+    action: "CREATED", leadId, clienteId: result.clienteId || null,
+    queueId: result.queueId || null, buffered: !!result.buffered,
+  }), { expirationTtl: 90 * 86400 });
+  if (result.clienteId)
+    ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId, "LinkedIn Lead Sync"));
+  return json({ ok: true, clienteId: result.clienteId || null, queueId: result.queueId || null, buffered: !!result.buffered }, 200, cors);
+}
+
+async function linkedinApiHeaders(env) {
+  const token = await linkedinAccessToken(env);
+  if (!token) throw new Error("Token Lead Sync no configurado");
+  const version = String(env.LINKEDIN_API_VERSION || "202609").replace(/\D/g, "").slice(0, 6) || "202609";
+  return {
+    Authorization: "Bearer " + token,
+    "Linkedin-Version": version,
+    "X-Restli-Protocol-Version": "2.0.0",
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+}
+
+function linkedinOwner(raw) {
+  const kind = String(raw?.kind || raw?.type || "").trim();
+  const urn = String(raw?.urn || "").trim();
+  if (!["sponsoredAccount","organization"].includes(kind)) return null;
+  const re = kind === "sponsoredAccount"
+    ? /^urn:li:sponsoredAccount:\d+$/
+    : /^urn:li:organization:\d+$/;
+  if (!re.test(urn)) return null;
+  return { kind, urn };
+}
+
+async function handleLinkedinSubscriptions(request, env, cors, url) {
+  const provided = String(request.headers.get("X-Linkedin-Admin-Key") || "");
+  const expected = String(env.LINKEDIN_ADMIN_KEY || "").trim();
+  if (!expected) return json({ ok: false, error: "Administrador LinkedIn no configurado" }, 503, cors);
+  if (!timingSafeEqual(provided, expected)) return json({ ok: false, error: "No autorizado" }, 401, cors);
+
+  let headers;
+  try { headers = await linkedinApiHeaders(env); }
+  catch (e) { return json({ ok: false, error: e.message }, 503, cors); }
+
+  if (request.method === "POST") {
+    const body = await readJson(request);
+    const owner = linkedinOwner(body?.owner);
+    const leadType = String(body?.leadType || "SPONSORED").toUpperCase();
+    if (!owner || !["SPONSORED","COMPANY","EVENT","ORGANIZATION_PRODUCT"].includes(leadType))
+      return json({ ok: false, error: "owner/leadType inválidos" }, 422, cors);
+    let webhook = String(body?.webhook || "").trim();
+    if (!webhook) webhook = url.origin + "/webhooks/linkedin/official";
+    try {
+      const u = new URL(webhook);
+      if (u.protocol !== "https:" || u.username || u.password || u.hash)
+        return json({ ok: false, error: "Webhook debe ser HTTPS público" }, 422, cors);
+    } catch (_) { return json({ ok: false, error: "Webhook inválido" }, 422, cors); }
+
+    const payload = { webhook, owner: { [owner.kind]: owner.urn }, leadType };
+    const r = await fetch("https://api.linkedin.com/rest/leadNotifications", {
+      method: "POST", headers, body: JSON.stringify(payload),
+    });
+    const data = await r.clone().json().catch(() => null);
+    if (!r.ok) return json({ ok: false, error: data?.message || data?.error || ("LinkedIn " + r.status), status: r.status }, 502, cors);
+    return json({ ok: true, status: r.status, id: r.headers.get("x-restli-id") || data?.id || null, subscription: data || payload }, 201, cors);
+  }
+
+  if (request.method === "GET") {
+    const owner = linkedinOwner({
+      kind: url.searchParams.get("ownerType"),
+      urn: url.searchParams.get("ownerUrn"),
+    });
+    const leadType = String(url.searchParams.get("leadType") || "SPONSORED").toUpperCase();
+    if (!owner || !["SPONSORED","COMPANY","EVENT","ORGANIZATION_PRODUCT"].includes(leadType))
+      return json({ ok: false, error: "ownerType/ownerUrn/leadType requeridos" }, 422, cors);
+    const ownerParam = "(value:(" + owner.kind + ":" + encodeURIComponent(owner.urn) + "))";
+    const target = "https://api.linkedin.com/rest/leadNotifications?q=criteria&owner=" + ownerParam +
+      "&leadType=(leadType:" + encodeURIComponent(leadType) + ")";
+    const r = await fetch(target, { method: "GET", headers });
+    const data = await r.json().catch(() => null);
+    if (!r.ok) return json({ ok: false, error: data?.message || data?.error || ("LinkedIn " + r.status), status: r.status }, 502, cors);
+    return json({ ok: true, data }, 200, cors);
+  }
+
+  const id = String(url.searchParams.get("id") || "");
+  if (!/^\d+$/.test(id)) return json({ ok: false, error: "id de suscripción requerido" }, 422, cors);
+  const r = await fetch("https://api.linkedin.com/rest/leadNotifications/" + id, { method: "DELETE", headers });
+  if (!r.ok && r.status !== 404) {
+    const data = await r.json().catch(() => null);
+    return json({ ok: false, error: data?.message || data?.error || ("LinkedIn " + r.status), status: r.status }, 502, cors);
+  }
+  return json({ ok: true, deleted: true, id }, 200, cors);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
  * RUTA: POST /webhooks/linkedin   (vía Make / Zapier / HubSpot)
  * ══════════════════════════════════════════════════════════════════════ */
 async function handleLinkedin(request, env, ctx, cors) {
@@ -1934,7 +2243,44 @@ async function handleLinkedin(request, env, ctx, cors) {
   return response;
 }
 
-async function syncLinkedinInboundProspect(env, norm, clienteId) {
+async function findLinkedinProspectByLeadId(env, leadId) {
+  if (!leadId) return null;
+  const safe = String(leadId).replace(/'/g, "\\'");
+  const url =
+    `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("LinkedIn_Prospects")}` +
+    `?maxRecords=1&filterByFormula=${encodeURIComponent(`{LinkedIn Lead ID}='${safe}'`)}`;
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+  if (!r.ok) return null;
+  return (await r.json())?.records?.[0] || null;
+}
+
+async function logLinkedinInboundEvent(env, { prospect, leadId, clienteId, detail, actor = "Webhook LinkedIn" }) {
+  try {
+    const row = prospect || await findLinkedinProspectByLeadId(env, leadId);
+    const f = row?.fields || {};
+    const linkedClient = clienteId || (Array.isArray(f.Cliente) && f.Cliente[0]) || "";
+    await airtableCreateTolerant(env, "LinkedIn_Events", stripEmpty({
+      "Evento ID": "LI-IN-" + Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 8),
+      Prospecto: row?.id ? [row.id] : undefined,
+      Cliente: linkedClient ? [linkedClient] : undefined,
+      Tipo: "Inbound",
+      "Estado anterior": "",
+      "Estado nuevo": f.Estado || "Cliente",
+      Fecha: new Date().toISOString(),
+      Campaña: f.Campaña,
+      Identidad: f.Identidad,
+      Segmento: f.Segmento,
+      Fuente: f.Fuente || "Lead Gen Form",
+      Actor: actor,
+      "Score B2B": Number(f["Score B2B"]) || undefined,
+      Detalle: detail || "Lead recibido por LinkedIn",
+    }));
+  } catch (e) {
+    console.error("[leads-worker] LinkedIn_Events:", e.message);
+  }
+}
+
+async function syncLinkedinInboundProspect(env, norm, clienteId, actor = "Webhook LinkedIn") {
   try {
     const leadId = norm.linkedinLeadId;
     const fields = stripEmpty({
@@ -1944,6 +2290,7 @@ async function syncLinkedinInboundProspect(env, norm, clienteId) {
       "LinkedIn URL": norm.linkedinUrl,
       Email: norm.email,
       "Teléfono": norm.phone,
+      Industria: norm.industry,
       Fuente: "Lead Gen Form",
       Estado: "Cliente",
       Campaña: norm.campaign || norm.utmCampaign,
@@ -1953,25 +2300,23 @@ async function syncLinkedinInboundProspect(env, norm, clienteId) {
       "Fecha descubrimiento": new Date().toISOString(),
     });
 
-    let existing = null;
-    if (leadId) {
-      const safe = String(leadId).replace(/'/g, "\\'");
-      const url =
-        `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("LinkedIn_Prospects")}` +
-        `?maxRecords=1&filterByFormula=${encodeURIComponent(`{LinkedIn Lead ID}='${safe}'`)}`;
-      const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
-      if (r.ok) existing = (await r.json())?.records?.[0]?.id || null;
-    }
-
-    if (existing) {
+    const found = await findLinkedinProspectByLeadId(env, leadId);
+    let row;
+    if (found?.id) {
       const patch = { ...fields };
       delete patch["Fecha descubrimiento"];
-      await airtableUpdateTolerant(env, "LinkedIn_Prospects", existing, patch);
+      row = await airtableUpdateTolerant(env, "LinkedIn_Prospects", found.id, patch) || found;
     } else {
-      await airtableCreateTolerant(env, "LinkedIn_Prospects", fields);
+      row = await airtableCreateTolerant(env, "LinkedIn_Prospects", fields);
     }
+    await logLinkedinInboundEvent(env, {
+      prospect: row, leadId, clienteId, actor,
+      detail: actor === "LinkedIn Lead Sync" ? "Lead recibido por integración oficial Lead Sync" : "Lead recibido por webhook LinkedIn",
+    });
+    return row;
   } catch (e) {
     console.error("[leads-worker] LinkedIn_Prospects:", e.message);
+    return null;
   }
 }
 
@@ -2755,6 +3100,7 @@ function normalizeWeb(b) {
     email: str(b.email),
     phone: str(b.phone),
     jobTitle: str(b.jobTitle),
+    industry: str(b.industry),
     service: str(b.service),
     product: str(b.product),
     quantity: str(b.quantity),
@@ -3217,7 +3563,7 @@ function corsHeaders(origin, env) {
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Public-Lead-Key, X-Portal-Admin-Key",
+    "Access-Control-Allow-Headers": "Content-Type, X-Public-Lead-Key, X-Portal-Admin-Key, X-Linkedin-Webhook-Key, X-Linkedin-Admin-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
