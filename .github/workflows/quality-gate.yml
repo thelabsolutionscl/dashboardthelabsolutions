@@ -1,0 +1,47 @@
+name: Quality gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: JavaScript syntax
+        run: |
+          for file in js/*.js airtable-proxy/src/*.js; do
+            [ -f "$file" ] && node --check "$file"
+          done
+      - name: Inline JavaScript syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),cp=require('child_process');
+          const html=fs.readFileSync('index.html','utf8');
+          const re=/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
+          let m,i=0;
+          while((m=re.exec(html))){
+            if(/\bsrc\s*=/.test(m[0].slice(0,m[0].indexOf('>')))) continue;
+            const p='/tmp/inline-'+(++i)+'.js';
+            fs.writeFileSync(p,m[1]);
+            cp.execFileSync(process.execPath,['--check',p],{stdio:'inherit'});
+          }
+          NODE
+      - name: PHP syntax
+        run: php -l mail-api.php
+      - name: Full test suite
+        run: node --test tests/*.test.js

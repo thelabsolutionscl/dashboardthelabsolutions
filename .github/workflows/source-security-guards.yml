@@ -1,0 +1,51 @@
+name: Source security guards
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject credential material in production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=()
+          for p in index.html cotiza.html mail-api.php js airtable-proxy lead-worker sii-worker printer-bridge .github/workflows; do
+            [ -e "$p" ] && files+=("$p")
+          done
+          patterns=(
+            'pat[A-Za-z0-9_-]{20,}'
+            'sk-ant-[A-Za-z0-9_-]{20,}'
+            'sk-proj-[A-Za-z0-9_-]{20,}'
+            're_[A-Za-z0-9_-]{20,}'
+            '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----'
+            'xox[baprs]-[A-Za-z0-9-]{20,}'
+          )
+          bad=0
+          for p in "${patterns[@]}"; do
+            if grep -RInE --exclude='*.map' -- "$p" "${files[@]}" >/tmp/source-guard-hit 2>/dev/null; then
+              echo "::error::Possible credential material found in production source"
+              sed -E 's/([=:])[[:space:]]*[^[:space:]]+/\1 [REDACTED]/g' /tmp/source-guard-hit | head -50
+              bad=1
+            fi
+          done
+          test "$bad" -eq 0
+      - name: Ensure critical secrets stay behind cutover gates
+        run: |
+          set -euo pipefail
+          grep -q 'PORTAL_ACCESS_MODE' .github/workflows/deploy.yml
+          grep -q 'PRINTER_ACCESS_MODE' .github/workflows/deploy.yml
+          grep -q 'SII_ACCESS_MODE' .github/workflows/deploy.yml
+          grep -q 'ACCESS_ENFORCE' airtable-proxy/src/access-auth.js
