@@ -36,3 +36,10 @@ test('al soltar la rotacion se fuerza un repintado final',()=>{
   const block=SRC.slice(i,i+500);
   assert.match(block,/else render\(\)/);
 });
+
+
+test('rotacion del preview queda limitada a un frame y recupera pointercancel',()=>{
+  assert.match(SRC,/requestAnimationFrame\(\(\)=>\{_rotRaf=0;render\(\);\}\)/);
+  assert.match(SRC,/cancelAnimationFrame\(_rotRaf\)/);
+  assert.match(SRC,/addEventListener\('pointercancel'/);
+});
