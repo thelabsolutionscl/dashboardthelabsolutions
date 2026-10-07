@@ -2844,15 +2844,22 @@ self.onmessage=function(ev){
     ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--accent)';drop.style.background='rgba(0,212,204,0.05)';}));
     ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor='var(--border2)';drop.style.background='';}));
     drop.addEventListener('drop',e=>loadFiles(e.dataTransfer.files));
-    const cv=el('slCanvas');let _ptStart=null,_ptMoved=0;
+    const cv=el('slCanvas');let _ptStart=null,_ptMoved=0,_rotRaf=0;
     cv.addEventListener('pointerdown',e=>{S.drag={x:e.clientX,y:e.clientY};_ptStart={x:e.clientX,y:e.clientY};_ptMoved=0;cv.setPointerCapture(e.pointerId);if(!S.layFlatMode)cv.style.cursor='grabbing';});
-    cv.addEventListener('pointermove',e=>{if(!S.drag)return;_ptMoved+=Math.abs(e.clientX-S.drag.x)+Math.abs(e.clientY-S.drag.y);S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};render();});
+    cv.addEventListener('pointermove',e=>{
+      if(!S.drag)return;
+      _ptMoved+=Math.abs(e.clientX-S.drag.x)+Math.abs(e.clientY-S.drag.y);
+      S.rot.a+=(e.clientX-S.drag.x)*0.01;S.rot.b+=(e.clientY-S.drag.y)*0.01;S.drag={x:e.clientX,y:e.clientY};
+      if(!_rotRaf)_rotRaf=requestAnimationFrame(()=>{_rotRaf=0;render();});
+    });
     cv.addEventListener('pointerup',e=>{
       const wasClick=_ptStart&&_ptMoved<6;S.drag=null;_ptStart=null;
+      if(_rotRaf){cancelAnimationFrame(_rotRaf);_rotRaf=0;}
       cv.style.cursor=S.layFlatMode?'crosshair':'grab';
       if(wasClick&&S.layFlatMode){const r=cv.getBoundingClientRect();_layFlatAt(e.clientX-r.left,e.clientY-r.top);}
       else render(); // repintado final nítido al terminar de rotar
     });
+    cv.addEventListener('pointercancel',()=>{S.drag=null;_ptStart=null;if(_rotRaf){cancelAnimationFrame(_rotRaf);_rotRaf=0;}cv.style.cursor=S.layFlatMode?'crosshair':'grab';render();});
     // Arrastrar para rotar el preview 3D de trayectorias
     const gcv=el('slGcodeCanvas');
     if(gcv){gcv.style.touchAction='none';let gd=null;
