@@ -52,10 +52,11 @@ test('send route validates recipients, count, headers, body and attachments serv
 });
 
 test('outgoing attachment helper rejects malformed base64 and count overflow',t=>{
+  const policyStart=php.indexOf('function mail_active_attachment_blocked(');
   const start=php.indexOf('function mail_parse_outgoing_attachments(');
   const end=php.indexOf('function decode_str(',start);
-  assert.ok(start>0&&end>start);
-  const helper=php.slice(start,end);
+  assert.ok(policyStart>0&&start>policyStart&&end>start);
+  const helper=php.slice(policyStart,end);
   assert.match(helper,/count\(\$parsed\) > 10/);
   assert.match(helper,/base64_decode\(\$a\['data'\], true\)/);
   assert.match(helper,/\$total > 20 \* 1024 \* 1024/);
@@ -103,5 +104,5 @@ test('attachment download validates part path and applies preflight plus decoded
 });
 
 test('build marker identifies October boundary hardening',()=>{
-  assert.match(php,/MAIL_API_BUILD', '2026-10-06-mail-boundaries'/);
+  assert.match(php,/MAIL_API_BUILD', '2026-10-07-mail-session-idempotency'/);
 });

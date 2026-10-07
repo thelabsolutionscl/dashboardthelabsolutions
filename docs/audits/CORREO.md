@@ -1,206 +1,203 @@
 # Auditoría de CORREO
 
-## Alcance
+## Estado
 
-El módulo está compuesto por:
+Auditoría funcional #107 cerrada en código.
 
-- `index.html`: interfaz del cliente de correo;
-- `js/correo.js`: cuentas, credenciales, lectura, composición, adjuntos y vínculos con CRM;
-- `js/notify.js`: polling de no leídos;
-- `mail-api.php`: IMAP para lectura y Resend/SMTP para envío.
+El módulo queda dividido en tres capas:
 
-La auditoría revisó autenticación, autorización, secretos, envío, lectura, HTML remoto, adjuntos, límites, idempotencia, cuentas compartidas y trazabilidad.
+1. **Cliente `js/correo.js`**: interfaz, sanitización, composición y compatibilidad temporal.
+2. **Proxy Access**: identidad individual, autorización de casillas y sesión corta del buzón.
+3. **`mail-api.php`**: IMAP, Resend, límites, idempotencia, auditoría y validación de adjuntos.
 
-## Fortalezas comprobadas
+La activación productiva del proxy/Cloudflare Access y el despliegue de la versión nueva de `mail-api.php` continúan agrupados para el cierre final de #306.
 
-- El endpoint usa HTTPS y respuestas `no-store`.
-- El frontend aplica timeout de 30 segundos.
-- Las lecturas pueden reintentarse, pero los envíos no se reintentan automáticamente.
-- El doble clic de envío se bloquea localmente con `_sending`.
-- El listado IMAP usa sobres y no descarga todos los cuerpos.
-- Los snippets están acotados por cantidad, tamaño y tiempo.
-- El visor HTML usa un iframe `sandbox` sin `allow-scripts`.
-- El texto plano se escapa antes de renderizarse.
-- Hay límites de adjuntos de 15 MB en cliente y 20 MB en servidor.
-- La integración registra envíos de cotizaciones y conecta remitentes con CRM.
+## Autenticación y sesión
 
-Estas defensas son valiosas, pero no compensan los bloqueadores críticos siguientes.
+El navegador ya no persiste contraseñas IMAP en `localStorage` ni `sessionStorage`.
 
-## Hallazgos críticos
+Cuando Cloudflare Access está activo:
 
-### 1. Resend envía antes de autenticar la casilla
+- `GET /mail/accounts` devuelve exclusivamente las casillas autorizadas para la identidad firmada;
+- `POST /mail/session` recibe la clave una sola vez, valida IMAP y crea una sesión backend de 4 horas;
+- `POST /mail/rpc` ejecuta las acciones posteriores sin que el navegador vuelva a transportar la contraseña;
+- la sesión expirada devuelve `MAIL_SESSION_REQUIRED`;
+- `DELETE /mail/session` permite invalidarla explícitamente.
 
-En `case 'send'`, cuando existe `RESEND_API_KEY`, `mail-api.php` llama a `resend_send(...)` antes de abrir IMAP o verificar `user/pass`.
+Antes del cutover de #306 existe compatibilidad temporal solo en memoria de la pestaña. Esa clave no se escribe en Web Storage y desaparece al recargar/cerrar.
 
-El POST solo exige que `user` y `pass` no estén vacíos. CORS no es autenticación y puede omitirse realizando la solicitud fuera de un navegador. Por lo tanto, una contraseña falsa puede alcanzar el envío Resend usando una dirección remitente aceptada por el proveedor.
+## Autorización de casillas
 
-**Corrección requerida:** autenticar primero contra IMAP o, preferiblemente, reemplazar la contraseña de buzón por una sesión backend corta emitida después de una autenticación válida. Después, autorizar explícitamente la casilla remitente.
+Las casillas compartidas ya no se agregan automáticamente en el cliente.
 
-### 2. HTML recibido sale del sandbox al responder o reenviar
+El proxy construye la lista desde:
 
-La vista normal coloca `body_html` dentro de un iframe aislado. Sin embargo, `reply()` y `forward()` pasan `m.body_html` a `openCompose()`, que lo asigna mediante `mailCmpBody.innerHTML` en el DOM principal.
+- la casilla propia de la identidad Access, si pertenece a `@thelab.solutions`;
+- `MAIL_SHARED_ACCOUNT_MAP`, una allowlist server-side que puede conceder una casilla a roles o correos concretos.
 
-Así, un correo malicioso puede introducir HTML activo, atributos de evento, formularios, enlaces engañosos o recursos remotos dentro del dashboard cuando el usuario responde o reenvía.
+`hola@thelab.solutions` no tiene trato especial en el frontend ni en el Worker.
 
-**Corrección requerida:** sanitizar con una política estricta antes de insertar HTML en el editor. El contenido citado debería convertirse a HTML permitido o texto seguro.
+`postAs()` falla explícitamente si:
 
-### 3. Contraseñas de correo en texto plano dentro de `localStorage`
+- la casilla no está autorizada; o
+- la sesión de esa casilla no existe/expiró.
 
-Cada contraseña se guarda bajo `thelab_mail_pass_<cuenta>` y permanece indefinidamente. Cualquier XSS en el dashboard, extensión con acceso al sitio, persona con acceso al mismo perfil del navegador o script comprometido puede leer todas las credenciales almacenadas.
+Nunca cambia silenciosamente a otro remitente.
 
-Además, la contraseña completa viaja al endpoint en cada operación.
+## HTML y XSS
 
-**Corrección requerida:** sesión backend corta, cookies `HttpOnly`, rotación, expiración e invalidación. El navegador no debe conservar la contraseña del buzón.
+Responder y reenviar pasan el HTML recibido por `_sanitizarCita()` antes de insertarlo en el editor principal.
 
-### 4. No existe limitación de envío en servidor
+Firmas y contenido compartido pasan por una allowlist separada `_sanitizarFirma()`, que filtra:
 
-El “freno” de correos vive en `localStorage`. Se puede borrar, modificar o evitar llamando directamente a `mail-api.php`. Tampoco existe una cuota por cuenta, IP, usuario, tenant o ventana temporal en el backend.
+- tags activos;
+- atributos peligrosos;
+- estilos con `url()`, `expression`, `javascript:`, `@import`, etc.;
+- URLs no HTTPS.
 
-**Corrección requerida:** rate limit autoritativo con respuesta 429, límites diferenciados para manual/automatizado y alertas por comportamiento anómalo.
+Las imágenes que agrega manualmente el usuario se crean mediante nodos DOM y solo aceptan URLs HTTPS sin credenciales embebidas.
 
-## Hallazgos altos
+## Tracking remoto
 
-### 5. IMAP desactiva la validación del certificado TLS
+El visor mantiene iframe sandbox sin scripts.
 
-La conexión usa `/imap/ssl/novalidate-cert`. El tráfico va cifrado, pero el cliente no verifica correctamente la identidad del servidor, debilitando la protección frente a intermediarios.
+Además:
 
-Debe corregirse el certificado/cadena del servidor y retirar `novalidate-cert`.
+- las imágenes remotas se eliminan por defecto del HTML mostrado;
+- aparece una acción explícita **Cargar imágenes remotas**;
+- al cargarlas se aplica `referrer=no-referrer`;
+- responder/reenviar no vuelve a habilitar imágenes remotas automáticamente.
 
-### 6. Cuentas compartidas y remitentes sin autorización central
+## Envío
 
-`hola@thelab.solutions` aparece automáticamente en el selector y el usuario puede agregar cualquier dirección con formato válido. No existe una asignación backend que indique qué persona o rol puede leer o enviar desde cada casilla.
+Antes de Resend:
 
-`postAs()` además cae silenciosamente a la cuenta activa cuando falta la contraseña solicitada. Esto puede enviar desde una identidad distinta a la esperada por un agente o flujo CRM.
+1. se valida origen/método y límites de payload;
+2. se valida la casilla `@thelab.solutions`;
+3. se valida IMAP;
+4. se reserva idempotencia;
+5. se reserva cuota;
+6. recién entonces se llama a Resend.
 
-### 7. Firmas y URLs insertadas no se sanitizan
+Una contraseña falsa no puede alcanzar Resend.
 
-Las firmas pueden editarse como HTML crudo, persistirse en `localStorage` y Airtable, recuperarse y volver a insertarse mediante `innerHTML`.
+## Idempotencia
 
-`sigInsertImage()` e `insertImagePrompt()` interpolan una URL directamente dentro de un atributo HTML. Se necesita sanitización, escape de atributos y una política que permita solo `https:` y, cuando corresponda, hosts aprobados.
+Cada envío genera `idempotency_key`.
 
-### 8. Imágenes remotas y tracking pixels
+`mail-api.php` mantiene una reserva atómica de 24 horas por casilla + clave:
 
-El iframe bloquea scripts, pero permite que imágenes y otros recursos remotos se carguen automáticamente. Abrir un correo puede revelar IP, agente de usuario, horario de lectura y parámetros únicos al remitente.
+- primer intento: `pending`;
+- resultado final: `done` con respuesta mínima;
+- repetición de una clave completada: devuelve el mismo resultado sin reenviar;
+- repetición mientras está en curso: 409.
 
-Se recomienda bloquear recursos remotos por defecto y ofrecer “Cargar imágenes” por mensaje o remitente confiable.
+La reserva está en el servidor, no en el navegador.
 
-### 9. Validación incompleta de destinatarios y remitentes en backend
+## Cuota
 
-La validación de `To`, `CC` y `BCC` ocurre principalmente en JavaScript. El servidor solo comprueba que `to` y `subject` no estén vacíos.
+La cuota de envío sigue siendo autoritativa en servidor:
 
-Debe validar sintaxis, cantidad de destinatarios, tamaño, caracteres de control y políticas de dominio. `From` debe salir de una allowlist vinculada a la sesión autenticada.
+- predeterminado: 200 envíos/casilla/hora;
+- configurable con `MAIL_SEND_HOURLY_LIMIT`;
+- serializada con `flock`;
+- 429 + `Retry-After` al superar el límite.
 
-### 10. Sin idempotencia de envío
+## Auditoría
 
-No se reintenta `send`, lo que reduce duplicados, pero un timeout deja al usuario sin saber si Resend aceptó el mensaje. Reintentar manualmente puede duplicarlo.
+Cada intento de envío deja un evento mínimo en servidor con:
 
-Debe generarse una idempotency key por envío, almacenarse en servidor y conservar el identificador devuelto por Resend.
+- timestamp;
+- hash de casilla;
+- hash de IP;
+- resultado;
+- proveedor;
+- ID del proveedor;
+- hash de idempotency key;
+- cantidad de destinatarios.
 
-## Hallazgos medios
+No guarda:
 
-- La descarga de adjuntos carga el archivo completo en memoria y no impone tamaño máximo en `action=attachment`.
-- No hay advertencia reforzada para ejecutables, HTML, SVG, documentos con macros u otros formatos activos.
-- El backend acepta cuerpo, asunto y lista de destinatarios sin límites explícitos propios.
-- La búsqueda IMAP construye el criterio con `addslashes`; conviene una codificación específica para criterios IMAP.
-- Firmas, destinatarios históricos y preferencias comparten Airtable/localStorage sin un modelo claro de permisos por casilla.
-- El frontend y el backend no verifican automáticamente que ejecutan el mismo `MAIL_API_BUILD`.
-- La auditoría de envíos es insuficiente: debe registrar cuenta, actor, fecha, resultado, proveedor e idempotency key sin almacenar contraseña ni cuerpo completo.
+- contraseña;
+- cuerpo;
+- asunto;
+- direcciones de destinatarios.
 
-## Arquitectura recomendada
+Los envíos que pasan por el proxy también generan auditoría operativa.
 
-1. Autenticar al usuario del dashboard contra un backend propio.
-2. Autorizar cuentas por usuario/rol en una tabla de asignaciones.
-3. Emitir una sesión corta y segura; nunca devolver ni persistir la contraseña IMAP.
-4. Validar la casilla antes de cualquier envío Resend.
-5. Aplicar rate limit, cuota, idempotencia y auditoría en servidor.
-6. Sanitizar HTML entrante, firmas, plantillas y contenido citado.
-7. Bloquear recursos remotos por defecto.
-8. Separar credenciales IMAP del proveedor transaccional de salida.
-9. Mantener estados de envío: preparado, aceptado por proveedor, guardado en Enviados, fallido o incierto.
+## Resend
 
-## Prioridad de corrección
+El ID retornado por Resend se conserva en la respuesta como `provider_id`.
 
-1. Bloquear envío Resend sin autenticación válida.
-2. Evitar XSS al responder/reenviar y al cargar firmas.
-3. Retirar contraseñas de `localStorage`.
-4. Agregar autorización de casillas y rate limit backend.
-5. Validar TLS, destinatarios, adjuntos e idempotencia.
-6. Bloquear tracking remoto y completar auditoría.
+Estados:
 
-## Cobertura agregada
+- `accepted`: Resend confirmó y entregó ID;
+- `failed_or_uncertain`: respuesta de error o resultado no confiable;
+- `rate_limited`: bloqueado antes del proveedor.
 
-- `tests/correo-wiring.test.js`
-- `.github/workflows/correo-audit.yml`
+El SMTP compartido continúa deshabilitado como fallback.
 
-Las pruebas activas protegen el cableado y las defensas existentes. Los defectos confirmados se mantienen como diagnósticos `todo` hasta que exista una implementación segura verificable.
+## TLS IMAP
 
-## Criterios de aceptación
+Todas las conexiones usan:
 
-1. Ningún envío ocurre antes de autenticar y autorizar la casilla.
-2. Una contraseña falsa nunca puede producir un envío Resend.
-3. El navegador no almacena contraseñas IMAP.
-4. Responder, reenviar o cargar una firma no puede ejecutar HTML arbitrario.
-5. Recursos remotos están bloqueados por defecto.
-6. Rate limit e idempotencia viven en servidor.
-7. Cada usuario solo puede usar las casillas asignadas por RBAC.
-8. `postAs` falla de forma explícita si no puede usar el remitente solicitado.
-9. IMAP valida el certificado TLS.
-10. Destinatarios, cuerpo y adjuntos tienen límites y validación backend.
-11. Los envíos generan una auditoría mínima y trazable.
-12. Los diagnósticos `todo` se convierten en pruebas obligatorias al corregirse.
+`/imap/ssl/validate-cert`
 
-## 2026-09-29 — mitigación de cuota en servidor (PR #317)
+No existe `novalidate-cert`.
 
-El PHP ahora reserva cada envío después de autenticar la casilla con IMAP y
-antes de contactar a Resend. El cupo predeterminado es **200 envíos por casilla
-en 60 minutos**, configurable por `MAIL_SEND_HOURLY_LIMIT` (1–2000). En el
-servidor cPanel que aloja el PHP, un archivo privado en el directorio temporal
-y `flock(LOCK_EX)` serializan las reservas entre peticiones simultáneas;
-solo persisten hashes SHA-256 de los correos, jamás contraseñas ni mensajes.
-Si la reserva no puede guardarse, el envío falla cerrado con 503; al alcanzar
-el límite devuelve 429 con `Retry-After`. Los errores/tiempos agotados de
-Resend consumen reserva porque el resultado puede ser incierto. Los clientes
-no deben reintentar automáticamente un envío de resultado ambiguo.
+## Destinatarios y límites
 
-**Límite de la mitigación:** funciona si las instancias PHP comparten el mismo
-filesystem, como un único cPanel. Si se distribuye a varios hosts, sustituir
-el archivo por una reserva atómica en Redis/DB. No reemplaza la futura sesión
-HttpOnly, permisos explícitos por casilla ni cuotas por actor/IP.
+El backend valida de forma independiente:
 
-La implementación en GitHub NO actualiza automáticamente el `mail-api.php`
-que está en cPanel. Validar el certificado de `mail.thelab.solutions:993`,
-instalar la versión nueva y comprobar el marcador
-`2026-09-29-mail-security-rate-guard` antes de dar por cerrada la auditoría
-de producción.
+- To/CC/BCC;
+- máximo 50 destinatarios;
+- asunto máximo 250 bytes;
+- nombre From máximo 120;
+- cuerpo HTML máximo 2 MiB;
+- máximo 10 adjuntos;
+- máximo 20 MiB decodificados.
 
-## 2026-10-06 — límites autoritativos del mail-api
+## Adjuntos activos
 
-La reauditoría del código vigente confirmó que autenticación IMAP antes de Resend,
-sanitización de citas/firmas, TLS con `validate-cert` y cuota por casilla ya
-estaban corregidos. Quedaban tres límites server-side incompletos:
+Además de los límites de tamaño, el backend bloquea tipos ejecutables/activos, entre otros:
 
-1. CORS anunciaba un origen permitido incluso ante un Origin desconocido y no
-   existía rechazo explícito de métodos distintos de POST/OPTIONS.
-2. El envío confiaba demasiado en validaciones del navegador para destinatarios,
-   tamaño del cuerpo y estructura/base64 real de adjuntos.
-3. `action=attachment` podía descargar y decodificar una parte grande sin un
-   límite backend propio.
+- EXE/COM/BAT/CMD/SCR/PS1/VBS/JS/JAR/MSI;
+- HTML;
+- SVG;
+- DOCM/XLSM/PPTM.
 
-La corrección `2026-10-06-mail-boundaries`:
+La política se aplica al envío y a la descarga desde IMAP.
 
-- devuelve 403 a Origin no permitido y 405 a métodos no permitidos;
-- restringe la identidad IMAP/From a casillas `@thelab.solutions`;
-- parsea To/CC/BCC en servidor y limita el total a 50 destinatarios;
-- limita asunto a 250 bytes, nombre From a 120 y cuerpo HTML a 2 MiB;
-- acepta como máximo 10 adjuntos y 20 MiB decodificados, valida base64, nombre
-  y MIME en servidor;
-- valida UID/part de descargas y aplica cortes antes y después de decodificar;
-- sanea el nombre de archivo devuelto;
-- incorpora `tests/mail-api-boundaries.test.js` y convierte el diagnóstico de
-  destinatarios en prueba obligatoria.
+## Build y despliegue
 
-Esto **no** sustituye los pendientes arquitectónicos: sesión backend HttpOnly,
-RBAC central de casillas compartidas, idempotencia de envíos, bloqueo de recursos
-remotos/tracking, auditoría mínima de proveedor y política para adjuntos activos.
-Además, el PHP de GitHub no entra en producción hasta desplegarlo en cPanel y
-validar IMAP/Resend de extremo a extremo.
+`MAIL_API_BUILD` es:
+
+`2026-10-07-mail-session-idempotency`
+
+`json_out()` agrega el build a todas las respuestas JSON, permitiendo detectar un cPanel desfasado.
+
+## Cobertura obligatoria
+
+`tests/correo-wiring.test.js` ya no contiene diagnósticos TODO para los hallazgos de #107.
+
+El workflow Correo valida también:
+
+- `airtable-proxy/src/worker.js`;
+- `airtable-proxy/src/access-auth.js`;
+- `mail-api.php`;
+- módulos JS de correo;
+- smoke global.
+
+## Pendiente externo
+
+No confundir **código mergeado** con **producción activada**.
+
+Para el cierre final de #306 aún corresponde:
+
+- desplegar el Worker/proxy actualizado;
+- activar/configurar Cloudflare Access;
+- definir `MAIL_SHARED_ACCOUNT_MAP`;
+- desplegar el `mail-api.php` nuevo en cPanel;
+- verificar el build público;
+- probar IMAP TLS real;
+- probar sesión, expiración, casillas autorizadas, 429 e idempotencia desde los equipos reales.

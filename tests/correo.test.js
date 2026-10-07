@@ -318,7 +318,7 @@ test('el envío sigue teniendo freno y no se puede disparar dos veces', () => {
   assert.match(fn, /if\(this\._sending\) return;/, 'sin doble clic');
   assert.match(fn, /finally\{\s*this\._sending=false;/, 'y el cerrojo se suelta siempre');
   // El freno horario debe cubrir las DOS rutas de salida.
-  assert.equal((CORREO.match(/action==='send'\)\{const g=this\._sendGate\(\);if\(g\) return g;\}/g) || []).length, 2,
+  assert.equal((CORREO.match(/action==='send'\)\{const g=this\._sendGate\(\);if\(g\)\s*return g;\}/g) || []).length, 2,
     'post() y postAs() deben pasar por el freno');
   // Una respuesta perdida después de mover o enviar no puede disparar la acción dos veces.
   const post=cuerpo('async post(params){');

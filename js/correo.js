@@ -15,6 +15,10 @@ const MAIL={
   _sending:false,
   _accountUnseen:{},
   _sharedMailRevisions:{},
+  _authorizedAccounts:null,
+  _secureMailReady:false,
+  _legacyPassByAccount:{},
+  _remoteImagesAllowed:new Set(),
 
   // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
   // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
@@ -28,10 +32,9 @@ const MAIL={
     let list=[]; try{list=JSON.parse(localStorage.getItem(this._acctsKey())||'[]');}catch(e){list=[];}
     if(!Array.isArray(list)) list=[];
     if(!list.some(a=>a&&a.email===u.username)) list.unshift({email:u.username,name:u.name||''});
-    // hola@ es la casilla comercial compartida: siempre disponible en el selector
-    // (al elegirla por primera vez pide su clave, que queda guardada por-casilla).
-    if(!list.some(a=>a&&a.email==='hola@thelab.solutions')) list.push({email:'hola@thelab.solutions',name:'The Lab Solutions'});
-    return list.filter(a=>a&&a.email);
+    const allowed=Array.isArray(this._authorizedAccounts)&&this._authorizedAccounts.length
+      ?new Set(this._authorizedAccounts):new Set([u.username]);
+    return list.filter(a=>a&&allowed.has(String(a.email||'').toLowerCase()));
   },
   setAccounts(list){const k=this._acctsKey();if(k) localStorage.setItem(k,JSON.stringify(list));},
   activeAccount(){
@@ -58,6 +61,41 @@ const MAIL={
       return{base:url.origin+url.pathname.replace(/\/$/,''),key:px.key};
     }catch(_){return null;}
   },
+  async _loadAuthorizedAccounts(){
+    const cfg=this._sharedMailConfig();
+    if(!cfg){this._secureMailReady=false;this._authorizedAccounts=null;return false;}
+    try{
+      const r=await fetch(cfg.base+'/mail/accounts',{method:'GET',credentials:'include',redirect:'error',
+        headers:{'X-App-Key':cfg.key}});
+      const d=await r.json().catch(()=>null);
+      if(!r.ok||!d?.ok||!Array.isArray(d.accounts))throw Error('not ready');
+      this._authorizedAccounts=d.accounts.map(x=>String(x).toLowerCase());
+      this._secureMailReady=true;
+      const u=AUTH.getUser();
+      let list=[];try{list=JSON.parse(localStorage.getItem(this._acctsKey())||'[]');}catch(_){}
+      if(!Array.isArray(list))list=[];
+      for(const email of this._authorizedAccounts){
+        if(!list.some(a=>a&&a.email===email))list.push({email,name:email===u?.username?(u?.name||''):email.split('@')[0]});
+      }
+      this.setAccounts(list);
+      return true;
+    }catch(_){this._secureMailReady=false;this._authorizedAccounts=null;return false;}
+  },
+  async _secureMailSession(account,password){
+    const cfg=this._sharedMailConfig();if(!cfg)return {error:'Proxy seguro no configurado'};
+    const r=await fetch(cfg.base+'/mail/session',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify({account,password})});
+    return r.json().catch(()=>({error:'Respuesta inválida del proxy de correo'}));
+  },
+  async _secureMailRpc(account,params){
+    const cfg=this._sharedMailConfig();if(!cfg)return {error:'Proxy seguro no configurado'};
+    const r=await fetch(cfg.base+'/mail/rpc',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,'Content-Type':'application/json'},body:JSON.stringify({account,params})});
+    const d=await r.json().catch(()=>({error:'Respuesta inválida del proxy de correo'}));
+    if(r.status===401&&d?.error==='MAIL_SESSION_REQUIRED')return {error:'MAIL_SESSION_REQUIRED'};
+    return d;
+  },
+
   async _sharedMailRequest(resource,method,account,body){
     const cfg=this._sharedMailConfig();if(!cfg)throw new Error('Proxy compartido no configurado');
     const params=new URLSearchParams({resource});
@@ -150,40 +188,17 @@ const MAIL={
   },
 
   _mailPassKey(){const a=this.activeAccount();return a?'thelab_mail_pass_'+a:null;},
-  getMailPassFor(email){
-    if(!email)return '';
-    const k='thelab_mail_pass_'+email;
+  _purgeLegacyMailPasswords(){
     try{
-      const existing=sessionStorage.getItem(k);
-      if(existing)return existing;
-      // One-time migration of legacy passwords. sessionStorage is scoped to
-      // this tab; a closed browser will require the user to sign in again.
-      const old=localStorage.getItem(k)||'';
-      if(!old)return '';
-      sessionStorage.setItem(k,old);
-      localStorage.removeItem(k);
-      return old;
-    }catch(_){return '';}
+      for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith('thelab_mail_pass_'))localStorage.removeItem(k);}
+      for(let i=sessionStorage.length-1;i>=0;i--){const k=sessionStorage.key(i);if(k&&k.startsWith('thelab_mail_pass_'))sessionStorage.removeItem(k);}
+    }catch(_){}
   },
+  getMailPassFor(email){return email?String(this._legacyPassByAccount[email]||''):'';},
   getMailPass(){return this.getMailPassFor(this.activeAccount());},
-  setMailPass(p){
-    const k=this._mailPassKey();if(!k)return;
-    sessionStorage.setItem(k,p);
-    localStorage.removeItem(k);
-  },
-  clearMailPass(){
-    const k=this._mailPassKey();if(!k)return;
-    try{sessionStorage.removeItem(k);}finally{localStorage.removeItem(k);}
-  },
-
-  auth(){
-    const o=this.activeAccountObj();
-    return {
-      user:o.email||'',
-      pass:this.getMailPass()||'',
-      from_name:o.name||''
-    };
-  },
+  setMailPass(p){const a=this.activeAccount();if(a)this._legacyPassByAccount[a]=String(p||'');this._purgeLegacyMailPasswords();},
+  clearMailPass(){const a=this.activeAccount();if(a)delete this._legacyPassByAccount[a];this._purgeLegacyMailPasswords();},
+  auth(){const o=this.activeAccountObj();return{user:o.email||'',pass:this.getMailPass()||'',from_name:o.name||''};},
 
   // ── FRENO DE ENVÍOS ────────────────────────────────────────────
   // Ahora el envío sale por Resend, así que ya NO hay riesgo de que el hosting
@@ -251,28 +266,24 @@ const MAIL={
   },
 
   async post(params){
-    if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
-    const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
-    const a=this.auth();
-    fd.append('user',a.user); fd.append('pass',a.pass);
-    for(const[k,v] of Object.entries(params)) fd.append(k,v);
-    // El WAF del hosting bloquea de forma INTERMITENTE (fetch falla sin CORS).
-    // Una mutación pudo completarse aunque se haya perdido la respuesta.
-    // Reintentar spam/trash/mark/send podría actuar sobre un UID ya movido.
+    if(params&&params.action==='send'){const g=this._sendGate();if(g)return g;}
+    const account=this.activeAccount();
+    if(this._secureMailReady){
+      const data=await this._secureMailRpc(account,params);
+      if(data?.error==='MAIL_SESSION_REQUIRED'){this._init=false;this.showPassModal('La sesión del buzón expiró. Ingresa la clave nuevamente.');}
+      return data;
+    }
+    const fd=new URLSearchParams(),a=this.auth();if(!a.pass)return {error:'MAIL_SESSION_REQUIRED'};
+    fd.append('user',a.user);fd.append('pass',a.pass);
+    for(const[k,v] of Object.entries(params||{}))fd.append(k,v);
     const canRetry=['folders','list','snippets','read','search','attachment','sent_addrs'].includes(params?.action);
-    const tries=canRetry?3:1;
-    let lastErr='Sin conexión con el servidor';
+    const tries=canRetry?3:1;let lastErr='Sin conexión con el servidor';
     for(let i=0;i<tries;i++){
-      const ctrl=new AbortController();
-      const timeout=setTimeout(()=>ctrl.abort(),30000);
-      try{
-        const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
-        const text=await r.text();
-        return this._parseResp(text,r.status);
-      }catch(e){
-        lastErr=e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor';
-        if(i<tries-1&&e.name!=='AbortError'){await new Promise(res=>setTimeout(res,500*(i+1)));continue;}
-      }finally{clearTimeout(timeout);}
+      const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),30000);
+      try{const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});return this._parseResp(await r.text(),r.status);}
+      catch(e){lastErr=e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor';
+        if(i<tries-1&&e.name!=='AbortError'){await new Promise(res=>setTimeout(res,500*(i+1)));continue;}}
+      finally{clearTimeout(timeout);}
     }
     return{error:lastErr};
   },
@@ -281,30 +292,34 @@ const MAIL={
   // por-cuenta. Si esa clave no está, cae a la cuenta activa conservando el
   // from_name pedido, y avisa desde qué casilla salió realmente.
   async postAs(fromEmail,params){
+    fromEmail=String(fromEmail||'').toLowerCase();
+    if(!this.accounts().some(a=>a.email===fromEmail))
+      return {error:'No se envió: la casilla '+fromEmail+' no está autorizada para esta sesión.'};
+    if(params&&params.action==='send'){const g=this._sendGate();if(g)return g;}
+    if(this._secureMailReady){
+      const data=await this._secureMailRpc(fromEmail,params);
+      if(data?.error==='MAIL_SESSION_REQUIRED')return {error:'No se envió: la sesión de '+fromEmail+' expiró. Selecciona esa casilla e inicia sesión.'};
+      return data;
+    }
     const pass=this.getMailPassFor(fromEmail);
     if(!pass){
-      return {error:'No se envió: la casilla '+fromEmail+' no tiene credenciales configuradas. Selecciónala en Correos e inicia sesión.'};
+      return {error:'No se envió: la casilla '+fromEmail+' no tiene una sesión activa.'};
     }
-    if(params&&params.action==='send'){const g=this._sendGate();if(g) return g;}
-    const fd=new URLSearchParams(); // urlencoded, no multipart: el WAF del hosting devuelve 415 a multipart/form-data
-    fd.append('user',fromEmail); fd.append('pass',pass);
-    for(const[k,v] of Object.entries(params)) fd.append(k,v);
-    const ctrl=new AbortController();
-    const timeout=setTimeout(()=>ctrl.abort(),30000);
-    try{
-      const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});
-      const text=await r.text();
-      return this._parseResp(text,r.status);
-    }catch(e){
-      return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};
-    }finally{clearTimeout(timeout);}
+    const fd=new URLSearchParams();fd.append('user',fromEmail);fd.append('pass',pass);
+    for(const[k,v] of Object.entries(params||{}))fd.append(k,v);
+    const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),30000);
+    try{const r=await fetch(this.API,{method:'POST',body:fd,signal:ctrl.signal});return this._parseResp(await r.text(),r.status);}
+    catch(e){return{error:e.name==='AbortError'?'Tiempo de espera agotado':'Sin conexión con el servidor'};}
+    finally{clearTimeout(timeout);}
   },
 
   async init(){
+    this._purgeLegacyMailPasswords();
+    await this._loadAuthorizedAccounts();
     this.renderAccounts();
     this._hydrateSharedMailboxState().catch(()=>{});
     if(this._init) return;
-    if(!this.getMailPass()){this.showPassModal();return;}
+    if(!this._secureMailReady&&!this.getMailPass()){this.showPassModal();return;}
     this._init=true;
     document.getElementById('mailConnStatus').textContent='Conectando...';
     try{
@@ -333,18 +348,19 @@ const MAIL={
   },
 
   async confirmMailPass(){
-    const p=document.getElementById('mailPassInput').value;
-    if(!p) return;
-    document.getElementById('mailPassModal').style.display='none';
-    this.setMailPass(p);
-    this._init=false;
-    await this.init();
+    const p=document.getElementById('mailPassInput').value;if(!p)return;
+    const account=this.activeAccount();document.getElementById('mailPassError').textContent='Verificando...';
+    if(this._secureMailReady){
+      const d=await this._secureMailSession(account,p);document.getElementById('mailPassInput').value='';
+      if(!d?.ok){document.getElementById('mailPassError').textContent=d?.error||'No se pudo iniciar sesión';return;}
+    }else{this.setMailPass(p);document.getElementById('mailPassInput').value='';}
+    document.getElementById('mailPassModal').style.display='none';this._init=false;await this.init();
   },
 
   async loadFolders(){
     const data=await this.post({action:'folders'});
     if(data.error){
-      if(data.error.toLowerCase().includes('auth')||data.error.toLowerCase().includes('login')){
+      if(data.error==='MAIL_SESSION_REQUIRED'||data.error.toLowerCase().includes('auth')||data.error.toLowerCase().includes('login')){
         this.clearMailPass();this._init=false;
         this.showPassModal('Contraseña incorrecta. Inténtalo de nuevo.');
         return false;   // corta init(): sin clave, pedir la lista es un viaje perdido
@@ -719,7 +735,15 @@ const MAIL={
       const css=light
         ?'*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;background:#fff;margin:0;padding:16px;line-height:1.6}a{color:#0068c9}img{max-width:100%;height:auto}'
         :'*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:14px;color:#ccc;background:#111;margin:0;padding:16px;line-height:1.6}a{color:#00f3ff}img{max-width:100%;height:auto}';
-      ifr.srcdoc=`<!DOCTYPE html><html><head><meta charset="UTF-8"><base target="_blank"><style>${css}</style></head><body>${data.body_html}</body></html>`;
+      const allowRemote=this._remoteImagesAllowed.has(String(data.uid||this.selUid||''));
+      const safeBody=this._sanitizarCita(data.body_html||'',allowRemote);
+      ifr.srcdoc=`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${css}</style></head><body>${safeBody}</body></html>`;
+      if(!allowRemote&&/<img\b/i.test(String(data.body_html||''))){
+        const bar=document.createElement('div');bar.className='mail-remote-images-blocked';
+        const btn=document.createElement('button');btn.className='btn btn-ghost btn-sm';btn.textContent='Cargar imágenes remotas';
+        btn.onclick=()=>{this._remoteImagesAllowed.add(String(data.uid||this.selUid||''));this._renderMsgBody(data);};
+        bar.textContent='Imágenes remotas bloqueadas para proteger tu privacidad. ';bar.appendChild(btn);bodyDiv.appendChild(bar);
+      }
       bodyDiv.appendChild(ifr);
       ifr.onload=()=>{
         try{const h=ifr.contentDocument.body.scrollHeight;ifr.style.height=(h+32)+'px';}catch(e){}
@@ -1620,7 +1644,7 @@ const MAIL={
     status.textContent='Enviando...';status.style.color='var(--text3)';
     try{
       const a=this.auth();
-      const params={action:'send',to,cc,bcc,subject,body,from_name:this._cmpFromName||a.from_name};
+      const params={action:'send',to,cc,bcc,subject,body,from_name:this._cmpFromName||a.from_name,idempotency_key:crypto.randomUUID()};
       if(this._cmpAtts.length) params.atts=JSON.stringify(this._cmpAtts.map(x=>({name:x.name,type:x.type,data:x.data})));
       // Si el borrador fija una casilla de salida (p.ej. hola@), autentica como esa
       // cuenta con su clave guardada; si no, sale por la cuenta activa.

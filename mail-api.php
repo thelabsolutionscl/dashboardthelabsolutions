@@ -34,7 +34,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-10-06-mail-boundaries');
+define('MAIL_API_BUILD', '2026-10-07-mail-session-idempotency');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -43,6 +43,7 @@ define('MAIL_API_BUILD', '2026-10-06-mail-boundaries');
 // json_out() sustituye los bytes inválidos (JSON_INVALID_UTF8_SUBSTITUTE)
 // y, si aún fallara, saneía recursivamente a UTF-8 — nunca devuelve vacío.
 function json_out($data) {
+    if (is_array($data) && !array_key_exists('build', $data)) $data['build'] = MAIL_API_BUILD;
     $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
         | (defined('JSON_PARTIAL_OUTPUT_ON_ERROR') ? JSON_PARTIAL_OUTPUT_ON_ERROR : 0);
@@ -191,6 +192,14 @@ function mail_recipient_list($raw, $required = false, $max = 50) {
     return ['value' => implode(',', $emails), 'count' => count($emails), 'emails' => $emails];
 }
 
+function mail_active_attachment_blocked($name, $mime = '') {
+    $ext = strtolower(pathinfo((string)$name, PATHINFO_EXTENSION));
+    $blocked = ['exe','com','bat','cmd','scr','ps1','vbs','js','jse','jar','msi','html','htm','svg','docm','xlsm','pptm'];
+    if (in_array($ext, $blocked, true)) return true;
+    $m = strtolower(trim((string)$mime));
+    return in_array($m, ['text/html','image/svg+xml','application/x-msdownload','application/x-msdos-program'], true);
+}
+
 // Adjuntos de salida: JSON estricto, máximo 10 archivos y 20 MiB reales
 // decodificados. No se confía en MIME, tamaño ni base64 declarados por JS.
 function mail_parse_outgoing_attachments($raw) {
@@ -222,6 +231,7 @@ function mail_parse_outgoing_attachments($raw) {
         if ($type !== '' && (strlen($type) > 100 ||
             !preg_match('~^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$~i', $type)))
             return ['error' => 'Tipo de adjunto inválido'];
+        if (mail_active_attachment_blocked($name, $type)) return ['error' => 'Tipo de adjunto activo o ejecutable bloqueado'];
         $attachments[] = [
             'name' => $name,
             'type' => $type ?: 'application/octet-stream',
@@ -657,9 +667,53 @@ function resend_send($from_name, $from_addr, $to, $cc, $subject, $body_html, $at
     );
     if ($resp === null) return 'No se pudo contactar a Resend: ' . $cerr;
     $json = json_decode($resp, true);
-    if ($code >= 200 && $code < 300 && !empty($json['id'])) { resend_health_mark_ok($key); return null; } // éxito
+    if ($code >= 200 && $code < 300 && !empty($json['id'])) { $GLOBALS['TLS_RESEND_LAST_ID']=(string)$json['id']; resend_health_mark_ok($key); return null; } // éxito
     $msg = is_array($json) ? ($json['message'] ?? ($json['error']['message'] ?? ($json['name'] ?? $resp))) : $resp;
     return 'Resend (' . $code . '): ' . mb_substr((string) $msg, 0, 300);
+}
+
+function mail_idempotency_file() {
+    return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'tls-mail-idempotency.json';
+}
+function mail_idempotency_begin($user, $key) {
+    if (!is_string($key) || !preg_match('/^[A-Za-z0-9._:-]{16,128}$/', $key))
+        return ['error'=>'Idempotency key requerida o inválida','status'=>422];
+    $file=mail_idempotency_file();$h=@fopen($file,'c+');
+    if(!$h)return ['error'=>'Idempotencia no disponible','status'=>503];
+    @chmod($file,0600);if(!@flock($h,LOCK_EX)){fclose($h);return ['error'=>'Idempotencia no disponible','status'=>503];}
+    try{
+        rewind($h);$raw=stream_get_contents($h);$db=$raw?json_decode($raw,true):[];if(!is_array($db))$db=[];
+        $now=time();foreach($db as $k=>$v){if(!is_array($v)||($v['ts']??0)<$now-86400)unset($db[$k]);}
+        $id=hash('sha256',strtolower(trim($user)).'|'.$key);
+        if(isset($db[$id])){
+            $row=$db[$id];
+            if(($row['state']??'')==='done')return ['duplicate'=>true,'response'=>$row['response']??['ok'=>true]];
+            return ['error'=>'Envío con la misma idempotency key ya está en curso','status'=>409];
+        }
+        $db[$id]=['state'=>'pending','ts'=>$now];
+        $json=json_encode($db);rewind($h);ftruncate($h,0);fwrite($h,$json);fflush($h);
+        return ['reserved'=>true,'id'=>$id];
+    }finally{flock($h,LOCK_UN);fclose($h);}
+}
+function mail_idempotency_finish($id,$response) {
+    if(!$id)return;
+    $file=mail_idempotency_file();$h=@fopen($file,'c+');if(!$h||!@flock($h,LOCK_EX)){if($h)fclose($h);return;}
+    try{
+        rewind($h);$raw=stream_get_contents($h);$db=$raw?json_decode($raw,true):[];if(!is_array($db))$db=[];
+        $db[$id]=['state'=>'done','ts'=>time(),'response'=>$response];
+        $json=json_encode($db);rewind($h);ftruncate($h,0);fwrite($h,$json);fflush($h);
+    }finally{flock($h,LOCK_UN);fclose($h);}
+}
+function mail_audit_send($user,$result,$providerId,$idemKey,$recipientCount=0) {
+    $file=rtrim(sys_get_temp_dir(),DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'tls-mail-audit.jsonl';
+    $row=[
+      'ts'=>gmdate('c'),'account_hash'=>hash('sha256',strtolower(trim($user))),
+      'ip_hash'=>hash('sha256',(string)($_SERVER['REMOTE_ADDR']??'')),
+      'result'=>(string)$result,'provider'=>'resend',
+      'provider_id'=>$providerId?:null,'idempotency_hash'=>hash('sha256',(string)$idemKey),
+      'recipient_count'=>(int)$recipientCount
+    ];
+    @file_put_contents($file,json_encode($row,JSON_UNESCAPED_SLASHES)."\n",FILE_APPEND|LOCK_EX);@chmod($file,0600);
 }
 
 // Shared-host server-side send quota: all PHP requests lock the same private
@@ -1069,6 +1123,21 @@ case 'send':
         exit;
     }
 
+    $idemKey = trim($_POST['idempotency_key'] ?? '');
+    $idem = mail_idempotency_begin($user, $idemKey);
+    if (!empty($idem['duplicate'])) {
+        imap_close($conn);
+        echo json_out($idem['response']);
+        exit;
+    }
+    if (empty($idem['reserved'])) {
+        imap_close($conn);
+        http_response_code($idem['status'] ?? 503);
+        echo json_out(['error'=>$idem['error'] ?? 'Idempotencia no disponible','retryable'=>false]);
+        exit;
+    }
+    $idemId = $idem['id'];
+
     // Reserve after IMAP authentication and BEFORE contacting Resend. A
     // failed reservation fails closed. Client-side limits remain only UI hints.
     $quota = mail_send_reserve($user);
@@ -1076,14 +1145,22 @@ case 'send':
         imap_close($conn);
         http_response_code($quota['status'] ?? 503);
         if (!empty($quota['retryAfter'])) header('Retry-After: ' . (int)$quota['retryAfter']);
-        echo json_out(['error' => $quota['error'], 'retryable' => false]);
+        $resp=['error'=>$quota['error'],'retryable'=>false];
+        mail_idempotency_finish($idemId,$resp);
+        mail_audit_send($user,'rate_limited',null,$idemKey,$toCheck['count']+$ccCheck['count']+$bccCheck['count']);
+        echo json_out($resp);
         exit;
     }
 
+    $GLOBALS['TLS_RESEND_LAST_ID']=null;
     $err = resend_send($from_name, $user, $to, $cc, $subject, $body_html, $attachments, $bcc);
+    $providerId=$GLOBALS['TLS_RESEND_LAST_ID'] ?? null;
     if ($err) {
         imap_close($conn);
-        echo json_out(['error' => $err, 'provider' => 'resend']);
+        $resp=['error'=>$err,'provider'=>'resend','status'=>'uncertain'];
+        mail_idempotency_finish($idemId,$resp);
+        mail_audit_send($user,'failed_or_uncertain',$providerId,$idemKey,$toCheck['count']+$ccCheck['count']+$bccCheck['count']);
+        echo json_out($resp);
         exit;
     }
 
@@ -1116,7 +1193,10 @@ case 'send':
         imap_close($conn);
     }
 
-    echo json_out(['ok' => true]);
+    $resp=['ok'=>true,'provider'=>'resend','provider_id'=>$providerId,'status'=>'accepted'];
+    mail_idempotency_finish($idemId,$resp);
+    mail_audit_send($user,'accepted',$providerId,$idemKey,$toCheck['count']+$ccCheck['count']+$bccCheck['count']);
+    echo json_out($resp);
     break;
 
 // ── spam / no deseado ────────────────────────────────────────
@@ -1312,6 +1392,15 @@ case 'attachment':
         if (!isset($target->parts[$i])) { echo json_out(['error' => 'Parte no encontrada']); imap_close($conn); exit; }
         $target = $target->parts[$i];
     }
+    $downloadName='';
+    foreach (($target->dparameters ?? []) as $p) if (strtolower($p->attribute ?? '')==='filename') $downloadName=decode_str($p->value ?? '');
+    foreach (($target->parameters ?? []) as $p) if (!$downloadName && strtolower($p->attribute ?? '')==='name') $downloadName=decode_str($p->value ?? '');
+    $downloadMime=strtolower(($target->type ?? 3)===0?'text/'.($target->subtype??'plain'):(($target->type ?? 3)===1?'multipart/':'application/').($target->subtype??'octet-stream'));
+    if (mail_active_attachment_blocked($downloadName,$downloadMime)) {
+        imap_close($conn);http_response_code(415);
+        echo json_out(['error'=>'Adjunto activo o ejecutable bloqueado por seguridad']);exit;
+    }
+
     // BODYSTRUCTURE expone bytes antes de descargar la parte: cortar temprano
     // cuando el servidor ya declara un adjunto demasiado grande.
     if (isset($target->bytes) && (int)$target->bytes > 28 * 1024 * 1024) {

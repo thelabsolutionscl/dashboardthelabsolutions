@@ -12,8 +12,8 @@ const workerSource=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/wo
   .replace('export default','const worker=');
 const {
   CrmMutationGuard,worker,sharedMailSignatureAllowed,sharedMailAddressesAllowed,
-  sharedMailTemplatesAllowed,sharedMailMailboxAllowed
-}=new Function(workerSource+'\nreturn {CrmMutationGuard,worker,sharedMailSignatureAllowed,sharedMailAddressesAllowed,sharedMailTemplatesAllowed,sharedMailMailboxAllowed};')();
+  sharedMailTemplatesAllowed,sharedMailMailboxAllowed,mailAuthorizedAccounts
+}=new Function(workerSource+'\nreturn {CrmMutationGuard,worker,sharedMailSignatureAllowed,sharedMailAddressesAllowed,sharedMailTemplatesAllowed,sharedMailMailboxAllowed,mailAuthorizedAccounts};')();
 const priorFetch=global.fetch;
 test.after(()=>{global.fetch=priorFetch;});
 const APP='app1YtD74AqiPWQhy',TABLE='Monitor%20Sistema',BASE='/v0/'+APP+'/';
@@ -40,14 +40,15 @@ function sha256(text){
   const {createHash}=require('node:crypto');
   return createHash('sha256').update(text).digest('hex');
 }
-function harness({withTemplates=false}={}){
+function harness({withTemplates=false,sharedMap={}}={}){
+
   const current={
     MAIL_SIGNATURES:JSON.stringify(signatures()),
     MAIL_SENT_ADDRESSES:JSON.stringify(addresses()),
     MAIL_TEMPLATES:withTemplates?JSON.stringify(templates()):null
   };
   let patches=0,creates=0;
-  const env={APP_KEY:'public-test',AIRTABLE_TOKEN:'pat-private'};
+  const env={APP_KEY:'public-test',AIRTABLE_TOKEN:'pat-private',MAIL_SHARED_ACCOUNT_MAP:JSON.stringify(sharedMap)};
   const guard=new CrmMutationGuard({storage:{async get(){},async put(){},async delete(){}}},env);
   env.CRM_MUTATION_GUARD={
     idFromName(name){assert.equal(name,'tls-shared-mail');return name;},
@@ -121,14 +122,24 @@ test('mail validators accept live-shaped data and reject malformed or oversized 
   assert.equal(sharedMailTemplatesAllowed(templates()),true);
   assert.equal(sharedMailTemplatesAllowed({...templates(),secret:'x'}),false);
 });
-test('mailbox policy is self + hola; finance adds pagos; admin can use any TLS mailbox',()=>{
-  assert.equal(sharedMailMailboxAllowed({role:'sales',email:'seller@thelab.solutions'},'seller@thelab.solutions',false),true);
-  assert.equal(sharedMailMailboxAllowed({role:'sales',email:'seller@thelab.solutions'},'hola@thelab.solutions',false),true);
-  assert.equal(sharedMailMailboxAllowed({role:'sales',email:'seller@thelab.solutions'},'other@thelab.solutions',false),false);
-  assert.equal(sharedMailMailboxAllowed({role:'operator',email:'ops@thelab.solutions'},'pagos@thelab.solutions',false),false);
-  assert.equal(sharedMailMailboxAllowed({role:'finance',email:'finanzas@thelab.solutions'},'pagos@thelab.solutions',false),true);
-  assert.equal(sharedMailMailboxAllowed({role:'admin',email:'admin@thelab.solutions'},'nicanor@thelab.solutions',false),true);
-  assert.equal(sharedMailMailboxAllowed({role:'admin',email:'admin@thelab.solutions'},'outside@example.com',false),false);
+test('mailbox policy grants only self unless a shared mailbox is explicitly mapped',()=>{
+  const sales={role:'sales',email:'seller@thelab.solutions'};
+  const finance={role:'finance',email:'finanzas@thelab.solutions'};
+  const admin={role:'admin',email:'admin@thelab.solutions'};
+  const empty={MAIL_SHARED_ACCOUNT_MAP:'{}'};
+  assert.equal(sharedMailMailboxAllowed(sales,'seller@thelab.solutions',false,empty),true);
+  assert.equal(sharedMailMailboxAllowed(sales,'hola@thelab.solutions',false,empty),false);
+  assert.equal(sharedMailMailboxAllowed(finance,'pagos@thelab.solutions',false,empty),false);
+  assert.equal(sharedMailMailboxAllowed(admin,'nicanor@thelab.solutions',false,empty),false);
+  const env={MAIL_SHARED_ACCOUNT_MAP:JSON.stringify({
+    'hola@thelab.solutions':['role:sales','role:admin'],
+    'pagos@thelab.solutions':['role:finance','role:admin']
+  })};
+  assert.deepEqual(mailAuthorizedAccounts(sales,env),['hola@thelab.solutions','seller@thelab.solutions']);
+  assert.equal(sharedMailMailboxAllowed(sales,'hola@thelab.solutions',false,env),true);
+  assert.equal(sharedMailMailboxAllowed(finance,'pagos@thelab.solutions',false,env),true);
+  assert.equal(sharedMailMailboxAllowed(admin,'hola@thelab.solutions',false,env),true);
+  assert.equal(sharedMailMailboxAllowed(admin,'outside@example.com',false,env),false);
 });
 test('sales GET returns one signature only and cannot request another personal mailbox',async()=>{
   const h=harness();
@@ -142,8 +153,11 @@ test('sales GET returns one signature only and cannot request another personal m
   res=await h.run('GET',{account:'other@thelab.solutions'});
   assert.equal(res.status,403);
 });
-test('shared hola mailbox is readable while pagos is restricted to finance/admin',async()=>{
-  const h=harness();
+test('shared mailboxes are readable only when MAIL_SHARED_ACCOUNT_MAP grants them',async()=>{
+  const h=harness({sharedMap:{
+    'hola@thelab.solutions':['role:sales'],
+    'pagos@thelab.solutions':['role:finance']
+  }});
   let res=await h.run('GET',{resource:'sent-addresses',account:'hola@thelab.solutions'});
   assert.equal(res.status,200);
   assert.deepEqual((await res.json()).data,['hola@cliente.cl']);

@@ -12,6 +12,8 @@ const MAIL = fs.readFileSync(path.join(ROOT, 'js', 'correo.js'), 'utf8');
 const NOTIFY = fs.readFileSync(path.join(ROOT, 'js', 'notify.js'), 'utf8');
 const PHP = fs.readFileSync(path.join(ROOT, 'mail-api.php'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
+const WORKER = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'worker.js'), 'utf8');
+const ACCESS = fs.readFileSync(path.join(ROOT, 'airtable-proxy', 'src', 'access-auth.js'), 'utf8');
 const SOURCE = `${INDEX}\n${MAIL}\n${NOTIFY}`;
 
 function esc(value) {
@@ -146,7 +148,7 @@ test('mail-api expone cabeceras RFC de conversación sin descargar cuerpos', () 
     assert.match(list, new RegExp("'" + key + "'"));
     assert.match(search, new RegExp("'" + key + "'"));
   }
-  assert.match(PHP,/MAIL_API_BUILD', '2026-10-06-mail-boundaries/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-10-07-mail-session-idempotency/);
 });
 
 test('las lecturas IMAP están acotadas y toleran mensajes dañados', () => {
@@ -224,23 +226,20 @@ test('diagnóstico: Resend debe autenticar la casilla antes de enviar', (t) => {
   assert.ok(authAt < resendAt);
 });
 
-test('diagnóstico: responder o reenviar no debe sacar HTML remoto del sandbox', (t) => {
-  const open = methodBlock('openCompose');
-  const reply = methodBlock('reply');
-  const forward = methodBlock('forward');
-  if (/innerHTML\s*=/.test(open) && (/body_html/.test(reply) || /body_html/.test(forward))) {
-    t.todo('CRÍTICO: el HTML recibido se inserta en el DOM principal al responder/reenviar; sanitizar antes de abrir el editor');
-    return;
-  }
+test('responder y reenviar sanitizan HTML remoto antes de entrar al editor principal', () => {
+  const open=methodBlock('openCompose'),reply=methodBlock('reply'),forward=methodBlock('forward');
+  assert.match(reply,/_sanitizarCita\(m\.body_html\)/);
+  assert.match(forward,/_sanitizarCita\(m\.body_html\)/);
+  assert.match(open,/mailCmpBody'\)\.innerHTML=this\._sanitizarCita\(opts\.body\|\|''\)\+sig/);
+  assert.match(MAIL,/_sanitizarCita\(html,allowImages=false\)/);
+  assert.match(MAIL,/drop=new Set\('script style svg math iframe object embed form/);
 });
 
-test('diagnóstico: firmas persistidas no deben ejecutar HTML arbitrario', (t) => {
-  const sig = methodBlock('sigHtml');
-  const open = methodBlock('openCompose');
-  if (/localStorage/.test(MAIL) && /\$\{s\}/.test(sig) && /innerHTML\s*=/.test(open)) {
-    t.todo('sanitizar firmas recuperadas de localStorage/Airtable antes de insertarlas en el DOM o en un correo');
-    return;
-  }
+test('firmas persistidas pasan por allowlist antes de insertarse', () => {
+  assert.match(methodBlock('sigHtml'),/_sanitizarFirma\(s\)/);
+  assert.match(methodBlock('setSig'),/_sanitizarFirma\(html\)/);
+  assert.match(methodBlock('openSigModal'),/_sanitizarFirma\(this\.getSig\(\)\)/);
+  assert.match(MAIL,/_safeSignatureStyle/);
 });
 
 test('diagnóstico: el freno de envíos debe existir también en servidor', (t) => {
@@ -250,11 +249,13 @@ test('diagnóstico: el freno de envíos debe existir también en servidor', (t) 
   }
 });
 
-test('diagnóstico: las credenciales no deberían persistir en texto plano', (t) => {
-  if (/thelab_mail_pass_/.test(MAIL) && /localStorage\.setItem/.test(MAIL)) {
-    t.todo('migrar contraseñas fuera de localStorage: sesión corta, token delegado o vault/backend');
-    return;
-  }
+test('contraseñas de buzón no se persisten en localStorage ni sessionStorage', () => {
+  assert.match(MAIL,/_legacyPassByAccount:\{\}/);
+  assert.match(MAIL,/_purgeLegacyMailPasswords\(\)/);
+  assert.doesNotMatch(MAIL,/sessionStorage\.setItem\([^\n]*thelab_mail_pass_/);
+  assert.doesNotMatch(MAIL,/localStorage\.setItem\([^\n]*thelab_mail_pass_/);
+  assert.match(MAIL,/_secureMailSession\(account,password\)/);
+  assert.match(WORKER,/expiresAt=Date\.now\(\)\+ttl/);
 });
 
 test('diagnóstico: IMAP debe validar el certificado TLS', (t) => {
@@ -275,15 +276,60 @@ test('mail-api valida destinatarios, limita el total y restringe la identidad Fr
   assert.match(send,/resend_send\(\$from_name, \$user,/,
     'From debe provenir de la misma casilla que autenticó IMAP');
 });
-test.todo('el visor debe bloquear imágenes y recursos remotos por defecto para evitar tracking pixels y filtración de IP');
-test.todo('reply, forward, firmas e imágenes insertadas por URL deben pasar por un sanitizador HTML y una política de URLs');
-test.todo('frontend y host PHP deben verificar automáticamente el mismo MAIL_API_BUILD para detectar despliegues desfasados');
-test.todo('acciones masivas y automáticas deben usar una idempotency key compartida para evitar duplicados tras timeouts');
-test.todo('rate limit/cuota/tamaño ya son backend; falta auditoría mínima de envíos sin guardar contraseñas ni contenido');
-test.todo('descargas de adjuntos ya tienen límite backend; falta advertencia/allowlist para ejecutables y formatos activos');
-test.todo('las cuentas compartidas deben asignarse por RBAC; no deben aparecer automáticamente para cualquier usuario con acceso a Correo');
-test.todo('postAs no debe caer silenciosamente a otra casilla cuando falta la credencial del remitente solicitado');
-test.todo('plantillas, firmas y borradores deben tener respaldo versionado, sanitizado y permisos por cuenta');
+test('visor bloquea recursos remotos por defecto y exige acción explícita para cargarlos',()=>{
+  const render=methodBlock('_renderMsgBody');
+  assert.match(render,/_sanitizarCita\(data\.body_html\|\|'',allowRemote\)/);
+  assert.match(render,/Cargar imágenes remotas/);
+  assert.match(render,/meta name="referrer" content="no-referrer"/);
+  assert.match(MAIL,/_remoteImagesAllowed:new Set\(\)/);
+});
+test('HTML citado, firmas e imágenes insertadas usan sanitización y URL HTTPS',()=>{
+  assert.match(MAIL,/_sanitizarCita\(html,allowImages=false\)/);
+  assert.match(MAIL,/_sanitizarFirma\(html\)/);
+  assert.match(methodBlock('_insertEditorImage'),/url\.protocol!=='https:'/);
+  assert.match(methodBlock('_insertEditorImage'),/createElement\('img'\)/);
+});
+test('mail-api publica build en todas las respuestas para detectar despliegues desfasados',()=>{
+  assert.match(PHP,/MAIL_API_BUILD', '2026-10-07-mail-session-idempotency/);
+  assert.match(PHP,/array_key_exists\('build', \$data\)/);
+});
+test('envíos usan idempotency key autoritativa de servidor',()=>{
+  assert.match(methodBlock('sendCompose'),/idempotency_key:crypto\.randomUUID\(\)/);
+  assert.match(PHP,/function mail_idempotency_begin\(/);
+  assert.match(PHP,/mail_idempotency_finish\(/);
+  assert.match(PHP,/duplicate.*response/s);
+});
+test('backend registra auditoría mínima sin cuerpo ni contraseña',()=>{
+  assert.match(PHP,/function mail_audit_send\(/);
+  assert.match(PHP,/account_hash/);
+  assert.match(PHP,/provider_id/);
+  const audit=PHP.slice(PHP.indexOf('function mail_audit_send('),PHP.indexOf('// Shared-host server-side send quota:'));
+  assert.doesNotMatch(audit,/body_html|pass|subject|\bto\b/);
+});
+test('adjuntos activos o ejecutables quedan bloqueados también en backend',()=>{
+  assert.match(PHP,/function mail_active_attachment_blocked\(/);
+  assert.match(PHP,/docm.*xlsm.*pptm/);
+  assert.match(PHP,/Adjunto activo o ejecutable bloqueado por seguridad/);
+  assert.match(PHP,/Tipo de adjunto activo o ejecutable bloqueado/);
+});
+test('casillas compartidas se asignan por backend y hola no aparece automáticamente',()=>{
+  assert.match(WORKER,/MAIL_SHARED_ACCOUNT_MAP/);
+  assert.match(WORKER,/function mailAuthorizedAccounts\(/);
+  assert.doesNotMatch(methodBlock('accounts'),/hola@thelab\.solutions/);
+  assert.match(ACCESS,/path==='\/mail\/accounts'/);
+});
+test('postAs falla explícitamente si el remitente no está autorizado o sin sesión',()=>{
+  const postAs=methodBlock('postAs');
+  assert.match(postAs,/no está autorizada para esta sesión/);
+  assert.match(postAs,/no tiene una sesión activa|sesión de .* expiró/);
+  assert.doesNotMatch(postAs,/activeAccount\(\).*fallback|cae a la cuenta activa/s);
+});
+test('firmas y plantillas compartidas conservan scope y sanitización',()=>{
+  assert.match(WORKER,/SHARED_MAIL_RECORDS/);
+  assert.match(WORKER,/sharedMailMailboxAllowed/);
+  assert.match(WORKER,/sharedMailTemplatesAllowed/);
+  assert.match(methodBlock('setSig'),/_sanitizarFirma\(html\)/);
+});
 
 
 test('las cuentas de correo quedan visibles y ordenadas en la columna izquierda',()=>{
@@ -358,7 +404,7 @@ test('mail-api lee correctamente mensajes single-part y normaliza UTF-8 antes de
   const send=phpCase('send');
   assert.match(send,/repair_mojibake_utf8\(trim\(\$_POST\['subject'\]/);
   assert.match(send,/repair_mojibake_utf8\(\$_POST\['body'\]/);
-  assert.match(PHP,/MAIL_API_BUILD', '2026-10-06-mail-boundaries/);
+  assert.match(PHP,/MAIL_API_BUILD', '2026-10-07-mail-session-idempotency/);
 });
 
 test('verificación Resend exige IMAP y prueba capacidad de envío sin crear correo',()=>{
