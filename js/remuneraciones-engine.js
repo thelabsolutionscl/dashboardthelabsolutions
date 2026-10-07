@@ -16,7 +16,7 @@ const DEFAULT_RULE=Object.freeze({
   contract:'standard',product:'*'
 });
 const STATUS=Object.freeze(['estimated','accrued','approved','paid','reversed']);
-let target=null,installed=false,shared=null,hydrating=null,period='mes';
+let target=null,installed=false,shared=null,sharedRevision=null,hydrating=null,period='mes';
 
 function num(v){const n=Number(v);return Number.isFinite(n)?n:0;}
 function norm(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
@@ -75,6 +75,16 @@ function sellerEmailFrom(fields){
   }
   return '';
 }
+function sellerEmailFor(fields){
+  const explicit=sellerEmailFrom(fields);if(explicit)return explicit;
+  const seller=norm(sellerOf(fields));if(!seller)return '';
+  const users=Array.isArray(target?.AUTH?.USERS)?target.AUTH.USERS:[];
+  const hit=users.find(u=>u?.role==='comercial'&&(
+    norm(String(u.username||'').split('@')[0])===seller||norm(u.name||'')===seller||
+    norm(u.name||'').startsWith(seller+' ')||seller.startsWith(norm(u.name||'')+' ')
+  ));
+  return String(hit?.username||'').toLowerCase();
+}
 function rules(doc=shared){return Array.isArray(doc?.rules)&&doc.rules.length?doc.rules:[DEFAULT_RULE];}
 function resolveRule({seller='',sellerEmail='',date=todayKey(),product=''}={},doc=shared){
   const sm=norm(seller),em=String(sellerEmail||'').toLowerCase(),pm=norm(product);
@@ -108,7 +118,7 @@ function authoritativeEvent(orderId,doc=shared){
 }
 function deriveOrder(order,doc=shared){
   const f=order?.fields||{},date=String(f['Fecha entrega']||f['Fecha despacho']||'').slice(0,10);
-  const seller=sellerOf(f),sellerEmail=sellerEmailFrom(f);
+  const seller=sellerOf(f),sellerEmail=sellerEmailFor(f);
   const auth=authoritativeEvent(order?.id,doc);
   if(auth&&STATUS.includes(auth.status))return {...auth,authoritative:true,record:order};
   const rule=resolveRule({seller,sellerEmail,date:date||todayKey(),product:String(f['Detalle productos']||'')},doc);
@@ -192,10 +202,121 @@ async function hydrate(){
   const u=currentUser();if(target?._DEMO_MODE||!u||!['comercial','finanzas','admin','gerencia'].includes(u.role)||!proxyConfig())return false;
   hydrating=(async()=>{
     const r=await request('/shared/remunerations');if(!r.ok)return false;
-    const d=await r.json().catch(()=>null);if(!d?.ok||d.data?.version!==2)return false;
-    shared=d.data;return true;
+    const d=await r.json().catch(()=>null);if(!d?.ok||d.data?.version!==2||typeof d.revision!=='string')return false;
+    shared=d.data;sharedRevision=d.revision;return true;
   })().catch(()=>false).finally(()=>{hydrating=null;});
   return hydrating;
+}
+
+function canManage(){
+  const role=currentUser()?.role;return ['finanzas','admin','gerencia'].includes(role);
+}
+function currentPeriodKey(){
+  if(!['mes','anterior'].includes(period))return '';
+  const b=bounds();return /^\d{4}-\d{2}-01$/.test(b.start)?b.start.slice(0,7):'';
+}
+function clone(v){return JSON.parse(JSON.stringify(v));}
+async function writeShared(mutator){
+  if(!canManage())return false;
+  if(!shared||typeof sharedRevision!=='string')await hydrate();
+  if(!shared||typeof sharedRevision!=='string'){target?.toast?.('No se pudo leer el período compartido','error');return false;}
+  const next=clone(shared);mutator(next);next.version=2;next.updatedAt=Date.now();
+  const r=await request('/shared/remunerations','PUT',{data:next,expectedRevision:sharedRevision}).catch(()=>null);
+  const d=await r?.json?.().catch(()=>null);
+  if(!r?.ok){
+    if(r?.status===409){shared=d?.data||shared;sharedRevision=d?.revision||sharedRevision;target?.toast?.('El período cambió en otro equipo. Revisa y vuelve a intentar.','error');render();}
+    else target?.toast?.('No se pudo guardar el período de remuneraciones','error');
+    return false;
+  }
+  shared=d.data;sharedRevision=d.revision;target?.toast?.('Período de remuneraciones actualizado','success');render();return true;
+}
+function liveSnapshotEvents(key,email){
+  const doc={rules:rules(shared),events:[]},now=new Date().toISOString();
+  return selectedOrders().map(o=>deriveOrder(o,doc)).map(e=>({...e,sellerEmail:e.sellerEmail||sellerEmailFor(e.record?.fields)}))
+    .filter(e=>e.period===key&&e.sellerEmail===email&&e.verifiedBase&&e.status!=='estimated')
+    .map(e=>({
+      id:'commission:'+key+':'+e.sourceId,sourceId:e.sourceId,order:e.order||'',sellerEmail:email,seller:e.seller||'',
+      period:key,date:e.date||'',eligibleNet:Math.round(num(e.eligibleNet)),commission:Math.round(num(e.commission)),
+      status:e.status==='reversed'?'reversed':'accrued',ruleId:e.ruleId,ruleVersion:e.ruleVersion,
+      ruleRate:num(e.ruleRate),basis:e.basis||'',verifiedBase:true,paymentRatio:num(e.paymentRatio),
+      eventAt:now,updatedAt:now,reversalOf:e.reversalOf||'',reason:e.reason||'',invoice:String(e.record?.fields?.['DTE N°']||e.invoice||''),
+      payment:String(e.record?.fields?.['Estado pago']||e.record?.fields?.['Estado de pago']||e.payment||'')
+    }));
+}
+function sellerPeriodRows(key){
+  const rows=Array.isArray(shared?.periods)?shared.periods.filter(p=>p.period===key):[];
+  const liveEmails=[...new Set(selectedOrders().map(o=>sellerEmailFor(o.fields)).filter(Boolean))];
+  const emails=[...new Set([...rows.map(p=>p.sellerEmail),...liveEmails])];
+  return emails.map(email=>({email,row:rows.find(p=>p.sellerEmail===email)||null}));
+}
+function transitionLabel(state){
+  return ({none:'Crear borrador',draft:'Enviar a revisión',review:'Aprobar',approved:'Cerrar período',
+    closed:'Marcar comisión pagada',reopened:'Enviar a revisión',paid:'Pagado'})[state||'none']||state;
+}
+async function advancePeriod(email){
+  const key=currentPeriodKey();if(!key||!canManage())return;
+  const old=shared?.periods?.find(p=>p.period===key&&p.sellerEmail===email)||null;
+  const nextState=old?({draft:'review',review:'approved',approved:'closed',closed:'paid',reopened:'review'})[old.status]:'draft';
+  if(!nextState)return;
+  await writeShared(doc=>{
+    const now=new Date().toISOString();
+    let events;
+    if(old&&['approved','closed'].includes(old.status)){
+      events=doc.events.filter(e=>e.period===key&&e.sellerEmail===email).map(e=>({...e,
+        status:nextState==='paid'&&e.status==='approved'?'paid':e.status,updatedAt:now}));
+    }else{
+      events=liveSnapshotEvents(key,email);
+      if(nextState==='approved')events=events.map(e=>({...e,status:e.status==='reversed'?'reversed':'approved',updatedAt:now}));
+    }
+    doc.events=doc.events.filter(e=>!(e.period===key&&e.sellerEmail===email)).concat(events);
+    const adjustments=doc.adjustments.filter(a=>a.period===key&&a.sellerEmail===email);
+    const total=Math.round(events.reduce((n,e)=>n+num(e.commission),0)+adjustments.reduce((n,a)=>n+num(a.amount),0));
+    const seller=events[0]?.seller||old?.seller||email.split('@')[0];
+    const row={id:old?.id||('period:'+key+':'+email),period:key,sellerEmail:email,seller,status:nextState,
+      snapshotTotal:['closed','paid'].includes(nextState)?(old?.status==='closed'?old.snapshotTotal:total):num(old?.snapshotTotal),
+      closedAt:nextState==='closed'?now:(old?.closedAt||''),paidAt:nextState==='paid'?now:(old?.paidAt||''),
+      reopenedAt:old?.reopenedAt||'',updatedAt:now,
+      ruleVersions:[...new Set(events.map(e=>e.ruleId+'@'+e.ruleVersion))],note:old?.note||''};
+    const idx=doc.periods.findIndex(p=>p.id===row.id);if(idx>=0)doc.periods[idx]=row;else doc.periods.push(row);
+  });
+}
+async function reopenPeriod(email){
+  const key=currentPeriodKey();if(currentUser()?.role!=='admin'||!key)return;
+  await writeShared(doc=>{
+    const p=doc.periods.find(x=>x.period===key&&x.sellerEmail===email);
+    if(!p||!['closed','paid'].includes(p.status))return;
+    p.status='reopened';p.reopenedAt=new Date().toISOString();p.updatedAt=p.reopenedAt;
+  });
+}
+async function addAdjustment(email){
+  const key=currentPeriodKey();if(!key||!canManage())return;
+  const p=shared?.periods?.find(x=>x.period===key&&x.sellerEmail===email);
+  if(p&&['closed','paid'].includes(p.status)){target?.toast?.('Reabre el período antes de ajustar','error');return;}
+  const amount=Number(target.prompt?.('Monto del ajuste en CLP (puede ser negativo):','0'));
+  if(!Number.isFinite(amount)||!amount)return;
+  const reason=String(target.prompt?.('Motivo obligatorio del ajuste:','')||'').trim();if(!reason)return;
+  const evidence=String(target.prompt?.('Evidencia o referencia (opcional):','')||'').trim();
+  await writeShared(doc=>doc.adjustments.push({
+    id:'adjust:'+crypto.randomUUID(),period:key,sellerEmail:email,
+    seller:doc.events.find(e=>e.period===key&&e.sellerEmail===email)?.seller||email.split('@')[0],
+    amount:Math.round(amount),reason,actor:currentUser()?.username||currentUser()?.name||'',
+    evidence,createdAt:new Date().toISOString(),reversalOf:''
+  }));
+}
+function managementHtml(){
+  if(!canManage())return '';
+  const key=currentPeriodKey();
+  if(!key)return '<div style="margin-top:10px;font-size:10px;color:var(--text3)">Selecciona Mes o Mes anterior para administrar cierres.</div>';
+  if(!shared)return '<div style="margin-top:10px;font-size:10px;color:var(--text3)">Fuente compartida de períodos no disponible.</div>';
+  const rows=sellerPeriodRows(key);
+  if(!rows.length)return '<div style="margin-top:10px;font-size:10px;color:var(--text3)">No hay vendedores con pedidos para '+esc(key)+'.</div>';
+  return '<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px"><div style="font-size:10px;font-weight:800;margin-bottom:7px">CIERRE '+esc(key)+'</div>'+
+    rows.map(({email,row})=>{const st=row?.status||'none';return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0;font-size:10px">'+
+      '<b>'+esc(row?.seller||email)+'</b><span style="color:var(--text3)">'+esc(st)+'</span>'+
+      (st!=='paid'?'<button class="btn btn-ghost btn-sm" onclick="RemuneracionesEngine.advancePeriod(\''+esc(email)+'\')">'+esc(transitionLabel(st))+'</button>':'')+
+      (!['closed','paid'].includes(st)?'<button class="btn btn-ghost btn-sm" onclick="RemuneracionesEngine.addAdjustment(\''+esc(email)+'\')">+ Ajuste</button>':'')+
+      ((['closed','paid'].includes(st)&&currentUser()?.role==='admin')?'<button class="btn btn-ghost btn-sm" onclick="RemuneracionesEngine.reopenPeriod(\''+esc(email)+'\')">Reabrir</button>':'')+
+      (row?'<span style="margin-left:auto">snapshot '+money(row.snapshotTotal)+'</span>':'')+'</div>';}).join('')+'</div>';
 }
 function selectedOrders(){
   const b=bounds(),all=Array.isArray(target?.state?.pedidos)?target.state.pedidos:[];
@@ -214,7 +335,7 @@ function renderLiquidacion(events){
   box.innerHTML=`<div style="font-size:10.5px;color:var(--text3);margin-bottom:8px">Resumen comercial auditable · no constituye una liquidación legal de remuneraciones.</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:7px">
     ${[['Estimada',sum.estimated],['Devengada',sum.accrued],['Aprobada',sum.approved],['Pagada',sum.paid],['Revertida',sum.reversed]].map(([k,v])=>`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px"><div style="font-size:9px;color:var(--text3)">${k}</div><b>${money(v)}</b></div>`).join('')}
-  </div>${bases.length?`<div style="margin-top:8px;font-size:10px;color:var(--text3)">Sueldos base vigentes registrados: ${bases.map(x=>esc(x.seller||seller)+' '+money(x.amount)).join(' · ')}</div>`:''}`;
+  </div>${bases.length?`<div style="margin-top:8px;font-size:10px;color:var(--text3)">Sueldos base vigentes registrados: ${bases.map(x=>esc(x.seller||seller)+' '+money(x.amount)).join(' · ')}</div>`:''}${managementHtml()}`;
 }
 function render(){
   if(!target)return;
@@ -262,8 +383,9 @@ async function exportCsv(){
 function install(root){
   if(!root||installed)return;target=root;installed=true;
   root.setRemPeriodo=setPeriod;root.renderRemuneraciones=render;root.exportRemCSV=exportCsv;root.remRenderLiquidacion=()=>renderLiquidacion(selectedOrders().map(o=>deriveOrder(o,shared)));
+  try{if(root.RBAC?.tabs?.finanzas&&!root.RBAC.tabs.finanzas.includes('remuneraciones'))root.RBAC.tabs.finanzas.push('remuneraciones');}catch(_){}
   Promise.resolve().then(async()=>{await hydrate();render();});
 }
 return {TZ,DEFAULT_RULE,STATUS,tzParts,todayKey,monthKey,mondayKey,bounds,inBounds,taxNet,resolveRule,paidRatio,isReversed,
-  hasInvoice,deriveOrder,summary,quoteWeight,projectQuote,csvCell,csvExport,install,hydrate,render,get shared(){return shared;}};
+  hasInvoice,deriveOrder,summary,quoteWeight,projectQuote,csvCell,csvExport,install,hydrate,render,advancePeriod,reopenPeriod,addAdjustment,get shared(){return shared;}};
 });
