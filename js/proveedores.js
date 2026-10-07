@@ -30,10 +30,10 @@ const PV_CAT_EXTRA_PALETTE=[
   ['#6366f1','rgba(99,102,241,0.13)','rgba(99,102,241,0.32)'],
 ];
 const PV_CATS_DEFAULT=['Filamentos 3D','Resinas y materiales','Componentes LED / Neones','Trofeos y medallas','Packaging / Embalaje','Electrónica y cables','Logística y despacho','Diseño / Gráfica','Servicios varios','Otro'];
-getPvCats=function(){try{const s=localStorage.getItem('pv_categorias');return s?JSON.parse(s):[...PV_CATS_DEFAULT];}catch{return[...PV_CATS_DEFAULT];}}
-setPvCats=function(arr){localStorage.setItem('pv_categorias',JSON.stringify(arr));}
-getPvCatColorMap=function(){try{const s=localStorage.getItem('pv_cat_colors');return s?JSON.parse(s):{};} catch{return {};}}
-setPvCatColorMap=function(obj){localStorage.setItem('pv_cat_colors',JSON.stringify(obj));}
+function getPvCats(){try{const s=localStorage.getItem('pv_categorias');return s?JSON.parse(s):[...PV_CATS_DEFAULT];}catch{return[...PV_CATS_DEFAULT];}}
+function setPvCats(arr){localStorage.setItem('pv_categorias',JSON.stringify(arr));}
+function getPvCatColorMap(){try{const s=localStorage.getItem('pv_cat_colors');return s?JSON.parse(s):{};} catch{return {};}}
+function setPvCatColorMap(obj){localStorage.setItem('pv_cat_colors',JSON.stringify(obj));}
 function getPvCatColor(cat){
   if(PV_CAT_COLORS[cat]) return PV_CAT_COLORS[cat];
   const custom=getPvCatColorMap();
@@ -376,7 +376,7 @@ function _pvPostBtns(id,current){
     return `<button class="btn btn-sm" onclick="event.stopPropagation();setProvEstadoPost('${id}','${s}')" style="font-size:10px;font-weight:700;letter-spacing:0.3px;border:1px solid ${on?col:'var(--border2)'};color:${on?'#0a0a0a':col};background:${on?col:'transparent'};border-radius:6px;padding:4px 10px;cursor:pointer">${s}</button>`;
   }).join('');
 }
-setProvEstadoPost=async function(id,estado){
+async function setProvEstadoPost(id,estado){
   const p=state.proveedores.find(x=>x.id===id);if(!p)return;
   const old=p.fields['Estado postulación']||'';
   p.fields['Estado postulación']=estado;
@@ -409,7 +409,7 @@ function _pvCanRetryCreateAfterError(err){
   if(/timeout|timed out|network|failed to fetch|abort|\b5\d\d\b/i.test(msg)) return false;
   return /\b422\b|UNKNOWN_FIELD_NAME|INVALID_MULTIPLE_CHOICE_OPTIONS|INVALID_VALUE_FOR_COLUMN|INVALID_RECORDS|INVALID_REQUEST_UNKNOWN/i.test(msg);
 }
-createProveedor=async function(){
+async function createProveedor(){
   const nombre=(document.getElementById('np-nombre')?.value||'').trim();
   const categorias=getPvSelectedCats('np');
   if(!nombre){toast('Nombre requerido','error');return;}
@@ -558,7 +558,7 @@ function updateProveedoresBulkBar(){
   const sa=document.getElementById('proveedoresSelectAll');if(sa){const all=document.querySelectorAll('#proveedoresTableBody .row-chk');sa.checked=all.length>0&&n===all.length;sa.indeterminate=n>0&&n<all.length;}
 }
 function clearProveedoresSelection(){selectedProveedores.clear();document.querySelectorAll('#proveedoresTableBody .row-chk').forEach(c=>{c.checked=false;c.closest('tr')?.classList.remove('row-selected');});const sa=document.getElementById('proveedoresSelectAll');if(sa){sa.checked=false;sa.indeterminate=false;}updateProveedoresBulkBar();}
-bulkDeleteProveedores=async function(){
+async function bulkDeleteProveedores(){
   const ids=[...selectedProveedores];if(!ids.length) return;
   const nombres=ids.map(id=>state.proveedores.find(p=>p.id===id)?.fields['Nombre']||id).join(', ');
   if(!confirm(`¿Eliminar ${ids.length} proveedor${ids.length!==1?'es':''}?\n${nombres}`)) return;
@@ -587,7 +587,7 @@ async function bulkEditProveedorEstado(){
   err?toast(`${ok} actualizados, ${err} con error`,'info'):toast(`✓ ${ok} proveedor${ok!==1?'es':''} → "${estado}"`,'success');
   clearProveedoresSelection();renderProveedores();
 }
-deleteProveedor=async function(id,nombre){
+async function deleteProveedor(id,nombre){
   if(!confirm(`¿Eliminar proveedor "${nombre}"?`)) return;
   const rec=state.proveedores.find(x=>x.id===id);
   const snapshot=rec?sanitizeForRestore(rec.fields):null;
@@ -666,9 +666,9 @@ function exportToCSV(t){
 // comparar y elegir el mejor precio por ítem. localStorage + respaldo en
 // Airtable (Monitor Sistema · PRECIOS_PROV) para sobrevivir a limpiar caché.
 const _PRECIOS_PROV_KEY='thelab_precios_prov_v1';
-_preciosProv=function(){return _listaVivos(_PRECIOS_PROV_KEY);}
-_preciosProvSaveArr=function(arr){_listaGuardar(_PRECIOS_PROV_KEY,arr);_preciosProvBackup();}
-_preciosProvBackup=async function(){
+function _preciosProv(){return _listaVivos(_PRECIOS_PROV_KEY);}
+function _preciosProvSaveArr(arr){_listaGuardar(_PRECIOS_PROV_KEY,arr);_preciosProvBackup();}
+async function _preciosProvBackup(){
   try{
     const notes=localStorage.getItem(_PRECIOS_PROV_KEY)||'[]';
     await _monitorUpsert('PRECIOS_PROV',notes,'preciosProvRecordId');
@@ -681,11 +681,11 @@ function _normItem(s){return String(s||'').toLowerCase().normalize('NFD').replac
 // nombre elegía como "más barato" al de la unidad con menor número absoluto y
 // anunciaba un ahorro inexistente. La unidad entra en la identidad del ítem.
 function _precioKey(item,unidad){return _normItem(item)+'|'+_normItem(unidad);}
-_preciosDeProv=function(prov){
+function _preciosDeProv(prov){
   const k=String(prov||'').toLowerCase();
   return _preciosProv().filter(p=>String(p.prov||'').toLowerCase()===k).sort((a,b)=>_normItem(a.item).localeCompare(_normItem(b.item))||String(b.fecha||'').localeCompare(String(a.fecha||'')));
 }
-addPrecioProv=function(prov){
+function addPrecioProv(prov){
   const nombre=String(prov||'').trim();
   const item=(prompt('Ítem o material cotizado (ej: PLA 1kg negro, Impresión A3, Corte láser MDF 3mm):')||'').trim();
   if(!item)return;
@@ -707,7 +707,7 @@ addPrecioProv=function(prov){
   const box=document.getElementById('preciosProv-'+(p?p.id:''));
   if(p) try{const b=document.getElementById('preciosProv-'+p.id);if(b)b.innerHTML=_preciosProvFichaHtml(nombre);}catch(e){}
 }
-delPrecioProv=function(id){
+function delPrecioProv(id){
   const arr=_preciosProv();const rec=arr.find(x=>x.id===id);
   _preciosProvSaveArr(arr.filter(x=>x.id!==id));
   try{renderProveedores();}catch(e){}
@@ -782,15 +782,15 @@ function renderMejorPrecio(){
 // Genera órdenes de compra formales a un proveedor con ítems, totales (IVA),
 // PDF imprimible y envío. Reutiliza los precios registrados (N5) como ayuda.
 const _OC_KEY='thelab_oc_v1';
-_ocAll=function(){return _listaVivos(_OC_KEY);}
-_ocSaveArr=function(arr){_listaGuardar(_OC_KEY,arr);_ocBackup();}
-_ocBackup=async function(){
+function _ocAll(){return _listaVivos(_OC_KEY);}
+function _ocSaveArr(arr){_listaGuardar(_OC_KEY,arr);_ocBackup();}
+async function _ocBackup(){
   try{const notes=localStorage.getItem(_OC_KEY)||'[]';
     await _monitorUpsert('ORDENES_COMPRA',notes,'ocRecordId');
   }catch(e){}
 }
-_ocNextNum=function(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
-openOCModal=function(provNombre,ocId){
+function _ocNextNum(){const y=new Date().getFullYear();let mx=0;_ocAll().forEach(o=>{const m=String(o.numero||'').match(new RegExp('OC-'+y+'-(\\d+)'));if(m)mx=Math.max(mx,parseInt(m[1]));});return `OC-${y}-${String(mx+1).padStart(3,'0')}`;}
+function openOCModal(provNombre,ocId){
   const sel=document.getElementById('ocProveedor');
   const provs=(state.proveedores||[]).slice().sort((a,b)=>String(a.fields['Nombre']||'').localeCompare(String(b.fields['Nombre']||'')));
   sel.innerHTML='<option value="">— Selecciona proveedor —</option>'+provs.map(p=>`<option value="${escapeHtml(p.fields['Nombre']||'')}">${escapeHtml(p.fields['Nombre']||'')}</option>`).join('');
@@ -803,7 +803,7 @@ openOCModal=function(provNombre,ocId){
   document.getElementById('ocModal').style.display='flex';
 }
 function closeOCModal(){document.getElementById('ocModal').style.display='none';}
-ocProveedorChanged=function(){
+function ocProveedorChanged(){
   const prov=document.getElementById('ocProveedor').value;
   const hint=document.getElementById('ocPreciosHint');if(!hint)return;
   let n=0;try{n=(typeof _preciosDeProv==='function'&&prov)?_preciosDeProv(prov).length:0;}catch(e){}
@@ -836,7 +836,7 @@ function ocCalc(){
   set('ocNeto',neto);set('ocIva',iva);set('ocTotal',neto+iva);
   return {neto,iva,total:neto+iva};
 }
-guardarOC=function(conPDF){
+function guardarOC(conPDF){
   const proveedor=document.getElementById('ocProveedor').value;
   if(!proveedor){toast('Selecciona un proveedor','error');return;}
   const items=_ocRows().filter(x=>x.item&&x.cantidad>0).map(x=>({item:x.item,cantidad:x.cantidad,precio:x.precio}));
