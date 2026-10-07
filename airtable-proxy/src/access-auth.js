@@ -29,13 +29,6 @@ const ACCESS_OPERATOR_WRITE_METHODS=Object.freeze({
   Cotizaciones:new Set(['POST','PATCH']),
   Pedidos:new Set(['POST','PATCH']),
   Proveedores:new Set(['POST','PATCH']),
-  SupplierPrices:new Set(['POST','PATCH']),
-  PurchaseOrders:new Set(['POST','PATCH']),
-  PurchaseOrderItems:new Set(['POST','PATCH']),
-  PurchaseOrderEvents:new Set(['POST']),
-  SupplierEvaluations:new Set(['POST']),
-  SupplierCategories:new Set(['POST','PATCH']),
-  SupplierApplications:new Set(['PATCH']),
   Maquinas:new Set(['PATCH']),
   Maquinas_Eventos:new Set(['POST','PATCH']),
   Maquinas_Mant:new Set(['POST']),
@@ -43,7 +36,9 @@ const ACCESS_OPERATOR_WRITE_METHODS=Object.freeze({
 });
 const ACCESS_FINANCE_TABLES=new Set([
   'Facturas','Gastos','Pagos','Libro Diario','Remuneraciones','Comisiones',
-  'Presupuestos','Prestamos','Préstamos','Ventas','Caja','Reportes'
+  'Presupuestos','Prestamos','Préstamos','Ventas','Caja','Reportes',
+  'SupplierPrices','PurchaseOrders','PurchaseOrderItems','PurchaseOrderEvents',
+  'SupplierEvaluations','SupplierCategories','SupplierApplications'
 ]);
 const ACCESS_ALLOWED_TABLES=new Set([
   'Clientes','Cotizaciones','Pedidos','Facturas','Inventario','Maquinas',
@@ -256,9 +251,9 @@ function accessAllows(identity,method,path){
   if(path==='/mail/accounts')return method==='GET'&&['sales','operator','finance','admin'].includes(identity.role);
   if(path==='/mail/session')return ['POST','DELETE'].includes(method)&&['sales','operator','finance','admin'].includes(identity.role);
   if(path==='/mail/rpc')return method==='POST'&&['sales','operator','finance','admin'].includes(identity.role);
-  if(path==='/supplier/create')return method==='POST'&&['operator','finance','admin'].includes(identity.role);
-  if(path==='/supplier/purchase-order/reserve')return method==='POST'&&['operator','finance','admin'].includes(identity.role);
-  if(path==='/supplier/purchase-order/transition')return method==='POST'&&['operator','finance','admin'].includes(identity.role);
+  if(path==='/supplier/create')return method==='POST'&&(finance||admin);
+  if(path==='/supplier/purchase-order/reserve')return method==='POST'&&(finance||admin);
+  if(path==='/supplier/purchase-order/transition')return method==='POST'&&(finance||admin);
   if(path==='/shared/problems')return ['GET','POST'].includes(method);
   if(path==='/shared/machineops')return ['operator','admin'].includes(identity.role)&&
     ['GET','PUT'].includes(method);
