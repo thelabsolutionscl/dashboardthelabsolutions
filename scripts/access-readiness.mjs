@@ -142,19 +142,30 @@ export async function checkAccessReadiness(config,fetcher=fetch){
   }
   if(config.stage==='post'){
     if(config.siiAccessMode!=='true')fail('SII_ACCESS_MODE must be true after cutover');
-    if(!config.siiWorkerKey||config.siiWorkerKey.length<16)
-      fail('Original SII key required to verify the post-cutover public HTML');
+    const masters=[
+      ['PROXY_KEY',config.proxyKey],
+      ['SII_WORKER_KEY',config.siiWorkerKey],
+      ['PORTAL_ADMIN_KEY',config.portalAdminKey],
+      ['PRINTER_TUNNEL_TOKEN',config.printerTunnelToken]
+    ];
+    const missing=masters.filter(([,value])=>!value||String(value).length<12).map(([name])=>name);
+    if(missing.length)fail('Original master secrets required for post-cutover exposure scan: '+missing.join(', '));
     else {
       try{
         const r=await fetcher(BROWSER_ORIGIN+'/',{
-          method:'GET',redirect:'manual',signal:AbortSignal.timeout(12000)
+          method:'GET',redirect:'manual',signal:AbortSignal.timeout(12000),
+          headers:{'Cache-Control':'no-cache'}
         });
         const html=r.ok?await r.text():'';
         if(!r.ok)fail('Published dashboard unavailable for exposure check');
-        else if(html.includes(config.siiWorkerKey)||html.includes('%%SII_WORKER_KEY%%'))
-          fail('Published dashboard still contains the SII credential or placeholder');
-        else ok('Published dashboard HTML contains no matching SII worker key');
-      }catch(_){fail('Cannot inspect published dashboard for SII key exposure');}
+        else {
+          for(const [name,value] of masters){
+            if(html.includes(String(value))||html.includes('%%'+name+'%%'))
+              fail('Published dashboard still contains '+name+' or its unresolved placeholder');
+            else ok('Published dashboard HTML contains no matching '+name);
+          }
+        }
+      }catch(_){fail('Cannot inspect published dashboard for master-secret exposure');}
     }
   }
   manual.push('Verify logged-in finance/admin and denied viewer sessions in a real browser');
@@ -167,7 +178,9 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
     serviceClientSecret:process.env.PREFLIGHT_CF_CLIENT_SECRET,
     stage:process.env.STAGE||'before',
     siiAccessMode:process.env.SII_ACCESS_MODE,
-    siiWorkerKey:process.env.SII_WORKER_KEY
+    siiWorkerKey:process.env.SII_WORKER_KEY,
+    portalAdminKey:process.env.PORTAL_ADMIN_KEY,
+    printerTunnelToken:process.env.PRINTER_TUNNEL_TOKEN
   });
   for(const item of result.passed)console.log('PASS: '+item);
   for(const item of result.manual)console.log('MANUAL: '+item);
