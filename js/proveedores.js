@@ -954,6 +954,7 @@ async function _supplierOpsHydrate(force=false){
       _supplierOpsState.evaluations=d.evaluations||[];_supplierOpsState.categories=d.categories||[];
       _supplierOpsState.fetchedAt=d.fetchedAt||null;_supplierOpsState.ready=true;
       if(Array.isArray(d.suppliers)&&d.suppliers.length){state.proveedores=d.suppliers;}
+      if(Array.isArray(d.pedidos)&&d.pedidos.length){state.pedidos=d.pedidos;}
       return true;
     }catch(e){console.warn('[SupplierOps]',e.message);return false;}
     finally{_supplierOpsState.loading=null;}
@@ -966,7 +967,7 @@ function _supplierByAny(v){
 }
 function _supplierPedidoMatches(pedido,supplierId,nombre){
   const f=pedido?.fields||{},linked=f['Proveedor ID']||f['Supplier ID']||f['Proveedor IDs'];
-  const ids=Array.isArray(linked)?linked.map(x=>typeof x==='string'?x:(x?.id||x?.name||'')):String(linked||'').split(',').map(x=>x.trim());
+  const rawLinks=f.Proveedores||linked;const ids=Array.isArray(rawLinks)?rawLinks.map(x=>typeof x==='string'?x:(x?.id||x?.name||'')):String(rawLinks||'').split(',').map(x=>x.trim());
   if(ids.filter(Boolean).includes(supplierId))return true;
   // Compatibilidad de lectura para pedidos históricos: nunca se usa para crear relaciones nuevas.
   return !ids.filter(Boolean).length&&String(f.Proveedor||'').split(',').map(x=>x.trim().toLowerCase()).includes(String(nombre||'').toLowerCase());
