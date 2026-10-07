@@ -42,7 +42,6 @@ jobs:
           PRINTER_TUNNEL: ${{ secrets.PRINTER_TUNNEL }}
           ADS_WEBAPP: ${{ secrets.ADS_WEBAPP }}
           ADS_CUSTOMER: ${{ secrets.ADS_CUSTOMER }}
-          ELEVENLABS: ${{ secrets.ELEVENLABS }}
           PRINTER_TUNNEL_TOKEN: ${{ secrets.PRINTER_TUNNEL_TOKEN }}
           PRINTER_ACCESS_MODE: ${{ vars.PRINTER_ACCESS_MODE }}
           PRINTER_CUTOVER_VERIFIED: ${{ vars.PRINTER_CUTOVER_VERIFIED }}
@@ -127,7 +126,6 @@ jobs:
           sed -i "s|%%PRINTER_TUNNEL%%|${PRINTER_TUNNEL}|g" index.html
           sed -i "s|%%ADS_WEBAPP%%|${ADS_WEBAPP}|g" index.html
           sed -i "s|%%ADS_CUSTOMER%%|${ADS_CUSTOMER}|g" index.html
-          sed -i "s|%%ELEVENLABS%%|${ELEVENLABS}|g" index.html
           if [ "${PRINTER_ACCESS_MODE}" = "true" ]; then
             if [ "${PRINTER_CUTOVER_VERIFIED}" != "true" ]; then
               echo "::error::Printer Access requires verified role-scoped Farm Controller tokens before cutover."
