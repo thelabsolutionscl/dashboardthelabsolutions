@@ -29,7 +29,7 @@ jobs:
           node-version: '20'
       - name: Read-only Access and SII readiness probes
         env:
-          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL: https://proxy.thelab.solutions
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           PREFLIGHT_CF_CLIENT_ID: ${{ secrets.PREFLIGHT_CF_CLIENT_ID }}
           PREFLIGHT_CF_CLIENT_SECRET: ${{ secrets.PREFLIGHT_CF_CLIENT_SECRET }}

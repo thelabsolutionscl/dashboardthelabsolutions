@@ -32,7 +32,7 @@ AUTO_PROCESS_DAILY_CAP = "25"
 # Marketing API version used by the official LinkedIn Lead Sync integration.
 LINKEDIN_API_VERSION = "202609"
 # Todas las llamadas Claude pasan por el proxy central protegido.
-AI_PROXY_URL = "https://airtable-proxy.wast3dspa.workers.dev"
+AI_PROXY_URL = "https://proxy.thelab.solutions"
 # Poda diaria de Agent_Queue: borra tareas "Completado" con más de N días
 # (Pendiente/Procesando/Error se conservan siempre). "0" la desactiva.
 CLEANUP_QUEUE_DAYS = "30"

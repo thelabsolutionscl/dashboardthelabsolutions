@@ -31,7 +31,7 @@ jobs:
         id: browser
         continue-on-error: true
         env:
-          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL: https://proxy.thelab.solutions
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           STAGE: reportes
         run: node scripts/access-readiness.mjs
@@ -41,7 +41,7 @@ jobs:
         if: always()
         continue-on-error: true
         env:
-          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL: https://proxy.thelab.solutions
           PROXY_KEY: ${{ secrets.PROXY_KEY }}
           PREFLIGHT_CF_CLIENT_ID: ${{ secrets.PREFLIGHT_CF_CLIENT_ID }}
           PREFLIGHT_CF_CLIENT_SECRET: ${{ secrets.PREFLIGHT_CF_CLIENT_SECRET }}
