@@ -2057,7 +2057,7 @@ async function socialProcessGuarded(env,s,eventKey){
     eventKey,replayed:!!inter?.fields?.["External event ID"]};
 }
 
-**
+/**
  * thelab-leads-worker
  * ---------------------------------------------------------------------------
  * Endpoint público de captación de leads para The Lab Solutions.
