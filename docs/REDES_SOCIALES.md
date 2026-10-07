@@ -360,3 +360,72 @@ Campos principales:
 La primera versión **no depende de Sales Navigator**. Si se habilita más adelante,
 puede enriquecer el descubrimiento manual con sus filtros y señales, sin cambiar
 el modelo de datos ni el flujo de conversión al CRM.
+
+
+---
+
+## 9. LinkedIn v2 — backend atómico, métricas y Lead Sync oficial
+
+### 9.1 Escrituras y conversión
+
+El navegador ya no escribe `LinkedIn_Prospects` ni `Clientes` directamente para este módulo.
+Usa tres rutas dedicadas del proxy:
+
+- `GET /linkedin/prospects` — proyección segura del staging.
+- `GET /linkedin/metrics` — métricas comerciales calculadas server-side.
+- `POST /linkedin/command` — crear, editar, analizar, cambiar etapa o convertir.
+
+Todas las mutaciones de LinkedIn pasan por el mismo Durable Object global
+`CRM_MUTATION_GUARD / tls-crm-global` que protege las mutaciones comerciales.
+La conversión guarda una reserva durable por prospecto antes de crear un Cliente.
+Si Airtable devuelve un resultado ambiguo, el sistema **no vuelve a crear a ciegas**:
+marca la conversión para conciliación y evita un duplicado.
+
+### 9.2 RBAC
+
+No se entregó a marketing/comercial acceso genérico a Airtable.
+
+- `admin`, `operator` y `sales`: lectura del staging + métricas + comandos.
+- `marketing@thelab.solutions`: mismo acceso LinkedIn mediante una excepción exacta ya usada
+  para otras funciones de marketing.
+- `finance`: solo métricas.
+- otros `viewer`: sin acceso LinkedIn.
+
+`LinkedIn_Events`, `LinkedIn_Prospects` y `Clientes` siguen protegidos como tablas:
+las rutas LinkedIn proyectan únicamente lo necesario.
+
+### 9.3 Historial y métricas
+
+La tabla `LinkedIn_Events` guarda Creación, Análisis, cambios de Estado, Conversión e Inbound.
+Esto permite calcular con hechos y timestamps reales:
+
+- Contactado → Respondió.
+- Respondió → Oportunidad.
+- Prospecto → Cliente.
+- tiempo promedio y mediana hasta respuesta;
+- follow-ups vencidos;
+- resultados por campaña, identidad y segmento.
+
+El panel también muestra **revenue neto posterior al alta LinkedIn**. Para evitar doble conteo,
+cada pedido se atribuye como máximo a un prospecto LinkedIn vinculado y solo cuando su fecha
+de ingreso es posterior al alta del prospecto. Se excluyen pedidos Cancelados y se divide el
+total por 1,19 para mostrar neto. Esta métrica es de procedencia temporal, **no demuestra
+causalidad** cuando el Cliente ya existía antes del contacto de LinkedIn.
+
+### 9.4 Integración oficial LinkedIn Lead Sync
+
+Se mantiene `POST /webhooks/linkedin` para Make/Zapier, pero el Worker incorpora además:
+
+- `GET /webhooks/linkedin/official?challengeCode=…` — challenge HMAC de LinkedIn.
+- `POST /webhooks/linkedin/official` — valida `X-LI-Signature` sobre el body raw,
+  deduplica notificaciones y descarga el Lead Form Response oficial.
+- `GET|POST|DELETE /linkedin/subscriptions` — administración protegida por
+  `LINKEDIN_ADMIN_KEY` de las suscripciones Lead Sync.
+
+La versión Marketing predeterminada es `202609`. El Worker puede usar un
+`LINKEDIN_ACCESS_TOKEN` o renovar automáticamente el acceso cuando existe
+`LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID + LINKEDIN_CLIENT_SECRET`.
+
+**Activación externa necesaria:** LinkedIn debe aprobar la app para Lead Sync y el usuario
+autenticado debe otorgar `r_marketing_leadgen_automation`. Sin esa aprobación/token el código
+queda desplegado pero la integración oficial permanece inactiva.
