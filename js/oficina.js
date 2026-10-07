@@ -177,29 +177,26 @@ function _ofEstadoCls(estado){
 }
 // Mini-sparkline de ejecuciones de los últimos 7 días (índice 6 = hoy)
 function _ofSpark(list){
-  const days=[0,0,0,0,0,0,0];
-  const start=new Date(); start.setHours(0,0,0,0);
-  (list||[]).forEach(r=>{ if(!r.t) return; const dd=new Date(r.t); dd.setHours(0,0,0,0); const idx=6-Math.round((start-dd)/86400000); if(idx>=0&&idx<7) days[idx]++; });
+  const days=[0,0,0,0,0,0,0],keys=[];
+  const d=new Date();for(let i=6;i>=0;i--){const x=new Date(d);x.setDate(x.getDate()-i);keys.push(_ofChileDay(x));}
+  (list||[]).forEach(r=>{const idx=keys.indexOf(_ofChileDay(r.t));if(idx>=0)days[idx]++;});
   const max=Math.max(1,...days);
-  const bars=days.map((v,i)=>{const h=Math.max(2,Math.round((v/max)*18)); return `<rect x="${i*9}" y="${20-h}" width="6" height="${h}" rx="1" fill="${v?'var(--accent)':'var(--border2)'}"/>`;}).join('');
+  const bars=days.map((v,i)=>{const h=Math.max(2,Math.round(v/max*18));return `<rect x="${i*9}" y="${20-h}" width="6" height="${h}" rx="1" fill="${v?'var(--accent)':'var(--border2)'}"/>`;}).join('');
   return `<svg class="of-spark" width="62" height="20" viewBox="0 0 62 20" aria-hidden="true">${bars}</svg>`;
 }
 function ofKey(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); const t=e.currentTarget; if(!t)return; if(typeof t.click==='function') t.click(); else if(typeof t.onclick==='function') t.onclick(e); else t.dispatchEvent(new MouseEvent('click',{bubbles:true})); } }   // a11y teclado (incluye nodos SVG sin .click() en algunos navegadores)
 // ── Insights del día (reglas simples, sin ML): hoy vs el MISMO día de la semana pasada,
 // hora pico y agente líder de hoy. Alimenta la franja bajo los KPIs y la tendencia del KPI.
 function _ofDayInsight(runs){
-  const now=new Date(), day0=new Date(now); day0.setHours(0,0,0,0);
-  const today=(runs||[]).filter(r=>_ofSameDay(r.t)).length;
-  const lwDay=new Date(day0); lwDay.setDate(lwDay.getDate()-7); const lw0=lwDay.getTime();
-  const lwNext=new Date(lwDay); lwNext.setDate(lwNext.getDate()+1); const lw1=lwNext.getTime();
-  const lastWeek=(runs||[]).filter(r=>r.t>=lw0&&r.t<lw1).length;
+  const now=new Date(),todayKey=_ofChileDay(now),lw=new Date(now);lw.setDate(lw.getDate()-7);const lwKey=_ofChileDay(lw);
+  const todayRows=(runs||[]).filter(r=>_ofChileDay(r.t)===todayKey),today=todayRows.length;
+  const lastWeek=(runs||[]).filter(r=>_ofChileDay(r.t)===lwKey).length;
   const hours=new Array(24).fill(0);
-  (runs||[]).forEach(r=>{ if(r.t>=day0.getTime()) hours[new Date(r.t).getHours()]++; });
-  const mx=Math.max(...hours), peak=(today&&mx>0)?hours.indexOf(mx):null;
-  const cnt={}; (runs||[]).forEach(r=>{ if(_ofSameDay(r.t)&&r.agent) cnt[r.agent]=(cnt[r.agent]||0)+1; });
-  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]||null;
-  const delta=lastWeek>0?Math.round((today-lastWeek)/lastWeek*100):null;
-  return {today,lastWeek,delta,peak,leader:top?top[0]:null,leaderN:top?top[1]:0};
+  todayRows.forEach(r=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Santiago',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(r.t));const h=Number(parts.find(x=>x.type==='hour')?.value||0);hours[h]++;});
+  const mx=Math.max(...hours),peak=today&&mx>0?hours.indexOf(mx):null,cnt={};
+  todayRows.forEach(r=>{if(r.agent)cnt[r.agent]=(cnt[r.agent]||0)+1;});
+  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]||null,delta=lastWeek>0?Math.round((today-lastWeek)/lastWeek*100):null;
+  return{today,lastWeek,delta,peak,leader:top?top[0]:null,leaderN:top?top[1]:0};
 }
 // ── Hitos del equipo: racha de días consecutivos con actividad y récord de ejecuciones en un día ──
 function _ofStreakRecord(runs){
@@ -409,15 +406,15 @@ function ofSetChartRange(n){ _ofChartRange=+n||14; try{localStorage.setItem('the
 }
 // ── Exportar: descarga la escena 3D (SVG, sin taint) o copia el resumen de KPIs ──
 function ofExport(){
+  if(!confirm('¿Exportar/copy Oficina Virtual? La acción quedará auditada.'))return;
+  _ofAudit('export',null,_ofView);
   const svg=_ofSvg();
   if(_ofView==='iso' && svg){
     try{
       const clone=svg.cloneNode(true);
       if(svg.dataset.vb) clone.setAttribute('viewBox',svg.dataset.vb);   // B14: exporta la escena COMPLETA, no el encuadre con zoom
-      clone.querySelectorAll('image').forEach(im=>{                       // B10: hrefs relativos → absolutos (sprites/modelos no salen rotos)
-        const h=im.getAttribute('href')||im.getAttribute('xlink:href'); if(!h) return;
-        try{ im.setAttribute('href',new URL(h,location.href).href); im.removeAttribute('xlink:href'); }catch(e){}
-      });
+      // Export autocontenido: las imágenes remotas no se referencian desde el SVG descargado.
+      clone.querySelectorAll('image').forEach(im=>im.remove());
       const src='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(clone);
       const blob=new Blob([src],{type:'image/svg+xml'}), url=URL.createObjectURL(blob);
       const a=document.createElement('a'); a.href=url; a.download='oficina-thelab.svg'; document.body.appendChild(a); a.click(); a.remove();
@@ -470,6 +467,8 @@ function ofDigest(){
   if(low.length){ L.push('','📦 Stock por reponer: '+low.length);
     low.slice(0,10).forEach(x=>L.push('• '+x.mat+': '+x.stock+' '+x.unidad+(x.sev===3?' (agotado)':' (bajo mínimo)'))); }
   const txt=L.join('\n');
+  if(!confirm('¿Copiar el resumen operativo? La acción quedará auditada.'))return;
+  _ofAudit('digest',null,'Resumen operativo');
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>{try{toast('🧾 Resumen del día copiado al portapapeles','success');}catch(e){}}).catch(()=>_ofDigestFallback(txt)); }
   else _ofDigestFallback(txt);
 }
@@ -547,24 +546,17 @@ function closeOfAgent(){ const e=document.getElementById('ofAgentModal'); if(e) 
 function ofAgentRun(id){ closeOfAgent(); switchTab('agentes'); setTimeout(()=>{const i=document.getElementById('input_'+id); if(i){ i.scrollIntoView({behavior:'smooth',block:'center'}); i.focus(); }},140); }
 // Abre una ejecución en el modal inline (compartido por el detalle del agente y el feed)
 function _ofOpenRun(r){
-  if(!r) return;
+  if(!r)return;
+  _ofAudit('view',r,'Detalle de ejecución');
   document.getElementById('agentInlineTitle').textContent='📜 '+_ofPretty(r.agent||'Agente')+' — '+NOTIFY._fmtFull(r.time);
-  const resultEl=document.getElementById('agentInlineResult');
-  resultEl.className='agent-modal-result'; resultEl.style.whiteSpace='normal';
-  // Consulta como cabecera ligera + salida procesada (suave y estructurada, igual que en Agentes).
-  const consultaHtml=r.input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta</div>${escapeHtml(String(r.input)).replace(/\n/g,'<br>')}</div>`:'';
-  const rid=r.meta?.agentId||(typeof _agentVisualId==='function'?_agentVisualId(r.agent):r.agent);
-  resultEl.innerHTML=consultaHtml+(r.output?(typeof renderAgentResult==='function'?renderAgentResult(rid,r.output,r.meta||{}):formatAgentReport(r.output)):'<span style="color:var(--text3)">(sin resultado guardado)</span>');
-  _agentInlineText=r.output||'';
-  document.getElementById('agentInlineActions').innerHTML=agentCtaButtonsHtml('',r.output||'')+'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>';
+  const resultEl=document.getElementById('agentInlineResult');resultEl.className='agent-modal-result';resultEl.style.whiteSpace='normal';
+  const input=_ofRunVisibleText(r,false),output=_ofRunVisibleText(r,true);
+  const consultaHtml=input?`<div style="font-size:11px;color:var(--text2);background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.5"><div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;margin-bottom:3px">▸ Consulta${r.contentRestricted?' · REDACTADA':''}</div>${escapeHtml(input).replace(/\n/g,'<br>')}</div>`:'';
+  resultEl.innerHTML=consultaHtml+(output?(r.contentRestricted?`<div style="white-space:pre-wrap">${escapeHtml(output)}</div>`:(typeof renderAgentResult==='function'?renderAgentResult(r.meta?.agentId||r.agent,output,r.meta||{}):formatAgentReport(output))):'<span style="color:var(--text3)">(sin resultado visible)</span>');
+  _agentInlineText=output;_agentInlineExecutionId=r.executionId||'';
+  document.getElementById('agentInlineActions').innerHTML=(r.contentRestricted?'':agentCtaButtonsHtml('',output))+(output?'<button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>':'');
   document.getElementById('agentInlineModal').style.display='flex';
 }
-function ofAgentViewRun(idx){
-  const r=_ofAgentRuns&&_ofAgentRuns[idx]; if(!r) return;
-  closeOfAgent();
-  _ofOpenRun(r);
-}
-// Clic en un item del feed → abre esa ejecución (idea: el feed deja de ser sólo lectura)
 function ofFeedView(i){ const r=_ofFeedShown&&_ofFeedShown[+i]; if(r) _ofOpenRun(r); }
 function ofSetView(v,persist){
   _ofView=v;
@@ -1962,7 +1954,7 @@ function _ofRenderIso(ia,auto,extras){
   const _lW=132,_lH=30;
   const logo=`<g transform="matrix(${_lux.toFixed(4)},${_luy.toFixed(4)},0,1,${_lorg[0].toFixed(1)},${_lorg[1].toFixed(1)})">`
     +`<rect x="-9" y="-8" width="${_lW+18}" height="${_lH+16}" rx="9" fill="#0e1116" opacity="0.9"/>`
-    +`<image href="https://dashboard.thelab.solutions/logo-thelab.png" x="0" y="0" width="${_lW}" height="${_lH}" preserveAspectRatio="xMidYMid meet"/>`
+    +`<image href="" x="0" y="0" width="${_lW}" height="${_lH}" preserveAspectRatio="xMidYMid meet"/>`
     +`</g>`;
   // Reloj de pared con hora real
   const clk=lp(0.3,wallH*0.55), now=new Date(), hr=now.getHours()%12, mn=now.getMinutes();
@@ -2052,6 +2044,14 @@ let _ofFeedQuery='';           // búsqueda de texto en la actividad (input/outp
 function ofSetFeedFilter(cat){ _ofFeedFilter=cat||'all'; try{localStorage.setItem('thelab_oficina_feedfilter',_ofFeedFilter);}catch(e){} _ofRenderFeed(_ofFeedRuns); }
 function ofFeedSearch(v){ _ofFeedQuery=(v||'').trim().toLowerCase(); _ofFeedLimit=15; _ofRenderFeed(_ofFeedRuns); }
 function _ofFeedCat(r){ return _ofCat({id:r.agent}).name; }   // área del run según su agente
+function _ofRunVisibleText(r,preferOutput=false){
+  if(!r)return'';
+  if(r.contentRestricted)return String((preferOutput?r.output:r.input)||r.input||r.output||'').slice(0,300);
+  return String((preferOutput?r.output:r.input)||r.input||r.output||'').slice(0,5000);
+}
+function _ofAudit(action,r,detail){
+  try{if(typeof officeAuditAction==='function')officeAuditAction(action,'office-run',r?.executionId||'',detail||r?.agent||'').catch(()=>{});}catch(_){}
+}
 function _ofRenderFeed(runs){
   const feed=document.getElementById('oficinaFeed'); if(!feed) return;
   _ofFeedRuns=runs||[];
@@ -2072,7 +2072,7 @@ function _ofRenderFeed(runs){
   let shown=_ofFeedFilter==='all'?runs:runs.filter(r=>_ofFeedCat(r)===_ofFeedFilter);
   // Búsqueda de texto en la actividad: agente/persona + consulta + resultado (idea)
   const q=_ofFeedQuery;
-  if(q) shown=shown.filter(r=>{ const idn=agentIdentity(r.agent); return ((idn.persona||'')+' '+(idn.rol||'')+' '+(r.agent||'')+' '+(r.input||'')+' '+(r.output||'')).toLowerCase().includes(q); });
+  if(q) shown=shown.filter(r=>{const idn=agentIdentity(r.agent);return((idn.persona||'')+' '+(idn.rol||'')+' '+(r.agent||'')+' '+_ofRunVisibleText(r,false)+' '+_ofRunVisibleText(r,true)).toLowerCase().includes(q);});
   // Contador honesto: si la lista está truncada dice "15 de 112" (antes el badge mostraba el
   // total y la lista cortaba en 15 sin aviso — B-U9); "Ver más" amplía el corte.
   const lim=Math.max(15,_ofFeedLimit);
@@ -2098,37 +2098,34 @@ function _ofRenderFeed(runs){
       <div class="of-feed-ic" style="background:${col}1f;box-shadow:inset 0 0 0 1px ${col}40">${idn.emoji}</div>
       <div class="of-feed-main">
         <div class="of-feed-agent">${who}</div>
-        <div class="of-feed-txt">${escapeHtml((r.input||r.output||'').substring(0,120))}</div>
+        <div class="of-feed-txt">${escapeHtml(_ofRunVisibleText(r,false).substring(0,120))}</div>
       </div>
       <div class="of-feed-side">
-        ${(r.output||r.input)?`<button class="of-feed-copy" data-i="${i}" onclick="ofFeedCopy(this.dataset.i,event)" title="Copiar el resultado" aria-label="Copiar el resultado de esta ejecución">📋</button>`:''}
+        ${_ofRunVisibleText(r,true)?`<button class="of-feed-copy" data-i="${i}" onclick="ofFeedCopy(this.dataset.i,event)" title="Copiar el resultado" aria-label="Copiar el resultado de esta ejecución">📋</button>`:''}
         <div class="of-feed-time">${_ofAgo(r.t)}</div>
       </div>
     </div>`;}).join('')+more;
 }
 function ofFeedMore(){ _ofFeedLimit=Math.max(15,_ofFeedLimit)+20; _ofRenderFeed(_ofFeedRuns); }
 // Copiar el resultado de una ejecución directo desde el feed, sin abrir el modal
-function ofFeedCopy(i,ev){ if(ev&&ev.stopPropagation) ev.stopPropagation();
-  const r=_ofFeedShown&&_ofFeedShown[+i]; if(!r) return;
-  const txt=(r.output||r.input||'').toString();
-  if(!txt){ try{toast('Esta ejecución no tiene resultado para copiar','info');}catch(e){} return; }
-  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(()=>{try{toast('📋 Resultado copiado','success');}catch(e){}}).catch(()=>{try{toast('No se pudo copiar','error');}catch(e){}}); }
-  else { try{toast('Portapapeles no disponible','error');}catch(e){} }
+function ofFeedCopy(i,ev){if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const r=_ofFeedShown&&_ofFeedShown[+i];if(!r)return;
+  const txt=_ofRunVisibleText(r,true);
+  if(!txt){try{toast('Esta ejecución no tiene resultado visible para copiar','info');}catch(e){}return;}
+  if(!confirm('¿Copiar este resultado? La acción quedará auditada.'))return;
+  _ofAudit('copy',r,'Feed de Oficina');
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(()=>{try{toast('📋 Resultado copiado','success');}catch(e){}}).catch(()=>{try{toast('No se pudo copiar','error');}catch(e){}});
+  else try{toast('Portapapeles no disponible','error');}catch(e){}
 }
 
 // ── Analítica de la oficina (gráficos SVG, sin librerías) ──────────────
 function _ofBarsDays(runs){
-  const N=Math.max(7,Math.min(30,_ofChartRange||14)), arr=new Array(N).fill(0), lab=[];
-  const start=new Date(); start.setHours(0,0,0,0);
-  for(let i=0;i<N;i++){ const d=new Date(start); d.setDate(start.getDate()-(N-1-i)); lab.push(d.getDate()); }
-  runs.forEach(r=>{ if(!r.t)return; const d=new Date(r.t); d.setHours(0,0,0,0); const idx=N-1-Math.round((start-d)/864e5); if(idx>=0&&idx<N) arr[idx]++; });
-  const max=Math.max(1,...arr), W=320,H=120,pad=16,bw=(W-pad*2)/N, step=Math.ceil(N/8);
-  let bars='',lbls='';
-  arr.forEach((v,i)=>{ const x=pad+i*bw, bh=(v/max)*(H-pad-22), y=H-22-bh;
-    bars+=`<rect x="${(x+2).toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i===N-1?'var(--accent)':'var(--accent3)'}" opacity="${i===N-1?1:0.6}"><title>${lab[i]}: ${v}</title></rect>`;
-    if((i%step===0 && N-1-i>=step)||i===N-1) lbls+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="8" fill="var(--text3)">${lab[i]}</text>`;   // sin solape con la última etiqueta (B-U8)
-  });
-  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg"><line x1="${pad}" y1="${H-22}" x2="${W-pad}" y2="${H-22}" stroke="var(--border)"/>${bars}${lbls}</svg>`;
+  const N=Math.max(7,Math.min(30,_ofChartRange||14)),keys=[],lab=[],now=new Date();
+  for(let i=N-1;i>=0;i--){const d=new Date(now);d.setDate(d.getDate()-i);keys.push(_ofChileDay(d));lab.push(new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',day:'numeric'}).format(d));}
+  const arr=new Array(N).fill(0);(runs||[]).forEach(r=>{const idx=keys.indexOf(_ofChileDay(r.t));if(idx>=0)arr[idx]++;});
+  const max=Math.max(1,...arr),W=320,H=120,pad=16,bw=(W-pad*2)/N,step=Math.ceil(N/8);let rect='',lbls='';
+  arr.forEach((v,i)=>{const x=pad+i*bw,bh=v/max*(H-pad-22),y=H-22-bh;rect+=`<rect x="${(x+2).toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i===N-1?'var(--accent)':'var(--accent3)'}" opacity="${i===N-1?1:.6}"><title>${lab[i]}: ${v}</title></rect>`;if(i%step===0||i===N-1)lbls+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="8" fill="var(--text3)">${lab[i]}</text>`;});
+  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg"><line x1="${pad}" y1="${H-22}" x2="${W-pad}" y2="${H-22}" stroke="var(--border)"/>${rect}${lbls}</svg>`;
 }
 function _ofBarsTop(runs){
   const _rd=Math.max(7,Math.min(30,_ofChartRange||14)), since=Date.now()-_rd*864e5, cnt={};
@@ -2207,20 +2204,16 @@ function _ofTimeline(runs){
 // Mapa de calor SEMANAL (día × hora) de las ejecuciones del rango — muestra los patrones de
 // actividad del equipo (¿lunes por la mañana? ¿viernes de reportes?). Celdas con <title> (tap=toast).
 function _ofHeatmap(runs){
-  const R=Math.max(7,Math.min(30,_ofChartRange||14)), since=Date.now()-R*864e5;
+  const R=Math.max(7,Math.min(30,_ofChartRange||14)),allowed=new Set(),now=new Date();
+  for(let i=0;i<R;i++){const d=new Date(now);d.setDate(d.getDate()-i);allowed.add(_ofChileDay(d));}
   const grid=Array.from({length:7},()=>new Array(24).fill(0));
-  (runs||[]).forEach(r=>{ if(!r.t||r.t<since) return; const d=new Date(r.t); grid[(d.getDay()+6)%7][d.getHours()]++; });
-  const flat=grid.flat(), max=Math.max(1,...flat), total=flat.reduce((s,v)=>s+v,0);
-  if(!total) return `<div class="of-chart-empty">Sin ejecuciones en ${R} días.</div>`;
-  const days=['L','M','X','J','V','S','D'], cw=11.5, ch=11, ox=18, oy=4, W=320, H=7*ch+oy+14;
-  let cells='';
-  for(let d=0;d<7;d++){
-    cells+=`<text x="${ox-6}" y="${oy+d*ch+8}" font-size="7" fill="var(--text3)" text-anchor="end">${days[d]}</text>`;
-    for(let h=0;h<24;h++){ const v=grid[d][h];
-      cells+=`<rect x="${(ox+h*cw).toFixed(1)}" y="${oy+d*ch}" width="${cw-1.5}" height="${ch-1.5}" rx="2" fill="var(--accent)" opacity="${v?(0.15+0.85*v/max).toFixed(2):0.05}"><title>${days[d]} ${h}:00 · ${v} ejec.</title></rect>`; }
-  }
-  let hl=''; for(let h=0;h<24;h+=6) hl+=`<text x="${(ox+h*cw+cw/2).toFixed(1)}" y="${H-3}" font-size="7" fill="var(--text3)" text-anchor="middle">${h}h</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${cells}${hl}</svg>`;
+  (runs||[]).forEach(r=>{if(!r.t||!allowed.has(_ofChileDay(r.t)))return;const d=new Date(r.t);
+    const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Santiago',weekday:'short',hour:'2-digit',hourCycle:'h23'}).formatToParts(d);
+    const wd=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(parts.find(x=>x.type==='weekday')?.value||'');const h=Number(parts.find(x=>x.type==='hour')?.value||0);if(wd>=0)grid[wd][h]++;});
+  const flat=grid.flat(),max=Math.max(1,...flat),total=flat.reduce((a,b)=>a+b,0);if(!total)return `<div class="of-chart-empty">Sin ejecuciones en ${R} días.</div>`;
+  const days=['L','M','X','J','V','S','D'],cw=11.5,ch=11,ox=18,oy=4,W=320,H=7*ch+oy+14;let cells='';
+  for(let d=0;d<7;d++){cells+=`<text x="${ox-6}" y="${oy+d*ch+8}" font-size="7" fill="var(--text3)" text-anchor="end">${days[d]}</text>`;for(let h=0;h<24;h++){const v=grid[d][h];cells+=`<rect x="${(ox+h*cw).toFixed(1)}" y="${oy+d*ch}" width="${cw-1.5}" height="${ch-1.5}" rx="2" fill="var(--accent)" opacity="${v?(.15+.85*v/max).toFixed(2):.05}"><title>${days[d]} ${h}:00 · ${v} ejec.</title></rect>`;}}
+  return `<svg viewBox="0 0 ${W} ${H}" class="of-chart-svg">${cells}</svg>`;
 }
 // En táctil no existen los tooltips <title>: un tap sobre una barra/segmento muestra su valor (B-U10)
 function _ofInitChartTips(host){
