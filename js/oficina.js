@@ -84,7 +84,7 @@ function ofLogComm(from,to){
 // ── Errores de agentes IA (B-C10): runAgent llama ofAgentError(label) en su catch; el agente
 // aparece "Con falla" (of-error) en la Oficina durante 10 min o hasta su próxima ejecución OK.
 const _ofAgentErrors={}; const _OF_AGENT_ERR_MS=600000;
-function ofAgentError(label){ if(label) _ofAgentErrors[label]=Date.now(); }
+function ofAgentError(label){ if(label)_ofAgentErrors[label]=Date.now();try{if(typeof officeExecutionFailByAgent==='function')officeExecutionFailByAgent(label);}catch(e){} }
 // ── Reacciones / celebraciones cuando un agente COMPLETA una ejecución ──
 let _ofCelebs=[]; const _OF_CELEB_MS=5200;
 function ofCelebrate(label){
