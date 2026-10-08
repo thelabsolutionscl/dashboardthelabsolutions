@@ -62,3 +62,14 @@ test('WebGL interpola iluminación por vértice y no dibuja aristas del modelo',
   assert.match(SRC,/base\*vLight/);
   assert.doesNotMatch(SRC,/_renderModelWebGL[\s\S]*?gl\.LINES/);
 });
+
+
+test('WebGL dibuja la malla completa y no el muestreo S.prev',()=>{
+  const i=SRC.indexOf('function _renderModelWebGL(');
+  const j=SRC.indexOf('\n  function render(){',i);
+  const block=SRC.slice(i,j);
+  assert.match(block,/const t=S\.tris/);
+  assert.doesNotMatch(block,/const t=S\.prev/);
+  assert.match(block,/if\(G\.geom!==t\)/);
+  assert.match(block,/gl\.STATIC_DRAW/);
+});
