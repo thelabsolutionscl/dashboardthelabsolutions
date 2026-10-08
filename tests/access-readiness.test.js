@@ -102,9 +102,20 @@ test('unapproved proxy URLs do not receive service credentials',async()=>{
  assert.ok(r.errors.length);
  assert.equal(h.calls.length,0);
 });
-test('post-cutover catches any leaked browser master secret in published HTML',async()=>{
+test('post-cutover requires both SII cutover gates before exposure checks can pass',async()=>{
  const {checkAccessReadiness}=await import(script.href);
  const base={...cfg,stage:'post',siiAccessMode:'true',
+   proxyKey:'proxy-master-test-123456',
+   siiWorkerKey:'sii-master-test-123456',portalAdminKey:'portal-master-test-123456',
+   printerTunnelToken:'printer-master-test-123456'};
+ const missing=await checkAccessReadiness(base,mock().fetcher);
+ assert.match(missing.errors.join(' '),/SII_CUTOVER_VERIFIED/);
+ const verified=await checkAccessReadiness({...base,siiCutoverVerified:'true'},mock().fetcher);
+ assert.equal(verified.errors.length,0);
+});
+test('post-cutover catches any leaked browser master secret in published HTML',async()=>{
+ const {checkAccessReadiness}=await import(script.href);
+ const base={...cfg,stage:'post',siiAccessMode:'true',siiCutoverVerified:'true',
    proxyKey:'proxy-master-test-123456',
    siiWorkerKey:'test-secret-exposed-123456',
    portalAdminKey:'portal-master-test-123456',
