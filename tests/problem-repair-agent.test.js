@@ -25,7 +25,8 @@ test('agente queda acotado por modelo, turnos y suite completa',()=>{
 test('reparaciones se hacen en rama y PR antes del merge',()=>{
   assert.match(WORKFLOW,/autofix\//);
   assert.match(WORKFLOW,/gh pr create --base main --head/);
-  assert.match(WORKFLOW,/gh pr merge "\$PR_URL" --squash --delete-branch/);
+  assert.doesNotMatch(WORKFLOW,/gh pr merge "\$PR_URL" --squash --delete-branch/);
+  assert.match(WORKFLOW,/Mantener PR automático pendiente de verificaciones obligatorias/);
   assert.doesNotMatch(WORKFLOW,/git push\s+origin\s+main/);
 });
 
