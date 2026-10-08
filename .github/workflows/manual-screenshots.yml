@@ -68,7 +68,7 @@ jobs:
           test -s docs/manual/assets/manual-web.png
 
       - name: Guardar capturas actualizadas en el PR
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -79,3 +79,12 @@ jobs:
           fi
           git commit -m "docs(manual): actualizar screenshots"
           git push origin HEAD:"${TARGET_BRANCH}"
+
+      - name: Publicar capturas de ejecución manual sin escribir en main
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-screenshots-${{ github.run_id }}
+          path: docs/manual/assets/*.png
+          if-no-files-found: error
+          retention-days: 14
