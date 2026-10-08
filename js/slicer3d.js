@@ -257,7 +257,9 @@ const SL3D=(function(){
   // cama/ayudas; la malla se dibuja en un canvas WebGL transparente y se compone encima.
   // Así las caras se ocluyen por profundidad por píxel, no por el promedio de cada triángulo.
   function _renderModelWebGL(ctx,w,h,dpr,zm,ca,sa,cb,sb,sc,rad,ovAng){
-    const t=S.prev;if(!t||typeof document==='undefined')return false;
+    // WebGL usa la malla COMPLETA. S.prev puede estar muestreada para cálculos
+    // auxiliares, pero dibujar sólo uno de cada N triángulos abre agujeros reales.
+    const t=S.tris;if(!t||typeof document==='undefined')return false;
     try{
       if(!S._glPreview){
         const canvas=document.createElement('canvas');
@@ -266,69 +268,102 @@ const SL3D=(function(){
         const compile=(type,src)=>{const sh=gl.createShader(type);gl.shaderSource(sh,src);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh)||'shader');return sh;};
         const vs=compile(gl.VERTEX_SHADER,`
           attribute vec3 aPos;
-          attribute float aLight;
-          attribute float aOver;
+          attribute vec3 aNormal;
+          attribute float aFaceNz;
+          attribute float aFaceMaxZ;
+          uniform vec2 uRotA;
+          uniform vec2 uRotB;
+          uniform vec4 uScale;
+          uniform float uZm;
           varying float vLight;
-          varying float vOver;
+          varying float vFaceNz;
+          varying float vFaceMaxZ;
           void main(){
-            gl_Position=vec4(aPos,1.0);
-            vLight=aLight;
-            vOver=aOver;
+            float ca=uRotA.x, sa=uRotA.y, cb=uRotB.x, sb=uRotB.y;
+            float zz=aPos.z-uZm;
+            float x1=aPos.x*ca-aPos.y*sa;
+            float y1=aPos.x*sa+aPos.y*ca;
+            float depth=y1*cb-zz*sb;
+            float z2=y1*sb+zz*cb;
+            gl_Position=vec4(x1*uScale.x,z2*uScale.y,clamp(depth*uScale.z,-0.98,0.98),1.0);
+
+            float r1=aNormal.x*ca-aNormal.y*sa;
+            float r2=aNormal.x*sa+aNormal.y*ca;
+            float rD=r2*cb-aNormal.z*sb;
+            float rU=r2*sb+aNormal.z*cb;
+            float d1=max(0.0,r1*-0.398+rD*-0.498+rU*0.747);
+            float d2=max(0.0,r1*0.707+rD*0.566+rU*0.424);
+            float hsp=abs(r1*-0.233+rD*-0.876+rU*0.437);
+            vLight=min(1.45,0.30+0.66*d1+0.18*d2+0.10*abs(rD)+pow(hsp,22.0)*0.5);
+            vFaceNz=aFaceNz;
+            vFaceMaxZ=aFaceMaxZ;
           }`);
         const fs=compile(gl.FRAGMENT_SHADER,`
           precision mediump float;
+          uniform float uShowSupports;
+          uniform float uOverhangThreshold;
           varying float vLight;
-          varying float vOver;
+          varying float vFaceNz;
+          varying float vFaceMaxZ;
           void main(){
             vec3 teal=vec3(70.0,200.0,190.0)/255.0;
             vec3 orange=vec3(236.0,128.0,52.0)/255.0;
-            vec3 base=mix(teal,orange,step(0.5,vOver));
+            float over=step(0.5,uShowSupports)*step(vFaceNz,uOverhangThreshold)*step(0.5,vFaceMaxZ);
+            vec3 base=mix(teal,orange,over);
             gl_FragColor=vec4(clamp(base*vLight,0.0,1.0),1.0);
           }`);
         const program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
         if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program)||'program');
         const buffer=gl.createBuffer();
-        S._glPreview={canvas,gl,program,buffer,
+        S._glPreview={canvas,gl,program,buffer,geom:null,count:0,
           aPos:gl.getAttribLocation(program,'aPos'),
-          aLight:gl.getAttribLocation(program,'aLight'),
-          aOver:gl.getAttribLocation(program,'aOver')};
+          aNormal:gl.getAttribLocation(program,'aNormal'),
+          aFaceNz:gl.getAttribLocation(program,'aFaceNz'),
+          aFaceMaxZ:gl.getAttribLocation(program,'aFaceMaxZ'),
+          uRotA:gl.getUniformLocation(program,'uRotA'),
+          uRotB:gl.getUniformLocation(program,'uRotB'),
+          uScale:gl.getUniformLocation(program,'uScale'),
+          uZm:gl.getUniformLocation(program,'uZm'),
+          uShowSupports:gl.getUniformLocation(program,'uShowSupports'),
+          uOverhangThreshold:gl.getUniformLocation(program,'uOverhangThreshold')};
       }
       const G=S._glPreview,gl=G.gl,pxW=Math.max(1,Math.round(w*dpr)),pxH=Math.max(1,Math.round(h*dpr));
       if(G.canvas.width!==pxW)G.canvas.width=pxW;
       if(G.canvas.height!==pxH)G.canvas.height=pxH;
-      if(S._prevNfor!==t){S.prevN=_computeVertexNormals(t);S._prevNfor=t;}
-      const VN=S.prevN,m=t.length/9,data=new Float32Array(m*3*5);
-      const depthScale=Math.max(rad,1)*1.15,thr=(ovAng<-0.2?ovAng:-0.57);let q=0;
-      for(let i=0;i<m;i++){
-        const o=i*9;
-        const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx=t[o+6],cy=t[o+7],cz=t[o+8];
-        const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
-        const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,nl=Math.hypot(nx,ny,nz)||1;
-        const over=S.showSupports&&(nz/nl<thr)&&Math.max(az,bz,cz)>0.5?1:0;
-        for(let j=0;j<3;j++){
-          const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
-          const x1=x*ca-y*sa,y1=x*sa+y*ca;
-          const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
-          const clipX=Math.max(-1.2,Math.min(1.2,2*x1*sc/w));
-          const clipY=Math.max(-1.2,Math.min(1.2,2*z2*sc/h));
-          const clipZ=Math.max(-0.98,Math.min(0.98,y2/depthScale));
-          const vnx=VN[o+j*3],vny=VN[o+j*3+1],vnz=VN[o+j*3+2];
-          const r1=vnx*ca-vny*sa,r2=vnx*sa+vny*ca,rD=r2*cb-vnz*sb,rU=r2*sb+vnz*cb;
-          const d1=Math.max(0,r1*-0.398+rD*-0.498+rU*0.747);
-          const d2=Math.max(0,r1*0.707+rD*0.566+rU*0.424);
-          const hsp=Math.abs(r1*-0.233+rD*-0.876+rU*0.437);
-          const light=Math.min(1.45,0.30+0.66*d1+0.18*d2+0.10*Math.abs(rD)+Math.pow(hsp,22)*0.5);
-          data[q++]=clipX;data[q++]=clipY;data[q++]=clipZ;data[q++]=light;data[q++]=over;
+
+      // Subimos geometría/normales sólo cuando cambia la malla. Girar la cámara
+      // modifica uniforms, no reconstruye decenas de miles de vértices por frame.
+      if(G.geom!==t){
+        const VN=_computeVertexNormals(t),m=t.length/9,data=new Float32Array(m*3*8);let q=0;
+        for(let i=0;i<m;i++){
+          const o=i*9;
+          const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx=t[o+6],cy=t[o+7],cz=t[o+8];
+          const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+          const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,nl=Math.hypot(nx,ny,nz)||1;
+          const faceNz=nz/nl,faceMaxZ=Math.max(az,bz,cz);
+          for(let j=0;j<3;j++){
+            data[q++]=t[o+j*3];data[q++]=t[o+j*3+1];data[q++]=t[o+j*3+2];
+            data[q++]=VN[o+j*3];data[q++]=VN[o+j*3+1];data[q++]=VN[o+j*3+2];
+            data[q++]=faceNz;data[q++]=faceMaxZ;
+          }
         }
+        gl.bindBuffer(gl.ARRAY_BUFFER,G.buffer);gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
+        G.geom=t;G.count=m*3;
       }
+
       gl.viewport(0,0,pxW,pxH);gl.clearColor(0,0,0,0);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LESS);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);
-      gl.useProgram(G.program);gl.bindBuffer(gl.ARRAY_BUFFER,G.buffer);gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);
-      const stride=5*4;
+      gl.useProgram(G.program);gl.bindBuffer(gl.ARRAY_BUFFER,G.buffer);
+      const stride=8*4;
       gl.enableVertexAttribArray(G.aPos);gl.vertexAttribPointer(G.aPos,3,gl.FLOAT,false,stride,0);
-      gl.enableVertexAttribArray(G.aLight);gl.vertexAttribPointer(G.aLight,1,gl.FLOAT,false,stride,3*4);
-      gl.enableVertexAttribArray(G.aOver);gl.vertexAttribPointer(G.aOver,1,gl.FLOAT,false,stride,4*4);
-      gl.drawArrays(gl.TRIANGLES,0,m*3);
+      gl.enableVertexAttribArray(G.aNormal);gl.vertexAttribPointer(G.aNormal,3,gl.FLOAT,false,stride,3*4);
+      gl.enableVertexAttribArray(G.aFaceNz);gl.vertexAttribPointer(G.aFaceNz,1,gl.FLOAT,false,stride,6*4);
+      gl.enableVertexAttribArray(G.aFaceMaxZ);gl.vertexAttribPointer(G.aFaceMaxZ,1,gl.FLOAT,false,stride,7*4);
+      gl.uniform2f(G.uRotA,ca,sa);gl.uniform2f(G.uRotB,cb,sb);
+      gl.uniform4f(G.uScale,2*sc/w,2*sc/h,1/(Math.max(rad,1)*1.15),0);
+      gl.uniform1f(G.uZm,zm);gl.uniform1f(G.uShowSupports,S.showSupports?1:0);
+      gl.uniform1f(G.uOverhangThreshold,(ovAng<-0.2?ovAng:-0.57));
+      gl.drawArrays(gl.TRIANGLES,0,G.count);
       ctx.drawImage(G.canvas,0,0,w,h);
       return true;
     }catch(err){
