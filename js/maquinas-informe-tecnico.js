@@ -181,19 +181,24 @@ function close(){const el=document.getElementById('mrepModal');if(el)el.style.di
 
 async function open(id){
   const m=machine(id);if(!m){note('Máquina no encontrada','error');return false;}
-  try{if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(false);}catch(_){}
+  try{if(typeof refreshPrinterTunnelSession==='function')await refreshPrinterTunnelSession(false);
+    else if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(false);}catch(_){}
+  // A missing/expired workshop ticket can recover immediately on user click.
   if(window.MachineOps?.canRunPrinterAudit&&!window.MachineOps.canRunPrinterAudit()){
-    note('Para auditar necesitas una sesión operator/admin con el Farm Controller','error');return false;
+    try{if(typeof refreshPrinterTunnelSession==='function')await refreshPrinterTunnelSession(true);
+      else if(typeof _refreshPrinterAccessTicket==='function')await _refreshPrinterAccessTicket(true);}catch(_){}
   }
+  const canAudit=!window.MachineOps?.canRunPrinterAudit||window.MachineOps.canRunPrinterAudit();
   if(_run[id]){note('Ya hay un informe en curso para esta impresora','info');return false;}
   const el=dialog(),body=document.getElementById('mrepBody'),elig=testEligibility(id);
   document.getElementById('mrepTitle').textContent='INFORME TÉCNICO · '+label(m);
   body.innerHTML=
+    (canAudit?'':'<div role="alert" style="padding:12px;border:1px solid var(--warn);border-radius:8px;margin-bottom:12px;font-size:12px"><b>Informe nuevo no disponible</b><div style="margin-top:5px">El Dashboard y el Farm Controller tienen permisos separados. Se requiere una sesión operator/admin del taller. Comprueba Cloudflare Access y la conexión del Farm Controller; puedes consultar los informes anteriores más abajo.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="MachineReport.open(\\''+esc(id)+'\\')">Reintentar conexión</button></div>')+
     '<div style="font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:12px">Revisión remota vía Moonraker: logs de Klipper de los últimos días, historial de trabajos, configuración térmica (PID), ventiladores y estabilidad. La IA arma el diagnóstico y se genera un PDF con la identidad de The Lab Solutions.</div>'+
     '<label style="display:block;font-size:10px;font-weight:800;letter-spacing:.9px;color:var(--text3);text-transform:uppercase;margin-bottom:5px">Problema observado (opcional)</label>'+
     '<textarea id="mrepProblem" rows="2" maxlength="300" placeholder="Ej.: pieza derretida a mitad de impresión" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font:inherit;font-size:12px;resize:vertical"></textarea>'+
-    '<div style="margin-top:12px;padding:11px 12px;border:1px solid var(--border2);border-left:3px solid '+(elig.ok?TURQ:'var(--warn)')+';border-radius:9px;background:var(--surface2)">'+
-      '<label style="display:flex;gap:9px;align-items:flex-start;font-size:12px;color:var(--text);cursor:'+(elig.ok?'pointer':'not-allowed')+'"><input id="mrepTests" type="checkbox" '+(elig.ok?'':'disabled')+' style="margin-top:2px"><span><b>Incluir pruebas controladas</b><br><span style="color:var(--text3);font-size:11px;line-height:1.5">Enciende cada ventilador unos segundos y calienta el hotend a <input id="mrepTarget" type="number" min="180" max="260" value="220" style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:1px 4px"> °C durante ~4 min. Al final deja todo apagado.'+(elig.ok?'':'<br><b style="color:var(--warn)">No disponible: '+esc(elig.reason)+'</b>')+'</span></span></label></div>'+
+    '<div style="margin-top:12px;padding:11px 12px;border:1px solid var(--border2);border-left:3px solid '+(elig.ok&&canAudit?TURQ:'var(--warn)')+';border-radius:9px;background:var(--surface2)">'+
+      '<label style="display:flex;gap:9px;align-items:flex-start;font-size:12px;color:var(--text);cursor:'+(elig.ok&&canAudit?'pointer':'not-allowed')+'"><input id="mrepTests" type="checkbox" '+(elig.ok&&canAudit?'':'disabled')+' style="margin-top:2px"><span><b>Incluir pruebas controladas</b><br><span style="color:var(--text3);font-size:11px;line-height:1.5">Enciende cada ventilador unos segundos y calienta el hotend a <input id="mrepTarget" type="number" min="180" max="260" value="220" style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:1px 4px"> °C durante ~4 min. Al final deja todo apagado.'+(elig.ok?'':'<br><b style="color:var(--warn)">No disponible: '+esc(elig.reason)+'</b>')+'</span></span></label></div>'+
     '<div id="mrepProgress" style="display:none;margin-top:12px;padding:11px 12px;border-radius:9px;background:rgba(0,212,204,.08);border:1px solid rgba(0,212,204,.3)"><b id="mrepProgTitle" style="font-size:12px;color:var(--accent)"></b><div id="mrepProgDetail" style="font-size:11.5px;color:var(--text2);margin-top:3px"></div></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button id="mrepCancel" class="btn btn-ghost btn-sm" onclick="MachineReport.cancel(\''+esc(id)+'\')">Cancelar</button><button id="mrepGo" class="btn btn-primary btn-sm" style="font-weight:900;letter-spacing:.4px" onclick="MachineReport.run(\''+esc(id)+'\')">🩺 GENERAR INFORME</button></div>'+
     '<div id="mrepHistory" style="margin-top:16px;border-top:1px solid var(--border2);padding-top:12px"><div style="font-size:11px;color:var(--text3)">Cargando informes anteriores…</div></div>';
@@ -220,6 +225,9 @@ function cancel(id){
 }
 async function run(id){
   if(_run[id])return false;
+  if(window.MachineOps?.canRunPrinterAudit&&!window.MachineOps.canRunPrinterAudit()){
+    note('Sesión del taller no autorizada. Reconecta Cloudflare Access y reintenta.','error');return false;
+  }
   const problem=String(document.getElementById('mrepProblem')?.value||'').trim().slice(0,300);
   const withTests=!!document.getElementById('mrepTests')?.checked;
   const target=Math.max(180,Math.min(260,Math.round(num(document.getElementById('mrepTarget')?.value)||220)));
