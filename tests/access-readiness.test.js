@@ -105,6 +105,7 @@ test('unapproved proxy URLs do not receive service credentials',async()=>{
 test('post-cutover requires both SII cutover gates before exposure checks can pass',async()=>{
  const {checkAccessReadiness}=await import(script.href);
  const base={...cfg,stage:'post',siiAccessMode:'true',
+   proxyKey:'proxy-master-test-123456',
    siiWorkerKey:'sii-master-test-123456',portalAdminKey:'portal-master-test-123456',
    printerTunnelToken:'printer-master-test-123456'};
  const missing=await checkAccessReadiness(base,mock().fetcher);
