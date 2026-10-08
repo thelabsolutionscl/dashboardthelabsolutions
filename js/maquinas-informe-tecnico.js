@@ -193,7 +193,7 @@ async function open(id){
   const el=dialog(),body=document.getElementById('mrepBody'),elig=testEligibility(id);
   document.getElementById('mrepTitle').textContent='INFORME TÉCNICO · '+label(m);
   body.innerHTML=
-    (canAudit?'':'<div role="alert" style="padding:12px;border:1px solid var(--warn);border-radius:8px;margin-bottom:12px;font-size:12px"><b>Informe nuevo no disponible</b><div style="margin-top:5px">El Dashboard y el Farm Controller tienen permisos separados. Se requiere una sesión operator/admin del taller. Comprueba Cloudflare Access y la conexión del Farm Controller; puedes consultar los informes anteriores más abajo.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="MachineReport.open(\\''+esc(id)+'\\')">Reintentar conexión</button></div>')+
+    (canAudit?'':'<div role="alert" style="padding:12px;border:1px solid var(--warn);border-radius:8px;margin-bottom:12px;font-size:12px"><b>Informe nuevo no disponible</b><div style="margin-top:5px">El Dashboard y el Farm Controller tienen permisos separados. Se requiere una sesión operator/admin del taller. Comprueba Cloudflare Access y la conexión del Farm Controller; puedes consultar los informes anteriores más abajo.</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" data-machine="'+esc(id)+'" onclick="MachineReport.open(this.dataset.machine)">Reintentar conexión</button></div>')+
     '<div style="font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:12px">Revisión remota vía Moonraker: logs de Klipper de los últimos días, historial de trabajos, configuración térmica (PID), ventiladores y estabilidad. La IA arma el diagnóstico y se genera un PDF con la identidad de The Lab Solutions.</div>'+
     '<label style="display:block;font-size:10px;font-weight:800;letter-spacing:.9px;color:var(--text3);text-transform:uppercase;margin-bottom:5px">Problema observado (opcional)</label>'+
     '<textarea id="mrepProblem" rows="2" maxlength="300" placeholder="Ej.: pieza derretida a mitad de impresión" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font:inherit;font-size:12px;resize:vertical"></textarea>'+
@@ -203,6 +203,7 @@ async function open(id){
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button id="mrepCancel" class="btn btn-ghost btn-sm" onclick="MachineReport.cancel(\''+esc(id)+'\')">Cancelar</button><button id="mrepGo" class="btn btn-primary btn-sm" style="font-weight:900;letter-spacing:.4px" onclick="MachineReport.run(\''+esc(id)+'\')">🩺 GENERAR INFORME</button></div>'+
     '<div id="mrepHistory" style="margin-top:16px;border-top:1px solid var(--border2);padding-top:12px"><div style="font-size:11px;color:var(--text3)">Cargando informes anteriores…</div></div>';
   el.style.display='flex';
+  const generate=document.getElementById('mrepGo');if(generate&&!canAudit){generate.disabled=true;generate.title='Se requiere sesión operator/admin del taller';}
   loadHistory(id);
   return true;
 }
