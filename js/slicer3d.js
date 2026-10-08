@@ -253,6 +253,126 @@ const SL3D=(function(){
         const l=Math.hypot(nx,ny,nz)||1;out[o+j*3]=nx/l;out[o+j*3+1]=ny/l;out[o+j*3+2]=nz/l;}}
     return out;
   }
+  // Render del modelo con z-buffer real. El canvas visible sigue siendo 2D para
+  // cama/ayudas; la malla se dibuja en un canvas WebGL transparente y se compone encima.
+  // Así las caras se ocluyen por profundidad por píxel, no por el promedio de cada triángulo.
+  function _renderModelWebGL(ctx,w,h,dpr,zm,ca,sa,cb,sb,sc,rad,ovAng){
+    // WebGL usa la malla COMPLETA. S.prev puede estar muestreada para cálculos
+    // auxiliares, pero dibujar sólo uno de cada N triángulos abre agujeros reales.
+    const t=S.tris;if(!t||typeof document==='undefined')return false;
+    try{
+      if(!S._glPreview){
+        const canvas=document.createElement('canvas');
+        const gl=canvas.getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:true,preserveDrawingBuffer:false});
+        if(!gl)return false;
+        const compile=(type,src)=>{const sh=gl.createShader(type);gl.shaderSource(sh,src);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh)||'shader');return sh;};
+        const vs=compile(gl.VERTEX_SHADER,`
+          attribute vec3 aPos;
+          attribute vec3 aNormal;
+          attribute float aFaceNz;
+          attribute float aFaceMaxZ;
+          uniform vec2 uRotA;
+          uniform vec2 uRotB;
+          uniform vec4 uScale;
+          uniform float uZm;
+          varying float vLight;
+          varying float vFaceNz;
+          varying float vFaceMaxZ;
+          void main(){
+            float ca=uRotA.x, sa=uRotA.y, cb=uRotB.x, sb=uRotB.y;
+            float zz=aPos.z-uZm;
+            float x1=aPos.x*ca-aPos.y*sa;
+            float y1=aPos.x*sa+aPos.y*ca;
+            float depth=y1*cb-zz*sb;
+            float z2=y1*sb+zz*cb;
+            gl_Position=vec4(x1*uScale.x,z2*uScale.y,clamp(depth*uScale.z,-0.98,0.98),1.0);
+
+            float r1=aNormal.x*ca-aNormal.y*sa;
+            float r2=aNormal.x*sa+aNormal.y*ca;
+            float rD=r2*cb-aNormal.z*sb;
+            float rU=r2*sb+aNormal.z*cb;
+            float d1=max(0.0,r1*-0.398+rD*-0.498+rU*0.747);
+            float d2=max(0.0,r1*0.707+rD*0.566+rU*0.424);
+            float hsp=abs(r1*-0.233+rD*-0.876+rU*0.437);
+            vLight=min(1.45,0.30+0.66*d1+0.18*d2+0.10*abs(rD)+pow(hsp,22.0)*0.5);
+            vFaceNz=aFaceNz;
+            vFaceMaxZ=aFaceMaxZ;
+          }`);
+        const fs=compile(gl.FRAGMENT_SHADER,`
+          precision mediump float;
+          uniform float uShowSupports;
+          uniform float uOverhangThreshold;
+          varying float vLight;
+          varying float vFaceNz;
+          varying float vFaceMaxZ;
+          void main(){
+            vec3 teal=vec3(70.0,200.0,190.0)/255.0;
+            vec3 orange=vec3(236.0,128.0,52.0)/255.0;
+            float over=step(0.5,uShowSupports)*step(vFaceNz,uOverhangThreshold)*step(0.5,vFaceMaxZ);
+            vec3 base=mix(teal,orange,over);
+            gl_FragColor=vec4(clamp(base*vLight,0.0,1.0),1.0);
+          }`);
+        const program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
+        if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program)||'program');
+        const buffer=gl.createBuffer();
+        S._glPreview={canvas,gl,program,buffer,geom:null,count:0,
+          aPos:gl.getAttribLocation(program,'aPos'),
+          aNormal:gl.getAttribLocation(program,'aNormal'),
+          aFaceNz:gl.getAttribLocation(program,'aFaceNz'),
+          aFaceMaxZ:gl.getAttribLocation(program,'aFaceMaxZ'),
+          uRotA:gl.getUniformLocation(program,'uRotA'),
+          uRotB:gl.getUniformLocation(program,'uRotB'),
+          uScale:gl.getUniformLocation(program,'uScale'),
+          uZm:gl.getUniformLocation(program,'uZm'),
+          uShowSupports:gl.getUniformLocation(program,'uShowSupports'),
+          uOverhangThreshold:gl.getUniformLocation(program,'uOverhangThreshold')};
+      }
+      const G=S._glPreview,gl=G.gl,pxW=Math.max(1,Math.round(w*dpr)),pxH=Math.max(1,Math.round(h*dpr));
+      if(G.canvas.width!==pxW)G.canvas.width=pxW;
+      if(G.canvas.height!==pxH)G.canvas.height=pxH;
+
+      // Subimos geometría/normales sólo cuando cambia la malla. Girar la cámara
+      // modifica uniforms, no reconstruye decenas de miles de vértices por frame.
+      if(G.geom!==t){
+        const VN=_computeVertexNormals(t),m=t.length/9,data=new Float32Array(m*3*8);let q=0;
+        for(let i=0;i<m;i++){
+          const o=i*9;
+          const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx=t[o+6],cy=t[o+7],cz=t[o+8];
+          const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+          const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,nl=Math.hypot(nx,ny,nz)||1;
+          const faceNz=nz/nl,faceMaxZ=Math.max(az,bz,cz);
+          for(let j=0;j<3;j++){
+            data[q++]=t[o+j*3];data[q++]=t[o+j*3+1];data[q++]=t[o+j*3+2];
+            data[q++]=VN[o+j*3];data[q++]=VN[o+j*3+1];data[q++]=VN[o+j*3+2];
+            data[q++]=faceNz;data[q++]=faceMaxZ;
+          }
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER,G.buffer);gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
+        G.geom=t;G.count=m*3;
+      }
+
+      gl.viewport(0,0,pxW,pxH);gl.clearColor(0,0,0,0);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LESS);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);
+      gl.useProgram(G.program);gl.bindBuffer(gl.ARRAY_BUFFER,G.buffer);
+      const stride=8*4;
+      gl.enableVertexAttribArray(G.aPos);gl.vertexAttribPointer(G.aPos,3,gl.FLOAT,false,stride,0);
+      gl.enableVertexAttribArray(G.aNormal);gl.vertexAttribPointer(G.aNormal,3,gl.FLOAT,false,stride,3*4);
+      gl.enableVertexAttribArray(G.aFaceNz);gl.vertexAttribPointer(G.aFaceNz,1,gl.FLOAT,false,stride,6*4);
+      gl.enableVertexAttribArray(G.aFaceMaxZ);gl.vertexAttribPointer(G.aFaceMaxZ,1,gl.FLOAT,false,stride,7*4);
+      gl.uniform2f(G.uRotA,ca,sa);gl.uniform2f(G.uRotB,cb,sb);
+      gl.uniform4f(G.uScale,2*sc/w,2*sc/h,1/(Math.max(rad,1)*1.15),0);
+      gl.uniform1f(G.uZm,zm);gl.uniform1f(G.uShowSupports,S.showSupports?1:0);
+      gl.uniform1f(G.uOverhangThreshold,(ovAng<-0.2?ovAng:-0.57));
+      gl.drawArrays(gl.TRIANGLES,0,G.count);
+      ctx.drawImage(G.canvas,0,0,w,h);
+      return true;
+    }catch(err){
+      console.warn('[SL3D] WebGL preview fallback:',err);
+      S._glPreview=null;
+      return false;
+    }
+  }
+
   function render(){
     const cv=el('slCanvas');if(!S.prev||cv.style.display==='none')return;
     const dpr=Math.min(window.devicePixelRatio||1,2),w=Math.max(1,cv.clientWidth||420),h=Math.max(1,cv.clientHeight||300);
@@ -286,62 +406,68 @@ const SL3D=(function(){
     })();
     // Sombra de contacto blanda bajo la pieza (asienta el modelo en la cama)
     {const base=proj(0,0,0),rsh=Math.max(st.dx,st.dy)*0.55*sc+5;ctx.save();ctx.translate(base[0],base[1]);ctx.scale(1,Math.abs(sb)*0.5+0.16);const rg=ctx.createRadialGradient(0,0,0,0,0,rsh);rg.addColorStop(0,'rgba(0,0,0,0.42)');rg.addColorStop(0.7,'rgba(0,0,0,0.18)');rg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=rg;ctx.beginPath();ctx.arc(0,0,rsh,0,6.283);ctx.fill();ctx.restore();}
-    const t=S.prev,m=t.length/9,list=new Array(m);
-    if(S._prevNfor!==t){S.prevN=_computeVertexNormals(t);S._prevNfor=t;} // normales suaves cacheadas por malla
-    const VN=S.prevN;
-    const ovAng=S.params?-(Math.cos((90-(S.params.supportAngle||50))*Math.PI/180)):-0.57; // criterio según ángulo
-    for(let i=0;i<m;i++){
-      const o=i*9,P=[];let dsum=0;
-      // normal en espacio-modelo → para detectar voladizo (cara hacia abajo no apoyada en la cama)
-      const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx2=t[o+6],cy2=t[o+7],cz2=t[o+8];
-      const Ux=bx-ax,Uy=by-ay,Uz=bz-az,Vx=cx2-ax,Vy=cy2-ay,Vz=cz2-az;
-      const Nx=Uy*Vz-Uz*Vy,Ny=Uz*Vx-Ux*Vz,Nz=Ux*Vy-Uy*Vx,Nl=Math.hypot(Nx,Ny,Nz)||1;
-      const over=S.showSupports&&(Nz/Nl< (ovAng<-0.2?ovAng:-0.57))&&Math.max(az,bz,cz2)>0.5;
-      const lights=[],specs=[];
-      for(let j=0;j<3;j++){
-        const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
-        const x1=x*ca-y*sa,y1=x*sa+y*ca;
-        const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
-        P.push(w/2+x1*sc,h/2-z2*sc);dsum+=y2;
-        // Normal SUAVE del vértice, rotada igual que el vértice.
-        // Guardamos luz por vértice para interpolarla visualmente en el triángulo;
-        // antes se promediaba todo y cada triángulo quedaba de un color plano.
-        const vnx=VN[o+j*3],vny=VN[o+j*3+1],vnz=VN[o+j*3+2];
-        const r1=vnx*ca-vny*sa,r2=vnx*sa+vny*ca,rD=r2*cb-vnz*sb,rU=r2*sb+vnz*cb;
-        const d1=Math.max(0,r1*-0.398+rD*-0.498+rU*0.747);
-        const d2=Math.max(0,r1*0.707+rD*0.566+rU*0.424);
-        lights.push(Math.min(1,0.30+0.66*d1+0.18*d2+0.10*Math.abs(rD)));
-        const hsp=Math.abs(r1*-0.233+rD*-0.876+rU*0.437);
-        specs.push(Math.pow(hsp,22)*0.5);
-      }
-      list[i]={d:dsum,P,lights,specs,over};
-    }
-    const shade=(over,diff,spec)=>{
-      const sp=Math.round(spec*255);
-      return over
-        ?`rgb(${Math.min(255,Math.round(236*diff)+sp)},${Math.min(255,Math.round(128*diff)+sp)},${Math.min(255,Math.round(52*diff)+sp)})`
-        :`rgb(${Math.min(255,Math.round(70*diff)+sp)},${Math.min(255,Math.round(200*diff)+sp)},${Math.min(255,Math.round(190*diff)+sp)})`;
-    };
-    list.sort((p,q)=>q.d-p.d);
-    for(const f of list){
-      ctx.beginPath();ctx.moveTo(f.P[0],f.P[1]);ctx.lineTo(f.P[2],f.P[3]);ctx.lineTo(f.P[4],f.P[5]);ctx.closePath();
-      let minI=0,maxI=0;
-      for(let k=1;k<3;k++){if(f.lights[k]<f.lights[minI])minI=k;if(f.lights[k]>f.lights[maxI])maxI=k;}
-      const range=f.lights[maxI]-f.lights[minI];
-      let paint;
-      if(range>0.025){
-        const g=ctx.createLinearGradient(f.P[minI*2],f.P[minI*2+1],f.P[maxI*2],f.P[maxI*2+1]);
-        g.addColorStop(0,shade(f.over,f.lights[minI],f.specs[minI]));
-        g.addColorStop(1,shade(f.over,f.lights[maxI],f.specs[maxI]));
-        paint=g;
-      }else{
-        const d=(f.lights[0]+f.lights[1]+f.lights[2])/3,s=(f.specs[0]+f.specs[1]+f.specs[2])/3;
-        paint=shade(f.over,d,s);
-      }
-      ctx.fillStyle=paint;ctx.fill();
-      // Canvas 2D deja microgrietas antialias entre triángulos contiguos.
-      // Un solape fino del mismo paint las tapa sin dibujar una arista distinta.
-      ctx.strokeStyle=paint;ctx.lineWidth=1.25;ctx.lineJoin='round';ctx.lineCap='round';ctx.stroke();
+    const t=S.prev,m=t.length/9;
+    const ovAng=S.params?-(Math.cos((90-(S.params.supportAngle||50))*Math.PI/180)):-0.57;
+    const drewGL=_renderModelWebGL(ctx,w,h,dpr,zm,ca,sa,cb,sb,sc,rad,ovAng);
+    if(!drewGL){
+          const t=S.prev,m=t.length/9,list=new Array(m);
+          if(S._prevNfor!==t){S.prevN=_computeVertexNormals(t);S._prevNfor=t;} // normales suaves cacheadas por malla
+          const VN=S.prevN;
+          const ovAng=S.params?-(Math.cos((90-(S.params.supportAngle||50))*Math.PI/180)):-0.57; // criterio según ángulo
+          for(let i=0;i<m;i++){
+            const o=i*9,P=[];let dsum=0;
+            // normal en espacio-modelo → para detectar voladizo (cara hacia abajo no apoyada en la cama)
+            const ax=t[o],ay=t[o+1],az=t[o+2],bx=t[o+3],by=t[o+4],bz=t[o+5],cx2=t[o+6],cy2=t[o+7],cz2=t[o+8];
+            const Ux=bx-ax,Uy=by-ay,Uz=bz-az,Vx=cx2-ax,Vy=cy2-ay,Vz=cz2-az;
+            const Nx=Uy*Vz-Uz*Vy,Ny=Uz*Vx-Ux*Vz,Nz=Ux*Vy-Uy*Vx,Nl=Math.hypot(Nx,Ny,Nz)||1;
+            const over=S.showSupports&&(Nz/Nl< (ovAng<-0.2?ovAng:-0.57))&&Math.max(az,bz,cz2)>0.5;
+            const lights=[],specs=[];
+            for(let j=0;j<3;j++){
+              const x=t[o+j*3],y=t[o+j*3+1],z=t[o+j*3+2]-zm;
+              const x1=x*ca-y*sa,y1=x*sa+y*ca;
+              const y2=y1*cb-z*sb,z2=y1*sb+z*cb;
+              P.push(w/2+x1*sc,h/2-z2*sc);dsum+=y2;
+              // Normal SUAVE del vértice, rotada igual que el vértice.
+              // Guardamos luz por vértice para interpolarla visualmente en el triángulo;
+              // antes se promediaba todo y cada triángulo quedaba de un color plano.
+              const vnx=VN[o+j*3],vny=VN[o+j*3+1],vnz=VN[o+j*3+2];
+              const r1=vnx*ca-vny*sa,r2=vnx*sa+vny*ca,rD=r2*cb-vnz*sb,rU=r2*sb+vnz*cb;
+              const d1=Math.max(0,r1*-0.398+rD*-0.498+rU*0.747);
+              const d2=Math.max(0,r1*0.707+rD*0.566+rU*0.424);
+              lights.push(Math.min(1,0.30+0.66*d1+0.18*d2+0.10*Math.abs(rD)));
+              const hsp=Math.abs(r1*-0.233+rD*-0.876+rU*0.437);
+              specs.push(Math.pow(hsp,22)*0.5);
+            }
+            list[i]={d:dsum,P,lights,specs,over};
+          }
+          const shade=(over,diff,spec)=>{
+            const sp=Math.round(spec*255);
+            return over
+              ?`rgb(${Math.min(255,Math.round(236*diff)+sp)},${Math.min(255,Math.round(128*diff)+sp)},${Math.min(255,Math.round(52*diff)+sp)})`
+              :`rgb(${Math.min(255,Math.round(70*diff)+sp)},${Math.min(255,Math.round(200*diff)+sp)},${Math.min(255,Math.round(190*diff)+sp)})`;
+          };
+          list.sort((p,q)=>q.d-p.d);
+          for(const f of list){
+            ctx.beginPath();ctx.moveTo(f.P[0],f.P[1]);ctx.lineTo(f.P[2],f.P[3]);ctx.lineTo(f.P[4],f.P[5]);ctx.closePath();
+            let minI=0,maxI=0;
+            for(let k=1;k<3;k++){if(f.lights[k]<f.lights[minI])minI=k;if(f.lights[k]>f.lights[maxI])maxI=k;}
+            const range=f.lights[maxI]-f.lights[minI];
+            let paint;
+            if(range>0.025){
+              const g=ctx.createLinearGradient(f.P[minI*2],f.P[minI*2+1],f.P[maxI*2],f.P[maxI*2+1]);
+              g.addColorStop(0,shade(f.over,f.lights[minI],f.specs[minI]));
+              g.addColorStop(1,shade(f.over,f.lights[maxI],f.specs[maxI]));
+              paint=g;
+            }else{
+              const d=(f.lights[0]+f.lights[1]+f.lights[2])/3,s=(f.specs[0]+f.specs[1]+f.specs[2])/3;
+              paint=shade(f.over,d,s);
+            }
+            ctx.fillStyle=paint;ctx.fill();
+            // Canvas 2D deja microgrietas antialias entre triángulos contiguos.
+            // Un solape fino del mismo paint las tapa sin dibujar una arista distinta.
+            ctx.strokeStyle=paint;ctx.lineWidth=1.25;ctx.lineJoin='round';ctx.lineCap='round';ctx.stroke();
+          }
+      
     }
     // ── Columnas de soporte (palitos verticales bajo los voladizos) ──
     if(S.showSupports){
