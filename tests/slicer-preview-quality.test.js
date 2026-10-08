@@ -57,10 +57,11 @@ test('preview principal usa WebGL con depth buffer y conserva fallback 2D',()=>{
 });
 
 test('WebGL interpola iluminación por vértice y no dibuja aristas del modelo',()=>{
-  assert.match(SRC,/attribute float aLight/);
+  assert.match(SRC,/attribute vec3 aNormal/);
   assert.match(SRC,/varying float vLight/);
   assert.match(SRC,/base\*vLight/);
-  assert.doesNotMatch(SRC,/_renderModelWebGL[\s\S]*?gl\.LINES/);
+  const i=SRC.indexOf('function _renderModelWebGL('),j=SRC.indexOf('\n  function render(){',i);
+  assert.doesNotMatch(SRC.slice(i,j),/gl\.LINES/);
 });
 
 
