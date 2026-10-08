@@ -142,6 +142,7 @@ export async function checkAccessReadiness(config,fetcher=fetch){
   }
   if(config.stage==='post'){
     if(config.siiAccessMode!=='true')fail('SII_ACCESS_MODE must be true after cutover');
+    if(config.siiCutoverVerified!=='true')fail('SII_CUTOVER_VERIFIED must be true after cutover');
     const masters=[
       ['PROXY_KEY',config.proxyKey],
       ['SII_WORKER_KEY',config.siiWorkerKey],
@@ -178,6 +179,7 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
     serviceClientSecret:process.env.PREFLIGHT_CF_CLIENT_SECRET,
     stage:process.env.STAGE||'before',
     siiAccessMode:process.env.SII_ACCESS_MODE,
+    siiCutoverVerified:process.env.SII_CUTOVER_VERIFIED,
     siiWorkerKey:process.env.SII_WORKER_KEY,
     portalAdminKey:process.env.PORTAL_ADMIN_KEY,
     printerTunnelToken:process.env.PRINTER_TUNNEL_TOKEN
