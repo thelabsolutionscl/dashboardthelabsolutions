@@ -50,7 +50,7 @@ test('screenshots del manual se regeneran desde el PR actual',()=>{
   assert.match(SCREENSHOT_WORKFLOW,/pull_request:/);
   assert.match(SCREENSHOT_WORKFLOW,/docs\/manual\/MANUAL_USUARIO\.md/);
   assert.match(SCREENSHOT_WORKFLOW,/manual\.html/);
-  assert.match(SCREENSHOT_WORKFLOW,/github\.event\.pull_request\.head\.ref/);
+  assert.match(SCREENSHOT_WORKFLOW,/github\.event\.pull_request\.head\.sha/);
   assert.doesNotMatch(SCREENSHOT_WORKFLOW,/manual-screenshots-v2/);
 });
 
