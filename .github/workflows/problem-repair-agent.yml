@@ -302,7 +302,7 @@ jobs:
           PR_URL: ${{ steps.pr.outputs.url }}
         shell: bash
         run: |
-          echo "::notice::PR creado: $PR_URL. No se fusionará desde GITHUB_TOKEN: las verificaciones obligatorias deben ejecutarse y aprobarse antes de cualquier merge."
+          echo "::notice::PR creado ($PR_URL). Se requieren verificaciones obligatorias y aprobación antes del merge."
           exit 1
 
       - name: Lanzar deploy del dashboard
@@ -332,7 +332,8 @@ jobs:
           PROBLEM_RECORD_ID: ${{ steps.claim.outputs.record_id }}
           PROBLEM_STATE: PR abierto
           PROBLEM_DIAGNOSIS: ${{ steps.result.outputs.diagnosis }}
-          PROBLEM_PLAN: ${{ steps.result.outputs.plan }} · El PR permanece abierto: requiere verificaciones obligatorias y fusión autorizada; GITHUB_TOKEN no dispara los workflows del PR.
+          PROBLEM_PLAN: >-
+            ${{ steps.result.outputs.plan }} · El PR permanece abierto; requiere verificaciones obligatorias y fusión autorizada. GITHUB_TOKEN no dispara los workflows del PR.
           PROBLEM_PR_URL: ${{ steps.pr.outputs.url }}
           PROBLEM_ERROR: ''
         run: node scripts/problem-repair-queue.mjs update
