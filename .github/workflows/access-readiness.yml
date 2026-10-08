@@ -37,5 +37,6 @@ jobs:
           PORTAL_ADMIN_KEY: ${{ secrets.PORTAL_ADMIN_KEY }}
           PRINTER_TUNNEL_TOKEN: ${{ secrets.PRINTER_TUNNEL_TOKEN }}
           SII_ACCESS_MODE: ${{ vars.SII_ACCESS_MODE }}
+          SII_CUTOVER_VERIFIED: ${{ vars.SII_CUTOVER_VERIFIED }}
           STAGE: ${{ inputs.stage }}
         run: node scripts/access-readiness.mjs
