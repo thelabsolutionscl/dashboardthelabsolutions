@@ -290,14 +290,20 @@ jobs:
           PROBLEM_ERROR: La reparación generó cambios, pero la suite completa falló. El PR no se fusionó automáticamente.
         run: node scripts/problem-repair-queue.mjs update
 
-      - name: Fusionar automáticamente cambio de bajo riesgo
+      # GitHub Actions does not start new PR workflows for PRs created with
+      # GITHUB_TOKEN. Never bypass required checks or merge before CI runs.
+      # Keep these PRs open for review/CI initiated by an authorized actor.
+      - name: Mantener PR automático pendiente de verificaciones obligatorias
         if: steps.pr.outcome == 'success' && steps.risk.outputs.safe == 'true'
         id: merge
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ steps.pr.outputs.url }}
-        run: gh pr merge "$PR_URL" --squash --delete-branch
+        shell: bash
+        run: |
+          echo "::notice::PR creado: $PR_URL. No se fusionará desde GITHUB_TOKEN: las verificaciones obligatorias deben ejecutarse y aprobarse antes de cualquier merge."
+          exit 1
 
       - name: Lanzar deploy del dashboard
         if: steps.merge.outcome == 'success'
@@ -326,7 +332,7 @@ jobs:
           PROBLEM_RECORD_ID: ${{ steps.claim.outputs.record_id }}
           PROBLEM_STATE: PR abierto
           PROBLEM_DIAGNOSIS: ${{ steps.result.outputs.diagnosis }}
-          PROBLEM_PLAN: ${{ steps.result.outputs.plan }} · El PR quedó listo, pero GitHub no permitió el merge automático.
+          PROBLEM_PLAN: ${{ steps.result.outputs.plan }} · El PR permanece abierto: requiere verificaciones obligatorias y fusión autorizada; GITHUB_TOKEN no dispara los workflows del PR.
           PROBLEM_PR_URL: ${{ steps.pr.outputs.url }}
           PROBLEM_ERROR: ''
         run: node scripts/problem-repair-queue.mjs update
