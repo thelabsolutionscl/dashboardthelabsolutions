@@ -44,3 +44,21 @@ test('rotacion del preview queda limitada a un frame y recupera pointercancel',(
   assert.match(SRC,/cancelAnimationFrame\(_rotRaf\)/);
   assert.match(SRC,/addEventListener\('pointercancel'/);
 });
+
+
+test('preview principal usa WebGL con depth buffer y conserva fallback 2D',()=>{
+  assert.match(SRC,/function _renderModelWebGL\(/);
+  assert.match(SRC,/getContext\('webgl'/);
+  assert.match(SRC,/gl\.enable\(gl\.DEPTH_TEST\)/);
+  assert.match(SRC,/gl\.depthFunc\(gl\.LESS\)/);
+  assert.match(SRC,/gl\.drawArrays\(gl\.TRIANGLES/);
+  assert.match(SRC,/const drewGL=_renderModelWebGL/);
+  assert.match(SRC,/if\(!drewGL\)/);
+});
+
+test('WebGL interpola iluminación por vértice y no dibuja aristas del modelo',()=>{
+  assert.match(SRC,/attribute float aLight/);
+  assert.match(SRC,/varying float vLight/);
+  assert.match(SRC,/base\*vLight/);
+  assert.doesNotMatch(SRC,/_renderModelWebGL[\s\S]*?gl\.LINES/);
+});
