@@ -157,13 +157,73 @@ function quoteWeight(fields,now=todayKey()){
   if(/aprobad/.test(st))return .9;
   return 0;
 }
+/*
+ * En Cotizaciones, "Subtotal (CLP)" contiene COSTO de fabricación, NO
+ * precio de venta. La base de comisión debe conciliar la venta neta
+ * contra "Total final (CLP)" (venta con IVA) y el desglose registrado.
+ * Nunca inferir la venta a partir del costo ni asumir que todo bruto
+ * equivale a neto.
+ */
+function quoteNet(fields){
+  const f=fields||{};
+  for(const key of ['Monto neto (CLP)','Neto (CLP)','Subtotal neto (CLP)']){
+    const v=num(f[key]);
+    if(v>0)return {amount:Math.round(v),source:key,verified:true};
+  }
+  const gross=num(f['Total final (CLP)']);
+  for(const key of ['IVA (CLP)','Monto IVA (CLP)','IVA']){
+    if(!Object.prototype.hasOwnProperty.call(f,key)||f[key]==null||f[key]==='')continue;
+    const iva=Number(f[key]);
+    if(gross>0&&Number.isFinite(iva)&&iva>=0&&iva<=gross)
+      return {amount:Math.round(gross-iva),source:'Total final (CLP) - '+key,verified:true};
+  }
+  if(gross<=0)return {amount:0,source:'sin venta neta verificable',verified:false};
+
+  const discount=f['Descuento (%)']==null||f['Descuento (%)']===''?0:Number(f['Descuento (%)']);
+  if(!Number.isFinite(discount)||discount<0||discount>=100)
+    return {amount:0,source:'descuento no verificable',verified:false};
+
+  const candidates=[];
+  if(typeof f['Detalle JSON']==='string'){
+    try{
+      const lines=JSON.parse(f['Detalle JSON']);
+      if(Array.isArray(lines)&&lines.length&&lines.every(item=>
+        item&&Number.isFinite(Number(item.und))&&Number(item.und)>0&&
+        Number.isFinite(Number(item.ventaUnit))&&Number(item.ventaUnit)>=0)){
+        candidates.push({
+          sale:lines.reduce((sum,item)=>sum+Number(item.und)*Number(item.ventaUnit),0),
+          source:'Detalle JSON (precio de venta)'
+        });
+      }
+    }catch(_){/* Detalle legado puede venir solo como texto */}
+  }
+  if(typeof f['Detalle productos']==='string'){
+    const lines=f['Detalle productos'].split(/\r?\n/).filter(line=>line.trim());
+    const matches=lines.map(line=>line.match(/Venta:\s*\$\s*([\d.]+)/));
+    if(matches.length&&matches.every(Boolean))candidates.push({
+      sale:matches.reduce((sum,m)=>sum+Number(m[1].replace(/\./g,'')),0),
+      source:'Detalle productos (precio de venta)'
+    });
+  }
+
+  for(const candidate of candidates){
+    if(!Number.isFinite(candidate.sale)||candidate.sale<=0)continue;
+    const net=Math.round(candidate.sale*(1-discount/100));
+    // El Total final guardado incluye IVA de 19%. Verificar contra ese
+    // total antes de usar la venta neta (tolera redondeo de 1-2 pesos).
+    if(net>0&&Math.abs(Math.round(net*1.19)-gross)<=2)
+      return {amount:net,source:candidate.source,verified:true};
+  }
+  return {amount:0,source:'sin venta neta verificable',verified:false};
+}
+
 function projectQuote(q,doc=shared,now=todayKey()){
   const f=q?.fields||{},weight=quoteWeight(f,now),rule=resolveRule({seller:sellerOf(f),sellerEmail:sellerEmailFrom(f),date:now,product:String(f['Detalle productos']||'')},doc);
-  const base=taxNet(f,'Total final (CLP)');
-  const gross=num(f['Total final (CLP)']);
-  const estimatedBase=base.verified?base.amount:gross;
+  const base=quoteNet(f);
+  const estimatedBase=base.verified?base.amount:0;
   return {id:q?.id,weight,expired:weight===0&&!!f['Fecha vencimiento']&&String(f['Fecha vencimiento']).slice(0,10)<now,
-    base:estimatedBase,commission:Math.round(estimatedBase*num(rule.rate)*weight),rule};
+    base:estimatedBase,verifiedBase:base.verified,basis:base.source,
+    commission:Math.round(estimatedBase*num(rule.rate)*weight),rule};
 }
 function csvCell(v){
   let s=String(v??'');
@@ -365,7 +425,7 @@ function render(){
   const pb=target.document.getElementById('remPipeBody');
   if(pb)pb.innerHTML=eligible.length?eligible.map(x=>{const q=quotes.find(q=>q.id===x.id),f=q?.fields||{};return `<tr>
     <td class="mono">${esc(f['N° Cotización']||'—')}</td><td class="text-small">${esc(target.resolveClienteName?.(f.Cliente)||'—')}</td>
-    <td class="clp">${money(x.base)}</td><td class="clp" style="color:#a78bfa;font-weight:700">${money(x.commission)}</td>
+    <td class="clp">${x.verifiedBase?money(x.base):'Sin venta neta verificable'}</td><td class="clp" style="color:#a78bfa;font-weight:700">${x.verifiedBase?money(x.commission):'—'}</td>
     <td>${esc(f['Estado cotización']||'—')} · ${Math.round(x.weight*100)}%</td><td>${esc(f['Fecha vencimiento']||'—')}</td></tr>`;}).join(''):
     '<tr><td colspan="6"><div class="empty-state" style="padding:20px">Sin pipeline vigente</div></td></tr>';
 }
@@ -388,6 +448,6 @@ function install(root){
   try{if(root.RBAC?.tabs?.finanzas&&!root.RBAC.tabs.finanzas.includes('remuneraciones'))root.RBAC.tabs.finanzas.push('remuneraciones');}catch(_){}
   Promise.resolve().then(async()=>{await hydrate();render();});
 }
-return {TZ,DEFAULT_RULE,STATUS,tzParts,todayKey,monthKey,mondayKey,bounds,inBounds,taxNet,resolveRule,paidRatio,isReversed,
+return {TZ,DEFAULT_RULE,STATUS,tzParts,todayKey,monthKey,mondayKey,bounds,inBounds,taxNet,quoteNet,resolveRule,paidRatio,isReversed,
   hasInvoice,deriveOrder,summary,quoteWeight,projectQuote,csvCell,csvExport,install,hydrate,render,advancePeriod,reopenPeriod,addAdjustment,get shared(){return shared;}};
 });
