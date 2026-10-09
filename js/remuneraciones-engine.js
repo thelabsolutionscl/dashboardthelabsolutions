@@ -223,7 +223,7 @@ function projectQuote(q,doc=shared,now=todayKey()){
   const estimatedBase=base.verified?base.amount:0;
   return {id:q?.id,weight,expired:weight===0&&!!f['Fecha vencimiento']&&String(f['Fecha vencimiento']).slice(0,10)<now,
     base:estimatedBase,verifiedBase:base.verified,basis:base.source,
-    commission:Math.round(estimatedBase*num(rule.rate)*weight),rule};
+    potentialCommission:Math.round(estimatedBase*num(rule.rate)),commission:Math.round(estimatedBase*num(rule.rate)*weight),rule};
 }
 function csvCell(v){
   let s=String(v??'');
@@ -411,7 +411,7 @@ function render(){
     <div class="kpi-card green"><div class="kpi-label">Pedidos del período</div><div class="kpi-value">${orders.length}</div><div class="kpi-sub">${bounds().label}</div></div>
     <div class="kpi-card yellow"><div class="kpi-label">Base tributaria verificada</div><div class="kpi-value" style="font-size:18px">${money(verifiedNet)}</div><div class="kpi-sub">sin dividir bruto por IVA fijo</div></div>
     <div class="kpi-card"><div class="kpi-label" style="color:var(--accent)">Devengada + aprobada</div><div class="kpi-value" style="color:var(--accent);font-size:18px">${money(sum.accrued+sum.approved)}</div><div class="kpi-sub">${frozen?'incluye eventos congelados':'borrador desde CRM'}</div></div>
-    <div class="kpi-card"><div class="kpi-label" style="color:#a78bfa">Pipeline ponderado</div><div class="kpi-value" style="color:#a78bfa;font-size:18px">${money(pipeline)}</div><div class="kpi-sub">${eligible.length} vigentes · vencidas sin potencial pleno</div></div>
+    <div class="kpi-card"><div class="kpi-label" style="color:#a78bfa">Pipeline ponderado</div><div class="kpi-value" style="color:#a78bfa;font-size:18px">${money(pipeline)}</div><div class="kpi-sub">${eligible.length} vigentes · ponderado por etapa (Enviada 65%, Solicitada 35%, Aprobada 90%, vencidas 0%)</div></div>
     <div class="kpi-card"><div class="kpi-label" style="color:#fb923c">Pagada</div><div class="kpi-value" style="color:#fb923c;font-size:18px">${money(sum.paid)}</div><div class="kpi-sub">reversas: ${money(sum.reversed)}</div></div>`;
   const badge=target.document.getElementById('remBadge');if(badge)badge.textContent=orders.length+' pedido'+(orders.length===1?'':'s');
   const pipeBadge=target.document.getElementById('remPipeBadge');if(pipeBadge)pipeBadge.textContent=eligible.length+' vigente'+(eligible.length===1?'':'s');
@@ -423,10 +423,12 @@ function render(){
     <td class="clp" style="font-weight:700">${money(e.commission)} <span style="font-size:9px;color:var(--text3)">${statusLabel(e.status)}</span></td></tr>`).join(''):
     '<tr><td colspan="6"><div class="empty-state">Sin comisiones en este período</div></td></tr>';
   const pb=target.document.getElementById('remPipeBody');
+  const th=pb?.closest?.('table')?.querySelector?.('thead th:nth-child(4)');
+  if(th)th.textContent='COMISIÓN POTENCIAL 3,5%';
   if(pb)pb.innerHTML=eligible.length?eligible.map(x=>{const q=quotes.find(q=>q.id===x.id),f=q?.fields||{};return `<tr>
     <td class="mono">${esc(f['N° Cotización']||'—')}</td><td class="text-small">${esc(target.resolveClienteName?.(f.Cliente)||'—')}</td>
-    <td class="clp">${x.verifiedBase?money(x.base):'Sin venta neta verificable'}</td><td class="clp" style="color:#a78bfa;font-weight:700">${x.verifiedBase?money(x.commission):'—'}</td>
-    <td>${esc(f['Estado cotización']||'—')} · ${Math.round(x.weight*100)}%</td><td>${esc(f['Fecha vencimiento']||'—')}</td></tr>`;}).join(''):
+    <td class="clp">${x.verifiedBase?money(x.base):'Sin venta neta verificable'}</td><td class="clp" style="color:#a78bfa;font-weight:700">${x.verifiedBase?money(x.potentialCommission):'—'}</td>
+    <td>${esc(f['Estado cotización']||'—')}</td><td>${esc(f['Fecha vencimiento']||'—')}</td></tr>`;}).join(''):
     '<tr><td colspan="6"><div class="empty-state" style="padding:20px">Sin pipeline vigente</div></td></tr>';
 }
 function setPeriod(p,btn){

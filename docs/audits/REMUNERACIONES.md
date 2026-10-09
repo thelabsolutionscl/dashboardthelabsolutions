@@ -64,6 +64,8 @@ Ponderación vigente:
 
 La interfaz lo rotula como **Pipeline ponderado**, no como remuneración ganada.
 
+En la tabla **Pipeline — Cotizaciones activas**, la columna **Comisión potencial 3,5%** muestra el 100% de la comisión contractual sobre la venta neta verificada, sin aplicar la probabilidad de cierre. Solo el KPI **Pipeline ponderado** multiplica esa comisión por la probabilidad asociada al estado. Ejemplo: cotización ICB 261003, venta neta $2.540.000, comisión potencial $88.900 y proyección ponderada $57.785 (Enviada 65%). Ninguna de estas cifras se considera comisión ganada hasta cumplir las condiciones de devengo.
+
 ## Períodos compartidos
 
 Se incorpora `/shared/remunerations`, respaldado por el documento revisionado `REMUNERACIONES_V2`.

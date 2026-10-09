@@ -22,7 +22,8 @@ test('ICB 261003: comisión proyectada usa venta neta 2.540.000, jamás costo 1.
   assert.equal(result.weight,.65);
   assert.equal(result.base,2540000);
   assert.equal(result.verifiedBase,true);
-  assert.equal(result.commission,57785); // 2540000 * .035 * .65
+  assert.equal(result.commission,57785); // KPI de pipeline ponderado
+  assert.equal(result.potentialCommission,88900); // visible en la fila
   assert.equal(Math.round(result.base*.035),88900); // comisión si se concreta
   assert.notEqual(result.commission,27346); // valor errado anterior (costo × tasa × .65)
 });
@@ -35,7 +36,9 @@ test('cotización 261001: otra fila con el mismo problema también queda corregi
     'Estado cotización':'Enviada','Fecha vencimiento':'2026-10-21'
   };
   assert.equal(Engine.quoteNet(fields).amount,235410);
-  assert.equal(Engine.projectQuote({id:'recArt',fields},null,'2026-10-09').commission,5356);
+  const quote=Engine.projectQuote({id:'recArt',fields},null,'2026-10-09');
+  assert.equal(quote.commission,5356);
+  assert.equal(quote.potentialCommission,8239);
 });
 
 test('cotización legacy sin JSON: reconstruir venta únicamente de líneas Venta verificadas con bruto',()=>{
@@ -59,7 +62,9 @@ test('descuento comercial: conciliación con Total final e IVA sin confundir cos
   const net=Engine.quoteNet(fields);
   assert.equal(net.amount,564300);
   assert.equal(net.verified,true);
-  assert.equal(Engine.projectQuote({fields},null,'2026-10-09').commission,Math.round(564300*.035*.65));
+  const quote=Engine.projectQuote({fields},null,'2026-10-09');
+  assert.equal(quote.commission,Math.round(564300*.035*.65));
+  assert.equal(quote.potentialCommission,Math.round(564300*.035));
 });
 
 test('no usar costo ni venta bruta cuando faltan evidencias o los totales no cuadran',()=>{
@@ -92,5 +97,16 @@ test('cotización vencida conserva peso cero, aun cuando el monto neto sea corre
   },null,'2026-10-09');
   assert.equal(projection.base,2540000);
   assert.equal(projection.weight,0);
+  assert.equal(projection.potentialCommission,88900);
   assert.equal(projection.commission,0);
+});
+
+test('la tabla muestra el potencial sin ponderar y solo el KPI agrega comisión ponderada',()=>{
+  const fs=require('node:fs');
+  const path=require('node:path');
+  const source=fs.readFileSync(path.join(__dirname,'../js/remuneraciones-engine.js'),'utf8');
+  assert.match(source,/money\(x\.potentialCommission\)/);
+  assert.match(source,/pipeline=eligible\.reduce\(\(s,x\)=>s\+x\.commission,0\)/);
+  assert.match(source,/COMISIÓN POTENCIAL 3,5%/);
+  assert.doesNotMatch(source,/Math\.round\(x\.weight\*100\)/);
 });
