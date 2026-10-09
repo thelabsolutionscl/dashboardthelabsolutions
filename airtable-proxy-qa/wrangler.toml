@@ -1,0 +1,23 @@
+# Independent RBAC QA Worker. NEVER deploy as "airtable-proxy".
+# No routes or public workers.dev address by default; domain + Access
+# must be configured manually before use.
+name = "thelab-rbac-qa"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = false
+preview_urls = false
+keep_vars = true
+
+[vars]
+QA_MODE = "true"
+QA_BASE_ID = "app55FbVNr3yhTlbL"
+
+# Required secrets / variables configured ONLY on this dedicated Worker:
+#   QA_AIRTABLE_TOKEN : PAT restricted to QA base and record READ ONLY
+#   ACCESS_ENFORCE    : true
+#   ACCESS_TEAM_DOMAIN : https://<team>.cloudflareaccess.com
+#   ACCESS_AUD        : AUD of a NEW Access application for qa-proxy.thelab.solutions
+#   ACCESS_ROLE_MAP   : signed user email -> role (admin/sales)
+#   ACCESS_SELLER_MAP : signed sales email -> exact QA "Vendedor" choice
+# No production AIRTABLE_TOKEN, APP_KEY, Anthropic/OpenAI, Make, SII,
+# Portal, machine, AI budget KV or Durable Object bindings.
