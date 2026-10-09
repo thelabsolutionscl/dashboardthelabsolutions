@@ -223,7 +223,7 @@ function projectQuote(q,doc=shared,now=todayKey()){
   const estimatedBase=base.verified?base.amount:0;
   return {id:q?.id,weight,expired:weight===0&&!!f['Fecha vencimiento']&&String(f['Fecha vencimiento']).slice(0,10)<now,
     base:estimatedBase,verifiedBase:base.verified,basis:base.source,
-    commission:Math.round(estimatedBase*num(rule.rate)*weight),rule};
+    potentialCommission:Math.round(estimatedBase*num(rule.rate)),commission:Math.round(estimatedBase*num(rule.rate)*weight),rule};
 }
 function csvCell(v){
   let s=String(v??'');
