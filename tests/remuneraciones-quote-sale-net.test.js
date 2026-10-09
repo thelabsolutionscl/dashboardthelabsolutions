@@ -100,3 +100,13 @@ test('cotización vencida conserva peso cero, aun cuando el monto neto sea corre
   assert.equal(projection.potentialCommission,88900);
   assert.equal(projection.commission,0);
 });
+
+test('la tabla muestra el potencial sin ponderar y solo el KPI agrega comisión ponderada',()=>{
+  const fs=require('node:fs');
+  const path=require('node:path');
+  const source=fs.readFileSync(path.join(__dirname,'../js/remuneraciones-engine.js'),'utf8');
+  assert.match(source,/money\(x\.potentialCommission\)/);
+  assert.match(source,/pipeline=eligible\.reduce\(\(s,x\)=>s\+x\.commission,0\)/);
+  assert.match(source,/COMISIÓN POTENCIAL 3,5%/);
+  assert.doesNotMatch(source,/Math\.round\(x\.weight\*100\)/);
+});
