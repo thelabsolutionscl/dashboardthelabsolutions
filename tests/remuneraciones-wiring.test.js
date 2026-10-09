@@ -108,7 +108,7 @@ test('el motor autoritativo exige base tributaria real', () => {
 });
 test('el pipeline autoritativo excluye potencial pleno vencido', () => {
   assert.match(ENGINE, /if\(due&&due<now\)return 0/);
-  assert.match(ENGINE, /vencidas sin potencial pleno/);
+  assert.match(ENGINE, /vencidas 0%/);
 });
 test('el pipeline aplica probabilidad por etapa y vigencia', () => {
   assert.match(ENGINE, /solicitada[^\n]*\.35/);
