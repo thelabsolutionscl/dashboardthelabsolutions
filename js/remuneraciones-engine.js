@@ -425,7 +425,7 @@ function render(){
   const pb=target.document.getElementById('remPipeBody');
   if(pb)pb.innerHTML=eligible.length?eligible.map(x=>{const q=quotes.find(q=>q.id===x.id),f=q?.fields||{};return `<tr>
     <td class="mono">${esc(f['N° Cotización']||'—')}</td><td class="text-small">${esc(target.resolveClienteName?.(f.Cliente)||'—')}</td>
-    <td class="clp">${x.verifiedBase?money(x.base):'Sin venta neta verificable'}</td><td class="clp" style="color:#a78bfa;font-weight:700">${x.verifiedBase?money(x.commission):'—'}</td>
+    <td class="clp">${x.verifiedBase?money(x.base):'Sin venta neta verificable'}</td><td class="clp" style="color:#a78bfa;font-weight:700">${x.verifiedBase?money(x.potentialCommission):'—'}</td>
     <td>${esc(f['Estado cotización']||'—')} · ${Math.round(x.weight*100)}%</td><td>${esc(f['Fecha vencimiento']||'—')}</td></tr>`;}).join(''):
     '<tr><td colspan="6"><div class="empty-state" style="padding:20px">Sin pipeline vigente</div></td></tr>';
 }
