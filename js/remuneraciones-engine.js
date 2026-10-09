@@ -423,6 +423,8 @@ function render(){
     <td class="clp" style="font-weight:700">${money(e.commission)} <span style="font-size:9px;color:var(--text3)">${statusLabel(e.status)}</span></td></tr>`).join(''):
     '<tr><td colspan="6"><div class="empty-state">Sin comisiones en este período</div></td></tr>';
   const pb=target.document.getElementById('remPipeBody');
+  const th=pb?.closest?.('table')?.querySelector?.('thead th:nth-child(4)');
+  if(th)th.textContent='COMISIÓN POTENCIAL 3,5%';
   if(pb)pb.innerHTML=eligible.length?eligible.map(x=>{const q=quotes.find(q=>q.id===x.id),f=q?.fields||{};return `<tr>
     <td class="mono">${esc(f['N° Cotización']||'—')}</td><td class="text-small">${esc(target.resolveClienteName?.(f.Cliente)||'—')}</td>
     <td class="clp">${x.verifiedBase?money(x.base):'Sin venta neta verificable'}</td><td class="clp" style="color:#a78bfa;font-weight:700">${x.verifiedBase?money(x.potentialCommission):'—'}</td>
