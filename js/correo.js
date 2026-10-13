@@ -1042,7 +1042,7 @@ const MAIL={
         if(format.kind==='text'){
           const limit=512*1024;
           previewText=new TextDecoder('utf-8').decode(bytes.subarray(0,limit))+
-            (bytes.length>limit?'\\n\\n[Vista previa limitada a 512 KB. Descarga el archivo para verlo completo.]':'');
+            (bytes.length>limit?'\n\n[Vista previa limitada a 512 KB. Descarga el archivo para verlo completo.]':'');
         }
         const blob=new Blob([bytes],{type:format.mime});
         url=URL.createObjectURL(blob);
