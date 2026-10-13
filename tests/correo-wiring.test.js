@@ -180,6 +180,59 @@ test('modal captura flechas sin afectar los campos de texto y conserva cierre y 
   assert.match(CSS, /\.mail-received-preview-navigation/);
 });
 
+test('la caché LRU mantiene el uso bajo 32 MB y evita solicitudes repetidas', () => {
+  const vm=require('node:vm');
+  const revoked=[];
+  const mail=vm.runInNewContext(MAIL+'\nMAIL;',{
+    URL:{revokeObjectURL:url=>revoked.push(url)},
+    setTimeout:fn=>fn()
+  });
+  const MB=1024*1024;
+  assert.equal(mail._cacheReceivedAtt('1',{url:'blob:1',size:12*MB}),true);
+  assert.equal(mail._cacheReceivedAtt('2',{url:'blob:2',size:12*MB}),true);
+  assert.equal(mail._cacheReceivedAtt('3',{url:'blob:3',size:12*MB}),true);
+  assert.equal(mail._receivedAttCache.has('1'),false,'LRU debe expulsar el primero');
+  assert.deepEqual(revoked,['blob:1']);
+  assert.equal(mail._receivedAttCacheBytes,24*MB);
+  assert.equal(mail._cacheReceivedAtt('4',{url:'blob:4',size:33*MB}),false,'no almacenar archivos mayores al límite');
+  assert.equal(mail._receivedAttCache.has('4'),false);
+  mail._clearReceivedAttCache();
+  assert.equal(mail._receivedAttCache.size,0);
+  assert.equal(mail._receivedAttCacheBytes,0);
+  assert.deepEqual(revoked,['blob:1','blob:2','blob:3']);
+  const preview=methodBlock('previewReceivedAtt');
+  assert.match(preview, /if\(cached\)/, 'el visor debe reconocer datos cacheados');
+  assert.match(preview, /_cacheReceivedAtt/, 'el visor almacena el adjunto recién leído');
+  assert.match(preview, /this\.post\(\{action:'attachment'/, 'descarga sólo al no existir en caché');
+});
+
+test('cambio de correo, carpeta y cuenta invalida adjuntos previos y solicitudes pendientes', () => {
+  for(const name of ['readMsg','selectFolder','switchAccount','refresh']){
+    const method=methodBlock(name);
+    assert.match(method, /this\._clearReceivedAttCache\(\)/, name+' borra caché anterior');
+    assert.match(method, /this\._currentMsg=null/, name+' borra el correo anterior');
+    assert.match(method, /replaceChildren\(\)/, name+' borra botones de adjuntos obsoletos');
+  }
+  for(const name of ['selectFolder','switchAccount','refresh']){
+    assert.match(methodBlock(name), /\+\+this\._readSeq/, name+' invalida lecturas de otro buzón');
+  }
+  assert.match(methodBlock('readMsg'), /const seq=\+\+this\._readSeq/);
+  const preview=methodBlock('previewReceivedAtt');
+  assert.match(preview, /seq!==this\._receivedAttSeq/);
+  assert.match(preview, /this\.selUid!==context\.uid/);
+});
+
+test('el visor mantiene Tab y Escape dentro del diálogo y recupera foco de PDF', () => {
+  const ensure=methodBlock('_ensureReceivedAttModal');
+  assert.match(ensure, /window\.addEventListener\('blur'/);
+  assert.match(ensure, /active\?\.tagName!=='IFRAME'/);
+  assert.match(ensure, /addEventListener\('focusin'/);
+  assert.match(ensure, /active===dialog/);
+  assert.match(ensure, /e\.shiftKey\?last:first/);
+  assert.match(ensure, /overlay\.style\.display!=='flex'/);
+  assert.match(methodBlock('previewReceivedAtt'), /frame\.tabIndex=-1/);
+});
+
 test('solo los formatos pasivos de adjuntos reciben visor embebido', () => {
   const vm=require('node:vm');
   const obj=vm.runInNewContext(MAIL+'\nMAIL;');
