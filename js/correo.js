@@ -23,6 +23,8 @@ const MAIL={
   _receivedAttSeq:0,
   _receivedAttPriorFocus:null,
   _receivedAttIndex:-1,
+  _receivedAttCache:new Map(),
+  _receivedAttCacheBytes:0,
 
   // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
   // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
@@ -665,6 +667,10 @@ const MAIL={
 
   async readMsg(uid){
     this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    this._currentMsg=null;
+    const previousAtts=document.getElementById('mailRdrAtts');
+    if(previousAtts){previousAtts.style.display='none';previousAtts.replaceChildren();}
     this.selUid=uid;
     const seq=++this._readSeq;
     this.mobGo('reader');
@@ -863,17 +869,43 @@ const MAIL={
       if(e.target===overlay||e.target.closest('[data-mail-att-close]'))this.closeReceivedAttPreview();
     });
     overlay.addEventListener('keydown',e=>{
-      if(e.key==='Escape'){e.preventDefault();this.closeReceivedAttPreview();}
-      if(e.key==='Tab'){
-        const buttons=[...overlay.querySelectorAll('button:not(:disabled)')];
-        if(!buttons.length)return;
-        if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[buttons.length-1].focus();}
-        else if(!e.shiftKey&&document.activeElement===buttons[buttons.length-1]){e.preventDefault();buttons[0].focus();}
+      if(e.key==='Escape'){e.preventDefault();this.closeReceivedAttPreview();return;}
+      if(e.key!=='Tab')return;
+      const buttons=[...overlay.querySelectorAll('button:not(:disabled):not([hidden])')];
+      if(!buttons.length){e.preventDefault();overlay.querySelector('[role="dialog"]').focus();return;}
+      const active=document.activeElement;
+      const first=buttons[0],last=buttons[buttons.length-1];
+      const dialog=overlay.querySelector('[role="dialog"]');
+      // El foco inicial está en el diálogo, no en el primer botón.
+      if(active===dialog||!overlay.contains(active)){
+        e.preventDefault();(e.shiftKey?last:first).focus();
+      }else if(e.shiftKey&&active===first){
+        e.preventDefault();last.focus();
+      }else if(!e.shiftKey&&active===last){
+        e.preventDefault();first.focus();
       }
     });
     overlay.querySelector('#mailReceivedAttDownload').addEventListener('click',()=>this._downloadReceivedAtt());
     overlay.querySelector('#mailReceivedAttPrev').addEventListener('click',()=>this._navigateReceivedAtt(-1));
     overlay.querySelector('#mailReceivedAttNext').addEventListener('click',()=>this._navigateReceivedAtt(1));
+    // Los iframes PDF tienen su propio documento. Chromium entrega el foco
+    // al visor PDF, y las teclas ya no llegan al documento del dashboard.
+    // Recuperar el foco al diálogo preserva ←, → y Escape aun tras hacer
+    // clic en el PDF, sin bloquear su scroll con el ratón.
+    window.addEventListener('blur',()=>{
+      if(overlay.style.display!=='flex')return;
+      const active=document.activeElement;
+      if(active?.tagName!=='IFRAME'||!overlay.contains(active))return;
+      setTimeout(()=>{
+        if(overlay.style.display==='flex'&&overlay.contains(document.activeElement))
+          overlay.querySelector('[role="dialog"]').focus({preventScroll:true});
+      },0);
+    });
+    // Impide enfocar elementos del dashboard detrás de la ventana.
+    document.addEventListener('focusin',e=>{
+      if(overlay.style.display==='flex'&&!overlay.contains(e.target))
+        overlay.querySelector('[role="dialog"]').focus({preventScroll:true});
+    },true);
     // Registro único. El visor se oculta al cerrar, así que este listener no
     // interfiere con flechas del teclado fuera del modal.
     document.addEventListener('keydown',e=>{
@@ -886,6 +918,39 @@ const MAIL={
     },true);
     document.body.appendChild(overlay);
     return overlay;
+  },
+
+  _clearReceivedAttCache(){
+    for(const entry of this._receivedAttCache.values()){
+      if(entry?.url)setTimeout(()=>URL.revokeObjectURL(entry.url),500);
+    }
+    this._receivedAttCache.clear();
+    this._receivedAttCacheBytes=0;
+  },
+
+  _cacheReceivedAtt(part,entry){
+    // LRU por mensaje. Limitar bytes Y cantidad para evitar retener decenas
+    // de URLs Blob al recorrer cadenas con muchos adjuntos.
+    const limit=32*1024*1024, maxItems=8;
+    if(entry.size>limit)return false;
+    if(this._receivedAttCache.has(part)){
+      const old=this._receivedAttCache.get(part);
+      this._receivedAttCacheBytes-=old.size;
+      this._receivedAttCache.delete(part);
+      if(old.url!==entry.url)setTimeout(()=>URL.revokeObjectURL(old.url),500);
+    }
+    while(this._receivedAttCache.size>=maxItems||
+          this._receivedAttCacheBytes+entry.size>limit){
+      const key=this._receivedAttCache.keys().next().value;
+      if(key===undefined)break;
+      const old=this._receivedAttCache.get(key);
+      this._receivedAttCache.delete(key);
+      this._receivedAttCacheBytes-=old.size;
+      setTimeout(()=>URL.revokeObjectURL(old.url),500);
+    }
+    this._receivedAttCache.set(part,entry);
+    this._receivedAttCacheBytes+=entry.size;
+    return true;
   },
 
   _receivedAttItems(){
@@ -937,7 +1002,7 @@ const MAIL={
       const previous=this._receivedAttPreview;
       this._receivedAttPreview=null;
       modal.querySelector('#mailReceivedAttBody').replaceChildren();
-      if(previous?.url)setTimeout(()=>URL.revokeObjectURL(previous.url),500);
+      if(previous?.url&&!previous.cached)setTimeout(()=>URL.revokeObjectURL(previous.url),500);
     }
     this._receivedAttIndex=index;
     this._updateReceivedAttNavigation();
@@ -951,22 +1016,44 @@ const MAIL={
     modal.style.display='flex';
     if(!alreadyOpen)modal.querySelector('.mail-received-preview-dialog').focus();
     try{
-      const data=await this.post({action:'attachment',folder:context.folder,uid:context.uid,part});
+      // Si volvemos a un adjunto ya visto, se usa su Blob local: cero
+      // solicitudes IMAP adicionales mientras permanezca abierto el correo.
+      const cached=this._receivedAttCache.get(String(part));
+      let filename,format,url,previewText='',isCached=false;
+      if(cached){
+        this._receivedAttCache.delete(String(part));
+        this._receivedAttCache.set(String(part),cached); // actualizar LRU
+        ({name:filename,format,url,previewText}=cached);
+        isCached=true;
+      }else{
+        const data=await this.post({action:'attachment',folder:context.folder,uid:context.uid,part});
+        if(seq!==this._receivedAttSeq||this.folder!==context.folder||
+           this.selUid!==context.uid||this.activeAccount()!==context.account)return;
+        if(data.error)throw new Error(data.error);
+        if(typeof data.data!=='string'||!data.data)throw new Error('El adjunto no tiene contenido disponible');
+        const binary=atob(data.data);
+        const bytes=new Uint8Array(binary.length);
+        for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+        filename=String(data.name||name||'archivo');
+        format=this._receivedAttKind(filename,data.mime);
+        // Un PDF declarado no se interpreta como documento activo si no tiene cabecera PDF.
+        if(format.kind==='pdf'&&String.fromCharCode(...bytes.subarray(0,5))!=='%PDF-')
+          format={kind:'other',mime:'application/octet-stream'};
+        if(format.kind==='text'){
+          const limit=512*1024;
+          previewText=new TextDecoder('utf-8').decode(bytes.subarray(0,limit))+
+            (bytes.length>limit?'\n\n[Vista previa limitada a 512 KB. Descarga el archivo para verlo completo.]':'');
+        }
+        const blob=new Blob([bytes],{type:format.mime});
+        url=URL.createObjectURL(blob);
+        isCached=this._cacheReceivedAtt(String(part),{
+          url,name:filename,format,previewText,size:bytes.byteLength
+        });
+      }
+      // No asociar nunca la URL de un correo anterior con el correo actual.
       if(seq!==this._receivedAttSeq||this.folder!==context.folder||
          this.selUid!==context.uid||this.activeAccount()!==context.account)return;
-      if(data.error)throw new Error(data.error);
-      if(typeof data.data!=='string'||!data.data)throw new Error('El adjunto no tiene contenido disponible');
-      const binary=atob(data.data);
-      const bytes=new Uint8Array(binary.length);
-      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-      const filename=String(data.name||name||'archivo');
-      let format=this._receivedAttKind(filename,data.mime);
-      // Un PDF declarado no se interpreta como documento activo si no tiene cabecera PDF.
-      if(format.kind==='pdf'&&String.fromCharCode(...bytes.subarray(0,5))!=='%PDF-')
-        format={kind:'other',mime:'application/octet-stream'};
-      const blob=new Blob([bytes],{type:format.mime});
-      const url=URL.createObjectURL(blob);
-      this._receivedAttPreview={...context,url,name:filename};
+      this._receivedAttPreview={...context,url,name:filename,cached:isCached};
       modal.querySelector('#mailReceivedAttTitle').textContent=filename;
       button.disabled=false;
       body.replaceChildren();
@@ -980,14 +1067,13 @@ const MAIL={
         frame.title='Vista previa de '+filename;
         frame.className='mail-received-preview-pdf';
         frame.referrerPolicy='no-referrer';
+        frame.tabIndex=-1; // no incluir contenido del PDF en el recorrido Tab
         frame.src=url;
         body.appendChild(frame);
       }else if(format.kind==='text'){
         const pre=document.createElement('pre');
         pre.className='mail-received-preview-text';
-        const limit=512*1024;
-        pre.textContent=new TextDecoder('utf-8').decode(bytes.subarray(0,limit))+
-          (bytes.length>limit?'\n\n[Vista previa limitada a 512 KB. Descarga el archivo para verlo completo.]':'');
+        pre.textContent=previewText;
         body.appendChild(pre);
       }else{
         const hint=document.createElement('p');
@@ -1022,7 +1108,7 @@ const MAIL={
     const preview=this._receivedAttPreview;
     this._receivedAttPreview=null;
     this._receivedAttIndex=-1;
-    if(preview&&preview.url)setTimeout(()=>URL.revokeObjectURL(preview.url),500);
+    if(preview&&preview.url&&!preview.cached)setTimeout(()=>URL.revokeObjectURL(preview.url),500);
     const focus=this._receivedAttPriorFocus;
     this._receivedAttPriorFocus=null;
     if(focus&&focus.isConnected&&typeof focus.focus==='function')focus.focus();
@@ -1047,6 +1133,11 @@ const MAIL={
 
   async selectFolder(name){
     this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    ++this._readSeq;
+    this._currentMsg=null;
+    const oldAtts=document.getElementById('mailRdrAtts');
+    if(oldAtts){oldAtts.style.display='none';oldAtts.replaceChildren();}
     this.folder=name;
     this.page=1;
     this.selUid=null;
@@ -1076,6 +1167,12 @@ const MAIL={
   async nextPage(){if(this.page<this.pages){this.page++;await this.loadMessages();}},
 
   async refresh(){
+    this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    ++this._readSeq;
+    this._currentMsg=null;
+    const oldAtts=document.getElementById('mailRdrAtts');
+    if(oldAtts){oldAtts.style.display='none';oldAtts.replaceChildren();}
     this._init=false;
     this.selUid=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
@@ -1201,6 +1298,10 @@ const MAIL={
   },
   switchAccount(email){
     this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    ++this._readSeq;
+    const oldAtts=document.getElementById('mailRdrAtts');
+    if(oldAtts){oldAtts.style.display='none';oldAtts.replaceChildren();}
     const k=this._activeKey(); if(k) localStorage.setItem(k,email);
     this._init=false; this.folder='INBOX'; this.page=1; this.msgs=[]; this.selUid=null; this._currentMsg=null;
     document.getElementById('mailReaderEmpty').style.display='flex';

@@ -385,3 +385,69 @@ test('con la clave rechazada no se sigue pidiendo la bandeja', () => {
   const init = cuerpo('async init(){');
   assert.match(init, /if\(await this\.loadFolders\(\)===false\)\{/, 'init() tiene que hacerle caso');
 });
+
+
+test('visor real: Tab queda encerrado y flechas funcionan tras enfocar el iframe PDF', async (t) => {
+  if (!pagina) return t.skip('sin Chromium');
+  await pagina.evaluate((source) => {
+    const mail=new Function(source+';return MAIL;')();
+    mail._currentMsg={attachments:[{part:'1',name:'imagen.jpg'},{part:'2',name:'documento.pdf'}]};
+    mail._receivedAttIndex=0;
+    mail._navigateReceivedAtt=(step)=>window.__viewerMoves.push(step);
+    window.__viewerMoves=[];
+    window.__viewerTest=mail;
+    const modal=mail._ensureReceivedAttModal();
+    modal.style.display='flex';
+    mail._updateReceivedAttNavigation();
+    const iframe=document.createElement('iframe');
+    iframe.id='pdfFocusTest';
+    iframe.src='about:blank';
+    iframe.style.cssText='width:400px;height:250px;border:0';
+    iframe.tabIndex=-1;
+    modal.querySelector('#mailReceivedAttBody').appendChild(iframe);
+    modal.querySelector('[role="dialog"]').focus();
+  }, CORREO);
+  // Al iniciar en el contenedor, Shift+Tab no debe saltar a controles externos.
+  await pagina.keyboard.press('Shift+Tab');
+  assert.equal(await pagina.evaluate(()=>
+    document.getElementById('mailReceivedAttModal').contains(document.activeElement)
+  ),true,'Shift+Tab escapa del visor');
+  // El PDF (iframe con documento independiente) antes robaba las flechas.
+  await pagina.locator('#pdfFocusTest').click({position:{x:70,y:70}});
+  await pagina.waitForTimeout(100);
+  await pagina.keyboard.press('ArrowRight');
+  assert.deepEqual(await pagina.evaluate(()=>window.__viewerMoves),[1],
+    'la flecha derecha debe llegar al visor incluso después de enfocar PDF');
+  await pagina.keyboard.press('Escape');
+  assert.equal(await pagina.evaluate(()=>
+    document.getElementById('mailReceivedAttModal').style.display
+  ),'none','Escape debe cerrar tras interactuar con PDF');
+});
+
+test('visor real: volver a un adjunto ya visto no solicita nuevamente IMAP', async (t) => {
+  if (!pagina) return t.skip('sin Chromium');
+  const result=await pagina.evaluate(async(source)=>{
+    const mail=new Function(source+';return MAIL;')();
+    mail.folder='INBOX';
+    mail.selUid=9;
+    mail.activeAccount=()=> 'testing@thelab.solutions';
+    mail._currentMsg={attachments:[{part:'1',name:'uno.txt'},{part:'2',name:'dos.txt'}]};
+    let requests=0;
+    mail.post=async({part})=>{
+      requests++;
+      return {name:part==='1'?'uno.txt':'dos.txt',mime:'text/plain',data:btoa('archivo '+part)};
+    };
+    await mail.previewReceivedAtt('1','uno.txt');
+    await mail.previewReceivedAtt('2','dos.txt');
+    await mail.previewReceivedAtt('1','uno.txt');
+    const body=document.getElementById('mailReceivedAttBody');
+    const content=body.querySelector('pre')?.textContent;
+    const count=mail._receivedAttCache.size;
+    mail.closeReceivedAttPreview();
+    mail._clearReceivedAttCache();
+    return {requests,content,count};
+  },CORREO);
+  assert.equal(result.requests,2,'el tercer acceso debe reutilizar la caché');
+  assert.equal(result.content,'archivo 1');
+  assert.equal(result.count,2);
+});
