@@ -235,11 +235,23 @@ jobs:
           # Pages tarda unos segundos en soltar el lock aun después del cleanup.
           sleep 10
 
+      # Each attempt needs a distinct artifact. Rerunning a failed Pages job
+      # otherwise leaves duplicate github-pages artifacts in the same workflow run,
+      # and deploy-pages rejects the ambiguous lookup.
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: .
+
+      # The Actions artifact API can lag behind a successful upload. In the
+      # previous production run deploy-pages saw 0 artifacts one second after
+      # upload; a rerun then saw 2 with the default nonunique name.
+      - name: Wait for artifact indexing
+        run: sleep 15
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
