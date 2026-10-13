@@ -22,6 +22,7 @@ const MAIL={
   _receivedAttPreview:null,
   _receivedAttSeq:0,
   _receivedAttPriorFocus:null,
+  _receivedAttIndex:-1,
 
   // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
   // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
@@ -845,6 +846,11 @@ const MAIL={
       '<section class="mail-received-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="mailReceivedAttTitle" tabindex="-1">'+
         '<header class="mail-received-preview-header">'+
           '<strong id="mailReceivedAttTitle" class="mail-received-preview-title"></strong>'+
+          '<nav class="mail-received-preview-navigation" aria-label="Navegar archivos adjuntos">'+
+            '<span id="mailReceivedAttPosition" class="mail-received-preview-position" aria-live="polite"></span>'+
+            '<button type="button" class="btn btn-ghost btn-sm" id="mailReceivedAttPrev" aria-label="Adjunto anterior" title="Anterior (←)">←</button>'+
+            '<button type="button" class="btn btn-ghost btn-sm" id="mailReceivedAttNext" aria-label="Adjunto siguiente" title="Siguiente (→)">→</button>'+
+          '</nav>'+
           '<button type="button" class="btn btn-ghost btn-sm" data-mail-att-close aria-label="Cerrar previsualización">✕</button>'+
         '</header>'+
         '<div class="mail-received-preview-body" id="mailReceivedAttBody" role="status" aria-live="polite"></div>'+
@@ -866,24 +872,84 @@ const MAIL={
       }
     });
     overlay.querySelector('#mailReceivedAttDownload').addEventListener('click',()=>this._downloadReceivedAtt());
+    overlay.querySelector('#mailReceivedAttPrev').addEventListener('click',()=>this._navigateReceivedAtt(-1));
+    overlay.querySelector('#mailReceivedAttNext').addEventListener('click',()=>this._navigateReceivedAtt(1));
+    // Registro único. El visor se oculta al cerrar, así que este listener no
+    // interfiere con flechas del teclado fuera del modal.
+    document.addEventListener('keydown',e=>{
+      if(overlay.style.display!=='flex'||!['ArrowLeft','ArrowRight'].includes(e.key))return;
+      if(e.altKey||e.ctrlKey||e.metaKey||e.shiftKey)return;
+      const target=e.target;
+      if(target?.closest?.('input, textarea, select, [contenteditable="true"]'))return;
+      e.preventDefault();
+      this._navigateReceivedAtt(e.key==='ArrowRight'?1:-1);
+    },true);
     document.body.appendChild(overlay);
     return overlay;
   },
 
+  _receivedAttItems(){
+    // Únicamente los adjuntos del mensaje actualmente seleccionado.
+    return Array.isArray(this._currentMsg?.attachments)
+      ? this._currentMsg.attachments.filter(a=>a&&a.part!=null).map(a=>({
+          part:String(a.part),name:String(a.name||'Adjunto')
+        }))
+      : [];
+  },
+
+  _updateReceivedAttNavigation(){
+    const modal=document.getElementById('mailReceivedAttModal');
+    if(!modal)return;
+    const items=this._receivedAttItems();
+    const index=this._receivedAttIndex;
+    const isValid=index>=0&&index<items.length;
+    modal.querySelector('#mailReceivedAttPosition').textContent=isValid
+      ? `${index+1} de ${items.length}` : '';
+    const previous=modal.querySelector('#mailReceivedAttPrev');
+    const next=modal.querySelector('#mailReceivedAttNext');
+    previous.disabled=!isValid||index===0;
+    next.disabled=!isValid||index===items.length-1;
+    previous.hidden=next.hidden=items.length<2;
+  },
+
+  _navigateReceivedAtt(step){
+    const items=this._receivedAttItems();
+    const next=this._receivedAttIndex+step;
+    if(!Number.isInteger(step)||Math.abs(step)!==1||next<0||next>=items.length)return;
+    const item=items[next];
+    this.previewReceivedAtt(item.part,item.name);
+  },
+
   async previewReceivedAtt(part,name){
     if(!part||!this.selUid){toast('Adjunto no disponible','error');return;}
-    this.closeReceivedAttPreview();
+    const items=this._receivedAttItems();
+    const index=items.findIndex(a=>a.part===String(part));
+    if(index<0){toast('Adjunto no pertenece al mensaje abierto','error');return;}
+    const modal=this._ensureReceivedAttModal();
+    const alreadyOpen=modal.style.display==='flex';
+    if(!alreadyOpen){
+      this.closeReceivedAttPreview();
+      this._receivedAttPriorFocus=document.activeElement;
+    }else{
+      // Cambiar adjunto sin cerrar la ventana: invalida respuestas anteriores
+      // y libera el objeto anterior, conservando el foco dentro del visor.
+      ++this._receivedAttSeq;
+      const previous=this._receivedAttPreview;
+      this._receivedAttPreview=null;
+      modal.querySelector('#mailReceivedAttBody').replaceChildren();
+      if(previous?.url)setTimeout(()=>URL.revokeObjectURL(previous.url),500);
+    }
+    this._receivedAttIndex=index;
+    this._updateReceivedAttNavigation();
     const seq=++this._receivedAttSeq;
     const context={folder:this.folder,uid:this.selUid,account:this.activeAccount(),part};
-    const modal=this._ensureReceivedAttModal();
     const body=modal.querySelector('#mailReceivedAttBody');
     const button=modal.querySelector('#mailReceivedAttDownload');
-    this._receivedAttPriorFocus=document.activeElement;
     modal.querySelector('#mailReceivedAttTitle').textContent=String(name||'Adjunto');
     body.textContent='Cargando vista previa…';
     button.disabled=true;
     modal.style.display='flex';
-    modal.querySelector('.mail-received-preview-dialog').focus();
+    if(!alreadyOpen)modal.querySelector('.mail-received-preview-dialog').focus();
     try{
       const data=await this.post({action:'attachment',folder:context.folder,uid:context.uid,part});
       if(seq!==this._receivedAttSeq||this.folder!==context.folder||
@@ -955,6 +1021,7 @@ const MAIL={
     }
     const preview=this._receivedAttPreview;
     this._receivedAttPreview=null;
+    this._receivedAttIndex=-1;
     if(preview&&preview.url)setTimeout(()=>URL.revokeObjectURL(preview.url),500);
     const focus=this._receivedAttPriorFocus;
     this._receivedAttPriorFocus=null;

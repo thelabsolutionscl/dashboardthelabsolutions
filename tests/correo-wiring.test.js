@@ -125,6 +125,61 @@ test('los adjuntos recibidos se previsualizan antes de descargarse', () => {
   assert.match(CSS, /\.mail-received-preview-pdf/);
 });
 
+test('visor navega con flechas solo por los adjuntos del mensaje abierto', () => {
+  const vm=require('node:vm');
+  const mail=vm.runInNewContext(MAIL+'\nMAIL;');
+  mail._currentMsg={attachments:[
+    {part:'1.1',name:'primero.jpg'},{part:'1.2',name:'segundo.pdf'},{part:'1.3',name:'tercero.txt'}
+  ]};
+  const selection=[];
+  mail.previewReceivedAtt=(part,name)=>{
+    selection.push({part,name});
+    mail._receivedAttIndex=mail._receivedAttItems().findIndex(a=>a.part===part);
+  };
+  mail._receivedAttIndex=0;
+  mail._navigateReceivedAtt(-1); // límite inferior
+  assert.equal(selection.length,0);
+  mail._navigateReceivedAtt(1);
+  assert.equal(selection[0].name,'segundo.pdf');
+  mail._navigateReceivedAtt(1);
+  assert.equal(selection[1].name,'tercero.txt');
+  mail._navigateReceivedAtt(1); // límite superior
+  assert.equal(selection.length,2);
+  mail._navigateReceivedAtt(-1);
+  assert.equal(selection[2].part,'1.2');
+  mail._currentMsg={attachments:[{part:'2',name:'otro-correo.jpg'}]};
+  mail._receivedAttIndex=0;
+  mail._navigateReceivedAtt(1);
+  assert.equal(selection.length,3,'no puede saltar a otro mensaje');
+  mail._currentMsg=null;
+  assert.equal(mail._receivedAttItems().length,0);
+});
+
+test('modal captura flechas sin afectar los campos de texto y conserva cierre y descarga', () => {
+  const ensure=methodBlock('_ensureReceivedAttModal');
+  assert.match(ensure, /#mailReceivedAttPrev/);
+  assert.match(ensure, /#mailReceivedAttNext/);
+  assert.match(ensure, /addEventListener\('keydown'/);
+  assert.match(ensure, /overlay\.style\.display!=='flex'/, 'flechas solo con visor abierto');
+  assert.match(ensure, /ArrowLeft/);
+  assert.match(ensure, /ArrowRight/);
+  assert.match(ensure, /e\.preventDefault\(\)/);
+  assert.match(ensure, /textarea, select/, 'no captura flechas al escribir');
+  assert.match(ensure, /_navigateReceivedAtt\(e\.key==='ArrowRight'\?1:-1\)/);
+  assert.match(ensure, /e\.key==='Escape'/);
+  const navigation=methodBlock('_updateReceivedAttNavigation');
+  assert.match(navigation, /index===0/);
+  assert.match(navigation, /index===items\.length-1/);
+  assert.match(navigation, /textContent=/, 'contador sin inyectar HTML del correo');
+  const preview=methodBlock('previewReceivedAtt');
+  assert.match(preview, /const alreadyOpen=/);
+  assert.match(preview, /if\(!alreadyOpen\)/, 'al navegar no cierra el modal');
+  assert.match(preview, /\+\+this\._receivedAttSeq/, 'invalida cargas tardías');
+  assert.match(preview, /button\.disabled=true/, 'no descargar un adjunto mientras carga el siguiente');
+  assert.match(methodBlock('closeReceivedAttPreview'), /this\._receivedAttIndex=-1/);
+  assert.match(CSS, /\.mail-received-preview-navigation/);
+});
+
 test('solo los formatos pasivos de adjuntos reciben visor embebido', () => {
   const vm=require('node:vm');
   const obj=vm.runInNewContext(MAIL+'\nMAIL;');
