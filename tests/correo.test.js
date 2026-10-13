@@ -49,7 +49,7 @@ const ESC = CORREO.match(/esc\(s\)\{[^}]*\}/)[0];
 const FUENTE_CITA = `return {${ESC},${cuerpo('_sanitizarCita(html,allowImages=false){')}};`;
 const FUENTE_FIRMA = `return {${ESC},${cuerpo('_safeSignatureStyle(styleText){')}},${cuerpo('_sanitizarFirma(html){')}};`;
 // La línea real que pinta el chip de un adjunto.
-const LINEA_CHIP = CORREO.split('\n').find((l) => l.includes('mail-att-chip') && l.includes('downloadAtt')).trim();
+const LINEA_CHIP = CORREO.split('\n').find((l) => l.includes('mail-att-chip') && l.includes('previewReceivedAtt')).trim();
 
 // El tercer campo dice si el payload ejecuta SOLO por meterlo con innerHTML,
 // que es lo que hacía el editor. Medido en Chromium, no supuesto: un <svg
@@ -241,7 +241,7 @@ test('el nombre de un adjunto NO viaja como código', async (t) => {
     const medir = (linea) => {
       const obj = new Function('return {' + esc + ', chip(a){ return ' + linea + '; }};')();
       window.__robos = 0;
-      window.MAIL = { downloadAtt: () => {}, robar: () => { window.__robos++; } };
+      window.MAIL = { downloadAtt: () => {}, previewReceivedAtt: () => {}, robar: () => { window.__robos++; } };
       const d = document.createElement('div');
       d.innerHTML = obj.chip.call(obj, { part: '1', name: hostil });
       document.body.appendChild(d);
@@ -261,8 +261,8 @@ test('el adjunto se pasa como dato, no como trozo de código', () => {
   // La forma segura: el nombre vive en un atributo y se lee, nunca se compila.
   assert.match(LINEA_CHIP, /data-name="\$\{this\.esc\(a\.name\)\}"/);
   assert.match(LINEA_CHIP, /data-part="\$\{this\.esc\(a\.part\)\}"/);
-  assert.match(LINEA_CHIP, /onclick="MAIL\.downloadAtt\(this\.dataset\.part,this\.dataset\.name\)"/);
-  assert.doesNotMatch(LINEA_CHIP, /downloadAtt\('/, 'nada de interpolar dentro de comillas de JS');
+  assert.match(LINEA_CHIP, /onclick="MAIL\.previewReceivedAtt\(this\.dataset\.part,this\.dataset\.name\)"/);
+  assert.doesNotMatch(LINEA_CHIP, /previewReceivedAtt\('/, 'nada de interpolar dentro de comillas de JS');
 });
 
 // ── 4. Adjuntar archivos ────────────────────────────────────────────────
