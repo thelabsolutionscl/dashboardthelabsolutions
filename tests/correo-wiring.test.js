@@ -104,6 +104,47 @@ test('los adjuntos tienen límites en cliente y servidor', () => {
   assert.match(methodBlock('downloadAtt'), /URL\.revokeObjectURL/);
 });
 
+test('los adjuntos recibidos se previsualizan antes de descargarse', () => {
+  const read=methodBlock('readMsg');
+  assert.match(read, /MAIL\.previewReceivedAtt\(this\.dataset\.part,this\.dataset\.name\)/);
+  assert.doesNotMatch(read, /onclick="MAIL\.downloadAtt/, 'el clic no debe descargar automáticamente');
+  assert.match(read, /data-name="\$\{this\.esc\(a\.name\)\}"/, 'el nombre no se interpola como JavaScript');
+  const preview=methodBlock('previewReceivedAtt');
+  assert.match(preview, /action:'attachment'/, 'reutiliza el endpoint IMAP existente');
+  assert.match(preview, /this\._receivedAttKind\(filename,data\.mime\)/);
+  assert.match(preview, /format\.kind==='image'/);
+  assert.match(preview, /format\.kind==='pdf'/);
+  assert.match(preview, /format\.kind==='text'/);
+  assert.match(preview, /button\.disabled=false/, 'descarga activa solo si hay contenido');
+  assert.match(methodBlock('_downloadReceivedAtt'), /a\.download=/, 'descarga únicamente a solicitud');
+  assert.match(methodBlock('closeReceivedAttPreview'), /URL\.revokeObjectURL\(preview\.url\)/, 'libera recursos');
+  for(const name of ['readMsg','selectFolder','switchAccount']){
+    assert.match(methodBlock(name), /this\.closeReceivedAttPreview\(\)/, name+' cancela cualquier preview pendiente');
+  }
+  assert.match(CSS, /\.mail-received-preview-overlay/);
+  assert.match(CSS, /\.mail-received-preview-pdf/);
+});
+
+test('solo los formatos pasivos de adjuntos reciben visor embebido', () => {
+  const vm=require('node:vm');
+  const obj=vm.runInNewContext(MAIL+'\nMAIL;');
+  const kind=(name,mime)=>obj._receivedAttKind(name,mime).kind;
+  assert.equal(kind('imagen.png','image/png'),'image');
+  assert.equal(kind('plano.jpg','application/octet-stream'),'image');
+  assert.equal(kind('cotizacion.pdf','application/pdf'),'pdf');
+  assert.equal(kind('factura.pdf','application/octet-stream'),'pdf');
+  assert.equal(kind('detalle.csv','text/csv'),'text');
+  assert.equal(kind('notas.txt','application/octet-stream'),'text');
+  assert.equal(kind('malicioso.svg','image/svg+xml'),'other');
+  assert.equal(kind('falso.jpg','text/html'),'other');
+  assert.equal(kind('macro.docm','application/vnd.ms-word.document.macroenabled.12'),'other');
+  assert.equal(kind('plantilla.html','application/octet-stream'),'other');
+  const preview=methodBlock('previewReceivedAtt');
+  assert.match(preview, /\.textContent=/, 'texto siempre se trata como texto y no como HTML');
+  assert.match(preview, /'%PDF-'/, 'no intenta visualizar documentos sin cabecera PDF');
+  assert.doesNotMatch(preview, /innerHTML/, 'datos recibidos no deben inyectarse como HTML');
+});
+
 test('el visor aísla HTML activo y escapa el texto plano', () => {
   const render = methodBlock('_renderMsgBody');
   assert.match(render, /createElement\(['"]iframe['"]\)/);
