@@ -19,6 +19,9 @@ const MAIL={
   _secureMailReady:false,
   _legacyPassByAccount:{},
   _remoteImagesAllowed:new Set(),
+  _receivedAttPreview:null,
+  _receivedAttSeq:0,
+  _receivedAttPriorFocus:null,
 
   // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
   // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
@@ -660,6 +663,7 @@ const MAIL={
   },
 
   async readMsg(uid){
+    this.closeReceivedAttPreview();
     this.selUid=uid;
     const seq=++this._readSeq;
     this.mobGo('reader');
@@ -712,7 +716,7 @@ const MAIL={
       // la llamada y ejecutaba lo que viniera detrás (verificado en navegador).
       // Con data-* el nombre nunca es código: es un valor que se lee.
       attsDiv.innerHTML=data.attachments.map(a=>
-        `<span class="mail-att-chip" data-part="${this.esc(a.part)}" data-name="${this.esc(a.name)}" onclick="MAIL.downloadAtt(this.dataset.part,this.dataset.name)">📎 <span class="att-name">${this.esc(a.name)}</span></span>`
+        `<button type="button" class="mail-att-chip" data-part="${this.esc(a.part)}" data-name="${this.esc(a.name)}" onclick="MAIL.previewReceivedAtt(this.dataset.part,this.dataset.name)" title="Previsualizar adjunto">📎 <span class="att-name">${this.esc(a.name)}</span></button>`
       ).join('');
     }else{attsDiv.style.display='none';attsDiv.innerHTML='';}
     // Estado del botón destacar
@@ -803,6 +807,160 @@ const MAIL={
     toast('Marcado como no leído','success');
   },
 
+
+  // Los adjuntos del buzón llegan por IMAP como base64. No se abren URLs
+  // proporcionadas por el remitente ni se renderiza HTML/SVG activo.
+  _receivedAttKind(name,mime){
+    const type=String(mime||'').split(';')[0].trim().toLowerCase();
+    const ext=(String(name||'').toLowerCase().match(/\.([a-z0-9]+)$/)||[])[1]||'';
+    const images={'image/png':'image/png','image/jpeg':'image/jpeg','image/gif':'image/gif',
+      'image/webp':'image/webp','image/bmp':'image/bmp','image/avif':'image/avif'};
+    const textTypes=new Set(['text/plain','text/csv','text/markdown','text/tab-separated-values',
+      'application/json','application/xml','text/xml']);
+    if(images[type]) return {kind:'image',mime:images[type]};
+    if(type==='application/pdf'||type==='application/x-pdf') return {kind:'pdf',mime:'application/pdf'};
+    if(textTypes.has(type)) return {kind:'text',mime:'text/plain;charset=utf-8'};
+    // Algunos servidores IMAP etiquetan cualquier adjunto como octet-stream.
+    // Solo en ese caso se permite inferir un formato de vista previa por extensión.
+    if(!type||type==='application/octet-stream'||type==='binary/octet-stream'){
+      const extensions={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',
+        webp:'image/webp',bmp:'image/bmp',avif:'image/avif'};
+      if(extensions[ext]) return {kind:'image',mime:extensions[ext]};
+      if(ext==='pdf') return {kind:'pdf',mime:'application/pdf'};
+      if(['txt','csv','md','log','json','xml','yaml','yml','ini'].includes(ext))
+        return {kind:'text',mime:'text/plain;charset=utf-8'};
+    }
+    return {kind:'other',mime:'application/octet-stream'};
+  },
+
+  _ensureReceivedAttModal(){
+    let overlay=document.getElementById('mailReceivedAttModal');
+    if(overlay)return overlay;
+    overlay=document.createElement('div');
+    overlay.id='mailReceivedAttModal';
+    overlay.className='mail-received-preview-overlay';
+    overlay.style.display='none';
+    // Plantilla estática controlada por la aplicación (nunca contiene datos del correo).
+    overlay.innerHTML=
+      '<section class="mail-received-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="mailReceivedAttTitle" tabindex="-1">'+
+        '<header class="mail-received-preview-header">'+
+          '<strong id="mailReceivedAttTitle" class="mail-received-preview-title"></strong>'+
+          '<button type="button" class="btn btn-ghost btn-sm" data-mail-att-close aria-label="Cerrar previsualización">✕</button>'+
+        '</header>'+
+        '<div class="mail-received-preview-body" id="mailReceivedAttBody" role="status" aria-live="polite"></div>'+
+        '<footer class="mail-received-preview-footer">'+
+          '<button type="button" class="btn btn-ghost btn-sm" data-mail-att-close>Cerrar</button>'+
+          '<button type="button" class="btn btn-primary btn-sm" id="mailReceivedAttDownload" disabled>⬇ Descargar archivo</button>'+
+        '</footer>'+
+      '</section>';
+    overlay.addEventListener('click',e=>{
+      if(e.target===overlay||e.target.closest('[data-mail-att-close]'))this.closeReceivedAttPreview();
+    });
+    overlay.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){e.preventDefault();this.closeReceivedAttPreview();}
+      if(e.key==='Tab'){
+        const buttons=[...overlay.querySelectorAll('button:not(:disabled)')];
+        if(!buttons.length)return;
+        if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[buttons.length-1].focus();}
+        else if(!e.shiftKey&&document.activeElement===buttons[buttons.length-1]){e.preventDefault();buttons[0].focus();}
+      }
+    });
+    overlay.querySelector('#mailReceivedAttDownload').addEventListener('click',()=>this._downloadReceivedAtt());
+    document.body.appendChild(overlay);
+    return overlay;
+  },
+
+  async previewReceivedAtt(part,name){
+    if(!part||!this.selUid){toast('Adjunto no disponible','error');return;}
+    this.closeReceivedAttPreview();
+    const seq=++this._receivedAttSeq;
+    const context={folder:this.folder,uid:this.selUid,account:this.activeAccount(),part};
+    const modal=this._ensureReceivedAttModal();
+    const body=modal.querySelector('#mailReceivedAttBody');
+    const button=modal.querySelector('#mailReceivedAttDownload');
+    this._receivedAttPriorFocus=document.activeElement;
+    modal.querySelector('#mailReceivedAttTitle').textContent=String(name||'Adjunto');
+    body.textContent='Cargando vista previa…';
+    button.disabled=true;
+    modal.style.display='flex';
+    modal.querySelector('.mail-received-preview-dialog').focus();
+    try{
+      const data=await this.post({action:'attachment',folder:context.folder,uid:context.uid,part});
+      if(seq!==this._receivedAttSeq||this.folder!==context.folder||
+         this.selUid!==context.uid||this.activeAccount()!==context.account)return;
+      if(data.error)throw new Error(data.error);
+      if(typeof data.data!=='string'||!data.data)throw new Error('El adjunto no tiene contenido disponible');
+      const binary=atob(data.data);
+      const bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      const filename=String(data.name||name||'archivo');
+      let format=this._receivedAttKind(filename,data.mime);
+      // Un PDF declarado no se interpreta como documento activo si no tiene cabecera PDF.
+      if(format.kind==='pdf'&&String.fromCharCode(...bytes.subarray(0,5))!=='%PDF-')
+        format={kind:'other',mime:'application/octet-stream'};
+      const blob=new Blob([bytes],{type:format.mime});
+      const url=URL.createObjectURL(blob);
+      this._receivedAttPreview={...context,url,name:filename};
+      modal.querySelector('#mailReceivedAttTitle').textContent=filename;
+      button.disabled=false;
+      body.replaceChildren();
+      if(format.kind==='image'){
+        const img=document.createElement('img');
+        img.alt=filename;img.className='mail-received-preview-image';img.src=url;
+        img.onerror=()=>{if(seq===this._receivedAttSeq)body.textContent='No se pudo mostrar esta imagen. Puedes descargar el archivo.';};
+        body.appendChild(img);
+      }else if(format.kind==='pdf'){
+        const frame=document.createElement('iframe');
+        frame.title='Vista previa de '+filename;
+        frame.className='mail-received-preview-pdf';
+        frame.referrerPolicy='no-referrer';
+        frame.src=url;
+        body.appendChild(frame);
+      }else if(format.kind==='text'){
+        const pre=document.createElement('pre');
+        pre.className='mail-received-preview-text';
+        const limit=512*1024;
+        pre.textContent=new TextDecoder('utf-8').decode(bytes.subarray(0,limit))+
+          (bytes.length>limit?'\n\n[Vista previa limitada a 512 KB. Descarga el archivo para verlo completo.]':'');
+        body.appendChild(pre);
+      }else{
+        const hint=document.createElement('p');
+        hint.className='mail-received-preview-unavailable';
+        hint.textContent='Este formato no admite vista previa segura en el navegador. Puedes descargar el archivo.';
+        body.appendChild(hint);
+      }
+    }catch(e){
+      if(seq!==this._receivedAttSeq)return;
+      body.textContent=(e&&e.message)||'No se pudo cargar el adjunto';
+      button.disabled=true;
+    }
+  },
+
+  _downloadReceivedAtt(){
+    const preview=this._receivedAttPreview;
+    if(!preview||!preview.url)return;
+    const a=document.createElement('a');
+    a.href=preview.url;
+    a.download=String(preview.name||'archivo').replace(/[\\/\x00-\x1f\x7f]/g,'_');
+    document.body.appendChild(a);a.click();a.remove();
+  },
+
+  closeReceivedAttPreview(){
+    ++this._receivedAttSeq; // invalida descargas que todavía estén en vuelo
+    const modal=document.getElementById('mailReceivedAttModal');
+    if(modal){
+      modal.style.display='none';
+      modal.querySelector('#mailReceivedAttBody').replaceChildren(); // detiene PDF/imagen
+      modal.querySelector('#mailReceivedAttDownload').disabled=true;
+    }
+    const preview=this._receivedAttPreview;
+    this._receivedAttPreview=null;
+    if(preview&&preview.url)setTimeout(()=>URL.revokeObjectURL(preview.url),500);
+    const focus=this._receivedAttPriorFocus;
+    this._receivedAttPriorFocus=null;
+    if(focus&&focus.isConnected&&typeof focus.focus==='function')focus.focus();
+  },
+
   async downloadAtt(part,name){
     toast('Descargando '+name+'...','info');
     const data=await this.post({action:'attachment',folder:this.folder,uid:this.selUid,part});
@@ -821,6 +979,7 @@ const MAIL={
   },
 
   async selectFolder(name){
+    this.closeReceivedAttPreview();
     this.folder=name;
     this.page=1;
     this.selUid=null;
@@ -974,6 +1133,7 @@ const MAIL={
     this.switchAccount(next);
   },
   switchAccount(email){
+    this.closeReceivedAttPreview();
     const k=this._activeKey(); if(k) localStorage.setItem(k,email);
     this._init=false; this.folder='INBOX'; this.page=1; this.msgs=[]; this.selUid=null; this._currentMsg=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
