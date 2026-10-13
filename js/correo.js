@@ -23,6 +23,8 @@ const MAIL={
   _receivedAttSeq:0,
   _receivedAttPriorFocus:null,
   _receivedAttIndex:-1,
+  _receivedAttCache:new Map(),
+  _receivedAttCacheBytes:0,
 
   // ── Cuentas de correo (multi-cuenta) ──────────────────────────────
   // El buzón activo ya no es forzosamente el usuario del dashboard: se puede
@@ -665,6 +667,10 @@ const MAIL={
 
   async readMsg(uid){
     this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    this._currentMsg=null;
+    const previousAtts=document.getElementById('mailRdrAtts');
+    if(previousAtts){previousAtts.style.display='none';previousAtts.replaceChildren();}
     this.selUid=uid;
     const seq=++this._readSeq;
     this.mobGo('reader');
@@ -863,17 +869,43 @@ const MAIL={
       if(e.target===overlay||e.target.closest('[data-mail-att-close]'))this.closeReceivedAttPreview();
     });
     overlay.addEventListener('keydown',e=>{
-      if(e.key==='Escape'){e.preventDefault();this.closeReceivedAttPreview();}
-      if(e.key==='Tab'){
-        const buttons=[...overlay.querySelectorAll('button:not(:disabled)')];
-        if(!buttons.length)return;
-        if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[buttons.length-1].focus();}
-        else if(!e.shiftKey&&document.activeElement===buttons[buttons.length-1]){e.preventDefault();buttons[0].focus();}
+      if(e.key==='Escape'){e.preventDefault();this.closeReceivedAttPreview();return;}
+      if(e.key!=='Tab')return;
+      const buttons=[...overlay.querySelectorAll('button:not(:disabled):not([hidden])')];
+      if(!buttons.length){e.preventDefault();overlay.querySelector('[role="dialog"]').focus();return;}
+      const active=document.activeElement;
+      const first=buttons[0],last=buttons[buttons.length-1];
+      const dialog=overlay.querySelector('[role="dialog"]');
+      // El foco inicial está en el diálogo, no en el primer botón.
+      if(active===dialog||!overlay.contains(active)){
+        e.preventDefault();(e.shiftKey?last:first).focus();
+      }else if(e.shiftKey&&active===first){
+        e.preventDefault();last.focus();
+      }else if(!e.shiftKey&&active===last){
+        e.preventDefault();first.focus();
       }
     });
     overlay.querySelector('#mailReceivedAttDownload').addEventListener('click',()=>this._downloadReceivedAtt());
     overlay.querySelector('#mailReceivedAttPrev').addEventListener('click',()=>this._navigateReceivedAtt(-1));
     overlay.querySelector('#mailReceivedAttNext').addEventListener('click',()=>this._navigateReceivedAtt(1));
+    // Los iframes PDF tienen su propio documento. Chromium entrega el foco
+    // al visor PDF, y las teclas ya no llegan al documento del dashboard.
+    // Recuperar el foco al diálogo preserva ←, → y Escape aun tras hacer
+    // clic en el PDF, sin bloquear su scroll con el ratón.
+    window.addEventListener('blur',()=>{
+      if(overlay.style.display!=='flex')return;
+      const active=document.activeElement;
+      if(active?.tagName!=='IFRAME'||!overlay.contains(active))return;
+      setTimeout(()=>{
+        if(overlay.style.display==='flex'&&overlay.contains(document.activeElement))
+          overlay.querySelector('[role="dialog"]').focus({preventScroll:true});
+      },0);
+    });
+    // Impide enfocar elementos del dashboard detrás de la ventana.
+    document.addEventListener('focusin',e=>{
+      if(overlay.style.display==='flex'&&!overlay.contains(e.target))
+        overlay.querySelector('[role="dialog"]').focus({preventScroll:true});
+    },true);
     // Registro único. El visor se oculta al cerrar, así que este listener no
     // interfiere con flechas del teclado fuera del modal.
     document.addEventListener('keydown',e=>{
@@ -886,6 +918,14 @@ const MAIL={
     },true);
     document.body.appendChild(overlay);
     return overlay;
+  },
+
+  _clearReceivedAttCache(){
+    for(const entry of this._receivedAttCache.values()){
+      if(entry?.url)setTimeout(()=>URL.revokeObjectURL(entry.url),500);
+    }
+    this._receivedAttCache.clear();
+    this._receivedAttCacheBytes=0;
   },
 
   _receivedAttItems(){
@@ -980,6 +1020,7 @@ const MAIL={
         frame.title='Vista previa de '+filename;
         frame.className='mail-received-preview-pdf';
         frame.referrerPolicy='no-referrer';
+        frame.tabIndex=-1; // no incluir contenido del PDF en el recorrido Tab
         frame.src=url;
         body.appendChild(frame);
       }else if(format.kind==='text'){
@@ -1047,6 +1088,11 @@ const MAIL={
 
   async selectFolder(name){
     this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    ++this._readSeq;
+    this._currentMsg=null;
+    const oldAtts=document.getElementById('mailRdrAtts');
+    if(oldAtts){oldAtts.style.display='none';oldAtts.replaceChildren();}
     this.folder=name;
     this.page=1;
     this.selUid=null;
@@ -1076,6 +1122,12 @@ const MAIL={
   async nextPage(){if(this.page<this.pages){this.page++;await this.loadMessages();}},
 
   async refresh(){
+    this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    ++this._readSeq;
+    this._currentMsg=null;
+    const oldAtts=document.getElementById('mailRdrAtts');
+    if(oldAtts){oldAtts.style.display='none';oldAtts.replaceChildren();}
     this._init=false;
     this.selUid=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
@@ -1201,6 +1253,10 @@ const MAIL={
   },
   switchAccount(email){
     this.closeReceivedAttPreview();
+    this._clearReceivedAttCache();
+    ++this._readSeq;
+    const oldAtts=document.getElementById('mailRdrAtts');
+    if(oldAtts){oldAtts.style.display='none';oldAtts.replaceChildren();}
     const k=this._activeKey(); if(k) localStorage.setItem(k,email);
     this._init=false; this.folder='INBOX'; this.page=1; this.msgs=[]; this.selUid=null; this._currentMsg=null;
     document.getElementById('mailReaderEmpty').style.display='flex';
