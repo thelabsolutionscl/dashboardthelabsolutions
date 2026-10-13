@@ -928,6 +928,31 @@ const MAIL={
     this._receivedAttCacheBytes=0;
   },
 
+  _cacheReceivedAtt(part,entry){
+    // LRU por mensaje. Limitar bytes Y cantidad para evitar retener decenas
+    // de URLs Blob al recorrer cadenas con muchos adjuntos.
+    const limit=32*1024*1024, maxItems=8;
+    if(entry.size>limit)return false;
+    if(this._receivedAttCache.has(part)){
+      const old=this._receivedAttCache.get(part);
+      this._receivedAttCacheBytes-=old.size;
+      this._receivedAttCache.delete(part);
+      if(old.url!==entry.url)setTimeout(()=>URL.revokeObjectURL(old.url),500);
+    }
+    while(this._receivedAttCache.size>=maxItems||
+          this._receivedAttCacheBytes+entry.size>limit){
+      const key=this._receivedAttCache.keys().next().value;
+      if(key===undefined)break;
+      const old=this._receivedAttCache.get(key);
+      this._receivedAttCache.delete(key);
+      this._receivedAttCacheBytes-=old.size;
+      setTimeout(()=>URL.revokeObjectURL(old.url),500);
+    }
+    this._receivedAttCache.set(part,entry);
+    this._receivedAttCacheBytes+=entry.size;
+    return true;
+  },
+
   _receivedAttItems(){
     // Únicamente los adjuntos del mensaje actualmente seleccionado.
     return Array.isArray(this._currentMsg?.attachments)
@@ -977,7 +1002,7 @@ const MAIL={
       const previous=this._receivedAttPreview;
       this._receivedAttPreview=null;
       modal.querySelector('#mailReceivedAttBody').replaceChildren();
-      if(previous?.url)setTimeout(()=>URL.revokeObjectURL(previous.url),500);
+      if(previous?.url&&!previous.cached)setTimeout(()=>URL.revokeObjectURL(previous.url),500);
     }
     this._receivedAttIndex=index;
     this._updateReceivedAttNavigation();
@@ -991,22 +1016,44 @@ const MAIL={
     modal.style.display='flex';
     if(!alreadyOpen)modal.querySelector('.mail-received-preview-dialog').focus();
     try{
-      const data=await this.post({action:'attachment',folder:context.folder,uid:context.uid,part});
+      // Si volvemos a un adjunto ya visto, se usa su Blob local: cero
+      // solicitudes IMAP adicionales mientras permanezca abierto el correo.
+      const cached=this._receivedAttCache.get(String(part));
+      let filename,format,url,previewText='',isCached=false;
+      if(cached){
+        this._receivedAttCache.delete(String(part));
+        this._receivedAttCache.set(String(part),cached); // actualizar LRU
+        ({name:filename,format,url,previewText}=cached);
+        isCached=true;
+      }else{
+        const data=await this.post({action:'attachment',folder:context.folder,uid:context.uid,part});
+        if(seq!==this._receivedAttSeq||this.folder!==context.folder||
+           this.selUid!==context.uid||this.activeAccount()!==context.account)return;
+        if(data.error)throw new Error(data.error);
+        if(typeof data.data!=='string'||!data.data)throw new Error('El adjunto no tiene contenido disponible');
+        const binary=atob(data.data);
+        const bytes=new Uint8Array(binary.length);
+        for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+        filename=String(data.name||name||'archivo');
+        format=this._receivedAttKind(filename,data.mime);
+        // Un PDF declarado no se interpreta como documento activo si no tiene cabecera PDF.
+        if(format.kind==='pdf'&&String.fromCharCode(...bytes.subarray(0,5))!=='%PDF-')
+          format={kind:'other',mime:'application/octet-stream'};
+        if(format.kind==='text'){
+          const limit=512*1024;
+          previewText=new TextDecoder('utf-8').decode(bytes.subarray(0,limit))+
+            (bytes.length>limit?'\\n\\n[Vista previa limitada a 512 KB. Descarga el archivo para verlo completo.]':'');
+        }
+        const blob=new Blob([bytes],{type:format.mime});
+        url=URL.createObjectURL(blob);
+        isCached=this._cacheReceivedAtt(String(part),{
+          url,name:filename,format,previewText,size:bytes.byteLength
+        });
+      }
+      // No asociar nunca la URL de un correo anterior con el correo actual.
       if(seq!==this._receivedAttSeq||this.folder!==context.folder||
          this.selUid!==context.uid||this.activeAccount()!==context.account)return;
-      if(data.error)throw new Error(data.error);
-      if(typeof data.data!=='string'||!data.data)throw new Error('El adjunto no tiene contenido disponible');
-      const binary=atob(data.data);
-      const bytes=new Uint8Array(binary.length);
-      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-      const filename=String(data.name||name||'archivo');
-      let format=this._receivedAttKind(filename,data.mime);
-      // Un PDF declarado no se interpreta como documento activo si no tiene cabecera PDF.
-      if(format.kind==='pdf'&&String.fromCharCode(...bytes.subarray(0,5))!=='%PDF-')
-        format={kind:'other',mime:'application/octet-stream'};
-      const blob=new Blob([bytes],{type:format.mime});
-      const url=URL.createObjectURL(blob);
-      this._receivedAttPreview={...context,url,name:filename};
+      this._receivedAttPreview={...context,url,name:filename,cached:isCached};
       modal.querySelector('#mailReceivedAttTitle').textContent=filename;
       button.disabled=false;
       body.replaceChildren();
@@ -1026,9 +1073,7 @@ const MAIL={
       }else if(format.kind==='text'){
         const pre=document.createElement('pre');
         pre.className='mail-received-preview-text';
-        const limit=512*1024;
-        pre.textContent=new TextDecoder('utf-8').decode(bytes.subarray(0,limit))+
-          (bytes.length>limit?'\n\n[Vista previa limitada a 512 KB. Descarga el archivo para verlo completo.]':'');
+        pre.textContent=previewText;
         body.appendChild(pre);
       }else{
         const hint=document.createElement('p');
@@ -1063,7 +1108,7 @@ const MAIL={
     const preview=this._receivedAttPreview;
     this._receivedAttPreview=null;
     this._receivedAttIndex=-1;
-    if(preview&&preview.url)setTimeout(()=>URL.revokeObjectURL(preview.url),500);
+    if(preview&&preview.url&&!preview.cached)setTimeout(()=>URL.revokeObjectURL(preview.url),500);
     const focus=this._receivedAttPriorFocus;
     this._receivedAttPriorFocus=null;
     if(focus&&focus.isConnected&&typeof focus.focus==='function')focus.focus();
