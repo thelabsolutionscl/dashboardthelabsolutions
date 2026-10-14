@@ -6,6 +6,7 @@
  */
 const TZ='America/Santiago';
 export const FONDOS_CATALOGO_URL='https://dashboard.thelab.solutions/data/fondos-concursables.json';
+export const FONDOS_CATALOGO_RESPALDO='https://raw.githubusercontent.com/thelabsolutionscl/dashboardthelabsolutions/main/data/fondos-concursables.json';
 const RESEND_URL='https://api.resend.com/emails';
 const PEOPLE={gustavo:'gustavo@thelab.solutions',nicanor:'nicanor@thelab.solutions'};
 const SOURCES=new Set(['www.sercotec.cl','sercotec.cl','www.corfo.cl','corfo.cl','www.corfo.gob.cl','corfo.gob.cl','www.fondos.gob.cl','fondos.gob.cl']);
@@ -66,10 +67,20 @@ export async function deliverFundAlerts(env,date=new Date(),fetcher=fetch){
   const clock=chileNow(date);
   if(clock.hour<9||clock.hour>21)return {skipped:'fuera-horario',date:clock.date};
   if(!env.RESEND_API_KEY||!env.RL)return {skipped:'falta-resend-o-kv',date:clock.date};
-  const now=await fetcher(FONDOS_CATALOGO_URL,{headers:{'Accept':'application/json'},cf:{cacheTtl:60}});
-  if(!now.ok)throw Error('El catálogo de fondos no responde ('+now.status+')');
-  const data=await now.json();
-  if(!Array.isArray(data.funds)||data.schema!==1)throw Error('Catálogo de fondos inválido');
+  // Fuente principal: misma versión mostrada por el dashboard; fallback
+  // público a GitHub main si el dominio usa Cloudflare Access o un redirect.
+  // Se rechaza toda carga que no cumpla el esquema esperado.
+  let data,sourceError;
+  for(const url of [FONDOS_CATALOGO_URL,FONDOS_CATALOGO_RESPALDO]){
+    try{
+      const response=await fetcher(url,{headers:{'Accept':'application/json'},cf:{cacheTtl:60}});
+      if(!response.ok)throw Error('HTTP '+response.status);
+      const payload=await response.json();
+      if(!Array.isArray(payload?.funds)||payload.schema!==1)throw Error('schema inválido');
+      data=payload;break;
+    }catch(e){sourceError=e;console.warn('[fondos-notify] fallo fuente catálogo:',url,String(e.message||e));}
+  }
+  if(!data)throw Error('No hay catálogo de fondos verificable: '+String(sourceError?.message||sourceError));
   const candidates=dueNotifications(data,date);
   const result={date:clock.date,events:candidates.length,sent:0,alreadySent:0,errors:[]};
   for(const f of candidates){
