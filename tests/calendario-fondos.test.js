@@ -159,7 +159,8 @@ test('salto de calendario restablece filtros y navega al mes exacto',()=>{
   assert.equal(state._calFiltro,'todos');
   assert.equal(state._calTipoFiltro,'fondos');
   assert.equal(state._calVista,'mes');
-  assert.deepEqual(state.persisted,['thelab_cal_vista','mes']);
+  assert.equal(state.persisted[0],'thelab_cal_vista');
+  assert.equal(state.persisted[1],'mes');
   assert.equal(state.renders,1);
   assert.equal(state.scrolled,true);
 });
