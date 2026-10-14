@@ -56,3 +56,13 @@ alarmas/notificaciones y sincronización al **Google Calendar personal** de cada
 - Access token OAuth: solo en memoria (nunca en localStorage ni en el respaldo).
 - En macOS/Tauri, solo se persiste el **Client ID de escritorio** en `localStorage`; el flujo usa navegador del sistema + loopback `127.0.0.1` + PKCE.
 - Zona horaria de los eventos: `America/Santiago`.
+
+## Fondos concursables (módulo TLS)
+
+- La sección **Calendario** muestra una tarjeta **Fondos concursables** con fechas de apertura y cierre verificadas en fuentes oficiales, además de un listado de programas **Por anunciar**. Catálogo versionado en `data/fondos-concursables.json`, revisado en fecha identificada.
+- Cada fecha publicada se presenta como evento virtual 🟢 apertura / 🔴 cierre en las vistas mes, semana y agenda. No se arrastra, no crea eventos en CRM ni se sincroniza automáticamente con Google Calendar.
+- Los programas sin fechas oficiales se muestran sin fecha, nunca extrapoladas desde años anteriores. El catálogo inicial **NO garantiza cobertura exhaustiva ni consulta en tiempo real**; las bases pueden modificarse.
+- La compatibilidad de TLS es solo preliminar: deben verificarse primera categoría, ventas en UF, actividad, comuna/región, aportes, deudas, subsidios previos y otros requisitos de la convocatoria.
+- El **agente de postulaciones** recibe preguntas pegadas por el usuario y antecedentes confirmados, usa el motor IA existente y entrega **borradores para copiar**, junto con requisitos pendientes. No envía postulaciones ni completa sitios externos. No pegar RUT personales, contraseñas, tokens o información sensible.
+- Código: `js/calendario-fondos.js`; catálogo: `data/fondos-concursables.json`; integración virtual: `js/calendario-base.js` y `js/calendario.js`. La preferencia de visualización se guarda solo en el navegador como `thelab_fondos_mostrar_v1`.
+- **Actualización de fechas:** revisar fuentes y publicar nuevas convocatorias en el catálogo cuando estén verificadas. Portales oficiales: https://www.sercotec.cl/convocatoria/, https://www.corfo.cl/sites/cpp/area/innovacion y https://www.fondos.gob.cl/.
