@@ -3905,6 +3905,34 @@
 @media(max-width:900px){#tab-calendario .cal-kpis{grid-template-columns:repeat(2,1fr)}#tab-calendario .cal-side-grid{grid-template-columns:1fr}}
 @media(max-width:760px){#tab-calendario .cal-cell{min-height:82px;padding:5px 6px}#tab-calendario .cal-ev{font-size:10.5px;line-height:1.3;padding:3px 5px}#tab-calendario .cal-ev-h{font-size:9.5px}#tab-calendario .cal-num{font-size:12px}#tab-calendario .cal-head,#tab-calendario .cal-body{min-width:700px}#tab-calendario #calGrid{overflow-x:auto}#tab-calendario .cal-ag-day{grid-template-columns:90px 1fr}#tab-calendario .cal-focus-row{grid-template-columns:72px minmax(0,1fr)}#tab-calendario .cal-focus-row .btn{grid-column:2;justify-self:start}#tab-calendario .cal-missing{grid-template-columns:22px minmax(0,1fr)}#tab-calendario .cal-missing-actions{grid-column:2;justify-content:flex-start}}
 </style>
+<style id="fondosStyles">
+#tab-calendario .fondos-panel{margin-bottom:14px;overflow:hidden}
+#tab-calendario .fondos-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#tab-calendario .fondos-head small{color:var(--text3);font-size:11px;display:block;margin-top:5px}
+#tab-calendario .fondos-control{display:flex;align-items:end;flex-wrap:wrap;gap:14px;padding:12px 15px;border-bottom:1px solid var(--border)}
+#tab-calendario .fondos-control label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text2)}
+#tab-calendario .fondos-control .field-select{min-width:245px}
+#tab-calendario .fondos-control .fondos-calendar-toggle{flex-direction:row;align-items:center;gap:8px;padding-bottom:9px}
+#tab-calendario .fondos-status{font-size:10px;padding:8px 15px;color:var(--text3)}
+#tab-calendario .fondos-list{padding:0 14px;max-height:440px;overflow-y:auto}
+#tab-calendario .fondos-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--border2);flex-wrap:wrap}
+#tab-calendario .fondos-row-main{display:flex;flex-direction:column;align-items:flex-start;gap:5px;flex:1;min-width:230px;font-size:12px}
+#tab-calendario .fondos-row-main small{color:var(--text3);font-size:10.5px;line-height:1.4}
+#tab-calendario .fondos-tag{font-size:10px;padding:3px 6px;border-radius:6px;border:1px solid var(--border2);color:var(--accent3)}
+#tab-calendario .fondos-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#tab-calendario .fondos-actions a,#tab-calendario .fondos-source-bar a,#tab-calendario .fondos-modal a{color:var(--accent3);font-size:11px;text-decoration:underline}
+#tab-calendario .fondos-source-bar{padding:12px 15px;color:var(--text3);font-size:11px;line-height:1.6}
+#tab-calendario .fondos-copiloto{padding:15px;border-top:1px solid var(--border);display:grid;gap:10px}
+#tab-calendario .fondos-copiloto h3{font-size:14px;margin:0;color:var(--text)}
+#tab-calendario .fondos-copiloto p{font-size:11px;color:var(--text3);line-height:1.6;margin:0}
+#tab-calendario .fondos-respuesta{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px;max-height:380px;overflow-y:auto;color:var(--text);font-family:inherit;font-size:12px;line-height:1.65}
+#tab-calendario .cal-ev.cal-fondo{cursor:pointer;white-space:nowrap}
+#tab-calendario .fondos-overlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.7);display:flex;justify-content:center;align-items:center;padding:20px}
+#tab-calendario .fondos-modal{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:22px;max-width:620px;width:100%;max-height:85vh;overflow-y:auto;line-height:1.6}
+#tab-calendario .fondos-modal h3{font-size:17px}
+#tab-calendario .fondos-modal p{font-size:12px;margin:10px 0;color:var(--text2)}
+#tab-calendario .fondos-warning{color:var(--warn)!important}
+</style>
 <div class="tab-panel pf" id="tab-calendario">
   <div class="section-header"><div><div class="section-title">Calendario operacional</div><div class="section-desc">Fechas límite de cotizaciones, metas internas, entregas de pedidos y agenda del equipo, con alertas y capacidad de Máquinas.</div></div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -3931,6 +3959,60 @@
         <label class="cal-chip"><input id="calSync_manual" type="checkbox"> Eventos del equipo</label><label class="cal-chip"><input id="calSync_cot_due" type="checkbox"> Entrega cotizaciones</label><label class="cal-chip"><input id="calSync_cot_expiry" type="checkbox"> Vigencia cotizaciones</label><label class="cal-chip"><input id="calSync_ped_internal" type="checkbox"> Metas internas</label><label class="cal-chip"><input id="calSync_ped_delivery" type="checkbox"> Entregas cliente</label><label class="cal-chip"><input id="calSync_onlyMine" type="checkbox"> Solo los míos</label>
       </div></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="calSaveSyncPrefs()">Guardar selección Google</button><button class="btn btn-primary btn-sm" onclick="calSaveConfig()">Guardar calendarios</button></div>
+    </div>
+  </div>
+  
+  <section class="card fondos-panel" aria-label="Fondos concursables para The Lab Solutions">
+    <div class="card-header fondos-head">
+      <div><div class="card-title">🏛 Fondos concursables para TLS</div>
+        <small>Inversión, innovación y digitalización · Región Metropolitana y llamados nacionales</small></div>
+      <button type="button" id="fondosReload" class="btn btn-ghost btn-sm">↻ Actualizar catálogo</button>
+    </div>
+    <div class="fondos-control">
+      <label for="fondosFiltro">Convocatorias
+        <select id="fondosFiltro" class="field-select">
+          <option value="proximos">Abiertas / próximas con fecha</option>
+          <option value="sin-fechas">Por anunciar</option>
+          <option value="cerrados">Convocatorias anteriores</option>
+          <option value="todos">Todos los programas</option>
+        </select>
+      </label>
+      <label class="fondos-calendar-toggle"><input type="checkbox" id="fondosShowOnCalendar" checked> Ver aperturas y cierres en el calendario</label>
+    </div>
+    <div id="fondosStatus" class="fondos-status" role="status"></div>
+    <div id="fondosList" class="fondos-list"></div>
+    <div class="fondos-source-bar">
+      Antes de postular, confirmar bases, horarios y posibles prórrogas:
+      <a href="https://www.sercotec.cl/convocatoria/" target="_blank" rel="noopener noreferrer">Sercotec</a> ·
+      <a href="https://www.corfo.cl/sites/cpp/convocatorias" target="_blank" rel="noopener noreferrer">Corfo</a> ·
+      <a href="https://www.fondos.gob.cl/" target="_blank" rel="noopener noreferrer">Fondos.gob.cl</a>
+    </div>
+    <div id="fondosCopiloto" class="fondos-copiloto">
+      <h3>🤖 Agente de postulaciones TLS</h3>
+      <p>Genera <b>borradores de respuestas</b> listos para copiar y una lista de antecedentes faltantes.
+        No verifica bases externas en vivo ni envía formularios por ti.</p>
+      <div class="field-group"><label class="field-label" for="fondosConvocatoria">Convocatoria</label>
+        <select id="fondosConvocatoria" class="field-select"><option value="">Selecciona un fondo</option></select></div>
+      <div class="field-group"><label class="field-label" for="fondosOtroFondo">Otra convocatoria que no está en el catálogo (opcional)</label><input id="fondosOtroFondo" class="field-input" maxlength="200" placeholder="Nombre exacto de la convocatoria; selecciona «Otra convocatoria» arriba"></div>
+      <div class="field-group"><label class="field-label" for="fondosPreguntas">Preguntas o exigencias copiadas del formulario *</label>
+        <textarea id="fondosPreguntas" class="field-textarea" rows="5" maxlength="16000" placeholder="Pega las preguntas del formulario o requisitos. Nunca pegues contraseñas, claves API ni datos personales sensibles."></textarea></div>
+      <div class="field-group"><label class="field-label" for="fondosAntecedentes">Antecedentes confirmados de TLS (opcional)</label>
+        <textarea id="fondosAntecedentes" class="field-textarea" rows="3" maxlength="6000" placeholder="Proyecto, inversión, resultados medibles, datos que conozcas y puedas comprobar."></textarea></div>
+      <div class="fondos-actions">
+        <button type="button" id="fondosGenerar" class="btn btn-primary btn-sm">🤖 Preparar borrador</button>
+        <button type="button" id="fondosCopiar" class="btn btn-ghost btn-sm">Copiar respuestas</button>
+        <small id="fondosCopyNotice" role="status"></small>
+      </div>
+      <pre id="fondosRespuesta" class="fondos-respuesta" aria-live="polite">Selecciona un fondo y pega las preguntas para preparar un borrador. Revísalo antes de presentar.</pre>
+    </div>
+  </section>
+  <div class="fondos-overlay" id="fondosDetalleModal" style="display:none">
+    <div class="fondos-modal" role="dialog" aria-modal="true" aria-label="Detalle de convocatoria">
+      <div id="fondosDetalleBody"></div>
+      <div class="fondos-actions">
+        <button class="btn btn-primary btn-sm" type="button" data-fondos-draft="" id="fondosDetallePreparar">🤖 Preparar postulación</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="fondosCerrarDetalle">Cerrar</button>
+      </div>
     </div>
   </div>
   <div id="calKpis" class="cal-kpis"></div>

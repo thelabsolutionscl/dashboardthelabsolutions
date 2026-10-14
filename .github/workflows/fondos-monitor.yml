@@ -1,0 +1,41 @@
+name: Detectar convocatorias fondos TLS
+
+on:
+  schedule:
+    - cron: '30 14 * * 1-5'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  detectar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probar parser de la fuente oficial
+        run: node --test tests/fondos-monitor.test.js
+      - name: Buscar nuevas ventanas oficiales Sercotec
+        run: node scripts/fondos-monitor.js
+      # GITHUB_TOKEN-created PRs do not trigger PR-check workflows automatically.
+      # This workflow NEVER updates the live catalog; a human must validate the
+      # official bases, update data/fondos-concursables.json and merge with CI.
+      - name: Proponer cambios para revisión
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: bot/revisar-fondos-sercotec
+          base: main
+          delete-branch: true
+          add-paths: data/fondos-detectados.json
+          title: "chore(fondos): revisar nuevas convocatorias detectadas en Sercotec"
+          body: |
+            Detección automática de posibles fondos con fecha en la RM o nacionales.
+            **NO son fechas verificadas para el Calendario**. Revisar bases,
+            confirmar compatibilidad con TLS, prórrogas y horarios, y recién
+            después actualizar data/fondos-concursables.json por PR con CI.
+          commit-message: "chore(fondos): actualizar detecciones para revisión"
