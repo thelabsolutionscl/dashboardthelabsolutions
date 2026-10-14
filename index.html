@@ -3932,6 +3932,18 @@
 #tab-calendario .fondos-modal h3{font-size:17px}
 #tab-calendario .fondos-modal p{font-size:12px;margin:10px 0;color:var(--text2)}
 #tab-calendario .fondos-warning{color:var(--warn)!important}
+#tab-calendario .fondos-cal-summary{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--border2);color:var(--text2);font-size:11px;line-height:1.5}
+#tab-calendario .fondos-cal-summary-text{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#tab-calendario .fondos-cal-summary-text b{color:var(--text)}
+#tab-calendario .fondos-undated-list{margin:0 14px 14px;padding:11px 12px;border-top:1px solid var(--border2);font-size:11px}
+#tab-calendario .fondos-undated-title{font-weight:750;margin-bottom:9px}
+#tab-calendario .fondos-undated-title small{font-weight:400;color:var(--text3)}
+#tab-calendario .fondos-undated-items{display:flex;flex-wrap:wrap;gap:7px}
+#tab-calendario .fondos-undated-chip{background:var(--surface2);color:var(--text2);border:1px solid var(--border2);border-radius:7px;padding:7px 10px;text-align:left;font:inherit;font-size:11px;cursor:pointer}
+#tab-calendario .fondos-undated-chip:hover{border-color:var(--accent);color:var(--text)}
+#tab-calendario .cal-ev.cal-fondo{font-weight:750;border-left-width:4px;line-height:1.3;background:var(--surface2)}
+#tab-calendario .cal-ev.cal-fondo:hover{outline:1px solid var(--accent)}
+
 </style>
 <div class="tab-panel pf" id="tab-calendario">
   <div class="section-header"><div><div class="section-title">Calendario operacional</div><div class="section-desc">Fechas límite de cotizaciones, metas internas, entregas de pedidos y agenda del equipo, con alertas y capacidad de Máquinas.</div></div>
@@ -3940,6 +3952,7 @@
       <button class="btn btn-ghost btn-sm" id="calGoogleBtn" onclick="calGoogleConnect()" title="Autorizar Google Calendar en este navegador">🔗 Conectar Google Calendar</button>
       <button class="btn btn-ghost btn-sm" id="calSyncBtn" onclick="calSyncAll()" title="Sincronizar eventos pendientes con Google Calendar">⇅ Sincronizar calendario</button>
       <button class="btn btn-ghost btn-sm" onclick="tvStartCalendario()" title="Mostrar únicamente la sección Calendario en pantalla completa">📺 Pantalla completa (TV)</button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="window.TLSFondos?.goToClosest?.()" title="Abrir el mes del hito concursable más cercano con fecha confirmada">🏛 Ver fondos en calendario</button>
       <button class="btn btn-primary btn-sm" onclick="openCalEventoModal()">＋ Evento</button>
     </div>
   </div>
@@ -4028,7 +4041,9 @@
       <div style="display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:2px;margin-left:auto"><button class="btn btn-ghost btn-sm" data-cal-view="mes" onclick="calSetVista('mes')">Mes</button><button class="btn btn-ghost btn-sm" data-cal-view="semana" onclick="calSetVista('semana')">Semana</button><button class="btn btn-ghost btn-sm" data-cal-view="agenda" onclick="calSetVista('agenda')">Agenda</button></div>
     </div>
     <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:10px 14px 0;border-top:1px solid var(--border2)"><span style="font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:800">Tipo</span><div id="calTipoChips" style="display:flex;gap:5px;flex-wrap:wrap"></div><span style="font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:800;margin-left:auto">Responsable</span><div id="calFiltroChips" style="display:flex;gap:5px;flex-wrap:wrap"></div></div>
+    <div id="fondosCalendarioResumen" class="fondos-cal-summary" role="status"></div>
     <div id="calGrid" style="padding:12px 14px"></div>
+    <div id="fondosCalendarioSinFecha" class="fondos-undated-list"></div>
   </div>
   <div class="cal-side-grid" style="margin-bottom:14px">
     <div class="card"><div class="card-header"><span class="card-title">📆 Próximos 14 días</span></div><div id="calProximos" style="padding:10px 14px"></div></div>
