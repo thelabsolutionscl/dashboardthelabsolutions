@@ -119,6 +119,21 @@ test('no acepta claves personales, URLs no oficiales ni correos externos como de
  assert.ok(h.calls().every(x=>JSON.parse(x.options.body).to[0]==='gustavo@thelab.solutions'));
  assert.equal(m.dueNotifications({schema:2,funds:fake.funds},at).length,0);
 });
+test('si el dashboard exige Access, carga desde el catálogo público de respaldo sin avisos falsos',async()=>{
+ const m=await module(),h=harness();
+ let tried=[];
+ const fallback=async(url,opts)=>{
+  tried.push(url);
+  if(url===m.FONDOS_CATALOGO_URL)return {ok:true,json:async()=>{throw Error('Access devolvió HTML')}};
+  if(url===m.FONDOS_CATALOGO_RESPALDO)return {ok:true,json:async()=>fake};
+  return h.fetcher(url,opts);
+ };
+ const output=await m.deliverFundAlerts(h.env,h.now,fallback);
+ assert.equal(output.sent,4);
+ assert.deepEqual(tried.slice(0,2),[m.FONDOS_CATALOGO_URL,m.FONDOS_CATALOGO_RESPALDO_URL||m.FONDOS_CATALOGO_RESPALDO]);
+ assert.equal(h.calls().length,4);
+});
+
 test('avisos dentro del dashboard solo para ambos usuarios y una vez por fecha',()=>{
  assert.match(cal,/notifyToday\(\)/);
  assert.match(cal,/personas:\['gustavo','nicanor'\]/);
