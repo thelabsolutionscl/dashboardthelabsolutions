@@ -30,12 +30,93 @@
   };
   let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false,searchTerm='';
   // DEMO independiente: solo UI local, nunca toca catálogos, eventos ni avisos.
-  let demoMode=false,demoStep='inicio';
+  let demoMode=false,demoStep='inicio',demoRunId=0;
+  const DEMO_QUESTION='TLS quiere evaluar un proyecto piloto para mejorar el prototipado y la impresión 3D. ¿Qué debería incluir en una postulación a un fondo de innovación y qué antecedentes faltan?';
+  let demoAgent={status:'idle',prompt:DEMO_QUESTION,result:'',error:'',source:''};
+  // No cambia los fondos del calendario ni produce notificaciones; la IA genera SOLO un borrador.
+  function demoLocalAnswer(prompt){
+    const words=compact(prompt);
+    const focus=/impresi[oó]n 3d|prototip|fabricaci[oó]n|pl[aá]/i.test(words)?'fabricación digital y prototipado':
+      /merchand|se[nñ]al|trofeo|acril/i.test(words)?'señalética, merchandising y fabricación publicitaria':'el proyecto descrito';
+    return [
+      'EVALUACIÓN DE EJEMPLO — SIMULACIÓN LOCAL (NO IA)',
+      '',
+      'Proyecto descrito: '+prompt,
+      '',
+      '1. Posible enfoque: formular un piloto verificable sobre '+focus+', con objetivos, beneficiarios, actividades y resultados medibles.',
+      '2. Comprobar antes de postular: bases vigentes, organismo, fecha, innovación exigida, antigüedad de la empresa, ventas, cofinanciamiento y gastos admisibles.',
+      '3. Datos que faltan: presupuesto y cotizaciones, indicadores de éxito, equipo, capacidad instalada, evidencia técnica y documentos tributarios.',
+      '4. Próximo paso sugerido: reunir las bases del fondo real y sus preguntas. Preparar respuestas únicamente con antecedentes confirmados.',
+      '',
+      'Esto no es una evaluación de elegibilidad ni una postulación enviada.'
+    ].join('\n');
+  }
+  function demoAgentPanel(){
+    const working=demoAgent.status==='working',done=demoAgent.status==='done',failed=demoAgent.status==='error';
+    const badge=working?'AGENTE PROCESANDO':done?(demoAgent.source==='ia'?'AGENTE IA · RESPUESTA OBTENIDA':'SIMULACIÓN LOCAL · SIN IA'):failed?'AGENTE NO DISPONIBLE':'PRUEBA EL AGENTE';
+    const stage=working?
+      '<div class="fondos-agent-working" role="status" aria-live="polite" aria-busy="true"><div class="fondos-agent-orbit" aria-hidden="true"><span>✦</span></div><div><b>El agente TLS está procesando tu solicitud…</b><p>Analizando el proyecto, identificando requisitos y preparando una respuesta.</p><div class="fondos-agent-work-steps"><span>Revisión del proyecto</span><span>Encaje y riesgos</span><span>Borrador de respuesta</span></div></div></div>':
+      done?'<div class="fondos-demo-agent-result" role="status" aria-live="polite"><b>✓ Análisis finalizado</b><span class="fondos-demo-agent-source">'+esc(demoAgent.source==='ia'?'Respuesta generada por IA':'Procesamiento local de ejemplo (no IA)')+'</span><pre>'+esc(demoAgent.result)+'</pre><button type="button" class="fondos-demo-copy" data-fondos-demo-copy>📋 Copiar resultado</button></div>':
+      failed?'<div class="fondos-demo-agent-error" role="alert"><strong>No se pudo completar la consulta a la IA.</strong><p>'+esc(demoAgent.error)+'</p><button type="button" data-fondos-demo-run-local>Probar simulación local sin IA</button></div>':
+      '<p class="fondos-demo-agent-hint">Escribe un caso sobre un proyecto de TLS y ejecútalo. El resultado dependerá de tu solicitud.</p>';
+    return '<div class="fondos-demo-screen fondos-demo-agent-screen"><div class="fondos-demo-eyebrow">04 / AGENTE DE POSTULACIONES · '+badge+'</div>'+
+      '<h4>Agente de fondos TLS</h4><p>Prueba un análisis de innovación. En modo DEMO nunca se enviarán formularios ni se generarán fechas o alertas.</p>'+
+      '<label for="fondosDemoPregunta" class="fondos-demo-agent-label">Describe el proyecto o lo que quieres preparar</label>'+
+      '<textarea id="fondosDemoPregunta" maxlength="1500" rows="3" placeholder="Describe tu proyecto de ejemplo…" '+(working?'disabled aria-disabled="true"':'')+'>'+esc(demoAgent.prompt)+'</textarea>'+
+      '<div class="fondos-demo-agent-controls"><button type="button" class="fondos-demo-agent-run" data-fondos-demo-run '+(working?'disabled aria-disabled="true"':'')+'>'+(working?'◌ Agente procesando…':'✦ Ejecutar análisis con agente')+'</button>'+
+      '<small>Ejemplo editable · No usar información confidencial.</small><span id="fondosDemoCopyNotice" aria-live="polite"></span></div>'+
+      stage+
+    '</div>';
+  }
+  async function runDemoAgent(forceLocal=false){
+    if(!demoMode||demoAgent.status==='working')return false;
+    const raw=String(document.getElementById('fondosDemoPregunta')?.value??demoAgent.prompt).trim();
+    if(raw.length<18||raw.length>1500){
+      demoAgent={...demoAgent,status:'error',error:'Describe un proyecto de entre 18 y 1.500 caracteres.',prompt:raw};
+      render();return false;
+    }
+    if(/(?:\bpat[A-Za-z0-9_.-]{20,}|\bsk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._-]{20,})/.test(raw)){
+      demoAgent={...demoAgent,status:'error',error:'Detecté una posible clave de acceso. Retírala antes de continuar.',prompt:raw};
+      render();return false;
+    }
+    const id=++demoRunId;
+    demoAgent={status:'working',prompt:raw,result:'',error:'',source:''};
+    demoStep='borrador';
+    render(); // Pintar el agente y spinner ANTES de llamar a cualquier API.
+    try{
+      let answer='',source='ia';
+      if(forceLocal||typeof window.callAgentClaude!=='function'){
+        source='local';
+        // Es una transformación local real del texto escrito, señalada siempre como simulación.
+        await new Promise(resolve=>setTimeout(resolve,650));
+        answer=demoLocalAnswer(raw);
+      }else{
+        const sys='Eres un agente demostrativo para postulaciones de The Lab Solutions en Chile. Estás en MODO DEMO y trabajas con un proyecto hipotético. Responde en español chileno, concreto, con 4 apartados: Idea y ajuste potencial, riesgos de elegibilidad, borrador editable, antecedentes faltantes. No inventes convocatorias reales, fechas, requisitos comprobados, montos, ventas ni documentos. No afirmes haber revisado bases ni enviado solicitudes.';
+        const user='ANÁLISIS DE PRUEBA, NO POSTULACIÓN REAL. Proyecto de ejemplo:\n'+raw+'\n\nDevuelve un borrador breve, con datos a confirmar.';
+        answer=String(await window.callAgentClaude('CEO',sys,user,{maxTokens:900})||'').trim();
+        if(!answer)throw new Error('El motor respondió sin contenido.');
+      }
+      if(id!==demoRunId||!demoMode)return false;
+      demoAgent={...demoAgent,status:'done',source,result:answer};
+      render();
+      return true;
+    }catch(e){
+      if(id!==demoRunId||!demoMode)return false;
+      demoAgent={...demoAgent,status:'error',error:String(e?.message||e||'Error de conexión.').slice(0,280),source:'ia'};
+      render();return false;
+    }
+  }
+  function toggleDemo(){
+    demoMode=!demoMode;demoRunId++;
+    demoStep=demoMode?'borrador':'inicio';
+    demoAgent={status:'idle',prompt:DEMO_QUESTION,result:'',error:'',source:''};
+    render();
+    if(demoMode)void runDemoAgent();
+  }
   const demoISO=days=>{
     const d=new Date(today()+'T12:00:00');d.setDate(d.getDate()+days);
     return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')+'T12:00';
   };
-  function toggleDemo(){demoMode=!demoMode;demoStep='inicio';render();}
   function demoIllustration(){
     const opening=pretty(demoISO(3)),closing=pretty(demoISO(17));
     const screens={
@@ -43,11 +124,11 @@
       requisitos:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">01 / REQUISITOS</div><h4>Evaluación de compatibilidad</h4><p><strong>Fondo ficticio:</strong> Innovación en fabricación 3D.</p><p><strong>Posible encaje:</strong> Desarrollo de nuevos procesos de impresión.</p><p><strong>Por comprobar:</strong> antigüedad tributaria, ventas, inversión, cofinanciamiento y mérito innovador.</p><small>En un concurso real se consultan siempre las bases oficiales.</small></div>',
       fechas:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">02 / CALENDARIO</div><h4>Así se ven las fechas verificadas</h4><div class="fondos-demo-dates"><div><small>🟢 Apertura simulada</small><b>'+esc(opening)+'</b></div><div><small>🟠 Cierre simulado</small><b>'+esc(closing)+'</b></div></div><p>Cuando existe un plazo oficial, aparece en el Calendario. Estos días de ejemplo <strong>no se incorporan</strong> a la agenda real.</p></div>',
       alerta:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">03 / AVISOS</div><h4>Ejemplo de aviso a gerencia</h4><div class="fondos-demo-email"><span>✉ Correo simulado</span><b>🟢 Abre hoy: Innovación para TLS</b><small>Destinatarios de ejemplo: Gustavo y Nicanor</small><p>Revisa requisitos, monto y bases antes de iniciar la postulación.</p></div><small>Vista previa local. No se utiliza Cloudflare, Resend ni las casillas reales.</small></div>',
-      borrador:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">04 / ASISTENTE</div><h4>Cómo ayuda el agente de postulaciones</h4><p><strong>Pregunta de ejemplo:</strong> ¿Qué mejora propone el proyecto?</p><div class="fondos-demo-email"><span>✦ Borrador ilustrativo</span><p>Proponemos investigar y validar una mejora en los procesos de fabricación digital mediante prototipos y pruebas medibles.</p></div><p><strong>Datos pendientes:</strong> presupuesto, equipo, evidencia técnica y calendario.</p><small>Respuesta prediseñada: no se llama al motor IA ni se envía un formulario.</small></div>'
+      borrador:demoAgentPanel()
     };
-    const steps=[['requisitos','◇ Ver requisitos'],['fechas','▦ Ver calendario'],['alerta','✉ Simular aviso'],['borrador','✦ Ver borrador']];
+    const steps=[['requisitos','◇ Ver requisitos'],['fechas','▦ Ver calendario'],['alerta','✉ Simular aviso'],['borrador','✦ Ejecutar agente']];
     return '<section class="fondos-demo-panel" aria-label="Demo interactiva de fondos TLS">'+
-      '<div class="fondos-demo-top"><div><span class="fondos-demo-label">◈ MODO DEMO · SIMULACIÓN</span><h3>Prueba cada función con un fondo ficticio.</h3><p>Los datos reales siguen intactos. No se crean eventos, no se manda correo y no se envían postulaciones.</p></div><button type="button" data-fondos-demo-toggle class="fondos-demo-exit">↩ Volver al radar real</button></div>'+
+      '<div class="fondos-demo-top"><div><span class="fondos-demo-label">◈ MODO DEMO · SIMULACIÓN</span><h3>El agente procesa un proyecto de ejemplo, y puedes recorrer las demás funciones.</h3><p>Los datos reales siguen intactos. No se crean eventos, no se manda correo y no se envían postulaciones.</p></div><button type="button" data-fondos-demo-toggle class="fondos-demo-exit">↩ Volver al radar real</button></div>'+
       '<div class="fondos-demo-steps" role="group" aria-label="Escenas de la demostración">'+steps.map(([key,label])=>'<button type="button" data-fondos-demo-step="'+key+'" aria-pressed="'+(demoStep===key?'true':'false')+'" class="'+(demoStep===key?'active':'')+'">'+label+'</button>').join('')+'</div>'+
       '<div class="fondos-demo-stage">'+screens[demoStep]+'</div>'+
       '<p class="fondos-demo-footnote">Los nombres y plazos mostrados en DEMO son simulados. Ningún evento, notificación o solicitud será real.</p>'+
@@ -356,11 +437,21 @@
       'ANTECEDENTES PROPORCIONADOS Y CONFIRMADOS POR EL USUARIO (si existen):\n'+(evidence||'Ninguno; pedir antes de afirmar.'),
     ].join('\n\n');
     const btn=document.getElementById('fondosGenerar');
-    busy=true;btn&&(btn.disabled=true);output.textContent='Preparando borrador con IA…';
+    const prevLabel=btn?.innerHTML||'';
+    busy=true;
+    if(btn){btn.disabled=true;btn.textContent='✦ Agente TLS trabajando…';}
+    output.classList?.add('fondos-agent-loading');
+    output.setAttribute?.('aria-busy','true');
+    output.textContent='✦ AGENTE TLS PROCESANDO\n\nAnalizando las preguntas y requisitos…\nPreparando un borrador sin inventar información…';
     try{const result=await window.callAgentClaude('CEO',sys,user,{maxTokens:1400});
       output.textContent=String(result||'Sin respuesta del motor IA.');
     }catch(e){output.textContent='No se pudo generar el borrador: '+String(e.message||e)+'. Puedes reintentar.';}
-    finally{busy=false;btn&&(btn.disabled=false);}
+    finally{
+      busy=false;
+      output.classList?.remove('fondos-agent-loading');
+      output.setAttribute?.('aria-busy','false');
+      if(btn){btn.disabled=false;btn.innerHTML=prevLabel;}
+    }
   }
   async function copyDraft(){
     const value=document.getElementById('fondosRespuesta')?.textContent||'';
@@ -377,11 +468,22 @@
     if(typeof document.createElement==='function'&&document.head&&!document.getElementById('fondosTlsStyles')){
       const sheet=document.createElement('link');
       sheet.rel='stylesheet';sheet.id='fondosTlsStyles';
-      sheet.href=new URL('fondos-tls.css?v=20261014demo',document.baseURI).href;
+      sheet.href=new URL('fondos-tls.css?v=20261014agent',document.baseURI).href;
       document.head.appendChild(sheet);
     }
     root.addEventListener('click',e=>{
       if(e.target.closest('[data-fondos-demo-toggle]')){toggleDemo();return;}
+      if(e.target.closest('[data-fondos-demo-run]')&&demoMode){void runDemoAgent();return;}
+      if(e.target.closest('[data-fondos-demo-run-local]')&&demoMode){void runDemoAgent(true);return;}
+      if(e.target.closest('[data-fondos-demo-copy]')&&demoMode&&demoAgent.status==='done'){
+        if(navigator.clipboard?.writeText){
+          navigator.clipboard.writeText(demoAgent.result).then(()=>{
+            const notice=document.getElementById('fondosDemoCopyNotice');
+            if(notice)notice.textContent='Resultado copiado.';
+          }).catch(()=>{const notice=document.getElementById('fondosDemoCopyNotice');if(notice)notice.textContent='No se pudo copiar. Selecciona el texto.';});
+        }
+        return;
+      }
       const scene=e.target.closest('[data-fondos-demo-step]');
       if(scene&&demoMode){demoStep=scene.dataset.fondosDemoStep;render();return;}
       const quick=e.target.closest('[data-fondos-view]');
@@ -397,6 +499,7 @@
     if(filter)filter.addEventListener('change',()=>{mode=filter.value;render();});
     document.getElementById('fondosList')?.addEventListener('input',e=>{
       if(e.target.id==='fondosBuscar'){searchTerm=e.target.value;applySearch();}
+      if(e.target.id==='fondosDemoPregunta'&&demoMode){demoAgent.prompt=e.target.value;}
     });
     document.addEventListener('keydown',e=>{
       if(e.key==='Escape'&&document.getElementById('fondosDetalleModal')?.style.display==='flex')close();
@@ -412,7 +515,7 @@
     // Ventana abierta durante horas: recordar nuevas aperturas y cierres.
     setInterval(notifyToday,15*60*1000);
   }
-  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode};
+  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode,runDemoAgent,demoAgentState:()=>({...demoAgent})};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();

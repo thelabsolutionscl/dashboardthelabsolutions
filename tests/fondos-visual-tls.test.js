@@ -29,7 +29,7 @@ function view(){
     addEventListener:(event,fn)=>{hooks['doc:'+event]=fn;}
   };
   const ctx={window:{renderCalendario(){}},document:doc,URL,Date,Intl,Number,JSON,Promise,console,
-    setInterval:()=>0,localStorage:{
+    setInterval:()=>0,setTimeout:(fn)=>{fn();return 0;},localStorage:{
       getItem:k=>state.get(k)||null,
       setItem:(k,v)=>state.set(k,v)
     },fetch:async()=>({ok:true,json:async()=>catalog})};
@@ -116,7 +116,7 @@ test('botón DEMO cambia solo la presentación, nunca los eventos oficiales o ca
   assert.doesNotMatch(v.list.innerHTML,/fondos-tls is-demo/);
   assert.equal(JSON.stringify(v.api.eventList()),originalEvents);
 });
-test('recorrido DEMO permite ver fechas, aviso y borrador simulados sin IA ni Resend',async()=>{
+test('recorrido DEMO permite ver fechas, aviso y agente cargando, sin avisos reales',async()=>{
   const v=view();await v.api.load();
   v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-toggle]'?{}:null}});
   assert.equal(v.api.isDemo(),true);
@@ -124,13 +124,13 @@ test('recorrido DEMO permite ver fechas, aviso y borrador simulados sin IA ni Re
     ['requisitos','Evaluación de compatibilidad'],
     ['fechas','Apertura simulada'],
     ['alerta','Correo simulado'],
-    ['borrador','Borrador ilustrativo']]){
+    ['borrador','AGENTE DE POSTULACIONES']]){
     v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-step]'?{dataset:{fondosDemoStep:scene}}:null}});
     assert.match(v.list.innerHTML,new RegExp(marker));
     assert.match(v.list.innerHTML,new RegExp('data-fondos-demo-step="'+scene+'" aria-pressed="true"'));
   }
-  assert.match(v.list.innerHTML,/no se llama al motor IA/i);
-  assert.match(v.list.innerHTML,/ni se envía un formulario/i);
+  assert.match(v.list.innerHTML,/El agente TLS está procesando|Análisis finalizado/i);
+  assert.match(v.list.innerHTML,/no se envían postulaciones/i);
   assert.match(css,/fondos-tls\.is-demo/);
   assert.match(css,/fondos-demo-stage/);
   v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-toggle]'?{}:null}});
@@ -142,4 +142,71 @@ test('recarga nueva arranca siempre en modo real, no reutiliza estado DEMO',asyn
   assert.equal(another.api.isDemo(),false);
   assert.match(another.list.innerHTML,/DEMO · Ver funcionamiento/);
   assert.equal(another.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2);
+});
+
+test('DEMO ejecuta IA de verdad, muestra spinner mientras responde y después el resultado',async()=>{
+  const v=view();await v.api.load();
+  const eventsBefore=JSON.stringify(v.api.eventList()),datesBefore=JSON.stringify(v.api.allDates());
+  let finish,parameters=[];
+  v.ctx.window.callAgentClaude=(...args)=>{parameters=args;return new Promise(resolve=>{finish=resolve;});};
+  v.api.toggleDemo();
+  assert.equal(v.api.isDemo(),true);
+  assert.equal(v.api.demoAgentState().status,'working');
+  assert.match(v.list.innerHTML,/fondos-agent-working/);
+  assert.match(v.list.innerHTML,/role="status" aria-live="polite" aria-busy="true"/);
+  assert.match(v.list.innerHTML,/Agente TLS está procesando/i);
+  assert.ok(parameters.length>=3);
+  assert.equal(parameters[0],'CEO');
+  assert.match(parameters[2],/ANÁLISIS DE PRUEBA/);
+  finish('Informe IA único: validar costos y antecedentes antes de postular.');
+  await new Promise(setImmediate);
+  assert.equal(v.api.demoAgentState().status,'done');
+  assert.equal(v.api.demoAgentState().source,'ia');
+  assert.match(v.list.innerHTML,/Informe IA único/);
+  assert.doesNotMatch(v.list.innerHTML,/fondos-agent-working/);
+  assert.equal(JSON.stringify(v.api.eventList()),eventsBefore);
+  assert.equal(JSON.stringify(v.api.allDates()),datesBefore);
+  assert.match(css,/fondos-agent-orbit/);
+  assert.match(css,/@keyframes fondosAgentOrbit/);
+});
+test('fallo de IA no se oculta: muestra error y permite procesar versión local',async()=>{
+  const v=view();await v.api.load();
+  v.ctx.window.callAgentClaude=async()=>{throw Error('Proxy no disponible');};
+  v.api.toggleDemo();
+  await new Promise(setImmediate);
+  assert.equal(v.api.demoAgentState().status,'error');
+  assert.match(v.list.innerHTML,/Proxy no disponible/);
+  assert.match(v.list.innerHTML,/data-fondos-demo-run-local/);
+  const local=v.api.runDemoAgent(true);
+  assert.equal(v.api.demoAgentState().status,'working');
+  await local;
+  assert.equal(v.api.demoAgentState().status,'done');
+  assert.equal(v.api.demoAgentState().source,'local');
+  assert.match(v.list.innerHTML,/SIMULACIÓN LOCAL \(NO IA\)/);
+});
+test('DEMO sin conexión IA responde con simulación local, editable y señalada',async()=>{
+  const v=view();await v.api.load();
+  v.api.toggleDemo();
+  await new Promise(setImmediate);
+  assert.equal(v.api.demoAgentState().status,'done');
+  assert.equal(v.api.demoAgentState().source,'local');
+  v.nodes.fondosDemoPregunta={value:'Quiero mejorar la señalética y merchandising para una activación, preparando un fondo de innovación hipotético.'};
+  v.hooks['list:input']({target:{id:'fondosDemoPregunta',value:v.nodes.fondosDemoPregunta.value}});
+  await v.api.runDemoAgent(true);
+  assert.match(v.api.demoAgentState().result,/señalética, merchandising/i);
+  assert.match(v.list.innerHTML,/no IA/i);
+});
+test('al salir de DEMO se descartan respuestas pendientes del agente',async()=>{
+  const v=view();await v.api.load();
+  let finish;
+  v.ctx.window.callAgentClaude=()=>new Promise(resolve=>{finish=resolve;});
+  v.api.toggleDemo();
+  assert.equal(v.api.demoAgentState().status,'working');
+  v.api.toggleDemo();
+  assert.equal(v.api.isDemo(),false);
+  finish('Resultado que llegó después de cerrar');
+  await new Promise(setImmediate);
+  assert.equal(v.api.isDemo(),false);
+  assert.doesNotMatch(v.list.innerHTML,/Resultado que llegó después/);
+  assert.equal(v.api.demoAgentState().status,'idle');
 });
