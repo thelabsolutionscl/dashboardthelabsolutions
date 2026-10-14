@@ -6,6 +6,7 @@
 
   const MODULES = [
     { src: 'js/calendario-base.js', ready: () => typeof window.renderCalendario === 'function' },
+    { src: 'js/calendario-fondos.js', ready: () => !!window.TLSFondos },
     { src: 'js/calendario-operaciones.js', ready: () => !!window.CalOps },
     { src: 'js/calendario-collapsible.js', ready: () => !!window.CalendarCollapsible },
     { src: 'js/tv-logo-fix.js', ready: () => !!window.TVLogoFix },
