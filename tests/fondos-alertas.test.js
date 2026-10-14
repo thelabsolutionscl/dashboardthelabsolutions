@@ -152,3 +152,24 @@ test('amplió búsqueda y conservó historial rastreable Corfo/Sercotec con lím
  assert.ok(catalog.funds.every(f=>/^https:\/\//.test(f.source)));
  assert.ok(catalog.funds.some(f=>f.open==null&&f.close==null));
 });
+
+
+test('auditoría de cobertura: nuevos programas sin fechas falsas ni notificaciones automáticas',async()=>{
+ const m=await module();
+ const expected=[
+  'sercotec-promocion-canales-rm-vigilar',
+  'corfo-red-asociativa-rm-vigilar',
+  'sercotec-sello-impacta-sustentable-vigilar'
+ ];
+ for(const id of expected){
+  const entry=catalog.funds.find(f=>f.id===id);
+  assert.ok(entry,id+' no está en el seguimiento');
+  assert.equal(entry.open,null);
+  assert.equal(entry.close,null);
+  assert.ok(/^https:\/\//.test(entry.source));
+  assert.match(entry.category,/no necesariamente subsidio|no subsidio|Cooperación/);
+ }
+ assert.equal(m.dueNotifications(catalog,new Date('2026-11-15T12:20:00.000Z')).length,0);
+ assert.equal(new Set(catalog.funds.map(f=>f.id)).size,catalog.funds.length,'evitar duplicados');
+ assert.ok(catalog.funds.length>=19);
+});
