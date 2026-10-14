@@ -130,7 +130,7 @@ test('recorrido DEMO permite ver fechas, aviso y borrador simulados sin IA ni Re
     assert.match(v.list.innerHTML,new RegExp('data-fondos-demo-step="'+scene+'" aria-pressed="true"'));
   }
   assert.match(v.list.innerHTML,/no se llama al motor IA/i);
-  assert.match(v.list.innerHTML,/no se envía un formulario/i);
+  assert.match(v.list.innerHTML,/ni se envía un formulario/i);
   assert.match(css,/fondos-tls\.is-demo/);
   assert.match(css,/fondos-demo-stage/);
   v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-toggle]'?{}:null}});
