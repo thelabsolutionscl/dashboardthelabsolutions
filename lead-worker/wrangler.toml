@@ -40,6 +40,13 @@ CLEANUP_QUEUE_DAYS = "30"
 RESEND_FROM = "The Lab Solutions <hola@thelab.solutions>"
 # Remitente VISIBLE de la auto-respuesta al cliente (nombre de quien atiende). Dominio verificado en Resend.
 RESEND_FROM_CLIENTE = "Andrea Garrido - The Lab Solutions <hola@thelab.solutions>"
+# Alertas oficiales de fondos concursables para las dos personas de gerencia.
+# Hora efectiva: primer cron de las 09:17 America/Santiago, independiente de DST.
+# Requiere RESEND_API_KEY y KV RL ya configurados; sin ellos no envía.
+FONDOS_NOTIFY_ENABLED = "true"
+FONDOS_NOTIFY_TO_GUSTAVO = "gustavo@thelab.solutions"
+FONDOS_NOTIFY_TO_NICANOR = "nicanor@thelab.solutions"
+
 WHATSAPP_NUMBER = "56928785039"
 # Newsletter: doble opt-in. Con RESEND_API_KEY configurado, /newsletter envía un correo
 # de confirmación y NO suscribe hasta que el usuario hace clic. Poner "false" para alta directa.
