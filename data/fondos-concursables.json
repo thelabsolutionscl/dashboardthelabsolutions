@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "reviewedAt": "2026-10-14",
-  "scope": "Llamados RM y nacionales para empresas establecidas vinculadas a fabricación digital, POP, productos 3D, inversión, digitalización e I+D; elegibilidad definitiva pendiente de validar ventas, primera categoría, antigüedad, territorio, foco, documentos y cofinanciamiento. Catálogo orientativo de convocatorias monetarias y otras oportunidades empresariales útiles, diferenciadas por categoría; se excluyen programas para empresas nuevas sin ventas si TLS no califica.",
-  "disclaimer": "Registro ampliado verificado en las páginas oficiales Sercotec y Corfo hasta 14/10/2026. No representa TODOS los fondos de Chile ni actualizaciones en tiempo real. Solo hay alertas cuando existe fecha oficial concreta en el catálogo, y no se notifica sobre fechas históricas.",
+  "scope": "Convocatorias nacionales y RM útiles a la fabricación digital y servicios TLS, más vigilancia de cuatro programas solicitados para noviembre aunque pueden NO ser compatibles. Compatibilidad y fechas futuras requieren bases verificadas.",
+  "disclaimer": "Curado con fuentes Sercotec, Corfo, ProChile y Start-Up Chile al 14/10/2026. Semilla Inicia, Semilla Expande, futuro Crea y Valida y futuro BIG carecen de nueva apertura/cierre confirmados para noviembre 2026: solo seguimiento sin alarmas de fechas supuestas. No representa todos los fondos del país ni confirma elegibilidad.",
   "funds": [
     {
       "id": "sercotec-crece-urbano-rm-2026",
@@ -393,6 +393,81 @@
       "info": "https://www.prochile.gob.cl/herramientas/concursos/",
       "verified": "La próxima edición aún no tiene apertura ni cierre confirmados al 14/10/2026. La convocatoria 2027 está registrada por separado como historial.",
       "requirements": "Comprobar nueva convocatoria, sectores y servicios admitidos, organización que puede postular y período oficial."
+    },
+    {
+      "id": "corfo-semilla-inicia-nueva-vigilar",
+      "name": "Corfo — Semilla Inicia (vigilar noviembre 2026)",
+      "organizer": "Corfo",
+      "region": "Región Metropolitana / según convocatoria futura",
+      "category": "Emprendimiento inicial / primeras ventas",
+      "fit": "No elegible para TLS existente con ventas",
+      "fitReason": "TLS opera con ventas; solo un emprendimiento nuevo genuino podría evaluarse bajo reglas de antigüedad, ausencia de ventas y vinculación.",
+      "open": null,
+      "close": null,
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-inicia/",
+      "info": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-inicia/",
+      "verified": "Ficha Corfo: RM abrió 30/04/2026 y cerró 29/05/2026; ninguna nueva apertura en noviembre de 2026 confirmada oficialmente al 14/10/2026.",
+      "requirements": "La versión consultada exige personas jurídicas con menos de 18 meses de iniciación de actividades y sin ventas. Validar bases, territorio y requisitos del nuevo llamado."
+    },
+    {
+      "id": "corfo-semilla-expande-nueva-vigilar",
+      "name": "Corfo — Semilla Expande (vigilar noviembre 2026)",
+      "organizer": "Corfo",
+      "region": "Todo Chile / Metropolitana según próxima edición",
+      "category": "Emprendimiento innovador / primeras ventas",
+      "fit": "Muy condicionada a antigüedad y ventas",
+      "fitReason": "Requiere solución innovadora propia y elegibilidad de la persona jurídica. TLS podría quedar excluida por antigüedad o monto de ventas; no asumir acceso.",
+      "open": null,
+      "close": null,
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-expande/",
+      "info": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-expande/",
+      "verified": "Ficha Corfo: llamado nacional 15/01/2026 a 24/02/2026; no hay fecha confirmada oficialmente para otro llamado en noviembre de 2026 al 14/10/2026.",
+      "requirements": "Persona jurídica con menos de 36 meses de iniciación de actividades y ventas netas máximo $80.000.000 en últimos 12 meses, según ficha del programa. Confirmar cambios en nuevas bases."
+    },
+    {
+      "id": "corfo-crea-y-valida-proxima-vigilar",
+      "name": "Corfo — Crea y Valida (nuevo llamado; vigilar noviembre 2026)",
+      "organizer": "Corfo",
+      "region": "Nacional (sujeto a nuevas bases)",
+      "category": "I+D / fabricación avanzada / prototipado",
+      "fit": "Potencialmente alta solo para I+D demostrable",
+      "fitReason": "Para un desarrollo nuevo de tecnologías, materiales, productos o procesos de manufactura 3D con investigación y desarrollo, no mera compra de equipos. No duplicar convocatoria histórica de mayo-agosto.",
+      "open": null,
+      "close": null,
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
+      "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
+      "verified": "Convocatoria oficial 2026 abrió 19/05 y cerró 04/08. La fecha 27/11/2026 en la ficha es de resultados, NO una nueva apertura. No hay segunda ventana confirmada al 14/10/2026.",
+      "requirements": "Personas jurídicas con al menos 24 meses de primera categoría, ventas previas e I+D. En 2026 el perfil era obligatorio y tenía fecha independiente; comprobar nuevas bases y fases."
+    },
+    {
+      "id": "startupchile-big-proximo-vigilar",
+      "name": "Start-Up Chile — Build, Ignite y Growth (vigilar noviembre 2026)",
+      "organizer": "Start-Up Chile / Corfo",
+      "region": "Chile y convocatorias internacionales",
+      "category": "Startup tecnológica / aceleración",
+      "fit": "Condicional: innovación escalable, etapa y antigüedad",
+      "fitReason": "La fabricación por encargo no basta. Solo calzaría si TLS presenta negocio tecnológico propio, escalable, acorde con línea Build/Ignite/Growth y exigencias de bases.",
+      "open": null,
+      "close": null,
+      "source": "https://startupchile.org/",
+      "info": "https://startupchile.org/postula/build/",
+      "verified": "Start-Up Chile informa BIG 12 cerrado, abierto en mayo de 2026; BIG 11 abrió noviembre de 2025, pero eso NO confirma una nueva ventana en noviembre de 2026 al 14/10/2026.",
+      "requirements": "Proyecto tecnológico innovador, escalabilidad, propiedad, antigüedad e ingresos acordes con línea; revisar requisitos distintos de Build, Ignite y Growth."
+    },
+    {
+      "id": "startupchile-big11-historico-2025",
+      "name": "Start-Up Chile — BIG 11 Build (histórico 2025)",
+      "organizer": "Start-Up Chile / Corfo",
+      "region": "Nacional / internacional",
+      "category": "Aceleración / historial verificable",
+      "fit": "Histórico, no postulación vigente",
+      "fitReason": "Referencia únicamente: las fechas de 2025 no permiten suponer fechas para 2026.",
+      "open": "2025-11-05T13:00",
+      "close": "2025-11-28T13:00",
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/start-up-chile-build-11-2025/",
+      "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/start-up-chile-build-11-2025/",
+      "verified": "Ficha oficial Corfo Start-Up Chile Build 11: apertura 05/11/2025 13:00 y cierre 28/11/2025 13:00. Histórico; sin alertas retroactivas.",
+      "requirements": "Se aplicaron las bases de BIG 11. La nueva convocatoria debe evaluarse por separado, según su publicación oficial."
     }
   ]
 }
