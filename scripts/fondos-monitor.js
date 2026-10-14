@@ -36,15 +36,18 @@ function candidates(html){
   const lines=plain(html),found=new Map();
   for(let i=0;i<lines.length;i++){
     if(!/^Inicio\s*:?\s*/i.test(lines[i]))continue;
-    const before=lines.slice(Math.max(0,i-15),i);
-    const name=[...before].reverse().find(s=>RELEVANT.test(s)&&!/^Inicio\b|^Cierre\b/.test(s)&&s.length>=7&&s.length<=200);
-    if(!name)continue;
+    // Asociar siempre con el título más cercano; nunca reutilizar el nombre
+    // de la tarjeta anterior si esta no es un fondo relevante para TLS.
+    const title=lines.slice(Math.max(0,i-3),i).reverse().find(s=>!/^Inicio\b|^Cierre\b/.test(s));
+    if(!title||!RELEVANT.test(title)||title.length<7||title.length>200)continue;
+    const name=title;
     let open=dt(lines[i]);
     if(!open&&i+1<lines.length)open=dt(lines[i+1]);
     if(!open||Number(open.slice(0,4))<YEAR)continue;
     let close='',region='';
-    for(let j=i+1;j<Math.min(i+25,lines.length);j++){
-      if(j>i+2&&/^Inicio\s*:/i.test(lines[j]))break;
+    for(let j=i+1;j<Math.min(i+7,lines.length);j++){
+      // No cruzar el límite de una ficha hacia la siguiente convocatoria.
+      if(j>i+1&&(/^Inicio\s*:/i.test(lines[j])||RELEVANT.test(lines[j])&&!/^Cierre\b/i.test(lines[j])))break;
       if(!close&&/^Cierre\s*:?\s*/i.test(lines[j]))close=dt(lines[j])||dt(lines[j+1]);
       if(!region&&/Regi[oó]n Metropolitana|(?:^|\s)Nacional(?:$|\s)/i.test(lines[j]))region=/Metropolitana/i.test(lines[j])?'Región Metropolitana':'Nacional';
     }
