@@ -178,7 +178,6 @@
     const watch=funds.filter(pending).length;
     const future=funds.filter(f=>!!iso(f.open)&&iso(f.open)>=now).length;
     const historical=funds.filter(f=>hasDate(f)&&f.close&&f.close.slice(0,10)<now).length;
-    const active=funds.filter(f=>tone(f)==='abierto').length;
     const shown=funds.filter(f=>mode==='todos'||(mode==='sin-fechas'?pending(f):
       mode==='proximos'?(!pending(f)&&(!f.close||f.close.slice(0,10)>=now)):
       mode==='cerrados'&&hasDate(f)&&!!f.close&&f.close.slice(0,10)<now));
@@ -275,7 +274,6 @@
     const modal=document.getElementById('fondosDetalleModal');
     const container=document.getElementById('fondosDetalleBody');
     if(!modal||!container)return;
-    const stage=tone(f);
     container.innerHTML='<div class="fondos-detail-shell">'+
       '<div class="fondos-eyebrow"><span class="fondos-live-dot" aria-hidden="true"></span>'+esc(f.organizer)+' · TLS FUNDING RADAR</div>'+
       '<h3 class="fondos-detail-title">'+esc(f.name)+'</h3>'+
