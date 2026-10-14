@@ -24,7 +24,7 @@
       source:f.source,info:allowedUrl(f.info)?f.info:f.source,
       verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900)};
   };
-  let funds=[],error='',updated='',mode='proximos',selected='',inFlight=null,busy=false;
+  let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false;
   const byId=id=>funds.find(f=>f.id===id);
   const hasDate=f=>!!(f.open||f.close);
   const pending=f=>!hasDate(f);
