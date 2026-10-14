@@ -47,7 +47,7 @@ test('descubrimientos deben verificarse antes de catálogo productivo',()=>{
  const wf=fs.readFileSync(path.join(__dirname,'../.github/workflows/fondos-monitor.yml'),'utf8');
  const script=fs.readFileSync(path.join(__dirname,'../scripts/fondos-monitor.js'),'utf8');
  const curated=JSON.parse(fs.readFileSync(path.join(__dirname,'../data/fondos-concursables.json'),'utf8'));
- assert.match(wf,/add-paths: data\/fondos-detectados\.json/);
+ assert.match(wf,/add-paths:\\s*\\|[\\s\\S]*?data\\/fondos-detectados\\.json/);
  assert.doesNotMatch(wf,/add-paths: data\/fondos-concursables\.json/);
  assert.match(script,/No calendar dates were auto-published/);
  assert.ok(curated.funds.every(x=>x.source.startsWith('https://')));
