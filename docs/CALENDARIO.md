@@ -123,3 +123,16 @@ Fuentes:
 - https://www.corfo.gob.cl/sites/cpp/convocatoria/start-up-chile-build-11-2025/
 - https://startupchile.org/
 - https://www.prochile.gob.cl/herramientas/concursos/
+
+### Interfaz TLS para fondos (diseño octubre 2026)
+
+El módulo **Fondos concursables** conserva su ubicación dentro de Calendario, el catálogo oficial y el copiloto, pero presenta la información con el lenguaje visual nativo de The Lab Solutions: fondo dark, acentos cyan, panel tipo glass, indicadores de oportunidades, tarjetas y estados legibles. La hoja `fondos-tls.css` se carga solo desde `js/calendario-fondos.js`, para no modificar la estética de otros módulos.
+
+- **Radar superior**: total de programas, pendientes de nueva convocatoria, aperturas futuras con fecha oficial y convocatorias cerradas; los números representan registros en el catálogo y no subsidios concedidos ni elegibilidad comprobada.
+- **Filtros y búsqueda**: Todos, En seguimiento, Con fechas próximas e Históricos, más texto por nombre, organismo, categoría o pertinencia. El filtro de la sección original continúa sincronizado.
+- **Tarjetas**: primero los cuatro programas en seguimiento especial de noviembre, después llamados vigentes/próximos y el resto. Explican encaje preliminar con TLS, región, organismo, ventana oficial cuando existe, botón para saltar al calendario, enlace a bases y acceso al agente para preparar un **borrador**, sin suponer que una postulación fue enviada.
+- **Detalle ampliado**: requisitos, justificación, respaldo, fechas y enlace oficial. Tecla Escape cierra el diálogo; se respetan los accesos ya existentes.
+- **Diseño adaptable** a pantallas pequeñas y con estilos de foco visible, y compatibilidad con la preferencia de movimiento reducido.
+- **Seguridad funcional**: búsqueda y presentación solo usan texto escapado del catálogo aprobado; nunca alteran fechas, alertas del Worker, Google Calendar, elegibilidad ni envío de formularios externos.
+
+Pruebas: `tests/fondos-visual-tls.test.js` más las auditorías preexistentes de `tests/calendario-fondos.test.js` y `tests/fondos-alertas.test.js`.

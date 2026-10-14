@@ -28,7 +28,7 @@
       source:f.source,info:allowedUrl(f.info)?f.info:f.source,
       verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900)};
   };
-  let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false;
+  let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false,searchTerm='';
   const byId=id=>funds.find(f=>f.id===id);
   const hasDate=f=>!!(f.open||f.close);
   const pending=f=>!hasDate(f);
@@ -139,32 +139,111 @@
     }
   }
   const link=(url,label)=>allowedUrl(url)?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>':'';
+  const radarIds=new Set(['corfo-semilla-inicia-nueva-vigilar','corfo-semilla-expande-nueva-vigilar','corfo-crea-y-valida-proxima-vigilar','startupchile-big-proximo-vigilar']);
+  const compact=txt=>String(txt||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  function tone(f){
+    const s=status(f);
+    if(pending(f))return 'seguimiento';
+    if(s==='Cerrado')return 'cerrado';
+    if(s==='Próximamente')return 'proximo';
+    return 'abierto';
+  }
+  function countFor(f){return compact([f.name,f.organizer,f.region,f.category,f.fit,f.fitReason].join(' '));}
+  function applySearch(){
+    const root=document.getElementById('fondosList');
+    if(!root||typeof root.querySelectorAll!=='function')return;
+    const q=compact(searchTerm.trim());
+    let visible=0;
+    root.querySelectorAll('[data-fondos-card]').forEach(node=>{
+      const item=byId(node.dataset.fondosCard);
+      const matches=!!item&&(!q||countFor(item).includes(q));
+      node.hidden=!matches;
+      if(matches)visible++;
+    });
+    const count=root.querySelector('[data-fondos-count]');
+    if(count)count.textContent=visible+' '+(visible===1?'oportunidad':'oportunidades')+' visibles';
+    const empty=root.querySelector('[data-fondos-no-match]');
+    if(empty)empty.hidden=visible!==0;
+  }
   function render(){
     const root=document.getElementById('fondosList');
     if(!root)return;
     const msg=document.getElementById('fondosStatus');
-    if(msg)msg.textContent=error||('Catálogo revisado: '+(updated||'sin fecha')+' · '+funds.length+' programas · solo fechas verificadas. No garantiza cobertura de todas las convocatorias.');
+    if(msg)msg.textContent=error||('Fuentes oficiales revisadas el '+(updated||'día pendiente de confirmar')+'. Las fechas y la elegibilidad se validan contra las bases de cada llamado.');
     const check=document.getElementById('fondosShowOnCalendar');
     if(check)try{check.checked=localStorage.getItem(KEY)!=='false';}catch{check.checked=true;}
     const filter=document.getElementById('fondosFiltro');
     if(filter)filter.value=mode;
+    const now=today();
+    const watch=funds.filter(pending).length;
+    const future=funds.filter(f=>!!iso(f.open)&&iso(f.open)>=now).length;
+    const historical=funds.filter(f=>hasDate(f)&&f.close&&f.close.slice(0,10)<now).length;
     const shown=funds.filter(f=>mode==='todos'||(mode==='sin-fechas'?pending(f):
-      mode==='proximos'?(!pending(f)&&(!f.close||f.close.slice(0,10)>=today())):
-      mode==='cerrados'&&hasDate(f)&&!!f.close&&f.close.slice(0,10)<today()));
-    if(!shown.length){
-      root.innerHTML='<div class="empty-state">No hay convocatorias verificadas en este filtro. Revisa las fuentes oficiales y los programas con fechas por confirmar.</div>';
-    }else root.innerHTML=shown.map(f=>'<article class="fondos-row"><div class="fondos-row-main">'+
-      '<b>'+esc(f.name)+'</b><span class="fondos-tag">'+esc(status(f))+'</span>'+
-      '<small>'+esc(f.organizer)+' · '+esc(f.region)+' · '+esc(f.fit)+'</small>'+
-      '<small>🟢 Apertura: '+esc(pretty(f.open))+' &nbsp; 🔴 Cierre: '+esc(pretty(f.close))+'</small>'+
-      '<small>'+esc(f.fitReason)+'</small>'+
-      '</div><div class="fondos-actions">'+
-      (iso(f.open)?'<button type="button" class="btn btn-ghost btn-sm" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="open">🟢 Ver apertura</button>':'')+
-      (iso(f.close)?'<button type="button" class="btn btn-ghost btn-sm" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="close">🔴 Ver cierre</button>':'')+
-      link(f.info,'Fuente oficial')+
-      '<button type="button" class="btn btn-ghost btn-sm" data-fondos-open="'+esc(f.id)+'">Ver requisitos</button>'+
-      '<button type="button" class="btn btn-primary btn-sm" data-fondos-draft="'+esc(f.id)+'">🤖 Preparar postulación</button>'+
-      '</div></article>').join('');
+      mode==='proximos'?(!pending(f)&&(!f.close||f.close.slice(0,10)>=now)):
+      mode==='cerrados'&&hasDate(f)&&!!f.close&&f.close.slice(0,10)<now));
+    const ordered=shown.slice().sort((a,b)=>{
+      const rank=f=>radarIds.has(f.id)?0:tone(f)==='abierto'?1:tone(f)==='proximo'?2:pending(f)?3:4;
+      const difference=rank(a)-rank(b);
+      if(difference)return difference;
+      if(tone(a)==='cerrado'&&tone(b)==='cerrado')return (b.close||'').localeCompare(a.close||'');
+      return a.name.localeCompare(b.name,'es');
+    });
+    const groups=[['todos','Todos'],['sin-fechas','En seguimiento'],['proximos','Con fechas próximas'],['cerrados','Históricos']];
+    const chips=groups.map(([value,title])=>
+      '<button type="button" class="fondos-filter-pill'+(mode===value?' is-active':'')+
+      '" data-fondos-view="'+value+'" aria-pressed="'+(mode===value?'true':'false')+'">'+esc(title)+'</button>'
+    ).join('');
+    const card=f=>{
+      const stage=tone(f),dating=!pending(f),restricted=/no elegible|no apto|baja|indirecta/i.test(f.fit);
+      const title=status(f)==='Sin fechas publicadas'?'Por anunciar':status(f)==='Cerrado'?'Finalizado':status(f)==='Próximamente'?'Próxima apertura':'Revisar vigencia';
+      const label=radarIds.has(f.id)?'VIGILANCIA PRIORITARIA':f.category;
+      const acronym=String(f.organizer||'TLS').split(/[\s/]+/).filter(Boolean).map(x=>x[0]).join('').slice(0,2).toUpperCase();
+      const dates=dating?
+        '<div class="fondos-date-strip" aria-label="Fechas de la convocatoria">'+
+          '<div class="fondos-date fondos-date--open"><small>● Apertura</small><b>'+esc(pretty(f.open))+'</b>'+
+            (iso(f.open)?'<button type="button" class="fondos-inline-jump" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="open">Ver en calendario ↗</button>':'')+
+          '</div><div class="fondos-date fondos-date--close"><small>● Cierre</small><b>'+esc(pretty(f.close))+'</b>'+
+            (iso(f.close)?'<button type="button" class="fondos-inline-jump" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="close">Ver en calendario ↗</button>':'')+
+          '</div></div>':
+        '<div class="fondos-date-strip"><div class="fondos-date fondos-date--unknown"><small>Próximo llamado</small><b>Fechas por confirmar en fuente oficial</b></div></div>';
+      return '<article class="fondos-row" data-status="'+stage+'" data-fondos-card="'+esc(f.id)+'">'+
+        '<div class="fondos-row-main">'+
+          '<div class="fondos-card-top"><span class="fondos-card-org"><span class="fondos-org-icon" aria-hidden="true">'+esc(acronym)+'</span><span>'+esc(f.organizer)+'</span></span>'+
+          '<span class="fondos-status" data-tone="'+stage+'">'+esc(title)+'</span></div>'+
+          '<div class="fondos-eyebrow">'+esc(label)+'</div>'+
+          '<h3 class="fondos-card-name">'+esc(f.name)+'</h3>'+
+          '<div class="fondos-card-meta">⌖ '+esc(f.region)+'</div>'+
+          '<div class="fondos-fit" data-tone="'+(restricted?'restricted':'normal')+'"><span class="fondos-fit-icon" aria-hidden="true">'+(restricted?'◇':'✦')+'</span><span><strong>Encaje estimado:</strong> '+esc(f.fit)+'</span></div>'+
+          '<p class="fondos-card-summary">'+esc(f.fitReason)+'</p>'+dates+
+        '</div>'+
+        '<div class="fondos-actions">'+
+          '<button type="button" class="btn btn-ghost btn-sm" data-fondos-open="'+esc(f.id)+'">Ver detalles</button>'+
+          link(f.info,'↗ Fuente oficial')+
+          '<button type="button" class="btn btn-primary btn-sm" data-fondos-draft="'+esc(f.id)+'">✦ Preparar borrador</button>'+
+        '</div></article>';
+    };
+    root.innerHTML='<div class="fondos-tls">'+
+      '<section class="fondos-hero" aria-label="Radar de oportunidades TLS">'+
+        '<div><div class="fondos-eyebrow"><span class="fondos-live-dot" aria-hidden="true"></span> THE LAB SOLUTIONS · OPPORTUNITY RADAR</div>'+
+          '<h2 class="fondos-title">Oportunidades para <span>seguir creciendo.</span></h2>'+
+          '<p class="fondos-lead">Fondos, innovación y programas para impulsar nuevos proyectos de TLS. Encuentra lo que vale la pena revisar, mira fechas oficiales y prepara tu postulación con ayuda del asistente.</p>'+
+          '<div class="fondos-hero-chips"><span class="fondos-micro fondos-micro--cyan">✓ Fechas respaldadas</span><span class="fondos-micro">◷ Seguimiento continuo</span><span class="fondos-micro">✦ Asistente IA</span></div>'+
+        '</div>'+
+        '<div class="fondos-kpis" aria-label="Resumen de programas">'+
+          '<div class="fondos-kpi fondos-kpi--focus"><b>'+funds.length+'</b><small>Programas en radar</small></div>'+
+          '<div class="fondos-kpi fondos-kpi--attention"><b>'+watch+'</b><small>Por anunciar</small></div>'+
+          '<div class="fondos-kpi"><b>'+future+'</b><small>Con apertura futura verificada</small></div>'+
+          '<div class="fondos-kpi"><b>'+historical+'</b><small>Convocatorias cerradas</small></div>'+
+        '</div>'+
+      '</section>'+
+      '<div class="fondos-toolbar"><div class="fondos-filter-pills" role="group" aria-label="Filtrar convocatorias">'+chips+'</div>'+
+        '<label class="fondos-search-wrap"><span class="fondos-search-icon" aria-hidden="true">⌕</span><input type="search" id="fondosBuscar" autocomplete="off" aria-label="Buscar por programa, institución o categoría" placeholder="Buscar fondo, organismo o proyecto…" value="'+esc(searchTerm)+'"></label></div>'+
+      '<div class="fondos-list-header"><b>Explora las oportunidades</b><span data-fondos-count>'+ordered.length+' oportunidades visibles</span></div>'+
+      '<div class="fondos-grid">'+ordered.map(card).join('')+'</div>'+
+      '<div class="fondos-empty" data-fondos-no-match'+(ordered.length?' hidden':'')+'><strong>No encontramos resultados en esta vista</strong>Prueba otra categoría o cambia el texto de búsqueda.</div>'+
+      '<p class="fondos-summary-footnote">El encaje con TLS es orientativo, no significa aprobación ni elegibilidad. Sin fecha oficial publicada, el programa queda en seguimiento y no genera alertas de apertura o cierre. <span aria-hidden="true">·</span> Catálogo actualizado: '+esc(updated||'sin fecha')+'.</p>'+
+    '</div>';
+    applySearch();
     const select=document.getElementById('fondosConvocatoria');
     if(select){const keep=select.value||selected;select.innerHTML='<option value="">Selecciona un fondo</option><option value="otro">Otra convocatoria (manual)</option>'+
       funds.map(f=>'<option value="'+esc(f.id)+'">'+esc(f.name)+'</option>').join('');
@@ -195,14 +274,21 @@
     const modal=document.getElementById('fondosDetalleModal');
     const container=document.getElementById('fondosDetalleBody');
     if(!modal||!container)return;
-    container.innerHTML='<h3>'+esc(f.name)+'</h3><p>'+esc(f.fitReason)+'</p>'+
-      '<p><b>Organismo:</b> '+esc(f.organizer)+' · '+esc(f.region)+'</p>'+
-      '<p><b>Posible compatibilidad:</b> '+esc(f.fit)+'</p>'+
-      '<p><b>Apertura:</b> '+esc(pretty(f.open))+' · <b>Cierre:</b> '+esc(pretty(f.close))+'</p>'+
-      '<p><b>Requisitos por revisar:</b> '+esc(f.requirements)+'</p>'+
-      '<p><b>Respaldo:</b> '+esc(f.verified)+'</p>'+
-      '<p>'+link(f.source,'Consultar bases / fuente oficial')+'</p>'+
-      '<p class="fondos-warning">Los datos deben confirmarse en la convocatoria vigente. TLS no se considera automáticamente elegible.</p>';
+    container.innerHTML='<div class="fondos-detail-shell">'+
+      '<div class="fondos-eyebrow"><span class="fondos-live-dot" aria-hidden="true"></span>'+esc(f.organizer)+' · TLS FUNDING RADAR</div>'+
+      '<h3 class="fondos-detail-title">'+esc(f.name)+'</h3>'+
+      '<p class="fondos-detail-lead">'+esc(f.fitReason)+'</p>'+
+      '<div class="fondos-detail-grid">'+
+        '<div class="fondos-detail-cell"><small>Estado</small><b>'+esc(status(f))+'</b></div>'+
+        '<div class="fondos-detail-cell"><small>Encaje estimado</small><b>'+esc(f.fit)+'</b></div>'+
+        '<div class="fondos-detail-cell"><small>Apertura</small><b>'+esc(pretty(f.open))+'</b></div>'+
+        '<div class="fondos-detail-cell"><small>Cierre</small><b>'+esc(pretty(f.close))+'</b></div>'+
+      '</div>'+
+      '<div class="fondos-detail-section"><h4>Lo que debes verificar antes de postular</h4><p>'+esc(f.requirements)+'</p></div>'+
+      '<div class="fondos-detail-section"><h4>Respaldo y territorio</h4><p>'+esc(f.region)+'. '+esc(f.verified)+'</p></div>'+
+      '<div class="fondos-detail-section"><h4>Información oficial</h4><p>'+link(f.source,'↗ Abrir fuente y bases del organismo')+'</p></div>'+
+      '<p class="fondos-warning">Los antecedentes y fechas se deben confirmar en las bases del nuevo llamado. La empresa no se considera elegible automáticamente.</p>'+
+    '</div>';
     const b=document.getElementById('fondosDetallePreparar');if(b)b.dataset.fondosDraft=f.id;
     modal.style.display='flex';
   }
@@ -262,7 +348,15 @@
   }
   function init(){
     const root=document.getElementById('tab-calendario');if(!root)return;
+    if(typeof document.createElement==='function'&&document.head&&!document.getElementById('fondosTlsStyles')){
+      const sheet=document.createElement('link');
+      sheet.rel='stylesheet';sheet.id='fondosTlsStyles';
+      sheet.href=new URL('fondos-tls.css?v=20261014b',document.baseURI).href;
+      document.head.appendChild(sheet);
+    }
     root.addEventListener('click',e=>{
+      const quick=e.target.closest('[data-fondos-view]');
+      if(quick){mode=quick.dataset.fondosView;render();return;}
       const goto=e.target.closest('[data-fondos-calendar]');
       if(goto){goTo(goto.dataset.fondosCalendar,goto.dataset.fondosPhase);return;}
       const openButton=e.target.closest('[data-fondos-open]');
@@ -272,6 +366,12 @@
     });
     const filter=document.getElementById('fondosFiltro');
     if(filter)filter.addEventListener('change',()=>{mode=filter.value;render();});
+    document.getElementById('fondosList')?.addEventListener('input',e=>{
+      if(e.target.id==='fondosBuscar'){searchTerm=e.target.value;applySearch();}
+    });
+    document.addEventListener('keydown',e=>{
+      if(e.key==='Escape'&&document.getElementById('fondosDetalleModal')?.style.display==='flex')close();
+    });
     document.getElementById('fondosShowOnCalendar')?.addEventListener('change',syncCalendar);
     document.getElementById('fondosReload')?.addEventListener('click',load);
     document.getElementById('fondosGenerar')?.addEventListener('click',draft);
