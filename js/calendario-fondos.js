@@ -8,8 +8,12 @@
   const KEY='thelab_fondos_mostrar_v1';
   const SOURCE='data/fondos-concursables.json';
   const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  const iso=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/.test(v)&&
-    !Number.isNaN(new Date(v.slice(0,10)+'T12:00:00').getTime())?v.slice(0,10):'';
+  const iso=v=>{if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/.test(v))return '';
+    const [y,m,d]=v.slice(0,10).split('-').map(Number),t=new Date(y,m-1,d,12);
+    if(t.getFullYear()!==y||t.getMonth()+1!==m||t.getDate()!==d)return '';
+    if(v.length>10&&(Number(v.slice(11,13))>23||Number(v.slice(14,16))>59))return '';
+    return v.slice(0,10);
+  };
   const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
   const pretty=v=>{if(!iso(v))return 'Por confirmar';const d=new Date(v.slice(0,10)+'T12:00:00');return d.toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'})+(v.includes('T')?' · '+v.slice(11,16)+' h':'');};
   const allowedUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&/^(?:www\.)?(?:sercotec\.cl|corfo\.cl|fondos\.gob\.cl)$/.test(u.hostname);}catch{return false;}};
