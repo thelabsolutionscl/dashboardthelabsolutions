@@ -42,7 +42,7 @@ function candidates(html){
     if(!title||!RELEVANT.test(title)||title.length<7||title.length>200)continue;
     const name=title;
     let open=dt(lines[i]);
-    if(!open&&i+1<lines.length)open=dt(lines[i+1]);
+    if(!open&&i+1<lines.length&&!/^(?:Inicio|Cierre)\b/i.test(lines[i+1]))open=dt(lines[i+1]);
     if(!open||Number(open.slice(0,4))<YEAR)continue;
     let close='',region='';
     for(let j=i+1;j<Math.min(i+7,lines.length);j++){
