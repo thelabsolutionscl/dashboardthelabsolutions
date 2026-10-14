@@ -62,7 +62,7 @@
     return '<div class="fondos-demo-screen fondos-demo-agent-screen"><div class="fondos-demo-eyebrow">04 / AGENTE DE POSTULACIONES · '+badge+'</div>'+
       '<h4>Agente de fondos TLS</h4><p>Prueba un análisis de innovación. En modo DEMO nunca se enviarán formularios ni se generarán fechas o alertas.</p>'+
       '<label for="fondosDemoPregunta" class="fondos-demo-agent-label">Describe el proyecto o lo que quieres preparar</label>'+
-      '<textarea id="fondosDemoPregunta" maxlength="1500" rows="3" placeholder="Describe tu proyecto de ejemplo…">'+esc(demoAgent.prompt)+'</textarea>'+
+      '<textarea id="fondosDemoPregunta" maxlength="1500" rows="3" placeholder="Describe tu proyecto de ejemplo…" '+(working?'disabled aria-disabled="true"':'')+'>'+esc(demoAgent.prompt)+'</textarea>'+
       '<div class="fondos-demo-agent-controls"><button type="button" class="fondos-demo-agent-run" data-fondos-demo-run '+(working?'disabled aria-disabled="true"':'')+'>'+(working?'◌ Agente procesando…':'✦ Ejecutar análisis con agente')+'</button>'+
       '<small>Ejemplo editable · No usar información confidencial.</small><span id="fondosDemoCopyNotice" aria-live="polite"></span></div>'+
       stage+
@@ -437,11 +437,21 @@
       'ANTECEDENTES PROPORCIONADOS Y CONFIRMADOS POR EL USUARIO (si existen):\n'+(evidence||'Ninguno; pedir antes de afirmar.'),
     ].join('\n\n');
     const btn=document.getElementById('fondosGenerar');
-    busy=true;btn&&(btn.disabled=true);output.textContent='Preparando borrador con IA…';
+    const prevLabel=btn?.innerHTML||'';
+    busy=true;
+    if(btn){btn.disabled=true;btn.textContent='✦ Agente TLS trabajando…';}
+    output.classList?.add('fondos-agent-loading');
+    output.setAttribute?.('aria-busy','true');
+    output.textContent='✦ AGENTE TLS PROCESANDO\n\nAnalizando las preguntas y requisitos…\nPreparando un borrador sin inventar información…';
     try{const result=await window.callAgentClaude('CEO',sys,user,{maxTokens:1400});
       output.textContent=String(result||'Sin respuesta del motor IA.');
     }catch(e){output.textContent='No se pudo generar el borrador: '+String(e.message||e)+'. Puedes reintentar.';}
-    finally{busy=false;btn&&(btn.disabled=false);}
+    finally{
+      busy=false;
+      output.classList?.remove('fondos-agent-loading');
+      output.setAttribute?.('aria-busy','false');
+      if(btn){btn.disabled=false;btn.innerHTML=prevLabel;}
+    }
   }
   async function copyDraft(){
     const value=document.getElementById('fondosRespuesta')?.textContent||'';
