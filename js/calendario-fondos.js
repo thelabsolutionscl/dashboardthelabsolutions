@@ -52,6 +52,61 @@
         risk:'normal',gcal:{}
       })));
   }
+  /* Los hitos son eventos virtuales con fecha oficial. Los fondos sin fecha
+     se muestran al pie de la grilla, nunca sobre una fecha inventada. */
+  function allDates(){
+    return funds.flatMap(f=>['open','close']
+      .filter(phase=>!!iso(f[phase]))
+      .map(phase=>({id:f.id,phase,fecha:iso(f[phase]),name:f.name}))
+    ).sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.name.localeCompare(b.name));
+  }
+  function goTo(id,phase){
+    const f=byId(id);
+    const fecha=f&&iso(f[phase]);
+    if(!fecha)return false;
+    // Un enlace explícito a la fecha habilita de nuevo los hitos, incluso si
+    // estaban ocultos localmente, para evitar un calendario aparentemente vacío.
+    try{localStorage.setItem(KEY,'true');}catch(_){}
+    const check=document.getElementById('fondosShowOnCalendar');
+    if(check)check.checked=true;
+    if(typeof window.calIrAFondoFecha!=='function')return false;
+    return window.calIrAFondoFecha(fecha);
+  }
+  function goToClosest(){
+    const dates=allDates(),now=today();
+    const closest=dates.find(d=>d.fecha>=now)||dates[dates.length-1];
+    return closest?goTo(closest.id,closest.phase):false;
+  }
+  function renderCalendarSummary(){
+    const summary=document.getElementById('fondosCalendarioResumen');
+    const unknown=document.getElementById('fondosCalendarioSinFecha');
+    const dates=allDates();
+    const month=typeof _calMes!=='undefined'&&_calMes instanceof Date
+      ?String(_calMes.getFullYear())+'-'+String(_calMes.getMonth()+1).padStart(2,'0')
+      :today().slice(0,7);
+    const thisMonth=dates.filter(d=>d.fecha.startsWith(month));
+    const undated=funds.filter(pending);
+    const closest=dates.find(d=>d.fecha>=today())||dates[dates.length-1];
+    let on=true;try{on=localStorage.getItem(KEY)!=='false';}catch(_){}
+    if(summary){
+      if(!funds.length){summary.innerHTML='<span>🏛 Cargando fechas de fondos concursables…</span>';}
+      else{
+        const label=new Date(month+'-01T12:00:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'});
+        summary.innerHTML='<div class="fondos-cal-summary-text"><b>🏛 Fondos concursables</b> <span>'+
+          esc(on?(thisMonth.length?thisMonth.length+' hitos en '+label:'Sin aperturas ni cierres confirmados en '+label):'Visualización desactivada')+
+          ' · '+dates.length+' fechas confirmadas · '+undated.length+' programas por anunciar</span></div>'+
+          (closest?'<button class="btn btn-ghost btn-sm" type="button" data-fondos-calendar="'+esc(closest.id)+'" data-fondos-phase="'+closest.phase+'">'+
+            (closest.fecha>=today()?'📅 Ir a la próxima fecha':'📅 Ver último hito registrado')+'</button>':'');
+      }
+    }
+    if(unknown){
+      if(!funds.length||!undated.length){unknown.innerHTML='';return;}
+      unknown.innerHTML='<div class="fondos-undated-title">📌 Programas sin fecha oficial confirmada <small>(no se ubican en un día hasta que se publiquen las bases)</small></div>'+
+        '<div class="fondos-undated-items">'+undated.map(f=>
+          '<button type="button" class="fondos-undated-chip" data-fondos-open="'+esc(f.id)+'">'+esc(f.name)+' · Fecha por confirmar</button>'
+        ).join('')+'</div>';
+    }
+  }
   const link=(url,label)=>allowedUrl(url)?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>':'';
   function render(){
     const root=document.getElementById('fondosList');
@@ -72,7 +127,10 @@
       '<small>'+esc(f.organizer)+' · '+esc(f.region)+' · '+esc(f.fit)+'</small>'+
       '<small>🟢 Apertura: '+esc(pretty(f.open))+' &nbsp; 🔴 Cierre: '+esc(pretty(f.close))+'</small>'+
       '<small>'+esc(f.fitReason)+'</small>'+
-      '</div><div class="fondos-actions">'+link(f.info,'Fuente oficial')+
+      '</div><div class="fondos-actions">'+
+      (iso(f.open)?'<button type="button" class="btn btn-ghost btn-sm" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="open">🟢 Ver apertura</button>':'')+
+      (iso(f.close)?'<button type="button" class="btn btn-ghost btn-sm" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="close">🔴 Ver cierre</button>':'')+
+      link(f.info,'Fuente oficial')+
       '<button type="button" class="btn btn-ghost btn-sm" data-fondos-open="'+esc(f.id)+'">Ver requisitos</button>'+
       '<button type="button" class="btn btn-primary btn-sm" data-fondos-draft="'+esc(f.id)+'">🤖 Preparar postulación</button>'+
       '</div></article>').join('');
@@ -80,6 +138,7 @@
     if(select){const keep=select.value||selected;select.innerHTML='<option value="">Selecciona un fondo</option><option value="otro">Otra convocatoria (manual)</option>'+
       funds.map(f=>'<option value="'+esc(f.id)+'">'+esc(f.name)+'</option>').join('');
       select.value=byId(keep)||keep==='otro'?keep:'';selected=select.value;}
+    renderCalendarSummary();
   }
   async function load(){
     if(inFlight)return inFlight;
@@ -173,6 +232,8 @@
   function init(){
     const root=document.getElementById('tab-calendario');if(!root)return;
     root.addEventListener('click',e=>{
+      const goto=e.target.closest('[data-fondos-calendar]');
+      if(goto){goTo(goto.dataset.fondosCalendar,goto.dataset.fondosPhase);return;}
       const openButton=e.target.closest('[data-fondos-open]');
       if(openButton){open(openButton.dataset.fondosOpen);return;}
       const draftButton=e.target.closest('[data-fondos-draft]');
@@ -189,7 +250,7 @@
     render();
     load();
   }
-  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso};
+  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();
