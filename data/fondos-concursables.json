@@ -228,6 +228,21 @@
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea_valida_eureka/",
       "verified": "Página Corfo con postulación permanente condicionada a fase I internacional; sin una fecha única de cierre para mostrar.",
       "requirements": "Socio internacional, selección fase I Eureka, empresa chilena y 24 meses de antigüedad, innovación real, cofinanciamiento."
+    },
+    {
+      "id": "sercotec-mejoranegocios-vigilar",
+      "name": "Sercotec — MejoraNegocios (próxima convocatoria RM)",
+      "organizer": "Sercotec",
+      "region": "Región Metropolitana / confirmar próxima edición",
+      "category": "Asesoría técnica / certificaciones / propiedad intelectual",
+      "fit": "Alta si convocatoria acepta proveedor industrial",
+      "fitReason": "Asesorías para mejorar fabricación, calidad de productos, reducir residuos, registrar marcas o profesionalizar la relación con empresas grandes; foco específico por edición.",
+      "open": null,
+      "close": null,
+      "source": "https://www.sercotec.cl/programas-y-servicios-digitalizados/",
+      "info": "https://www.sercotec.cl/programas-y-servicios-digitalizados/",
+      "verified": "Programa Sercotec acreditado en portal oficial; no se identificó ventana vigente de Región Metropolitana en octubre 2026.",
+      "requirements": "Primera categoría, ventas y rubro según bases del nuevo llamado; históricamente se focalizó en proveedoras de grandes empresas y asesorías especializadas."
     }
   ]
 }
