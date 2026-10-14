@@ -28,7 +28,7 @@ const page=[
 
 test('crawler conservador: solo llamadas pertinentes y con inicio cierre y región',()=>{
  const rows=candidates(page);
- assert.equal(rows.length,2);
+ assert.equal(rows.length,2,JSON.stringify(rows));
  assert.deepEqual(rows.map(x=>x.region).sort(),['Nacional','Región Metropolitana'].sort());
  assert.equal(rows.find(x=>x.title.includes('Sostenible')).open,'2026-11-02T12:00');
  assert.equal(rows.find(x=>x.title.includes('Kit')).close,'2026-11-22T15:00');
