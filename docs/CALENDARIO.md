@@ -136,3 +136,11 @@ El módulo **Fondos concursables** conserva su ubicación dentro de Calendario, 
 - **Seguridad funcional**: búsqueda y presentación solo usan texto escapado del catálogo aprobado; nunca alteran fechas, alertas del Worker, Google Calendar, elegibilidad ni envío de formularios externos.
 
 Pruebas: `tests/fondos-visual-tls.test.js` más las auditorías preexistentes de `tests/calendario-fondos.test.js` y `tests/fondos-alertas.test.js`.
+
+### Botón DEMO — recorrido interactivo de fondos TLS
+
+En Calendario → **Fondos concursables**, el hero del Radar TLS incluye **▶ DEMO · Ver funcionamiento**. Al pulsarlo, aparece un recorrido visual dentro de la misma sección con cuatro pantallas de ejemplo: **requisitos y ajuste con TLS**, **apertura/cierre en el calendario**, **correo de apertura a gerencia** y **borrador del agente de postulaciones**. La interfaz mantiene el tema oscuro/cyan y un botón **↩ Volver al radar real** visible en la parte superior y en el panel de demostración.
+
+**Seguridad y comportamiento**: la demo es 100 % cliente y en memoria (sin localStorage). Los nombres, plazos y textos mostrados son deliberadamente ficticios. No se escriben fechas falsas en el catálogo ni en Google Calendar; `eventList()` y `allDates()` siguen devolviendo exclusivamente hitos reales y `notifyToday()` sigue leyendo únicamente el catálogo verificado. La demo **no llama al Worker, Resend, Airtable ni al modelo IA, no envía postulaciones ni genera emails**; el aviso y el borrador son ilustraciones prediseñadas. La pantalla vuelve a los datos reales al salir y también tras recargar.
+
+Pruebas: `tests/fondos-visual-tls.test.js`, además de la suite existente de Calendario y notificaciones.

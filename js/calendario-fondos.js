@@ -29,6 +29,30 @@
       verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900)};
   };
   let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false,searchTerm='';
+  // DEMO independiente: solo UI local, nunca toca catálogos, eventos ni avisos.
+  let demoMode=false,demoStep='inicio';
+  const demoISO=days=>{
+    const d=new Date(today()+'T12:00:00');d.setDate(d.getDate()+days);
+    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')+'T12:00';
+  };
+  function toggleDemo(){demoMode=!demoMode;demoStep='inicio';render();}
+  function demoIllustration(){
+    const opening=pretty(demoISO(3)),closing=pretty(demoISO(17));
+    const screens={
+      inicio:'<div class="fondos-demo-screen"><div class="fondos-demo-icon">◎</div><h4>Recorre el radar sin comprometer datos</h4><p>Selecciona una opción para ver qué ocurre al encontrar un fondo, revisar sus plazos, recibir una alerta o preparar su postulación.</p><small>Todos los proyectos, fechas y textos son inventados.</small></div>',
+      requisitos:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">01 / REQUISITOS</div><h4>Evaluación de compatibilidad</h4><p><strong>Fondo ficticio:</strong> Innovación en fabricación 3D.</p><p><strong>Posible encaje:</strong> Desarrollo de nuevos procesos de impresión.</p><p><strong>Por comprobar:</strong> antigüedad tributaria, ventas, inversión, cofinanciamiento y mérito innovador.</p><small>En un concurso real se consultan siempre las bases oficiales.</small></div>',
+      fechas:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">02 / CALENDARIO</div><h4>Así se ven las fechas verificadas</h4><div class="fondos-demo-dates"><div><small>🟢 Apertura simulada</small><b>'+esc(opening)+'</b></div><div><small>🟠 Cierre simulado</small><b>'+esc(closing)+'</b></div></div><p>Cuando existe un plazo oficial, aparece en el Calendario. Estos días de ejemplo <strong>no se incorporan</strong> a la agenda real.</p></div>',
+      alerta:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">03 / AVISOS</div><h4>Ejemplo de aviso a gerencia</h4><div class="fondos-demo-email"><span>✉ Correo simulado</span><b>🟢 Abre hoy: Innovación para TLS</b><small>Destinatarios de ejemplo: Gustavo y Nicanor</small><p>Revisa requisitos, monto y bases antes de iniciar la postulación.</p></div><small>Vista previa local. No se utiliza Cloudflare, Resend ni las casillas reales.</small></div>',
+      borrador:'<div class="fondos-demo-screen"><div class="fondos-demo-eyebrow">04 / ASISTENTE</div><h4>Cómo ayuda el agente de postulaciones</h4><p><strong>Pregunta de ejemplo:</strong> ¿Qué mejora propone el proyecto?</p><div class="fondos-demo-email"><span>✦ Borrador ilustrativo</span><p>Proponemos investigar y validar una mejora en los procesos de fabricación digital mediante prototipos y pruebas medibles.</p></div><p><strong>Datos pendientes:</strong> presupuesto, equipo, evidencia técnica y calendario.</p><small>Respuesta prediseñada: no se llama al motor IA ni se envía un formulario.</small></div>'
+    };
+    const steps=[['requisitos','◇ Ver requisitos'],['fechas','▦ Ver calendario'],['alerta','✉ Simular aviso'],['borrador','✦ Ver borrador']];
+    return '<section class="fondos-demo-panel" aria-label="Demo interactiva de fondos TLS">'+
+      '<div class="fondos-demo-top"><div><span class="fondos-demo-label">◈ MODO DEMO · SIMULACIÓN</span><h3>Prueba cada función con un fondo ficticio.</h3><p>Los datos reales siguen intactos. No se crean eventos, no se manda correo y no se envían postulaciones.</p></div><button type="button" data-fondos-demo-toggle class="fondos-demo-exit">↩ Volver al radar real</button></div>'+
+      '<div class="fondos-demo-steps" role="group" aria-label="Escenas de la demostración">'+steps.map(([key,label])=>'<button type="button" data-fondos-demo-step="'+key+'" aria-pressed="'+(demoStep===key?'true':'false')+'" class="'+(demoStep===key?'active':'')+'">'+label+'</button>').join('')+'</div>'+
+      '<div class="fondos-demo-stage">'+screens[demoStep]+'</div>'+
+      '<p class="fondos-demo-footnote">Los nombres y plazos mostrados en DEMO son simulados. Ningún evento, notificación o solicitud será real.</p>'+
+    '</section>';
+  }
   const byId=id=>funds.find(f=>f.id===id);
   const hasDate=f=>!!(f.open||f.close);
   const pending=f=>!hasDate(f);
@@ -222,12 +246,13 @@
           '<button type="button" class="btn btn-primary btn-sm" data-fondos-draft="'+esc(f.id)+'">✦ Preparar borrador</button>'+
         '</div></article>';
     };
-    root.innerHTML='<div class="fondos-tls">'+
+    root.innerHTML='<div class="fondos-tls'+(demoMode?' is-demo':'')+'">'+
       '<section class="fondos-hero" aria-label="Radar de oportunidades TLS">'+
         '<div><div class="fondos-eyebrow"><span class="fondos-live-dot" aria-hidden="true"></span> THE LAB SOLUTIONS · OPPORTUNITY RADAR</div>'+
-          '<h2 class="fondos-title">Oportunidades para <span>seguir creciendo.</span></h2>'+
+          '<h2 class="fondos-title">'+(demoMode?'Explora TLS en <span>modo DEMO.</span>':'Oportunidades para <span>seguir creciendo.</span>')+'</h2>'+
           '<p class="fondos-lead">Fondos, innovación y programas para impulsar nuevos proyectos de TLS. Encuentra lo que vale la pena revisar, mira fechas oficiales y prepara tu postulación con ayuda del asistente.</p>'+
-          '<div class="fondos-hero-chips"><span class="fondos-micro fondos-micro--cyan">✓ Fechas respaldadas</span><span class="fondos-micro">◷ Seguimiento continuo</span><span class="fondos-micro">✦ Asistente IA</span></div>'+
+          '<div class="fondos-hero-chips"><span class="fondos-micro fondos-micro--cyan">'+(demoMode?'◈ ENTORNO DE PRUEBA':'✓ Fechas respaldadas')+'</span><span class="fondos-micro">◷ Seguimiento continuo</span><span class="fondos-micro">✦ Asistente IA</span></div>'+ 
+          '<div class="fondos-demo-hero-action"><button type="button" data-fondos-demo-toggle class="fondos-demo-button" aria-pressed="'+(demoMode?'true':'false')+'">'+(demoMode?'↩ Salir de DEMO':'▶ DEMO · Ver funcionamiento')+'</button></div>'+
         '</div>'+
         '<div class="fondos-kpis" aria-label="Resumen de programas">'+
           '<div class="fondos-kpi fondos-kpi--focus"><b>'+funds.length+'</b><small>Programas en radar</small></div>'+
@@ -235,7 +260,8 @@
           '<div class="fondos-kpi"><b>'+future+'</b><small>Con apertura futura verificada</small></div>'+
           '<div class="fondos-kpi"><b>'+historical+'</b><small>Convocatorias cerradas</small></div>'+
         '</div>'+
-      '</section>'+
+      '</section>'+ 
+      (demoMode?demoIllustration():'')+
       '<div class="fondos-toolbar"><div class="fondos-filter-pills" role="group" aria-label="Filtrar convocatorias">'+chips+'</div>'+
         '<label class="fondos-search-wrap"><span class="fondos-search-icon" aria-hidden="true">⌕</span><input type="search" id="fondosBuscar" autocomplete="off" aria-label="Buscar por programa, institución o categoría" placeholder="Buscar fondo, organismo o proyecto…" value="'+esc(searchTerm)+'"></label></div>'+
       '<div class="fondos-list-header"><b>Explora las oportunidades</b><span data-fondos-count>'+ordered.length+' oportunidades visibles</span></div>'+
@@ -351,10 +377,13 @@
     if(typeof document.createElement==='function'&&document.head&&!document.getElementById('fondosTlsStyles')){
       const sheet=document.createElement('link');
       sheet.rel='stylesheet';sheet.id='fondosTlsStyles';
-      sheet.href=new URL('fondos-tls.css?v=20261014b',document.baseURI).href;
+      sheet.href=new URL('fondos-tls.css?v=20261014demo',document.baseURI).href;
       document.head.appendChild(sheet);
     }
     root.addEventListener('click',e=>{
+      if(e.target.closest('[data-fondos-demo-toggle]')){toggleDemo();return;}
+      const scene=e.target.closest('[data-fondos-demo-step]');
+      if(scene&&demoMode){demoStep=scene.dataset.fondosDemoStep;render();return;}
       const quick=e.target.closest('[data-fondos-view]');
       if(quick){mode=quick.dataset.fondosView;render();return;}
       const goto=e.target.closest('[data-fondos-calendar]');
@@ -383,7 +412,7 @@
     // Ventana abierta durante horas: recordar nuevas aperturas y cierres.
     setInterval(notifyToday,15*60*1000);
   }
-  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday};
+  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();
