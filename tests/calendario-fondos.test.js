@@ -42,7 +42,7 @@ function instance(docNodes={}){
 test('el calendario incorpora nuevas fechas solo si hay respaldo y no en Google Calendar',async()=>{
   assert.match(LOADER,/calendario-fondos\.js/);
   assert.match(CAL,/window\.TLSFondos\?\.eventList/);
-  assert.match(CAL,/ev\.source==='fondos'\)return false/);
+  assert.match(CAL,/ev\?\.source==='fondos'\)return false/);
   assert.match(CAL,/filter\(ev=>ev\.source!=='fondos'\)/);
   assert.match(CAL,/calOpenEvent\(id\)[\s\S]*?TLSFondos\?\.open/);
   assert.match(CAL,/fondos','🟢 Fondos concursables/);
@@ -85,7 +85,7 @@ test('copiloto genera borrador usando solo datos provistos, sin postulaciones au
   assert.equal(calls.length,1);
   assert.equal(calls[0][0],'CEO');
   assert.match(calls[0][1],/SIN inventar hechos/);
-  assert.match(calls[0][1],/no completes formularios externos/i);
+  assert.match(calls[0][1],/ni completes formularios externos/i);
   assert.match(calls[0][2],/Describ(e|e el proyecto)/i);
   assert.match(docNodes.fondosRespuesta.textContent,/Respuestas seguras/);
   assert.equal(docNodes.fondosGenerar.disabled,false);
