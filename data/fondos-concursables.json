@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "reviewedAt": "2026-10-14",
-  "scope": "Llamados RM y nacionales para empresas establecidas vinculadas a fabricación digital, POP, productos 3D, inversión, digitalización e I+D; elegibilidad definitiva pendiente de validar ventas, primera categoría, antigüedad, territorio, foco, documentos y cofinanciamiento.",
+  "scope": "Llamados RM y nacionales para empresas establecidas vinculadas a fabricación digital, POP, productos 3D, inversión, digitalización e I+D; elegibilidad definitiva pendiente de validar ventas, primera categoría, antigüedad, territorio, foco, documentos y cofinanciamiento. Catálogo orientativo de convocatorias monetarias y otras oportunidades empresariales útiles, diferenciadas por categoría; se excluyen programas para empresas nuevas sin ventas si TLS no califica.",
   "disclaimer": "Registro ampliado verificado en las páginas oficiales Sercotec y Corfo hasta 14/10/2026. No representa TODOS los fondos de Chile ni actualizaciones en tiempo real. Solo hay alertas cuando existe fecha oficial concreta en el catálogo, y no se notifica sobre fechas históricas.",
   "funds": [
     {
@@ -243,6 +243,51 @@
       "info": "https://www.sercotec.cl/programas-y-servicios-digitalizados/",
       "verified": "Programa Sercotec acreditado en portal oficial; no se identificó ventana vigente de Región Metropolitana en octubre 2026.",
       "requirements": "Primera categoría, ventas y rubro según bases del nuevo llamado; históricamente se focalizó en proveedoras de grandes empresas y asesorías especializadas."
+    },
+    {
+      "id": "sercotec-promocion-canales-rm-vigilar",
+      "name": "Sercotec — Promoción y canales de comercialización (RM, próximos llamados)",
+      "organizer": "Sercotec",
+      "region": "Región Metropolitana, sujeto a oferta territorial",
+      "category": "Apoyo comercial / ferias (no necesariamente subsidio en dinero)",
+      "fit": "Alta si TLS ofrece productos o servicios admisibles",
+      "fitReason": "TLS podría promocionar impresión 3D, merchandising, señalética y productos propios en espacios comerciales apoyados por Sercotec.",
+      "open": null,
+      "close": null,
+      "source": "https://www.sercotec.cl/programas/promocion-y-canales-de-comercializacion/",
+      "info": "https://www.sercotec.cl/programas/promocion-y-canales-de-comercializacion/",
+      "verified": "Ficha oficial de programa; sin apertura/cierre de un llamado RM verificado al 14/10/2026. Apoyo en participación y comercialización; puede requerir copago.",
+      "requirements": "Micro o pequeña empresa formalizada; giro compatible y convocatoria regional abierta. El apoyo puede ser cofinanciamiento de participación en ferias, no transferencia de efectivo."
+    },
+    {
+      "id": "corfo-red-asociativa-rm-vigilar",
+      "name": "Corfo — Red Asociativa (próximas convocatorias RM)",
+      "organizer": "Corfo",
+      "region": "Región Metropolitana, sujeto a llamados vigentes",
+      "category": "Cooperación entre empresas / productividad",
+      "fit": "Condicional: mínimo 3 empresas y ventas",
+      "fitReason": "TLS podría mejorar procesos productivos y acceder a nuevos clientes en asociación con otras empresas complementarias, sujeto a demanda regional.",
+      "open": null,
+      "close": null,
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/red-asociativa/",
+      "info": "https://www.corfo.gob.cl/sites/cpp/programa/red-asociativa/",
+      "verified": "Programa y llamados históricos oficiales: convocatoria RM 2025, sin convocatoria RM 2026 verificada. No se trasladan fechas anteriores.",
+      "requirements": "Al menos 3 empresas beneficiarias, giro de primera categoría; en general ventas 2.400–600.000 UF, con excepciones para parte del grupo. Postulación mediante operadores y convocatoria regional."
+    },
+    {
+      "id": "sercotec-sello-impacta-sustentable-vigilar",
+      "name": "Sercotec — Sello Impacta Sustentable (próximos llamados)",
+      "organizer": "Sercotec",
+      "region": "Convocatorias por región; confirmar RM",
+      "category": "Asistencia técnica / sostenibilidad (no subsidio monetario)",
+      "fit": "Media si TLS cumple segmento micro o pequeña empresa",
+      "fitReason": "Ayuda a mejorar gestión energética, residuos plásticos y producción responsable; entrega asesoría y reconocimiento, no un fondo de inversión en dinero.",
+      "open": null,
+      "close": null,
+      "source": "https://www.sercotec.cl/convocatoria/sello-impacta-sustentable-2026/",
+      "info": "https://www.sercotec.cl/programas/sello-impacta-sustentable/",
+      "verified": "Programa Sercotec 2026 con bases y modificación de plazos; no se asignan fechas sin determinar el llamado correspondiente a RM.",
+      "requirements": "Empresa vigente en primera categoría, ventas 200–25.000 UF al año; revisar alcance regional, convocatoria y requisitos del proceso."
     }
   ]
 }
