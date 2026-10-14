@@ -124,7 +124,7 @@ test('recorrido DEMO permite ver fechas, aviso y agente cargando, sin avisos rea
     ['requisitos','Evaluación de compatibilidad'],
     ['fechas','Apertura simulada'],
     ['alerta','Correo simulado'],
-    ['borrador','Agente TLS']]){
+    ['borrador','AGENTE DE POSTULACIONES']]){
     v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-step]'?{dataset:{fondosDemoStep:scene}}:null}});
     assert.match(v.list.innerHTML,new RegExp(marker));
     assert.match(v.list.innerHTML,new RegExp('data-fondos-demo-step="'+scene+'" aria-pressed="true"'));
