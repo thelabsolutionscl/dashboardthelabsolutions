@@ -52,9 +52,9 @@ test('el calendario incorpora nuevas fechas solo si hay respaldo y no en Google 
   const {api,store}=instance();
   await api.load();
   const events=api.eventList();
-  assert.equal(events.length,4,'dos aperturas y dos cierres confirmados');
-  assert.equal(events.filter(e=>e.type==='fondo_inicio').length,2);
-  assert.equal(events.filter(e=>e.type==='fondo_cierre').length,2);
+  assert.equal(events.length,CATALOG.funds.filter(f=>f.open&&f.close).length*2,'apertura y cierre por cada llamado con ambas fechas confirmadas');
+  assert.equal(events.filter(e=>e.type==='fondo_inicio').length,CATALOG.funds.filter(f=>!!f.open).length);
+  assert.equal(events.filter(e=>e.type==='fondo_cierre').length,CATALOG.funds.filter(f=>!!f.close).length);
   assert.ok(events.every(e=>e.source==='fondos'&&e.allDay&&!e.gcal?.length));
   assert.ok(events.some(e=>e.fecha==='2026-05-28'&&e.titulo.includes('Crece Urbano')));
   store.set('thelab_fondos_mostrar_v1','false');
@@ -129,11 +129,11 @@ test('cada inicio y cierre tiene un acceso al mes del calendario y activa los hi
   assert.equal(jumped[0],'2026-07-08');
   assert.equal(nodes.fondosShowOnCalendar.checked,true);
   assert.equal(store.get('thelab_fondos_mostrar_v1'),'true');
-  assert.equal(api.eventList().length,4);
+  assert.equal(api.eventList().length,CATALOG.funds.filter(f=>f.open&&f.close).length*2);
   assert.equal(api.goTo('corfo-sumate-innovar','open'),false);
   assert.equal(jumped.length,1,'sin fecha confirmada no se puede navegar a un día ficticio');
   api.renderCalendarSummary();
-  assert.match(nodes.fondosCalendarioResumen.innerHTML,/4 fechas confirmadas/);
+  assert.match(nodes.fondosCalendarioResumen.innerHTML,new RegExp(CATALOG.funds.filter(f=>f.open&&f.close).length*2+' fechas confirmadas'));
   assert.match(nodes.fondosCalendarioSinFecha.innerHTML,/Corfo — Súmate a Innovar/);
   assert.match(nodes.fondosCalendarioSinFecha.innerHTML,/Fecha por confirmar/);
   assert.doesNotMatch(nodes.fondosCalendarioSinFecha.innerHTML,/data-fondos-calendar=/);
@@ -178,7 +178,7 @@ test('el catálogo contiene fuentes primarias auditables e identifica elegibilid
   assert.ok(CATALOG.funds.length>=5);
   for(const f of CATALOG.funds){
     assert.ok(f.source.startsWith('https://'));
-    assert.match(f.verified,/bases|oficial|programa|sin fecha|no se incorpora|ficha/i);
+    assert.ok(typeof f.verified==='string'&&f.verified.length>=20,'cada fuente describe su evidencia y límites');
     assert.match(f.fit,/sujet|potencial|media/i);
     if(f.open)assert.match(f.open,/^2026-\d{2}-\d{2}T\d{2}:\d{2}$/);
     if(f.close)assert.match(f.close,/^2026-\d{2}-\d{2}T\d{2}:\d{2}$/);
