@@ -34,7 +34,7 @@ function view(){
       setItem:(k,v)=>state.set(k,v)
     },fetch:async()=>({ok:true,json:async()=>catalog})};
   vm.runInNewContext(script,ctx);
-  return {api:ctx.window.TLSFondos,ctx,nodes,list,modal,detail,links,hooks,cards,counter,empty};
+  return {api:ctx.window.TLSFondos,ctx,nodes,list,modal,detail,links,hooks,cards,counter,empty,state};
 }
 test('radar TLS carga un CSS externo con marca propia y sin romper Calendario',async()=>{
   const v=view();
@@ -92,4 +92,54 @@ test('detalle TLS muestra requisitos, fechas y vínculo oficial válido, sin alt
   assert.match(v.detail.innerHTML,/https:\/\/www\.corfo\.gob\.cl/);
   assert.equal(v.nodes.fondosDetallePreparar.dataset.fondosDraft,'corfo-semilla-inicia-nueva-vigilar');
   assert.equal(v.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2);
+});
+
+test('botón DEMO cambia solo la presentación, nunca los eventos oficiales o calendario compartido',async()=>{
+  const v=view();await v.api.load();
+  const originalEvents=JSON.stringify(v.api.eventList());
+  const originalDates=JSON.stringify(v.api.allDates());
+  assert.equal(v.api.isDemo(),false);
+  assert.match(v.list.innerHTML,/DEMO · Ver funcionamiento/);
+  v.api.toggleDemo();
+  assert.equal(v.api.isDemo(),true);
+  assert.match(v.list.innerHTML,/fondos-tls is-demo/);
+  assert.match(v.list.innerHTML,/MODO DEMO · SIMULACIÓN/);
+  assert.match(v.list.innerHTML,/data-fondos-demo-toggle/);
+  assert.match(v.list.innerHTML,/data-fondos-demo-step="fechas"/);
+  assert.match(v.list.innerHTML,/no se manda correo/i);
+  assert.equal(JSON.stringify(v.api.eventList()),originalEvents);
+  assert.equal(JSON.stringify(v.api.allDates()),originalDates);
+  assert.ok([...v.state.keys()].every(k=>!k.toLowerCase().includes('demo')),'no persistir el demo en storage');
+  v.api.toggleDemo();
+  assert.equal(v.api.isDemo(),false);
+  assert.match(v.list.innerHTML,/data-fondos-card="corfo-semilla-inicia-nueva-vigilar"/);
+  assert.doesNotMatch(v.list.innerHTML,/fondos-tls is-demo/);
+  assert.equal(JSON.stringify(v.api.eventList()),originalEvents);
+});
+test('recorrido DEMO permite ver fechas, aviso y borrador simulados sin IA ni Resend',async()=>{
+  const v=view();await v.api.load();
+  v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-toggle]'?{}:null}});
+  assert.equal(v.api.isDemo(),true);
+  for(const [scene,marker] of [
+    ['requisitos','Evaluación de compatibilidad'],
+    ['fechas','Apertura simulada'],
+    ['alerta','Correo simulado'],
+    ['borrador','Borrador ilustrativo']]){
+    v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-step]'?{dataset:{fondosDemoStep:scene}}:null}});
+    assert.match(v.list.innerHTML,new RegExp(marker));
+    assert.match(v.list.innerHTML,new RegExp('data-fondos-demo-step="'+scene+'" aria-pressed="true"'));
+  }
+  assert.match(v.list.innerHTML,/no se llama al motor IA/i);
+  assert.match(v.list.innerHTML,/no se envía un formulario/i);
+  assert.match(css,/fondos-tls\.is-demo/);
+  assert.match(css,/fondos-demo-stage/);
+  v.hooks['root:click']({target:{closest:sel=>sel==='[data-fondos-demo-toggle]'?{}:null}});
+  assert.equal(v.api.isDemo(),false);
+});
+test('recarga nueva arranca siempre en modo real, no reutiliza estado DEMO',async()=>{
+  const v=view();await v.api.load();v.api.toggleDemo();
+  const another=view();await another.api.load();
+  assert.equal(another.api.isDemo(),false);
+  assert.match(another.list.innerHTML,/DEMO · Ver funcionamiento/);
+  assert.equal(another.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2);
 });
