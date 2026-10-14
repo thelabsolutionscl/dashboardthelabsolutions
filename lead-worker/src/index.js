@@ -35,6 +35,7 @@
  */
 
 import { waNotify, waSend, waPhone, mensajeLead, mensajeImpresora, waDailyReminders, WA_RUTAS, waWebhookVerify, waWebhookFirmaValida, waWebhookEvento } from "./wa-notify.js";
+import { deliverFundAlerts } from "./fondos-notify.js";
 
 const AIRTABLE_API = "https://api.airtable.com/v0";
 
@@ -233,6 +234,10 @@ export default {
       return;
     }
     ctx.waitUntil(retryDeadLetters(env));
+    // Apertura y cierre de fondos TLS: por correo y por destinatario,
+    // con Resend + idempotencia KV. Nunca se envían fechas vencidas.
+    ctx.waitUntil(deliverFundAlerts(env,new Date(event.scheduledTime || Date.now()))
+      .catch(e=>console.error("[fondos-notify] cron:",e.message)));
     // Resumen diario por WhatsApp (cotizaciones por enviar / pedidos por vencer);
     // solo actúa a la hora WA_DIGEST_HOUR de Chile y una vez por día.
     ctx.waitUntil(
