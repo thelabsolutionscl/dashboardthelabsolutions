@@ -134,6 +134,25 @@ test('si el dashboard exige Access, carga desde el catálogo público de respald
  assert.equal(h.calls().length,4);
 });
 
+test('ProChile: ambos avisos usan solo fuentes oficiales y no fechas futuras inventadas',async()=>{
+ const m=await module();
+ const f=catalog.funds.find(x=>x.id==='prochile-servicios-industrias-creativas-sectorial-2027');
+ const next=catalog.funds.find(x=>x.id==='prochile-servicios-industrias-creativas-proximo');
+ assert.ok(f&&next);
+ assert.equal(f.open,'2026-07-23T12:00');
+ assert.equal(f.close,'2026-08-20T17:00');
+ assert.equal(next.open,null);
+ assert.equal(next.close,null);
+ const starts=m.dueNotifications({schema:1,funds:[f,next]},new Date('2026-07-23T13:20:00Z'));
+ const ends=m.dueNotifications({schema:1,funds:[f,next]},new Date('2026-08-20T13:20:00Z'));
+ assert.equal(starts.length,1);
+ assert.equal(starts[0].phase,'apertura');
+ assert.equal(ends.length,1);
+ assert.equal(ends[0].phase,'cierre');
+ assert.equal(m.dueNotifications({schema:1,funds:[next]},new Date('2027-08-20T13:20:00Z')).length,0);
+ assert.ok(starts[0].url.startsWith('https://www.prochile.gob.cl/'));
+});
+
 test('avisos dentro del dashboard solo para ambos usuarios y una vez por fecha',()=>{
  assert.match(cal,/notifyToday\(\)/);
  assert.match(cal,/personas:\['gustavo','nicanor'\]/);

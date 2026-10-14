@@ -363,6 +363,36 @@
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/innova_alta_tecnologia_eureka/",
       "verified": "Ficha oficial marca postulaciones permanentes, pero los llamados internacionales tienen etapas y plazos específicos; no trasladar fechas de otros años.",
       "requirements": "Propuesta colaborativa internacional I+D de alta incertidumbre, completar fases requeridas y verificar ventana Eureka y convocatoria chilena."
+    },
+    {
+      "id": "prochile-servicios-industrias-creativas-sectorial-2027",
+      "name": "ProChile — Servicios e Industrias Creativas 2027 (proyectos sectoriales)",
+      "organizer": "ProChile",
+      "region": "Nacional; concurso sectorial",
+      "category": "Promoción internacional / diseño y servicios creativos",
+      "fit": "Indirecta, condicionada a proyecto sectorial admisible",
+      "fitReason": "TLS desarrolla diseño y fabricación digital; posible encaje únicamente si integra un proyecto sectorial liderado por persona jurídica elegible y presta servicios o productos admitidos. No es un subsidio individual garantizado a TLS.",
+      "open": "2026-07-23T12:00",
+      "close": "2026-08-20T17:00",
+      "source": "https://www.prochile.gob.cl/herramientas/concursos/",
+      "info": "https://www.prochile.gob.cl/herramientas/concursos/",
+      "verified": "Fuente oficial ProChile, preguntas frecuentes concursos 2027; apertura 23/07/2026 12:00 y cierre 20/08/2026 17:00. Convocatoria ya cerrada.",
+      "requirements": "Proyectos sectoriales, no una postulación individual ordinaria. Verificar persona jurídica postulante, sector servicios o industrias creativas, servicios/productos admisibles, mercados objetivo y bases del concurso."
+    },
+    {
+      "id": "prochile-servicios-industrias-creativas-proximo",
+      "name": "ProChile — Servicios e Industrias Creativas (siguiente concurso sectorial)",
+      "organizer": "ProChile",
+      "region": "Nacional; modalidad sectorial",
+      "category": "Promoción internacional / exportación de servicios",
+      "fit": "Indirecta, condicionado a bases y postulante asociativo",
+      "fitReason": "Oportunidad potencial si TLS integra un proyecto sectorial admisible junto a otras empresas u organización elegible. No confundir con subsidio individual directo.",
+      "open": null,
+      "close": null,
+      "source": "https://www.prochile.gob.cl/herramientas/concursos/",
+      "info": "https://www.prochile.gob.cl/herramientas/concursos/",
+      "verified": "La próxima edición aún no tiene apertura ni cierre confirmados al 14/10/2026. La convocatoria 2027 está registrada por separado como historial.",
+      "requirements": "Comprobar nueva convocatoria, sectores y servicios admitidos, organización que puede postular y período oficial."
     }
   ]
 }
