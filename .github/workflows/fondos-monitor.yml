@@ -21,6 +21,8 @@ jobs:
         run: node --test tests/fondos-monitor.test.js
       - name: Buscar nuevas ventanas oficiales Sercotec
         run: node scripts/fondos-monitor.js
+      - name: Revisar fichas de Corfo en busca de cambios en convocatorias
+        run: node scripts/fondos-watch-corfo.js
       # GITHUB_TOKEN-created PRs do not trigger PR-check workflows automatically.
       # This workflow NEVER updates the live catalog; a human must validate the
       # official bases, update data/fondos-concursables.json and merge with CI.
@@ -31,10 +33,12 @@ jobs:
           branch: bot/revisar-fondos-sercotec
           base: main
           delete-branch: true
-          add-paths: data/fondos-detectados.json
-          title: "chore(fondos): revisar nuevas convocatorias detectadas en Sercotec"
+          add-paths: |
+            data/fondos-detectados.json
+            data/fondos-corfo-por-revisar.json
+          title: "chore(fondos): revisar convocatorias oficiales Corfo y Sercotec"
           body: |
-            Detección automática de posibles fondos con fecha en la RM o nacionales.
+            Detección automática de posibles fechas y cambios en fondos de la RM o nacionales (Sercotec y Corfo).
             **NO son fechas verificadas para el Calendario**. Revisar bases,
             confirmar compatibilidad con TLS, prórrogas y horarios, y recién
             después actualizar data/fondos-concursables.json por PR con CI.

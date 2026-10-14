@@ -180,7 +180,7 @@ test('el catálogo contiene fuentes primarias auditables e identifica elegibilid
     assert.ok(f.source.startsWith('https://'));
     assert.ok(typeof f.verified==='string'&&f.verified.length>=20,'cada fuente describe su evidencia y límites');
     assert.ok(typeof f.fit==='string'&&f.fit.length>=5&&typeof f.requirements==='string'&&f.requirements.length>=15,'cada llamada documenta condiciones y requisitos por verificar');
-    if(f.open)assert.match(f.open,/^2026-\d{2}-\d{2}T\d{2}:\d{2}$/);
-    if(f.close)assert.match(f.close,/^2026-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    if(f.open)assert.match(f.open,/^20(?:25|26|27)-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    if(f.close)assert.match(f.close,/^20(?:25|26|27)-\d{2}-\d{2}T\d{2}:\d{2}$/);
   }
 });

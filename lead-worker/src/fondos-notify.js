@@ -55,7 +55,7 @@ export function emailFor(f,person,address){
     '<h2>'+esc(subject)+'</h2>'+
     '<p>Hola '+esc(person==='gustavo'?'Gustavo':'Nicanor')+',</p>'+
     '<p>Hoy, <b>'+esc(f.date)+'</b>, corresponde la <b>'+esc(f.phase)+'</b> de esta convocatoria ('+esc(f.organizer)+').</p>'+
-    '<p><b>Hora anunciada:</b> '+esc(f.time)+' (Chile continental). Confirma cualquier cambio directamente en el organismo.</p>'+
+    '<p><b>Horario:</b> '+(f.time==='00:00'?'No consta hora oficial en esta ficha; consulta las bases para el plazo exacto.':esc(f.time)+' (Chile continental)')+'. Confirma cualquier cambio directamente en el organismo.</p>'+
     '<p><b>Requisitos por verificar:</b> '+esc(f.requirements)+'</p>'+
     '<p><a href="'+esc(f.url)+'">Consultar convocatoria oficial y bases</a></p>'+
     '<p><a href="https://dashboard.thelab.solutions/">Abrir Calendario de TLS</a></p>'+
