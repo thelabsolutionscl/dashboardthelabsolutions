@@ -104,3 +104,22 @@ Las notificaciones por correo (Gustavo y Nicanor) se ejecutan en `lead-worker/sr
 - Se agrega seguimiento de la **próxima convocatoria ProChile** sin asignar fechas ni notificaciones hasta su publicación oficial.
 - La búsqueda contempla Sercotec, Corfo y el nuevo instrumento de ProChile, pero **no puede afirmar que detecta todos los fondos** de cada municipio, GORE, corporación o agencia. Hay llamados acotados a localidades, rubros, tipos de persona o consorcios. Registrar solo los potencialmente aplicables a TLS y revisar condiciones vigentes.
 - Los avisos por correo preparados para Gustavo y Nicanor requieren comprobar el secreto `RESEND_API_KEY`, el KV `RL` y una **prueba real de entrega** de ambos buzones; un workflow exitoso solo confirma código desplegado, no correos recibidos.
+
+### Llamados a vigilar en noviembre 2026 — fuentes oficiales (14/10/2026)
+
+Por solicitud de gerencia se incorporaron al catálogo cuatro **programas en seguimiento**: Semilla Inicia, Semilla Expande, un próximo llamado de Crea y Valida, y Start-Up Chile BIG (Build, Ignite y Growth). El aviso de posible actividad en noviembre **no es una fecha oficial de apertura/cierre**. Los cuatro registros tienen `open: null` y `close: null`; no aparecen como hitos fechados ni producen correos hasta verificar una nueva convocatoria. Esto evita extrapolar de otras regiones, años o documentos privados. El histórico **BIG 11 Build de noviembre 2025** se preserva por separado (05/11 13:00 al 28/11 13:00).
+
+- **Semilla Inicia:** la empresa existente TLS con ventas no sería elegible bajo la ficha oficial vigente para empresas con inicio de actividades: menos de 18 meses y **sin ventas**. Se monitoriza por indicación de gerencia y para un eventual emprendimiento distinto que cumpla íntegramente bases.
+- **Semilla Expande:** personas jurídicas con menos de 36 meses de inicio de actividades y máximo $80 millones netos de ventas en los últimos 12 meses, según ficha oficial actual; adicionalmente, solución innovadora, ventas de esa solución y expansión real. No se da por elegible a TLS.
+- **Crea y Valida:** pertinencia potencial para I+D de manufactura avanzada y prototipos nuevos, con 24 meses de primera categoría y ventas acreditadas. La ficha nacional 2026 cerró el 04/08/2026 y anuncia **resultados el 27/11/2026**; esta última fecha **no es nueva apertura de postulaciones**. Un nuevo llamado debe registrarse con identidad, bases y plazos propios, incluido perfil previo cuando corresponda.
+- **Start-Up Chile BIG:** la generación 11 abrió en noviembre 2025; la 12 abrió en mayo 2026. No consta todavía una convocatoria nueva de noviembre 2026 en la portada oficial. Build, Ignite y Growth son líneas distintas y exigen startup tecnológica escalable, más requisitos variables de etapa, antigüedad, ingresos y equipo.
+
+**Vigilancia ampliada:** el workflow `.github/workflows/fondos-monitor.yml` sigue con cron en días hábiles, revisa Sercotec y ahora Corfo, ProChile y Start-Up Chile, y propone señales en archivos de staging para **revisión humana**. Esto no transforma por sí solo datos públicos en fechas oficiales; un responsable debe comprobar nueva ficha/bases, zona horaria, territorio, etapa y elegibilidad, para entonces actualizar el catálogo mediante PR. Recién al publicarse una fecha concreta el Worker puede avisar a Gustavo y Nicanor por apertura o cierre del día (sin notificación retroactiva). Ni un deploy verde ni la confirmación de aceptación por Resend prueban recepción en ambos buzones; falta ensayo real en las dos casillas.
+
+Fuentes:
+- https://www.corfo.gob.cl/sites/cpp/programa/semilla-inicia/
+- https://www.corfo.gob.cl/sites/cpp/programa/semilla-expande/
+- https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/
+- https://www.corfo.gob.cl/sites/cpp/convocatoria/start-up-chile-build-11-2025/
+- https://startupchile.org/
+- https://www.prochile.gob.cl/herramientas/concursos/
