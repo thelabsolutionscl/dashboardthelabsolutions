@@ -87,9 +87,9 @@ function _calCrmEvents(){
   });
   return out;
 }
-function _calDisplayEvents(){return _calAll().filter(e=>!e.del).map(e=>({...e,source:e.source||'manual',type:e.type||'manual',color:_calColor(e)})).concat(_calCrmEvents());}
+function _calDisplayEvents(){return _calAll().filter(e=>!e.del).map(e=>({...e,source:e.source||'manual',type:e.type||'manual',color:_calColor(e)})).concat(_calCrmEvents(),window.TLSFondos?.eventList?.()||[]);}
 function _calEventById(id){return _calDisplayEvents().find(e=>e.id===id)||null;}
-function _calAllowedSync(ev){const p=_calSyncPrefs();if(ev.source!=='crm')return p.manual!==false;const mine=_calUserId();
+function _calAllowedSync(ev){if(ev?.source==='fondos')return false;const p=_calSyncPrefs();if(ev.source!=='crm')return p.manual!==false;const mine=_calUserId();
   // "Solo los míos" filtra por identidad. Si el login NO está mapeado a una
   // persona (mine===''; p.ej. hola@thelab.solutions), no hay "míos" que filtrar:
   // se trata onlyMine como inactivo. Antes excluía TODOS los eventos, y como los
@@ -97,7 +97,7 @@ function _calAllowedSync(ev){const p=_calSyncPrefs();if(ev.source!=='crm')return
   // "Solo los míos" sin identidad BORRABA de Google los calendarios del equipo.
   return p[ev.syncKey]!==false&&(!p.onlyMine||!mine||(ev.personas||[]).includes(mine));}
 function _calSyncCandidates(){
-  const current=_calDisplayEvents(),meta=_calCrmMeta(),ids=new Set(current.map(e=>e.id)),out=[];
+  const current=_calDisplayEvents().filter(ev=>ev.source!=='fondos'),meta=_calCrmMeta(),ids=new Set(current.map(e=>e.id)),out=[];
   current.forEach(ev=>{const allowed=_calAllowedSync(ev);if(allowed)out.push(ev);else if(Object.keys(ev.gcal||{}).length)out.push({...ev,del:true,_syncDisabled:true});});
   Object.entries(meta).forEach(([id,m])=>{if(!ids.has(id)&&Object.keys(m.gcal||{}).length)out.push({id,source:'crm',type:m.type||'crm',syncKey:m.syncKey||'ped_delivery',personas:[],gcal:m.gcal,del:true,mts:Date.now(),gsyncMts:+m.gsyncMts||0});});
   return out;
@@ -515,7 +515,8 @@ function _calPassFilter(ev){
   if(_calTipoFiltro==='todos')return true;
   if(_calTipoFiltro==='cotizaciones')return String(ev.type||'').startsWith('cot_');
   if(_calTipoFiltro==='pedidos')return String(ev.type||'').startsWith('ped_');
-  if(_calTipoFiltro==='equipo')return ev.source!=='crm';
+  if(_calTipoFiltro==='equipo')return ev.source==='manual';
+  if(_calTipoFiltro==='fondos')return ev.source==='fondos';
   if(_calTipoFiltro==='atrasados')return ev.risk==='overdue'||ev.risk==='today';
   if(_calTipoFiltro==='hoy')return _calDays(ev.fecha)===0;
   if(_calTipoFiltro==='semana'){const days=_calDays(ev.fecha);return days>=0&&days<=7;}
@@ -531,6 +532,7 @@ function _calEventosDia(f){
 function _calColor(ev){if(ev?.color)return ev.color;const p=_calPersona((ev?.personas||[])[0]);return (p&&p.color)||'var(--accent)';}
 function _calWhen(ev){const d=_calDays(ev.fecha);return d===null?'sin fecha':d<0?`${Math.abs(d)}d atraso`:d===0?'hoy':d===1?'mañana':`en ${d}d`;}
 function _calEventHtml(ev,compact=false){
+  if(ev.source==='fondos')return `<div class="cal-ev cal-fondo" style="border-left-color:${_calColor(ev)}" onclick="event.stopPropagation();calOpenEvent('${ev.id}')" title="${escapeHtml(ev.titulo||'')}"><span class="cal-ev-h">${ev.type==='fondo_cierre'?'🔴':'🟢'}</span> ${escapeHtml(ev.titulo||'')}</div>`;
   const pend=_calAllowedSync(ev)&&_calNeedsSync(ev)?' cal-pend':'',risk=ev.risk?` risk-${ev.risk}`:'',hora=ev.allDay?(ev.source==='crm'?_calWhen(ev):'●'):(ev.hIni||'');
   const cap=ev.type==='ped_delivery'&&typeof MachineOps!=='undefined'&&MachineOps.deadlineCapacityRisk?MachineOps.deadlineCapacityRisk(ev.recordId,ev.fecha):null;
   const capBadge=cap&&cap.status==='risk'?'<span class="cal-cap-risk" title="La planificación de Máquinas no alcanza esta fecha">CAP.</span>':'';
@@ -546,7 +548,7 @@ function calDropDate(e,fecha){e.preventDefault();const id=(e.dataTransfer&&e.dat
 function _calRenderFilters(){
   const chips=document.getElementById('calFiltroChips');if(chips)chips.innerHTML=[`<button class="cal-chip ${_calFiltro==='todos'?'on':''}" onclick="calSetFiltro('todos')">Todos</button>`]
     .concat(_calPersonas().map(p=>`<button class="cal-chip ${_calFiltro===p.id?'on':''}" style="--chip:${p.color}" onclick="calSetFiltro('${p.id}')"><span class="cal-dot" style="background:${p.color}"></span>${p.nombre.split(' ')[0]}</button>`)).join('');
-  const types=document.getElementById('calTipoChips');if(types){const rows=[['todos','Todos'],['hoy','Hoy'],['semana','7 días'],['cotizaciones','🟣 Cotizaciones'],['pedidos','🟠 Pedidos'],['equipo','🔵 Equipo'],['atrasados','🔴 Atrasados'],['capacidad','⚠ Capacidad'],['mios','👤 Míos'],['sin-responsable','⚪ Sin responsable']];types.innerHTML=rows.map(([k,l])=>`<button class="cal-chip ${_calTipoFiltro===k?'on':''}" onclick="calSetTipo('${k}')">${l}</button>`).join('');}
+  const types=document.getElementById('calTipoChips');if(types){const rows=[['todos','Todos'],['hoy','Hoy'],['semana','7 días'],['cotizaciones','🟣 Cotizaciones'],['pedidos','🟠 Pedidos'],['equipo','🔵 Equipo'],['fondos','🟢 Fondos concursables'],['atrasados','🔴 Atrasados'],['capacidad','⚠ Capacidad'],['mios','👤 Míos'],['sin-responsable','⚪ Sin responsable']];types.innerHTML=rows.map(([k,l])=>`<button class="cal-chip ${_calTipoFiltro===k?'on':''}" onclick="calSetTipo('${k}')">${l}</button>`).join('');}
   document.querySelectorAll('[data-cal-view]').forEach(b=>b.classList.toggle('active-filter',b.dataset.calView===_calVista));
 }
 function _calRenderMonth(grid){
@@ -725,7 +727,7 @@ function calBusinessDate(from,offset=0){
   const d=_calDate(from);if(!d)return'';let left=Math.abs(Math.trunc(+offset||0)),dir=offset<0?-1:1;while(left>0){d.setDate(d.getDate()+dir);if(_calBusinessDay(d))left--;}return _calFmtFecha(d);
 }
 function calInternalDate(delivery,buffer=2){return calBusinessDate(delivery,-Math.max(0,+buffer||0));}
-function calOpenEvent(id){const ev=_calEventById(id);if(!ev)return;if(ev.source==='crm')openCalCrmModal(ev.recordKind,ev.recordId,ev.field);else openCalEventoModal(null,id);}
+function calOpenEvent(id){const ev=_calEventById(id);if(!ev)return;if(ev.source==='fondos'){window.TLSFondos?.open?.(id);return;}if(ev.source==='crm')openCalCrmModal(ev.recordKind,ev.recordId,ev.field);else openCalEventoModal(null,id);}
 function calGoRecord(kind,id){closeCalCrmModal();const tab=kind==='pedido'?'pedidos':'cotizaciones';switchTab(tab);setTimeout(()=>{try{goToAlert(tab,id);}catch(e){}},180);}
 function _calCrmDetailItems(rec){
   const f=rec?.fields||{};let items=[];
