@@ -18,7 +18,7 @@ function view(){
   const counter={textContent:''},empty={hidden:false};
   const rootEl={addEventListener:(event,fn)=>{hooks['root:'+event]=fn;}};
   const filter={value:'',addEventListener:(event,fn)=>{hooks['filter:'+event]=fn;}};
-  const modal={style:{display:'none'}},detail={innerHTML:''},prepare={dataset:{}};
+  const modal={style:{display:'none'},addEventListener(){}},detail={innerHTML:''},prepare={dataset:{}};
   const nodes={'tab-calendario':rootEl,'fondosList':list,'fondosFiltro':filter,
     'fondosStatus':{textContent:''},'fondosShowOnCalendar':{checked:true,addEventListener(){}},
     'fondosDetalleModal':modal,'fondosDetalleBody':detail,'fondosDetallePreparar':prepare};
