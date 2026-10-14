@@ -95,6 +95,23 @@ test('copiloto genera borrador usando solo datos provistos, sin postulaciones au
   assert.match(docNodes.fondosRespuesta.textContent,/clave API/);
 });
 
+test('agente ayuda también a convocatorias nuevas sin inventar elegibilidad',async()=>{
+ const nodes={
+   fondosConvocatoria:{value:'otro'},
+   fondosOtroFondo:{value:'Fondo Regional Nueva Tecnología'},
+   fondosPreguntas:{value:'Indique el monto solicitado, la innovación del proyecto y adjunte documentos tributarios.'},
+   fondosAntecedentes:{value:''},
+   fondosRespuesta:{textContent:''},fondosGenerar:{disabled:false}
+ };
+ const {api,calls}=instance(nodes);await api.load();
+ // The select is not part of the synthetic DOM and retains its manual choice.
+ await api.draft();
+ assert.equal(calls.length,1);
+ assert.match(calls[0][2],/Fondo Regional Nueva Tecnología/);
+ assert.match(calls[0][2],/Convocatoria ingresada manualmente/);
+ assert.match(calls[0][1],/SIN inventar hechos/);
+});
+
 test('el catálogo contiene fuentes primarias auditables e identifica elegibilidad condicionada',()=>{
   assert.ok(CATALOG.funds.length>=5);
   for(const f of CATALOG.funds){
