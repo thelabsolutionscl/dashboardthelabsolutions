@@ -77,9 +77,9 @@
       '<button type="button" class="btn btn-primary btn-sm" data-fondos-draft="'+esc(f.id)+'">🤖 Preparar postulación</button>'+
       '</div></article>').join('');
     const select=document.getElementById('fondosConvocatoria');
-    if(select){const keep=select.value||selected;select.innerHTML='<option value="">Selecciona un fondo</option>'+
+    if(select){const keep=select.value||selected;select.innerHTML='<option value="">Selecciona un fondo</option><option value="otro">Otra convocatoria (manual)</option>'+
       funds.map(f=>'<option value="'+esc(f.id)+'">'+esc(f.name)+'</option>').join('');
-      select.value=byId(keep)?keep:'';selected=select.value;}
+      select.value=byId(keep)||keep==='otro'?keep:'';selected=select.value;}
   }
   async function load(){
     if(inFlight)return inFlight;
@@ -127,7 +127,8 @@
   async function draft(){
     if(busy)return;
     const id=document.getElementById('fondosConvocatoria')?.value;
-    const f=byId(id);
+    const typed=(document.getElementById('fondosOtroFondo')?.value||'').trim();
+    const f=id==='otro'&&typed.length>=5?{name:typed.slice(0,200),organizer:'Por identificar',source:'No proporcionada',verified:'Convocatoria ingresada manualmente: revisar bases originales.',open:'',close:'',requirements:'Verificar requisitos y antecedentes de la convocatoria original.'}:byId(id);
     const questions=(document.getElementById('fondosPreguntas')?.value||'').trim();
     const evidence=(document.getElementById('fondosAntecedentes')?.value||'').trim();
     const output=document.getElementById('fondosRespuesta');
