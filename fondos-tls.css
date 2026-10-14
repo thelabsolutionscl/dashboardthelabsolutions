@@ -1,6 +1,6 @@
 /* TLS Funding Radar — visual layer scoped to Calendario only.
    Same DM Sans, cyan #00d4cc, glass, blueprint accents as the TLS dashboard. */
-#tab-calendario #fondosList{display:block!important;width:100%;max-width:100%;padding:0;margin:12px 0 0}
+#tab-calendario #fondosList{display:block!important;width:100%;max-width:100%;max-height:none!important;overflow:visible!important;padding:0;margin:12px 0 0}
 #tab-calendario .fondos-tls{--f-cyan:var(--accent,#00d4cc);--f-soft:#a2abb9;--f-border:rgba(150,180,196,.17);color:var(--text,#f0f0f0);font-family:'DM Sans',sans-serif}
 #tab-calendario .fondos-tls button,#tab-calendario .fondos-tls input{font-family:inherit}
 #tab-calendario .fondos-hero{position:relative;isolation:isolate;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,.8fr);gap:24px;align-items:center;padding:clamp(23px,3vw,35px);border:1px solid rgba(0,212,204,.3);border-radius:22px;background:radial-gradient(ellipse at 96% 6%,rgba(0,212,204,.14),transparent 52%),radial-gradient(ellipse at 10% 100%,rgba(22,84,116,.15),transparent 58%),linear-gradient(125deg,rgba(19,26,32,.96),rgba(10,16,20,.95));box-shadow:0 18px 38px rgba(0,0,0,.2)}
