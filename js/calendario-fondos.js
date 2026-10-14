@@ -16,7 +16,7 @@
   };
   const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
   const pretty=v=>{if(!iso(v))return 'Por confirmar';const d=new Date(v.slice(0,10)+'T12:00:00');return d.toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'})+(v.includes('T')?' · '+v.slice(11,16)+' h':'');};
-  const allowedUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&/^(?:www\.)?(?:sercotec\.cl|corfo\.cl|fondos\.gob\.cl)$/.test(u.hostname);}catch{return false;}};
+  const allowedUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&/^(?:www\.)?(?:sercotec\.cl|corfo\.cl|corfo\.gob\.cl|fondos\.gob\.cl)$/.test(u.hostname);}catch{return false;}};
   const clean=f=>{
     if(!f||typeof f!=='object'||!/^[a-z0-9-]{3,90}$/.test(f.id||'')||typeof f.name!=='string'||!allowedUrl(f.source))return null;
     const begin=iso(f.open),end=iso(f.close);
@@ -40,6 +40,37 @@
     if(f.open&&f.open.slice(0,10)<=now&&(!f.close||f.close.slice(0,10)>=now))return 'Posiblemente abierto · verificar';
     return 'Por confirmar';
   };
+  // Avisos persistentes del dashboard al usuario autenticado: Gustavo y Nicanor.
+  // El envío POR CORREO corre 24/7 en lead-worker y no depende de esta pestaña.
+  function notifyToday(){
+    const n=typeof NOTIFY!=='undefined'?NOTIFY:null;
+    if(!n||typeof n.priority!=='function'||typeof n.persona!=='function')return 0;
+    const who=n.persona();
+    if(who!=='gustavo'&&who!=='nicanor')return 0;
+    // Chile continental: el calendario sigue usando fechas locales, pero las
+    // notificaciones de fondos se evalúan exclusivamente en America/Santiago.
+    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const field=name=>parts.find(x=>x.type===name)?.value||'';
+    const day=[field('year'),field('month'),field('day')].join('-');
+    let count=0;
+    for(const f of funds){
+      for(const [phase,name] of [['open','Apertura'],['close','Cierre']]){
+        if(iso(f[phase])!==day)continue;
+        const key='fondos:'+who+':'+f.id+':'+phase+':'+day;
+        try{if(localStorage.getItem(key)==='1')continue;}catch(_){}
+        const title=(phase==='open'?'🟢 Abre hoy: ':'🔴 Cierra hoy: ')+f.name;
+        const detail=name+' a las '+f[phase].slice(11,16)+' h (Chile) · Revisa las bases oficiales antes de postular.';
+        if(n.priority('info',title,detail,'calendario',{
+          personas:['gustavo','nicanor'],
+          tone:phase==='close'?'warning':'info',key
+        })){
+          count++;
+          try{localStorage.setItem(key,'1');}catch(_){}
+        }
+      }
+    }
+    return count;
+  }
   function eventList(){
     let on=true;try{on=localStorage.getItem(KEY)!=='false';}catch{}
     if(!on)return [];
@@ -152,7 +183,7 @@
         funds=fresh.filter(f=>{if(ids.has(f.id))return false;ids.add(f.id);return true;});
         updated=String(data.reviewedAt||'');
         error='';
-        render();if(typeof window.renderCalendario==='function')window.renderCalendario();
+        render();notifyToday();if(typeof window.renderCalendario==='function')window.renderCalendario();
       }catch(e){error='No se pudo actualizar el catálogo de fondos. '+String(e.message||e);render();}
     })().finally(()=>{inFlight=null;});
     return inFlight;
@@ -249,8 +280,10 @@
     document.getElementById('fondosDetalleModal')?.addEventListener('click',e=>{if(e.target.id==='fondosDetalleModal')close();});
     render();
     load();
+    // Ventana abierta durante horas: recordar nuevas aperturas y cierres.
+    setInterval(notifyToday,15*60*1000);
   }
-  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary};
+  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();
