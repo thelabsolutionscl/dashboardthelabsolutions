@@ -540,6 +540,22 @@ function _calEventHtml(ev,compact=false){
 }
 function calNavMes(d){if(_calVista==='mes')_calMes=new Date(_calMes.getFullYear(),_calMes.getMonth()+d,1);else{const x=new Date(_calMes);x.setDate(x.getDate()+d*(_calVista==='semana'?7:30));_calMes=x;}renderCalendario();}
 function calHoy(){_calMes=new Date();renderCalendario();}
+/* Saltar a la apertura o cierre de un fondo sin alterar el CRM ni Google.
+   Al saltar se restablecen los filtros de responsable y se seleccionan
+   únicamente los hitos concursables en la vista mensual. */
+function calIrAFondoFecha(fecha){
+  const d=_calDate(fecha);
+  if(!d)return false;
+  _calMes=new Date(d.getFullYear(),d.getMonth(),1);
+  _calFiltro='todos';
+  _calTipoFiltro='fondos';
+  _calVista='mes';
+  try{localStorage.setItem('thelab_cal_vista','mes');}catch(_){}
+  renderCalendario();
+  document.getElementById('calGrid')?.scrollIntoView?.({behavior:'smooth',block:'center'});
+  return true;
+}
+
 function calSetFiltro(pid){_calFiltro=pid;renderCalendario();}
 function calSetTipo(tipo){_calTipoFiltro=tipo;renderCalendario();}
 function calSetVista(vista){_calVista=vista;try{localStorage.setItem('thelab_cal_vista',vista);}catch(e){}renderCalendario();}
@@ -619,6 +635,7 @@ function renderCalendario(){
   renderCalProximos();
   renderCalMissing();renderCalHistory();
   _calRenderSyncStatus();
+  window.TLSFondos?.renderCalendarSummary?.();
 }
 function renderCalProximos(){
   const el=document.getElementById('calProximos');if(!el)return;
