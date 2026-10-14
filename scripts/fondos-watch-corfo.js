@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-/* Sentinel Corfo: revisa fuentes oficiales del catálogo y genera una lista
+/* Sentinel Corfo, ProChile y Start-Up Chile: revisa fuentes oficiales del catálogo y genera una lista
    de cambios para revisión humana, sin crear alertas ni fechas automáticamente.
    Es intencionalmente conservador: no usa fechas de tarjetas ajenas.
 */
@@ -10,7 +10,7 @@ const ROOT=path.join(__dirname,'..');
 const CATALOG=path.join(ROOT,'data/fondos-concursables.json');
 const OUTPUT=path.join(ROOT,'data/fondos-corfo-por-revisar.json');
 const MAX_BODY=1500000;
-const OFFICIAL=new Set(['www.corfo.gob.cl','corfo.gob.cl','www.corfo.cl','corfo.cl']);
+const OFFICIAL=new Set(['www.corfo.gob.cl','corfo.gob.cl','www.corfo.cl','corfo.cl','www.prochile.gob.cl','prochile.gob.cl','startupchile.org','www.startupchile.org']);
 function sanitize(html){
   return String(html||'')
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ')
@@ -28,6 +28,8 @@ function signal(html){
   // extraer menciones solo para revisión de un ser humano.
   const observations=[];
   const patterns=[
+    /(?:20(?:25|26|27|28)[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]20(?:25|26|27|28)|\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+de\s+20(?:25|26|27|28))\b/gi,
+    /(?:Applications|Postulaciones|Convocatoria|Apply|Deadline|BIG\s*1[3-9])\s*:?\s*(.{0,100})/gi,
     /(?:Apertura|Fecha Inicio|Inicio Postulaci[oó]n|Postulaciones Abiertas)\s*:?\s*(.{0,100})/gi,
     /(?:Cierre|Fecha T[eé]rmino|Termino Postulaci[oó]n|Postulaciones Cerradas)\s*:?\s*(.{0,100})/gi,
     /(?:20(?:25|26|27)[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]20(?:25|26|27))\b/g
@@ -67,11 +69,11 @@ async function audit({fetcher=fetch,records,delayMs=0}={}){
 async function main(){
   const {out,issues}=await audit();
   if(!out.length){console.log('Sin cambios verificables: mantener estado anterior. Fuentes fallidas:',issues.length);return;}
-  const next={schema:1,provider:'Corfo — detección previa a revisión humana',candidates:out};
+  const next={schema:1,provider:'Corfo, ProChile y Start-Up Chile — detección previa a revisión humana',candidates:out};
   const old=JSON.parse(fs.readFileSync(OUTPUT,'utf8'));
-  if(JSON.stringify(old)===JSON.stringify(next)){console.log('Corfo sin nuevos cambios observables.');return;}
+  if(JSON.stringify(old)===JSON.stringify(next)){console.log('Fuentes oficiales sin nuevos cambios observables.');return;}
   fs.writeFileSync(OUTPUT,JSON.stringify(next,null,2)+'\n');
-  console.log('Corfo: '+out.length+' fichas con señales por verificar; '+issues.length+' errores. Ninguna fecha publicada automáticamente.');
+  console.log('Fuentes oficiales: '+out.length+' fichas con señales por verificar; '+issues.length+' errores. Ninguna fecha publicada automáticamente.');
 }
 if(require.main===module)main().catch(e=>{console.error('Corfo watcher:',e.message);process.exitCode=1;});
 module.exports={sanitize,official,signal,audit};
