@@ -262,7 +262,7 @@
         '</div>'+
       '</section>'+ 
       (demoMode?demoIllustration():'')+
-      '<div class="fondos-toolbar">'<div class="fondos-filter-pills" role="group" aria-label="Filtrar convocatorias">'+chips+'</div>'+
+      '<div class="fondos-toolbar"><div class="fondos-filter-pills" role="group" aria-label="Filtrar convocatorias">'+chips+'</div>'+
         '<label class="fondos-search-wrap"><span class="fondos-search-icon" aria-hidden="true">⌕</span><input type="search" id="fondosBuscar" autocomplete="off" aria-label="Buscar por programa, institución o categoría" placeholder="Buscar fondo, organismo o proyecto…" value="'+esc(searchTerm)+'"></label></div>'+
       '<div class="fondos-list-header"><b>Explora las oportunidades</b><span data-fondos-count>'+ordered.length+' oportunidades visibles</span></div>'+
       '<div class="fondos-grid">'+ordered.map(card).join('')+'</div>'+
