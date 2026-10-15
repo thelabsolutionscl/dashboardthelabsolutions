@@ -128,12 +128,14 @@ test('cada inicio y cierre tiene un acceso al mes del calendario y activa los hi
   store.set('thelab_fondos_mostrar_v1','false');
   assert.equal(api.eventList().length,0);
   assert.equal(api.goTo('sercotec-crece-sostenible-rm-2026','close'),true);
+  assert.equal(api.goTo('corfo-crea-y-valida-2026','milestone:perfil-obligatorio'),true);
+  assert.ok(jumped.includes('2026-06-09'),'hito obligatorio debe abrir la fecha en calendario');
   assert.equal(jumped[0],'2026-07-08');
   assert.equal(nodes.fondosShowOnCalendar.checked,true);
   assert.equal(store.get('thelab_fondos_mostrar_v1'),'true');
   assert.equal(api.eventList().length,CATALOG.funds.filter(f=>f.open&&f.close).length*2 + CATALOG.funds.reduce((n,f)=>n+(f.milestones||[]).length,0));
   assert.equal(api.goTo('corfo-sumate-innovar','open'),false);
-  assert.equal(jumped.length,1,'sin fecha confirmada no se puede navegar a un día ficticio');
+  assert.equal(jumped.length,2,'sin fecha confirmada no se puede navegar a un día ficticio');
   api.renderCalendarSummary();
   assert.match(nodes.fondosCalendarioResumen.innerHTML,new RegExp(CATALOG.funds.filter(f=>f.open&&f.close).length*2 + CATALOG.funds.reduce((n,f)=>n+(f.milestones||[]).length,0)+' fechas confirmadas'));
   assert.match(nodes.fondosCalendarioSinFecha.innerHTML,/Corfo — Súmate a Innovar/);
