@@ -604,6 +604,61 @@ async function problemReportRepair(env,body,identity,legacy){
   }catch(_){return {error:'No se pudo poner el reporte en cola',status:503};}
 }
 
+
+/* Fondos TLS: estado COMPARTIDO en registro dedicado Monitor Sistema.
+ * El navegador solo puede modificar UN fondo por petición, con CAS en DO.
+ * Sin campos libres, RUT, respuestas de postulaciones ni datos sensibles.
+ */
+const SHARED_FUNDS_NAME='FONDOS_TLS';
+const SHARED_FUNDS_STAGES=new Set(['seguimiento','evaluando','preparando','postulado','descartado']);
+const SHARED_FUNDS_CHECKS=new Set(['bases','empresa','proyecto','finanzas','documentos','formulario','plazos']);
+const SHARED_FUNDS_EMPTY={schema:1,funds:{}};
+function sharedFundsRecordAllowed(row){
+  return row&&typeof row==='object'&&!Array.isArray(row)&&
+    Object.keys(row).length===3&&
+    Object.keys(row).every(k=>['stage','checks','watching'].includes(k))&&
+    SHARED_FUNDS_STAGES.has(row.stage)&&typeof row.watching==='boolean'&&
+    Array.isArray(row.checks)&&row.checks.length<=7&&
+    new Set(row.checks).size===row.checks.length&&row.checks.every(k=>SHARED_FUNDS_CHECKS.has(k));
+}
+function sharedFundsDocAllowed(doc){
+  if(!doc||typeof doc!=='object'||Array.isArray(doc)||
+     Object.keys(doc).length!==2||doc.schema!==1||
+     !doc.funds||typeof doc.funds!=='object'||Array.isArray(doc.funds)||
+     Object.keys(doc.funds).length>100||JSON.stringify(doc).length>48000)return false;
+  return Object.entries(doc.funds).every(([id,r])=>
+    /^[a-z0-9-]{3,90}$/.test(id)&&r&&typeof r==='object'&&!Array.isArray(r)&&
+    SHARED_FUNDS_STAGES.has(r.stage)&&r.watching===true&&Array.isArray(r.checks)&&
+    r.checks.length<=7&&new Set(r.checks).size===r.checks.length&&
+    r.checks.every(k=>SHARED_FUNDS_CHECKS.has(k))&&
+    typeof r.updatedAt==='string'&&r.updatedAt.length<=40&&
+    typeof r.updatedBy==='string'&&r.updatedBy.length<=254);
+}
+async function sharedFundsLoad(env){
+  if(!env.AIRTABLE_TOKEN)return {error:'missing-token'};
+  const u=new URLSearchParams();
+  u.set('maxRecords','2');u.set('filterByFormula',"{Name}='"+SHARED_FUNDS_NAME+"'");
+  u.append('fields[]','Name');u.append('fields[]','Notes');
+  let r;try{
+    r=await fetch(AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+'?'+u.toString(),{
+      method:'GET',redirect:'manual',
+      headers:{Authorization:'Bearer '+env.AIRTABLE_TOKEN,Accept:'application/json'}});
+  }catch(_){return {error:'network'};}
+  if(!r.ok||r.status>=300&&r.status<400)return {error:'upstream'};
+  let j;try{j=await r.json();}catch(_){return {error:'json'};}
+  if(!Array.isArray(j?.records)||j.records.length>1)return {error:'duplicate-or-invalid'};
+  if(!j.records.length)return {recordId:'',revision:'',raw:'',data:{schema:1,funds:{}}};
+  const rec=j.records[0];
+  if(!/^rec[A-Za-z0-9]{14}$/.test(rec.id||'')||
+     rec.fields?.Name!==SHARED_FUNDS_NAME||typeof rec.fields?.Notes!=='string')
+    return {error:'malformed-record'};
+  let data;try{data=JSON.parse(rec.fields.Notes);}catch(_){return {error:'invalid-json'};}
+  if(!sharedFundsDocAllowed(data))return {error:'invalid-document'};
+  return {recordId:rec.id,raw:rec.fields.Notes,
+    revision:await sharedCalendarDigest(rec.fields.Notes),data};
+}
+
 const SHARED_CALENDAR_EMPTY=Object.freeze({events:[],gmap:{},gmapMts:0,crmSync:{}});
 const SHARED_CALENDAR_EVENT_KEYS=new Set([
   'id','ts','creadoPor','gcal','titulo','fecha','allDay','hIni','hFin',
@@ -2882,7 +2937,8 @@ export class CrmMutationGuard {
     const run = this._queue.then(() => path==='/marketing/spend'
       ?this._handleSpend(request):path==='/ads-shell'
         ?this._handleAdsShell(request):path==='/shared-calendar'
-        ?this._handleSharedCalendar(request):path==='/shared-agenda'
+        ?this._handleSharedCalendar(request):path==='/shared-funds'
+        ?this._handleSharedFunds(request):path==='/shared-agenda'
           ?this._handleSharedAgenda(request):path==='/shared-mail'
             ?this._handleSharedMail(request):path==='/mail-session'
               ?this._handleMailSession(request):path==='/mail-rpc'
@@ -3096,6 +3152,48 @@ export class CrmMutationGuard {
     return this._json({error:'Acción LinkedIn no soportada'},422);
   }
 
+
+  async _handleSharedFunds(request){
+    if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
+      return this._json({error:'Funds storage unavailable'},503);
+    let body;try{body=await request.json();}catch(_){return this._json({error:'Invalid funds request'},422);}
+    const actor=body?.actor;
+    const signed=actor&&typeof actor.email==='string'&&
+      ['operator','admin'].includes(actor.role);
+    // Legacy APP_KEY only when existing Access migration is not complete.
+    const legacy=actor?.legacy===true;
+    if((!signed&&!legacy)||!/^[a-z0-9-]{3,90}$/.test(String(body?.fundId||''))||
+       !sharedFundsRecordAllowed(body?.record)||
+       typeof body.expectedRevision!=='string'||body.expectedRevision.length>64)
+      return this._json({error:'Funds change denied'},403);
+    const current=await sharedFundsLoad(this.env);
+    if(current.error)return this._json({error:'Funds storage unavailable'},503);
+    if(current.revision!==body.expectedRevision)
+      return this._json({error:'The funds list changed',code:'FUNDS_REVISION_CONFLICT',
+        revision:current.revision,data:current.data},409);
+    const next={schema:1,funds:{...current.data.funds}};
+    if(body.record.watching===false)delete next.funds[body.fundId];
+    else next.funds[body.fundId]={
+      stage:body.record.stage,checks:body.record.checks,watching:true,
+      updatedAt:new Date().toISOString(),updatedBy:signed?actor.email:'legacy-dashboard'
+    };
+    if(!sharedFundsDocAllowed(next))return this._json({error:'Funds document invalid'},422);
+    const raw=JSON.stringify(next);
+    const url=AIRTABLE_BASE+'/v0/app1YtD74AqiPWQhy/'+
+      encodeURIComponent('Monitor Sistema')+(current.recordId?'/'+current.recordId:'');
+    let r;try{
+      r=await fetch(url,{method:current.recordId?'PATCH':'POST',redirect:'manual',
+        headers:{Authorization:'Bearer '+this.env.AIRTABLE_TOKEN,
+          'Content-Type':'application/json'},
+        body:JSON.stringify({fields:{Name:SHARED_FUNDS_NAME,Notes:raw}})});
+    }catch(_){return this._json({error:'Funds write outcome uncertain',code:'FUNDS_WRITE_UNCERTAIN'},503);}
+    if(!r.ok||r.status>=300&&r.status<400)
+      return this._json({error:'Funds write was not confirmed',code:'FUNDS_WRITE_UNCERTAIN'},503);
+    const confirmed=await sharedFundsLoad(this.env);
+    if(confirmed.error||confirmed.raw!==raw)
+      return this._json({error:'Funds write verification failed',code:'FUNDS_WRITE_UNCERTAIN'},503);
+    return this._json({ok:true,revision:confirmed.revision,data:confirmed.data},200);
+  }
 
   async _handleSharedCalendar(request){
     if(request.method!=='POST'||!this.env.AIRTABLE_TOKEN)
@@ -5075,7 +5173,7 @@ export default {
     // depends on a credential shared with the public Pages bundle.
     const authPath=leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/funds'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname;
     const authorized=await accessAuthorize(request,env,authPath);
     if(authorized.response){
@@ -5591,6 +5689,40 @@ export default {
 
     // Calendar collaboration gets a dedicated document endpoint instead of
     // granting browsers generic Monitor Sistema access.
+    if(url.pathname==='/shared/funds'){
+      const headers={...CORS,'Cache-Control':'private, no-store'};
+      if(url.search)return json({error:'Query not allowed'},422,headers);
+      if(authorized.identity&&!['operator','admin'].includes(authorized.identity.role))
+        return json({error:'Funds workspace role denied'},403,headers);
+      if(!['GET','PUT'].includes(request.method))return json({error:'Method not allowed'},405,headers);
+      if(request.method==='GET'){
+        const current=await sharedFundsLoad(env);
+        if(current.error)return json({error:'Funds storage unavailable'},503,headers);
+        return json({ok:true,revision:current.revision,data:current.data},200,headers);
+      }
+      if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))
+        return json({error:'Expected JSON'},415,headers);
+      let body;try{const raw=await request.text();if(raw.length>1300)throw Error('large');body=JSON.parse(raw);}
+      catch(_){return json({error:'Invalid funds change'},422,headers);}
+      if(!body||Object.keys(body).some(k=>!['fundId','record','expectedRevision'].includes(k))||
+         !/^[a-z0-9-]{3,90}$/.test(String(body.fundId||''))||
+         !sharedFundsRecordAllowed(body.record)||
+         typeof body.expectedRevision!=='string'||body.expectedRevision.length>64)
+        return json({error:'Invalid funds change'},422,headers);
+      if(!env.CRM_MUTATION_GUARD)return json({error:'Funds write guard unavailable'},503,headers);
+      try{
+        const stub=env.CRM_MUTATION_GUARD.get(env.CRM_MUTATION_GUARD.idFromName('tls-shared-funds'));
+        const resp=await stub.fetch('https://crm-write.internal/shared-funds',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...body,actor:authorized.identity
+            ?{email:authorized.identity.email,role:authorized.identity.role}:{legacy:true}})
+        });
+        const outbound=new Headers(resp.headers);
+        Object.entries(headers).forEach(([k,v])=>outbound.set(k,v));
+        return new Response(resp.body,{status:resp.status,headers:outbound});
+      }catch(_){return json({error:'Funds write guard unavailable'},503,headers);}
+    }
+
     if(url.pathname==='/shared/calendar'){
       const scopedHeaders={...CORS,'Cache-Control':'private, no-store'};
       if(url.search)return json({error:'Calendar query parameters not allowed'},422,scopedHeaders);
