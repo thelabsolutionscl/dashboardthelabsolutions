@@ -184,3 +184,37 @@ test('el catálogo contiene fuentes primarias auditables e identifica elegibilid
     if(f.close)assert.match(f.close,/^20(?:25|26|27)-\d{2}-\d{2}T\d{2}:\d{2}$/);
   }
 });
+
+test('auditoría: cambiar de convocatoria invalida borrador anterior y bloquea copiar',async()=>{
+  const nodes={
+    fondosConvocatoria:{value:'sercotec-crece-urbano-rm-2026'},
+    fondosPreguntas:{value:'Describa el objetivo del proyecto y presupuesto solicitado con datos reales.'},
+    fondosAntecedentes:{value:'Proyecto concreto por verificar.'},
+    fondosRespuesta:{textContent:''},fondosGenerar:{disabled:false},
+    fondosCopyNotice:{textContent:''}
+  };
+  const {api,calls}=instance(nodes);await api.load();
+  await api.draft();
+  assert.equal(calls.length,1);
+  assert.match(nodes.fondosRespuesta.textContent,/Respuestas seguras/);
+  api.prepare('corfo-sumate-innovar');
+  assert.equal(nodes.fondosRespuesta.textContent,'','limpiar respuesta de convocatoria anterior');
+  await api.copyDraft();
+  assert.match(nodes.fondosCopyNotice.textContent,/Primero genera un borrador válido/);
+  assert.equal(nodes.fondosConvocatoria.value,'corfo-sumate-innovar');
+});
+test('auditoría: un error de IA o formulario inválido jamás se copia como borrador',async()=>{
+  const nodes={
+    fondosConvocatoria:{value:'sercotec-crece-urbano-rm-2026'},
+    fondosPreguntas:{value:'Por favor detalle el alcance técnico, innovación y el presupuesto de este proyecto.'},
+    fondosAntecedentes:{value:'Dato por validar'},
+    fondosRespuesta:{textContent:''},fondosGenerar:{disabled:false},
+    fondosCopyNotice:{textContent:''}
+  };
+  const {api,calls}=instance(nodes);await api.load();
+  nodes.fondosPreguntas.value='texto corto';
+  await api.draft();
+  assert.equal(calls.length,0);
+  await api.copyDraft();
+  assert.match(nodes.fondosCopyNotice.textContent,/Primero genera un borrador válido/);
+});
