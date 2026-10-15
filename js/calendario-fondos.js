@@ -176,7 +176,7 @@
   }
   function trackFund(id){
     if(!byId(id))return false;
-    if(tracked[id]?.watching){delete tracked[id];if(workspaceId===id){workspaceResult={status:'idle',source:'',text:'',error:''};}}
+    if(tracked[id]?.watching){delete tracked[id];if(workspaceId===id){workspaceRunId++;workspaceBusy=false;workspaceId='';workspaceBrief='';workspaceResult={status:'idle',source:'',text:'',error:''};}}
     else tracked[id]={stage:'seguimiento',checks:tracked[id]?.checks||[],watching:true};
     saveTracked();render();return !!tracked[id]?.watching;
   }
