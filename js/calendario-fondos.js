@@ -216,9 +216,18 @@
     const d=today(),opening=iso(f.open),closing=iso(f.close);
     if((opening&&!closing)||(!opening&&closing))return {tone:'watch',label:'Fechas incompletas',reason:'No está confirmada toda la ventana del concurso. Revisar la fuente antes de considerarlo disponible.'};
     if(!opening&&!closing)return {tone:'watch',label:'Sin fecha oficial',reason:'No hay nueva apertura confirmada. Seguir noticias y revisar bases cuando se publique un llamado.'};
-    if(closing&&closing<d)return {tone:'closed',label:'Convocatoria cerrada',reason:'Esta edición ya cerró. Sus fechas quedan solo como referencia histórica.'};
-    if(opening&&opening>d)return {tone:'future',label:'Apertura programada',reason:'Fecha incluida en catálogo oficial; validar condiciones y cambios antes de postular.'};
-    if(opening&&opening<=d&&(!closing||closing>=d))return {tone:'window',label:'Dentro de ventana publicada',reason:'La ventana registrada incluye hoy, pero es obligatorio confirmar vigencia y bases en la fuente oficial.'};
+    // Cierre/apertura son horas de Chile; después del plazo de la jornada
+    // no debe seguir mostrándose "Dentro de ventana publicada".
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Santiago',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+    const hour=parts.find(x=>x.type==='hour')?.value||'00';
+    const min=parts.find(x=>x.type==='minute')?.value||'00';
+    const nowTime=hour+':'+min;
+    const hasExactTime=v=>typeof v==='string'&&v.length===16&&v.slice(11,16)!=='00:00';
+    const pastClosing=closing<d||(closing===d&&hasExactTime(f.close)&&nowTime>=f.close.slice(11,16));
+    const beforeOpening=opening>d||(opening===d&&hasExactTime(f.open)&&nowTime<f.open.slice(11,16));
+    if(pastClosing)return {tone:'closed',label:'Convocatoria cerrada',reason:'La fecha u hora de cierre registrada ya pasó. Confirmar eventuales prórrogas en la fuente oficial.'};
+    if(beforeOpening)return {tone:'future',label:'Apertura programada',reason:'Fecha incluida en catálogo oficial; validar condiciones y cambios antes de postular.'};
+    if(opening&&opening<=d&&closing>=d)return {tone:'window',label:'Dentro de ventana publicada',reason:'La ventana registrada incluye el momento actual, pero es obligatorio confirmar vigencia y bases en la fuente oficial.'};
     return {tone:'watch',label:'Fechas por validar',reason:'Revisar la fuente oficial antes de tomar decisiones.'};
   }
   function offlinePlan(f,idea){
