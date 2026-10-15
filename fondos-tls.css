@@ -172,3 +172,72 @@
 @keyframes fondosAgentPulse{0%,100%{opacity:.42}50%{opacity:1}}
 @media(max-width:540px){#tab-calendario .fondos-agent-working{align-items:flex-start;gap:13px;padding:14px}#tab-calendario .fondos-agent-orbit{width:47px;height:47px}#tab-calendario .fondos-agent-work-steps span{font-size:8px}}
 @media(prefers-reduced-motion:reduce){#tab-calendario .fondos-agent-orbit::before,#tab-calendario .fondos-agent-orbit span,#tab-calendario .fondos-agent-work-steps span,#tab-calendario #fondosRespuesta.fondos-agent-loading::before{animation:none!important}#tab-calendario .fondos-agent-orbit::before{border-color:#00d4cc}}
+
+/* TLS Fondos — operable workflow. Conservative typography, readable spacing, no fake status. */
+#tab-calendario .fondos-tls:not(.is-demo) .fondos-hero{grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);padding:25px 28px;border-radius:16px}
+#tab-calendario .fondos-tls:not(.is-demo) .fondos-title{font-size:clamp(23px,2.7vw,31px);max-width:500px}
+#tab-calendario .fondos-tls:not(.is-demo) .fondos-lead{max-width:570px}
+#tab-calendario .fondos-tls:not(.is-demo) .fondos-kpi{min-height:84px;padding:14px 15px}
+#tab-calendario .fondos-action-banner{display:grid;gap:6px;padding:15px 17px;border:1px solid rgba(244,194,112,.27);background:linear-gradient(100deg,rgba(110,80,36,.14),rgba(11,19,23,.78));border-radius:12px;margin:15px 0;color:#c6d6d9;font-size:11px}
+#tab-calendario .fondos-action-banner>span{font-size:9px;letter-spacing:.12em;font-weight:800;color:#deb978}
+#tab-calendario .fondos-action-banner strong{font-size:13px;font-weight:800;color:#eef3f1}
+#tab-calendario .fondos-action-banner p{margin:0;line-height:1.6;color:#a9bac0}
+#tab-calendario .fondos-workspace{display:block;margin:15px 0 25px;padding:clamp(17px,2.4vw,27px);border:1px solid rgba(0,212,204,.27);border-radius:16px;background:linear-gradient(140deg,rgba(19,32,38,.97),rgba(14,22,28,.98));color:#c2d4d8}
+#tab-calendario .fondos-workspace-empty{display:flex;align-items:center;justify-content:space-between;gap:15px;min-height:150px}
+#tab-calendario .fondos-workspace-intro{max-width:660px}
+#tab-calendario .fondos-workspace-intro h3,#tab-calendario .fondos-workspace-heading h3{margin:7px 0 9px;color:#f0fafa;font-size:clamp(18px,2.2vw,22px);letter-spacing:-.025em;line-height:1.35}
+#tab-calendario .fondos-workspace-intro p{line-height:1.75;font-size:12px;color:#b9c9ce}
+#tab-calendario .fondos-workspace-intro strong{color:#85e8e2}
+#tab-calendario .fondos-workspace-count{white-space:nowrap;padding:9px 12px;font-size:11px;font-weight:700;background:rgba(0,212,204,.09);border:1px solid rgba(0,212,204,.22);border-radius:30px;color:#8ce8e1}
+#tab-calendario .fondos-workspace-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:16px}
+#tab-calendario .fondos-workspace-agency{font-size:11px;color:#94adb6}
+#tab-calendario .fondos-workspace-window{display:flex;align-items:flex-start;flex-wrap:wrap;gap:7px 16px;padding:13px 15px;border-radius:11px;border:1px solid rgba(235,191,119,.25);background:rgba(235,191,119,.07);margin:0 0 18px}
+#tab-calendario .fondos-workspace-window strong{color:#f2d19e;font-size:11px}
+#tab-calendario .fondos-workspace-window span{flex:1;min-width:200px;color:#c5d1d1;font-size:11px;line-height:1.6}
+#tab-calendario .fondos-workspace-window[data-tone="window"]{border-color:rgba(0,212,204,.34);background:rgba(0,212,204,.065)}
+#tab-calendario .fondos-workspace-window[data-tone="window"] strong{color:#83e7e0}
+#tab-calendario .fondos-workspace-window[data-tone="closed"]{border-color:rgba(149,166,178,.22);background:rgba(149,166,178,.065)}
+#tab-calendario .fondos-workspace-window[data-tone="closed"] strong{color:#becbd1}
+#tab-calendario .fondos-workspace-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+#tab-calendario .fondos-workspace-step{min-width:0;border:1px solid rgba(150,182,190,.14);background:rgba(0,0,0,.14);border-radius:12px;padding:19px}
+#tab-calendario .fondos-workspace-agent{grid-column:1/-1;border-color:rgba(0,212,204,.18);background:rgba(0,212,204,.035)}
+#tab-calendario .fondos-step-index{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:rgba(0,212,204,.12);border:1px solid rgba(0,212,204,.27);color:#81f0e7;font-weight:800;font-size:10px}
+#tab-calendario .fondos-workspace-step h4{font-size:15px;font-weight:800;color:#f4fafa;margin:12px 0 9px}
+#tab-calendario .fondos-workspace-step p{font-size:11px;color:#b6c7ce;line-height:1.75;margin:7px 0 12px}
+#tab-calendario .fondos-workspace-req{padding:10px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.08);border-radius:9px}
+#tab-calendario .fondos-workspace-req b{color:#f0e6cd}
+#tab-calendario .fondos-workspace-sources{font-size:11px;line-height:1.75;margin:9px 0 15px}
+#tab-calendario .fondos-workspace-sources a{color:#8cebe4;font-weight:700;text-decoration:underline;text-decoration-color:rgba(0,212,204,.4);text-underline-offset:3px}
+#tab-calendario .fondos-workspace-step>label{display:block;font-weight:700;font-size:11px;color:#d3e6e8;margin:10px 0 7px}
+#tab-calendario #fondosMesaEtapa,#tab-calendario #fondosMesaIdea{display:block;width:100%;max-width:100%;color:#e4f2f3;background:#0b191e;border:1px solid rgba(140,180,191,.3);border-radius:9px;padding:11px 12px;outline:none;font:inherit;font-size:12px;line-height:1.65}
+#tab-calendario #fondosMesaEtapa:focus,#tab-calendario #fondosMesaIdea:focus{border-color:#00d4cc;box-shadow:0 0 0 3px rgba(0,212,204,.12)}
+#tab-calendario #fondosMesaIdea{min-height:115px;resize:vertical}
+#tab-calendario .fondos-workspace-step small{display:block;color:#859faa;font-size:10px;line-height:1.6;margin-top:9px}
+#tab-calendario .fondos-workspace-checks{display:grid;gap:7px;margin-top:13px}
+#tab-calendario .fondos-workspace-checks label{display:flex;align-items:flex-start;gap:10px;padding:7px 9px;border-radius:7px;cursor:pointer;font-size:11px;line-height:1.5;color:#c7d8db}
+#tab-calendario .fondos-workspace-checks label:hover{background:rgba(255,255,255,.035)}
+#tab-calendario .fondos-workspace-checks input{flex-shrink:0;width:16px;height:16px;accent-color:#00d4cc;margin:0}
+#tab-calendario .fondos-workspace-meter{height:6px;border-radius:9px;background:rgba(255,255,255,.1);overflow:hidden;margin:13px 0}
+#tab-calendario .fondos-workspace-meter span{display:block;height:100%;border-radius:9px;background:#00d4cc;transition:width .18s ease}
+#tab-calendario .fondos-workspace-agent-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:13px 0}
+#tab-calendario .fondos-main-action,#tab-calendario .fondos-outline-action,#tab-calendario .fondos-more{font:700 11px 'DM Sans',sans-serif;border-radius:9px;padding:9px 13px;min-height:37px;cursor:pointer}
+#tab-calendario .fondos-main-action{background:#00d4cc;border:1px solid #00d4cc;color:#041e1f}
+#tab-calendario .fondos-main-action:disabled{cursor:progress;opacity:.6}
+#tab-calendario .fondos-outline-action{background:rgba(255,255,255,.03);border:1px solid rgba(155,193,200,.24);color:#c9e0e1}
+#tab-calendario .fondos-outline-action:hover{border-color:#00d4cc;color:#8ff2e8}
+#tab-calendario .fondos-workspace-working{display:flex;gap:13px;align-items:center;background:rgba(0,212,204,.07);border:1px solid rgba(0,212,204,.26);border-radius:11px;padding:15px;margin-top:12px}
+#tab-calendario .fondos-workspace-working strong{display:block;color:#d8f8f7;font-size:12px}
+#tab-calendario .fondos-workspace-working small{margin-top:3px}
+#tab-calendario .fondos-mini-spinner{display:inline-block;flex:0 0 34px;width:34px;height:34px;border:3px solid rgba(0,212,204,.15);border-top-color:#00d4cc;border-radius:50%;animation:fondosAgentOrbit .9s linear infinite}
+#tab-calendario .fondos-workspace-output,#tab-calendario .fondos-workspace-error{border:1px solid rgba(0,212,204,.3);border-radius:11px;padding:15px;margin-top:13px}
+#tab-calendario .fondos-workspace-error{border-color:rgba(235,176,111,.3)}
+#tab-calendario .fondos-workspace-output b,#tab-calendario .fondos-workspace-error b{color:#c9f3f1;font-size:12px}
+#tab-calendario .fondos-workspace-output pre{white-space:pre-wrap;overflow-wrap:anywhere;font:400 12px/1.75 'DM Sans',sans-serif;color:#d1e0e2;background:rgba(0,0,0,.19);padding:14px;border-radius:10px;max-height:500px;overflow:auto}
+#tab-calendario .fondos-workspace-error p{font-size:11px;color:#ebcfac}
+#tab-calendario .fondos-more{display:block;margin:17px auto;border:1px solid rgba(0,212,204,.32);background:rgba(0,212,204,.07);color:#80e8e2}
+#tab-calendario .fondos-more[hidden]{display:none}
+#tab-calendario .fondos-tls .fondos-row[data-status="cerrado"]{opacity:.9}
+#tab-calendario .fondos-workspace button:focus-visible,#tab-calendario .fondos-workspace input:focus-visible,#tab-calendario .fondos-workspace select:focus-visible{outline:2px solid #00d4cc;outline-offset:2px}
+@media(max-width:920px){#tab-calendario .fondos-tls:not(.is-demo) .fondos-hero{grid-template-columns:1fr}}
+@media(max-width:640px){#tab-calendario .fondos-tls:not(.is-demo) .fondos-hero{padding:19px 17px}#tab-calendario .fondos-workspace-empty{display:block}#tab-calendario .fondos-workspace-count{display:inline-flex;margin-top:10px}#tab-calendario .fondos-workspace-steps{grid-template-columns:1fr}#tab-calendario .fondos-workspace-agent{grid-column:auto}#tab-calendario .fondos-workspace-heading{align-items:flex-start;flex-direction:column}#tab-calendario .fondos-workspace-step{padding:15px}}
+@media(prefers-reduced-motion:reduce){#tab-calendario .fondos-mini-spinner{animation:none!important;border-color:#00d4cc}#tab-calendario .fondos-workspace-meter span{transition:none}}
