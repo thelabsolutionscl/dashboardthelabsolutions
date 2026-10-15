@@ -9,7 +9,7 @@ const root=path.join(__dirname,'..');
 const script=fs.readFileSync(path.join(root,'js/calendario-fondos.js'),'utf8');
 const catalog=JSON.parse(fs.readFileSync(path.join(root,'data/fondos-concursables.json'),'utf8'));
 const css=fs.readFileSync(path.join(root,'fondos-tls.css'),'utf8');
-function view(){
+function view(options={}){
   const hooks={}, cards=[], links=[];
   const list={innerHTML:'',addEventListener:(event,fn)=>{hooks['list:'+event]=fn;},
     querySelectorAll:()=>cards,
@@ -28,7 +28,7 @@ function view(){
     getElementById:id=>nodes[id]||null,
     addEventListener:(event,fn)=>{hooks['doc:'+event]=fn;}
   };
-  const ctx={window:{renderCalendario(){}},document:doc,URL,Date,Intl,Number,JSON,Promise,console,
+  const ctx={window:{renderCalendario(){}},document:doc,URL,Date:options.Date||Date,Intl,Number,JSON,Promise,console,
     setInterval:()=>0,setTimeout:(fn)=>{fn();return 0;},localStorage:{
       getItem:k=>state.get(k)||null,
       setItem:(k,v)=>state.set(k,v)
@@ -347,4 +347,15 @@ test('auditoría: ranking deja fondos no elegibles detrás de seguimiento razona
   const ineligible=html.indexOf('data-fondos-card="corfo-semilla-inicia-nueva-vigilar"');
   assert.ok(viable>=0&&ineligible>viable,'un fondo no elegible no encabeza la lista');
   assert.match(html,/No hay un fondo con apertura vigente o futura registrada/);
+});
+
+test('auditoría: usa la fecha de Chile incluso con navegador adelantado en UTC',async()=>{
+  class FixedDate extends Date{
+    constructor(...args){super(...(args.length?args:['2026-10-16T01:30:00.000Z']));}
+    static now(){return new Date('2026-10-16T01:30:00.000Z').getTime();}
+  }
+  const v=view({Date:FixedDate});await v.api.load();
+  const call={id:'fondo-prueba',open:'2026-10-15T12:00',close:'2026-10-15T23:00'};
+  assert.equal(v.api.fundWindow(call).tone,'window','en Santiago sigue siendo 15 de octubre, no 16');
+  assert.equal(v.api.fundWindow({...call,close:'2026-10-14T23:00'}).tone,'closed');
 });
