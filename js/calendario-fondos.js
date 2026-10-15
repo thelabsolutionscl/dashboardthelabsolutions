@@ -299,7 +299,7 @@
     const stageLabels={seguimiento:'Por revisar',evaluando:'Revisando requisitos',preparando:'Preparando borrador',postulado:'Enviado (marcado manualmente)',descartado:'Descartado'};
     const status=workspaceResult.status;
     const result=status==='working'?'<div class="fondos-workspace-working" role="status" aria-live="polite" aria-busy="true"><span class="fondos-mini-spinner" aria-hidden="true"></span><span><strong>Agente TLS procesando tu proyecto…</strong><small>Evaluando el caso y preparando pasos concretos</small></span></div>':
-      status==='done'?'<div class="fondos-workspace-output" role="status"><b>✓ Plan preparado · '+(workspaceResult.source==='ia'?'Generado con IA':'Guía local sin IA')+'</b><pre>'+esc(workspaceResult.text)+'</pre><button type="button" class="fondos-outline-action" data-fondos-work-copy>Copiar plan</button><span data-fondos-copy-note aria-live="polite"></span></div>':
+      status==='done'?'<div class="fondos-workspace-output" role="status"><b>✓ Plan preparado · '+(workspaceResult.source==='ia'?'Generado con IA':'Guía local sin IA')+'</b><pre>'+esc(workspaceResult.text)+'</pre><button type="button" class="fondos-outline-action" data-fondos-work-copy>Copiar plan</button><span id="fondosWorkCopyNote" aria-live="polite"></span></div>':
       status==='error'?'<div class="fondos-workspace-error" role="alert"><b>No se completó el análisis</b><p>'+esc(workspaceResult.error)+'</p><button type="button" class="fondos-outline-action" data-fondos-work-local>Crear guía local sin IA</button></div>':'';
     return '<section id="fondosMesa" class="fondos-workspace" aria-label="Mesa de trabajo de '+esc(f.name)+'">'+
       '<div class="fondos-workspace-heading"><div><div class="fondos-eyebrow">MI MESA DE TRABAJO · 3 PASOS</div><h3>'+esc(f.name)+'</h3><span class="fondos-workspace-agency">'+esc(f.organizer)+' · '+esc(f.region)+'</span></div>'+
@@ -699,8 +699,24 @@
       }
       const scene=e.target.closest('[data-fondos-demo-step]');
       if(scene&&demoMode){demoStep=scene.dataset.fondosDemoStep;render();return;}
+      const workOpen=e.target.closest('[data-fondos-work-open]');
+      if(workOpen&&!demoMode){openWorkspace(workOpen.dataset.fondosWorkOpen);return;}
+      const workTrack=e.target.closest('[data-fondos-work-track]');
+      if(workTrack&&!demoMode){trackFund(workTrack.dataset.fondosWorkTrack);return;}
+      if(e.target.closest('[data-fondos-work-close]')){workspaceRunId++;workspaceBusy=false;workspaceId='';workspaceResult={status:'idle',source:'',text:'',error:''};render();return;}
+      if(e.target.closest('[data-fondos-work-analyze]')){void workspaceAnalyze();return;}
+      if(e.target.closest('[data-fondos-work-local]')){void workspaceAnalyze(true);return;}
+      if(e.target.closest('[data-fondos-work-form]')){prepareFromWorkspace();return;}
+      if(e.target.closest('[data-fondos-work-copy]')&&workspaceResult.status==='done'){
+        const note=document.getElementById('fondosWorkCopyNote');
+        if(typeof navigator!=='undefined'&&navigator.clipboard?.writeText){
+          navigator.clipboard.writeText(workspaceResult.text).then(()=>{if(note)note.textContent='Copiado';}).catch(()=>{if(note)note.textContent='Selecciona el texto para copiar';});
+        }else if(note)note.textContent='Selecciona el texto para copiar';
+        return;
+      }
+      if(e.target.closest('[data-fondos-more]')){visibleLimit+=8;applySearch();return;}
       const quick=e.target.closest('[data-fondos-view]');
-      if(quick){mode=quick.dataset.fondosView;render();return;}
+      if(quick){mode=quick.dataset.fondosView;visibleLimit=8;render();return;}
       const goto=e.target.closest('[data-fondos-calendar]');
       if(goto){goTo(goto.dataset.fondosCalendar,goto.dataset.fondosPhase);return;}
       const openButton=e.target.closest('[data-fondos-open]');
@@ -708,11 +724,17 @@
       const draftButton=e.target.closest('[data-fondos-draft]');
       if(draftButton){prepare(draftButton.dataset.fondosDraft);}
     });
+    root.addEventListener('change',e=>{
+      if(e.target.id==='fondosMesaEtapa'&&workspaceId){stageFund(workspaceId,e.target.value);return;}
+      const check=e.target.closest?.('[data-fondos-work-check]');
+      if(check&&workspaceId){toggleFlowCheck(workspaceId,check.dataset.fondosWorkCheck,!!check.checked);return;}
+    });
     const filter=document.getElementById('fondosFiltro');
-    if(filter)filter.addEventListener('change',()=>{mode=filter.value;render();});
+    if(filter)filter.addEventListener('change',()=>{mode=filter.value;visibleLimit=8;render();});
     document.getElementById('fondosList')?.addEventListener('input',e=>{
-      if(e.target.id==='fondosBuscar'){searchTerm=e.target.value;applySearch();}
+      if(e.target.id==='fondosBuscar'){searchTerm=e.target.value;visibleLimit=8;applySearch();}
       if(e.target.id==='fondosDemoPregunta'&&demoMode){demoAgent.prompt=e.target.value;}
+      if(e.target.id==='fondosMesaIdea'&&!demoMode){workspaceBrief=e.target.value;}
     });
     document.addEventListener('keydown',e=>{
       if(e.key==='Escape'&&document.getElementById('fondosDetalleModal')?.style.display==='flex')close();
@@ -728,7 +750,7 @@
     // Ventana abierta durante horas: recordar nuevas aperturas y cierres.
     setInterval(notifyToday,15*60*1000);
   }
-  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode,runDemoAgent,demoAgentState:()=>({...demoAgent})};
+  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode,runDemoAgent,demoAgentState:()=>({...demoAgent}),openWorkspace,trackFund,stageFund,toggleFlowCheck,workspaceAnalyze,workspaceState:()=>({...workspaceResult}),fundWindow};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();
