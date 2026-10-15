@@ -148,3 +148,16 @@ Pruebas: `tests/fondos-visual-tls.test.js`, además de la suite existente de Cal
 ### Indicador de procesamiento del asistente de postulaciones
 
 El botón **✦ Generar** del copiloto real de fondos también presenta una visualización de trabajo (clase `fondos-agent-loading`, `aria-busy`, botón temporalmente inhabilitado) mientras espera a `callAgentClaude`. Cuando la solicitud termina —con respuesta o con error— se retira el indicador, se restaura el botón y se informa del resultado. Durante la demo, los estados `idle → working → done/error` se controlan con un identificador de ejecución, de modo que una respuesta tardía no vuelve a pintar el modo demo si el usuario ya salió.
+
+### Nueva mesa de trabajo: cómo usar fondos de TLS
+
+La sección deja de ser únicamente un listado. Ofrece un flujo de trabajo paso a paso:
+
+- **Estado real del catálogo:** clasifica ventanas publicadas (verificar vigencia), fondos sin fecha, futuras aperturas registradas e históricos. No se inventan nuevas convocatorias ni disponibilidad.
+- **Explorar:** los primeros ocho resultados son visibles, con filtros, búsqueda y botón para cargar más. **Seguir** crea una marca local y **Revisar para TLS** abre la ficha del fondo.
+- **Paso 1, elegibilidad:** ver organismo, encaje orientativo, bases oficiales, fechas y límites; elegir estado manual del trabajo (por revisar, evaluando, preparando, enviado manualmente o descartado). No representa adjudicación ni postulación presentada ante el organismo.
+- **Paso 2, antecedentes:** completar siete verificaciones manuales de bases, empresa, proyecto, presupuesto, documentos, preguntas del formulario y plazos. La barra de progreso mide casillas marcadas, no elegibilidad.
+- **Paso 3, agente:** describir el proyecto concreto de TLS y ejecutar una consulta con el agente disponible. Se muestra carga, resultado o error. Si no está conectado el motor, el usuario obtiene una guía local rotulada SIN IA; ante fallo del servicio se ofrece esa alternativa explícita.
+- **Formulario real:** la acción Preparar respuestas del formulario abre el copiloto existente, selecciona el fondo y propone preguntas orientativas solo cuando no existen preguntas ya pegadas. Conserva antecedentes escritos.
+
+La mesa almacena exclusivamente marcas y estados en localStorage, por identidad de Gustavo o Nicanor cuando está disponible o en una clave local genérica si no lo está. No almacena proyectos, respuestas, claves ni datos tributarios. No está sincronizada entre dispositivos. Los eventos en Calendario y los correos del Worker continúan usando únicamente el catálogo oficial y no se modifican por el seguimiento o la demo.
