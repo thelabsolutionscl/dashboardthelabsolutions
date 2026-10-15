@@ -343,12 +343,12 @@
   const hasDate=f=>!!(f.open||f.close);
   const pending=f=>!hasDate(f);
   const status=f=>{
-    const now=today();
+    const stage=fundWindow(f);
     if(!hasDate(f))return 'Sin fechas publicadas';
-    if(f.close&&f.close.slice(0,10)<now)return 'Cerrado';
-    if(f.open&&f.open.slice(0,10)>now)return 'Próximamente';
-    if(f.open&&f.open.slice(0,10)<=now&&(!f.close||f.close.slice(0,10)>=now))return 'Posiblemente abierto · verificar';
-    return 'Por confirmar';
+    if(stage.tone==='closed')return 'Cerrado';
+    if(stage.tone==='future')return 'Próximamente';
+    if(stage.tone==='window')return 'Posiblemente abierto · verificar';
+    return stage.label;
   };
   // Avisos persistentes del dashboard al usuario autenticado: Gustavo y Nicanor.
   // El envío POR CORREO corre 24/7 en lead-worker y no depende de esta pestaña.
@@ -774,6 +774,12 @@
     });
     document.getElementById('fondosShowOnCalendar')?.addEventListener('change',syncCalendar);
     document.getElementById('fondosReload')?.addEventListener('click',load);
+    // Un cambio posterior del texto o del fondo invalida la copia previa.
+    const invalidateDraft=()=>{draftReady=false;draftFor='';};
+    for(const id of ['fondosPreguntas','fondosAntecedentes','fondosOtroFondo']){
+      document.getElementById(id)?.addEventListener('input',invalidateDraft);
+    }
+    document.getElementById('fondosConvocatoria')?.addEventListener('change',invalidateDraft);
     document.getElementById('fondosGenerar')?.addEventListener('click',draft);
     document.getElementById('fondosCopiar')?.addEventListener('click',copyDraft);
     document.getElementById('fondosCerrarDetalle')?.addEventListener('click',close);
