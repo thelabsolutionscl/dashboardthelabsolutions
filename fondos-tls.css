@@ -241,3 +241,14 @@
 @media(max-width:920px){#tab-calendario .fondos-tls:not(.is-demo) .fondos-hero{grid-template-columns:1fr}}
 @media(max-width:640px){#tab-calendario .fondos-tls:not(.is-demo) .fondos-hero{padding:19px 17px}#tab-calendario .fondos-workspace-empty{display:block}#tab-calendario .fondos-workspace-count{display:inline-flex;margin-top:10px}#tab-calendario .fondos-workspace-steps{grid-template-columns:1fr}#tab-calendario .fondos-workspace-agent{grid-column:auto}#tab-calendario .fondos-workspace-heading{align-items:flex-start;flex-direction:column}#tab-calendario .fondos-workspace-step{padding:15px}}
 @media(prefers-reduced-motion:reduce){#tab-calendario .fondos-mini-spinner{animation:none!important;border-color:#00d4cc}#tab-calendario .fondos-workspace-meter span{transition:none}}
+
+/* Estados verificables del seguimiento y hitos obligatorios */
+#tab-calendario .fondos-shared-status{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:11px 14px;border-radius:10px;border:1px solid rgba(120,160,170,.18);background:rgba(125,150,160,.055);color:#afc5cb;font-size:11px;margin:13px 0}
+#tab-calendario .fondos-shared-status[data-sync="connected"]{color:#a1e8de;border-color:rgba(0,212,204,.2)}
+#tab-calendario .fondos-shared-status[data-sync="error"]{color:#f4c08c;border-color:rgba(236,169,91,.28)}
+#tab-calendario .fondos-sync-refresh{background:rgba(0,212,204,.065);color:#c2efea;border:1px solid rgba(0,212,204,.21);border-radius:8px;font:700 11px 'DM Sans',sans-serif;min-height:31px;padding:6px 11px;cursor:pointer}
+#tab-calendario .fondos-workspace-milestones{border:1px solid rgba(235,176,75,.28);background:rgba(235,176,75,.06);border-radius:11px;padding:13px 16px;margin:0 0 15px;font-size:11px;line-height:1.75;color:#dbc9b3}
+#tab-calendario .fondos-workspace-milestones>strong{display:block;color:#f5d39a;font-size:12px;margin-bottom:5px}
+#tab-calendario .fondos-workspace-milestones b{color:#ecdfc5}
+#tab-calendario .fondos-workspace-milestones a{color:#85e5dc;text-decoration:underline;text-underline-offset:2px}
+#tab-calendario .fondos-milestone-card-flag{font-size:11px;color:#f0c888;line-height:1.55;margin:10px 0}

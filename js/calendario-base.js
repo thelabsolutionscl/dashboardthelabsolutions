@@ -532,7 +532,7 @@ function _calEventosDia(f){
 function _calColor(ev){if(ev?.color)return ev.color;const p=_calPersona((ev?.personas||[])[0]);return (p&&p.color)||'var(--accent)';}
 function _calWhen(ev){const d=_calDays(ev.fecha);return d===null?'sin fecha':d<0?`${Math.abs(d)}d atraso`:d===0?'hoy':d===1?'mañana':`en ${d}d`;}
 function _calEventHtml(ev,compact=false){
-  if(ev.source==='fondos')return `<div class="cal-ev cal-fondo" style="border-left-color:${_calColor(ev)}" onclick="event.stopPropagation();calOpenEvent('${ev.id}')" title="${escapeHtml(ev.titulo||'')}"><span class="cal-ev-h">${ev.type==='fondo_cierre'?'🔴':'🟢'}</span> ${escapeHtml(ev.titulo||'')}</div>`;
+  if(ev.source==='fondos')return `<div class="cal-ev cal-fondo" style="border-left-color:${_calColor(ev)}" onclick="event.stopPropagation();calOpenEvent('${ev.id}')" title="${escapeHtml(ev.titulo||'')}"><span class="cal-ev-h">${ev.type==='fondo_hito'?'⚠':ev.type==='fondo_cierre'?'🔴':'🟢'}</span> ${escapeHtml(ev.titulo||'')}</div>`;
   const pend=_calAllowedSync(ev)&&_calNeedsSync(ev)?' cal-pend':'',risk=ev.risk?` risk-${ev.risk}`:'',hora=ev.allDay?(ev.source==='crm'?_calWhen(ev):'●'):(ev.hIni||'');
   const cap=ev.type==='ped_delivery'&&typeof MachineOps!=='undefined'&&MachineOps.deadlineCapacityRisk?MachineOps.deadlineCapacityRisk(ev.recordId,ev.fecha):null;
   const capBadge=cap&&cap.status==='risk'?'<span class="cal-cap-risk" title="La planificación de Máquinas no alcanza esta fecha">CAP.</span>':'';

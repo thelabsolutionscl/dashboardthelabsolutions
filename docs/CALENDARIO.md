@@ -161,3 +161,27 @@ La sección deja de ser únicamente un listado. Ofrece un flujo de trabajo paso 
 - **Formulario real:** la acción Preparar respuestas del formulario abre el copiloto existente, selecciona el fondo y propone preguntas orientativas solo cuando no existen preguntas ya pegadas. Conserva antecedentes escritos.
 
 La mesa almacena exclusivamente marcas y estados en localStorage, por identidad de Gustavo o Nicanor cuando está disponible o en una clave local genérica si no lo está. No almacena proyectos, respuestas, claves ni datos tributarios. No está sincronizada entre dispositivos. Los eventos en Calendario y los correos del Worker continúan usando únicamente el catálogo oficial y no se modifican por el seguimiento o la demo.
+
+
+## Fondos TLS: hitos intermedios, recordatorios y seguimiento compartido (15 oct 2026)
+
+### Hitos intermedios
+Cada programa puede declarar un arreglo opcional de `milestones`: `id`, `name`, `date` (fecha/hora Chile), `kind` (`mandatory` o `informative`), `source` y `verified`. Cada hito debe tener URL oficial permitida y fecha válida; las fechas no verificadas siguen vacías y no generan alarmas. La ficha y la mesa muestran los hitos separados de la fecha final. El calendario añade eventos virtuales `fondo_hito`, que siguen excluidos de Google Calendar.
+
+El único hito nuevo agregado es **Crea y Valida 2026: Fase 1, cierre de perfil obligatorio, 9 junio 2026 17:00 (Chile)**, confirmado en la ficha Corfo. Es histórico, no se alerta retrospectivamente. No se extrapolan nuevas fechas para 2027.
+
+### Alertas
+El Worker `lead-worker/src/fondos-notify.js` incluye hitos obligatorios con fecha oficial y envía avisos de apertura, cierre o hito el día exacto. También recuerda 7, 3 y 1 días antes de las fechas registradas. Solo envía a los dos buzones corporativos validados `@thelab.solutions`, exige Resend y KV configurados, se limita al horario de cron y usa clave de idempotencia por fondo, fase, fecha, anticipación y persona. El calendario presenta además avisos internos para hitos obligatorios el mismo día.
+
+**Importante:** las pruebas de GitHub usan un simulador de Resend y KV. El despliegue del Worker no prueba por sí mismo que se recibió un correo en los buzones reales. Se debe revisar la ejecución del cron de Cloudflare, los secretos del entorno, los IDs de Resend, la llegada a las dos bandejas y posibles rebotes. No se realizaron envíos ficticios en producción.
+
+### Mesa compartida
+Una ruta protegida `GET/PUT /shared/funds` en `airtable-proxy` mantiene el documento `FONDOS_TLS` en un registro dedicado de `Monitor Sistema`, sin conceder acceso genérico a esa tabla. Solo administradores y operadores con identidad Cloudflare Access pueden leer o escribir (durante el cutover se admite la autenticación APP_KEY heredada). Cada PUT cambia un fondo individual, valida estado + siete casillas y pasa por un Durable Object serializado con revisión CAS y comprobación posterior en Airtable. La interfaz muestra si se sincronizó con el equipo o si opera en modo local.
+
+El servidor **nunca almacena** el texto del proyecto, respuestas del formulario, RUT, documentos ni claves del navegador en este documento. La sincronización remota sustituye a las preferencias del navegador para esta mesa cuando se dispone de una respuesta válida. Si no hay conexión se conserva el seguimiento local y se informa con advertencia. La sincronización entre navegadores se comprueba con pruebas de integración simuladas. La conectividad del proxy de producción y Cloudflare Access deben validarse desde una sesión de Gustavo y Nicanor.
+
+### Seguridad / operación
+- Consultas y ediciones remotas necesitan rutas exactas, validación estricta y comprobación de rol; no aceptan payloads arbitrarios.
+- 409: actualización concurrente, el navegador recoge revisión y reintenta la modificación **una vez**; 5xx/timeout no disparan reintentos que puedan duplicar mutaciones.
+- La creación automática del documento se realiza solo en un PUT legítimo al registro `FONDOS_TLS`; no modifica el registro `CALENDARIO`.
+- En ausencia de deploy de Workers (por token Cloudflare no configurado) el dashboard conserva el fallback local y lo muestra explícitamente.

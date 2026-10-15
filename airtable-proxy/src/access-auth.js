@@ -239,6 +239,7 @@ function accessAllows(identity,method,path){
   // Solo administradores verificados consultan las claves de servicios externos.
   if(path==='/integrations/check')return admin&&method==='GET';
   if(path==='/ads/campaign-shell')return method==='POST'&&(operator||finance||admin);
+  if(path==='/shared/funds')return ['operator','admin'].includes(identity.role)&&['GET','PUT'].includes(method);
   if(path==='/shared/calendar')return method==='GET'||
     (method==='PUT'&&['sales','operator','finance','admin'].includes(identity.role));
   if(path==='/shared/agenda')return method==='GET'||

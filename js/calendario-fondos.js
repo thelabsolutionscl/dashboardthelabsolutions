@@ -31,7 +31,13 @@
       fit:String(f.fit||'Por evaluar').slice(0,120),fitReason:String(f.fitReason||'').slice(0,650),
       open:begin?String(f.open):'',close:end?String(f.close):'',
       source:f.source,info:allowedUrl(f.info)?f.info:f.source,
-      verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900)};
+      verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900),
+      milestones:(Array.isArray(f.milestones)?f.milestones:[]).slice(0,12).map(m=>{
+        if(!m||typeof m!=='object'||!/^[a-z0-9-]{3,60}$/.test(String(m.id||''))||
+          typeof m.name!=='string'||m.name.length<6||m.name.length>160||
+          !iso(m.date)||!allowedUrl(m.source)||!['mandatory','informative'].includes(m.kind))return null;
+        return {id:m.id,name:m.name,date:m.date,kind:m.kind,source:m.source,verified:String(m.verified||'').slice(0,500)};
+      }).filter(Boolean)};
   };
   let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false,searchTerm='',draftReady=false,draftFor='';
   // DEMO independiente: solo UI local, nunca toca catálogos, eventos ni avisos.
@@ -155,6 +161,8 @@
     ['plazos','Confirmé apertura y cierre en la fuente oficial']
   ];
   let tracked={},workspaceId='',workspaceBrief='',workspaceBusy=false,workspaceRunId=0;
+  let fundsSync='local',fundsSyncMessage='Guardado solo en este navegador',
+      fundsRevision='',fundsQueue=Promise.resolve(),fundsRemoteReady=false;
   let workspaceResult={status:'idle',source:'',text:'',error:''},visibleLimit=8;
   function trackKey(){
     let person='local';
@@ -178,14 +186,123 @@
       }]));
     }catch(_){return {};}
   }
-  function saveTracked(){
+  function fundsSharedConfig(){
+    try{
+      const p=typeof _proxyCfg==='function'?_proxyCfg():null;
+      if(!p?.url)return null;
+      const url=new URL(p.url);
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+         url.search||url.hash)return null;
+      if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+      return {url:url.origin+url.pathname.replace(/\/$/,'')+'/shared/funds',key:p.key};
+    }catch(_){return null;}
+  }
+  async function fundsSharedRequest(method,body){
+    const cfg=fundsSharedConfig();
+    if(!cfg)throw Error('Proxy de fondos no configurado');
+    return fetch(cfg.url,{method,credentials:'include',redirect:'error',
+      headers:{...(cfg.key?{'X-App-Key':cfg.key}:{}),...(body?{'Content-Type':'application/json'}:{})},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+  }
+  function absorbSharedData(data){
+    if(!data||data.schema!==1||!data.funds||typeof data.funds!=='object')return false;
+    const clean={};
+    for(const [id,r] of Object.entries(data.funds)){
+      if(!/^[a-z0-9-]{3,90}$/.test(id)||!r||!FLOW_STAGES.has(r.stage)||
+         !Array.isArray(r.checks)||r.watching!==true)continue;
+      clean[id]={stage:r.stage,checks:r.checks.filter(k=>FLOW_CHECKS.some(x=>x[0]===k)),watching:true};
+    }
+    tracked=clean;
+    try{localStorage.setItem(trackKey(),JSON.stringify(clean));}catch(_){}
+    return true;
+  }
+  async function syncTracked(){
+    if(!fundsSharedConfig()){
+      fundsSync='local';fundsSyncMessage='Sin conexión al proxy: guardado solo en este navegador';
+      render();return false;
+    }
+    fundsSync='loading';fundsSyncMessage='Conectando seguimiento compartido…';render();
+    try{
+      const r=await fundsSharedRequest('GET');
+      if(!r.ok)throw Error('HTTP '+r.status);
+      const d=await r.json();
+      if(!d.ok||typeof d.revision!=='string'||d.data?.schema!==1||!d.data.funds||typeof d.data.funds!=='object')
+        throw Error('Respuesta inválida');
+      fundsRevision=d.revision;fundsRemoteReady=true;
+      // Migración no destructiva: solo cuando la mesa compartida recién se crea.
+      // No sobreescribir el trabajo existente de otros operadores.
+      const old=readTracked(),migrationKey=FLOW_STORAGE+':shared-migrated';
+      let migrated=false;try{migrated=localStorage.getItem(migrationKey)==='1';}catch(_){}
+      const records=Object.entries(old).filter(([id,r])=>r?.watching&&/^[a-z0-9-]{3,90}$/.test(id));
+      if(!Object.keys(d.data.funds).length&&!migrated&&records.length){
+        fundsSyncMessage='Importando '+records.length+' fichas locales a la mesa compartida…';
+        for(const [id,r] of records){
+          const ok=await persistFundRecord(id,{stage:r.stage,checks:r.checks,watching:true});
+          if(!ok)throw Error('No se pudo migrar el seguimiento local; sigue disponible en este navegador');
+        }
+        try{localStorage.setItem(migrationKey,'1');}catch(_){}
+        const fresh=await fundsSharedRequest('GET');
+        if(!fresh.ok)throw Error('No se pudo verificar la importación');
+        const confirmed=await fresh.json();
+        if(!confirmed.ok||typeof confirmed.revision!=='string')throw Error('La importación no fue confirmada');
+        fundsRevision=confirmed.revision;
+        if(!absorbSharedData(confirmed.data))throw Error('Documento compartido inválido');
+      }else{
+        if(!absorbSharedData(d.data))throw Error('Documento compartido inválido');
+      }
+      fundsSync='connected';fundsSyncMessage='Seguimiento compartido con TLS · sincronizado';
+      render();return true;
+    }catch(e){
+      fundsRemoteReady=false;fundsSync='error';
+      fundsSyncMessage='Sin sincronización: '+String(e?.message||e).slice(0,100)+'. Cambios solo locales';
+      render();return false;
+    }
+  }
+  function persistFundRecord(id,record){
+    // Enviar únicamente la edición del fondo afectado, no un reemplazo completo del documento.
+    fundsQueue=fundsQueue.catch(()=>false).then(async()=>{
+      if(!fundsRemoteReady)return false;
+      const safeRecord={stage:FLOW_STAGES.has(record?.stage)?record.stage:'seguimiento',
+        checks:Array.isArray(record?.checks)?record.checks.filter(k=>FLOW_CHECKS.some(x=>x[0]===k)).slice(0,7):[],
+        watching:!!record?.watching};
+      try{
+        for(let attempt=0;attempt<2;attempt++){
+          const r=await fundsSharedRequest('PUT',{fundId:id,record:safeRecord,expectedRevision:fundsRevision});
+          if(r.status===409&&attempt===0){
+            const d=await r.json();
+            if(typeof d.revision!=='string')throw Error('Conflicto sin versión');
+            fundsRevision=d.revision;
+            continue;
+          }
+          if(!r.ok)throw Error('HTTP '+r.status);
+          const d=await r.json();
+          if(!d.ok||typeof d.revision!=='string')throw Error('Respuesta no confirmada');
+          fundsRevision=d.revision;
+          fundsSync='connected';fundsSyncMessage='Seguimiento compartido con TLS · sincronizado';
+          render();return true;
+        }
+        throw Error('Otro usuario modificó los fondos; actualiza la vista');
+      }catch(e){
+        fundsSync='error';
+        fundsSyncMessage='Error al guardar en equipo ('+String(e?.message||e).slice(0,75)+'). Cambio local sin confirmar';
+        render();return false;
+      }
+    });
+    return fundsQueue;
+  }
+  function saveTracked(id){
     try{localStorage.setItem(trackKey(),JSON.stringify(tracked));}catch(_){}
+    if(id&&fundsRemoteReady){
+      const record=tracked[id]||{stage:'seguimiento',checks:[],watching:false};
+      void persistFundRecord(id,{stage:record.stage,checks:[...(record.checks||[])],watching:record.watching===true});
+    }
   }
   function trackFund(id){
     if(!byId(id))return false;
     if(tracked[id]?.watching){delete tracked[id];if(workspaceId===id){workspaceRunId++;workspaceBusy=false;workspaceId='';workspaceBrief='';workspaceResult={status:'idle',source:'',text:'',error:''};}}
     else tracked[id]={stage:'seguimiento',checks:tracked[id]?.checks||[],watching:true};
-    saveTracked();render();return !!tracked[id]?.watching;
+    saveTracked(id);render();return !!tracked[id]?.watching;
   }
   function openWorkspace(id){
     if(!byId(id))return false;
@@ -197,20 +314,20 @@
     }
     workspaceId=id;
     if(!tracked[id])tracked[id]={stage:'seguimiento',checks:[],watching:true};
-    saveTracked();
+    saveTracked(id);
     render();
     document.getElementById('fondosMesa')?.scrollIntoView?.({behavior:'smooth',block:'start'});
     return true;
   }
   function stageFund(id,next){
     if(!byId(id)||!FLOW_STAGES.has(next)||!tracked[id])return false;
-    tracked[id].stage=next;saveTracked();render();return true;
+    tracked[id].stage=next;saveTracked(id);render();return true;
   }
   function toggleFlowCheck(id,key,checked){
     if(!byId(id)||!tracked[id]||!FLOW_CHECKS.some(x=>x[0]===key))return false;
     const current=new Set(tracked[id].checks||[]);
     if(checked)current.add(key);else current.delete(key);
-    tracked[id].checks=[...current];saveTracked();render();return true;
+    tracked[id].checks=[...current];saveTracked(id);render();return true;
   }
   function fundWindow(f){
     const d=today(),opening=iso(f.open),closing=iso(f.close);
@@ -314,6 +431,9 @@
       '<div class="fondos-workspace-heading"><div><div class="fondos-eyebrow">MI MESA DE TRABAJO · 3 PASOS</div><h3>'+esc(f.name)+'</h3><span class="fondos-workspace-agency">'+esc(f.organizer)+' · '+esc(f.region)+'</span></div>'+
         '<button type="button" class="fondos-outline-action" data-fondos-work-close>✕ Cerrar ficha</button></div>'+
       '<div class="fondos-workspace-window" data-tone="'+win.tone+'"><strong>'+esc(win.label)+'</strong><span>'+esc(win.reason)+'</span></div>'+
+      (confirmedMilestones(f).length?'<div class="fondos-workspace-milestones"><strong>⚠ Etapas adicionales del organismo</strong>'+
+        confirmedMilestones(f).map(m=>'<div><b>'+esc(m.name)+'</b> · '+esc(pretty(m.date))+
+          ' · '+link(m.source,'Comprobar en organismo')+'</div>').join('')+'</div>':'')+
       '<div class="fondos-workspace-steps">'+
         '<div class="fondos-workspace-step"><div class="fondos-step-index">01</div><h4>¿Conviene postular?</h4><p>'+esc(f.fit)+' · '+esc(f.fitReason)+'</p><p class="fondos-workspace-req"><b>Requisitos que debes verificar:</b> '+esc(f.requirements)+'</p>'+
           '<div class="fondos-workspace-sources">'+link(f.source,'↗ Bases y fuente oficial')+(f.info!==f.source?' · '+link(f.info,'↗ Ficha del organismo'):'')+'</div>'+
@@ -373,15 +493,22 @@
     const day=[field('year'),field('month'),field('day')].join('-');
     let count=0;
     for(const f of funds){
-      for(const [phase,name] of [['open','Apertura'],['close','Cierre']]){
-        if(iso(f[phase])!==day)continue;
-        const key='fondos:'+who+':'+f.id+':'+phase+':'+day;
+      const phases=[
+        ...[['open','Apertura',''],['close','Cierre','']].map(([key,label])=>
+          ({key,label,date:f[key],kind:key,source:f.source})),
+        ...confirmedMilestones(f).filter(m=>m.kind==='mandatory').map(m=>({
+          key:'hito-'+m.id,label:m.name,date:m.date,kind:'hito',source:m.source
+        }))
+      ];
+      for(const phase of phases){
+        if(iso(phase.date)!==day)continue;
+        const key='fondos:'+who+':'+f.id+':'+phase.key+':'+day;
         try{if(localStorage.getItem(key)==='1')continue;}catch(_){}
-        const title=(phase==='open'?'🟢 Abre hoy: ':'🔴 Cierra hoy: ')+f.name;
-        const detail=name+' a las '+f[phase].slice(11,16)+' h (Chile) · Revisa las bases oficiales antes de postular.';
+        const title=(phase.kind==='open'?'🟢 Abre hoy: ':phase.kind==='close'?'🔴 Cierra hoy: ':'⚠ Hito obligatorio hoy: ')+
+          (phase.kind==='hito'?phase.label+' · ':'')+f.name;
+        const detail=phase.label+' a las '+phase.date.slice(11,16)+' h (Chile) · Confirma en '+phase.source;
         if(n.priority('info',title,detail,'calendario',{
-          personas:['gustavo','nicanor'],
-          tone:phase==='close'?'warning':'info',key
+          personas:['gustavo','nicanor'],tone:phase.kind==='open'?'info':'warning',key
         })){
           count++;
           try{localStorage.setItem(key,'1');}catch(_){}
@@ -390,29 +517,46 @@
     }
     return count;
   }
+  function confirmedMilestones(f){
+    const ids=new Set();
+    return (f.milestones||[]).filter(m=>{
+      if(ids.has(m.id))return false;ids.add(m.id);
+      return !!iso(m.date)&&allowedUrl(m.source);
+    });
+  }
   function eventList(){
     let on=true;try{on=localStorage.getItem(KEY)!=='false';}catch{}
     if(!on)return [];
-    return funds.flatMap(f=>[["open","fondo_inicio","🟢 Abre"],["close","fondo_cierre","🔴 Cierra"]]
-      .filter(([field])=>iso(f[field]))
-      .map(([field,type,prefix])=>({
-        id:'fondo-'+f.id+'-'+field,source:'fondos',type,fecha:iso(f[field]),
-        titulo:prefix+' · '+f.name,desc:f.verified,personas:[],allDay:true,
-        color:field==='open'?'#3dbd92':'#e69b55',fundId:f.id,phase:field,
-        risk:'normal',gcal:{}
-      })));
+    return funds.flatMap(f=>[
+      ...[["open","fondo_inicio","🟢 Abre"],["close","fondo_cierre","🔴 Cierra"]]
+        .filter(([field])=>iso(f[field]))
+        .map(([field,type,prefix])=>({
+          id:'fondo-'+f.id+'-'+field,source:'fondos',type,fecha:iso(f[field]),
+          titulo:prefix+' · '+f.name,desc:f.verified,personas:[],allDay:true,
+          color:field==='open'?'#3dbd92':'#e69b55',fundId:f.id,phase:field,risk:'normal',gcal:{}
+        })),
+      ...confirmedMilestones(f).map(m=>({
+        id:'fondo-'+f.id+'-milestone-'+m.id,source:'fondos',type:'fondo_hito',
+        fecha:iso(m.date),titulo:(m.kind==='mandatory'?'⚠ Hito obligatorio':'📌 Hito')+' · '+m.name+' · '+f.name,
+        desc:m.verified,personas:[],allDay:true,color:'#e4ae4a',fundId:f.id,
+        phase:'milestone:'+m.id,risk:m.kind==='mandatory'?'alto':'normal',gcal:{}
+      }))
+    ]);
   }
   /* Los hitos son eventos virtuales con fecha oficial. Los fondos sin fecha
      se muestran al pie de la grilla, nunca sobre una fecha inventada. */
   function allDates(){
-    return funds.flatMap(f=>['open','close']
-      .filter(phase=>!!iso(f[phase]))
-      .map(phase=>({id:f.id,phase,fecha:iso(f[phase]),name:f.name}))
-    ).sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.name.localeCompare(b.name));
+    return funds.flatMap(f=>[
+      ...['open','close'].filter(phase=>!!iso(f[phase]))
+        .map(phase=>({id:f.id,phase,fecha:iso(f[phase]),name:f.name})),
+      ...confirmedMilestones(f).map(m=>({
+        id:f.id,phase:'milestone:'+m.id,fecha:iso(m.date),name:m.name+' · '+f.name
+      }))
+    ]).sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.name.localeCompare(b.name));
   }
   function goTo(id,phase){
     const f=byId(id);
-    const fecha=f&&iso(f[phase]);
+    const fecha=f&&iso(phase?.startsWith('milestone:')?confirmedMilestones(f).find(m=>m.id===phase.slice(10))?.date:f[phase]);
     if(!fecha)return false;
     // Un enlace explícito a la fecha habilita de nuevo los hitos, incluso si
     // estaban ocultos localmente, para evitar un calendario aparentemente vacío.
@@ -576,6 +720,8 @@
         future>0?'Hay '+future+' apertura(s) futura(s) registradas.':
         'No hay un fondo con apertura vigente o futura registrada en este catálogo.'
       )+'</strong><p>Trabaja el proyecto y los requisitos mientras se vigilan nuevas convocatorias. No se presentan fondos cerrados como abiertos.</p></div>'+workspaceHtml()))+
+      '<div class="fondos-shared-status" role="status" data-sync="'+esc(fundsSync)+'">'+esc(fundsSyncMessage)+
+        ' <button type="button" class="fondos-sync-refresh" data-fondos-sync-refresh>↻ Actualizar seguimiento</button></div>'+
       '<div class="fondos-toolbar"><div class="fondos-filter-pills" role="group" aria-label="Filtrar convocatorias">'+chips+'</div>'+
         '<label class="fondos-search-wrap"><span class="fondos-search-icon" aria-hidden="true">⌕</span><input type="search" id="fondosBuscar" autocomplete="off" aria-label="Buscar por programa, institución o categoría" placeholder="Buscar fondo, organismo o proyecto…" value="'+esc(searchTerm)+'"></label></div>'+
       '<div class="fondos-list-header"><b>Catálogo · '+funds.length+' programas</b><span data-fondos-count>'+ordered.length+' oportunidades visibles</span></div>'+
@@ -609,8 +755,9 @@
     return inFlight;
   }
   function open(id){
+    const marker=/^fondo-(.*)-milestone-([a-z0-9-]+)$/.exec(id||'');
     const match=/^fondo-(.*)-(open|close)$/.exec(id||'');
-    const f=byId(match?match[1]:id);
+    const f=byId(marker?marker[1]:match?match[1]:id);
     if(!f)return;
     const modal=document.getElementById('fondosDetalleModal');
     const container=document.getElementById('fondosDetalleBody');
@@ -625,6 +772,11 @@
         '<div class="fondos-detail-cell"><small>Apertura</small><b>'+esc(pretty(f.open))+'</b></div>'+
         '<div class="fondos-detail-cell"><small>Cierre</small><b>'+esc(pretty(f.close))+'</b></div>'+
       '</div>'+
+      '<div class="fondos-detail-section"><h4>Hitos y entregas obligatorias verificadas</h4>'+
+        (confirmedMilestones(f).length?'<ul>'+confirmedMilestones(f).map(m=>'<li><strong>'+
+          esc(m.name)+'</strong> · '+esc(pretty(m.date))+' · '+link(m.source,'Fuente oficial')+
+          ' <button type="button" class="btn btn-ghost btn-sm" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="milestone:'+esc(m.id)+'">Ver en calendario</button></li>').join('')+'</ul>':
+          '<p>Sin hitos adicionales acreditados en esta ficha; revisar bases antes de postular.</p>')+'</div>'+
       '<div class="fondos-detail-section"><h4>Lo que debes verificar antes de postular</h4><p>'+esc(f.requirements)+'</p></div>'+
       '<div class="fondos-detail-section"><h4>Respaldo y territorio</h4><p>'+esc(f.region)+'. '+esc(f.verified)+'</p></div>'+
       '<div class="fondos-detail-section"><h4>Información oficial</h4><p>'+link(f.source,'↗ Abrir fuente y bases del organismo')+'</p></div>'+
@@ -756,6 +908,7 @@
         }else if(note)note.textContent='Selecciona el texto para copiar';
         return;
       }
+      if(e.target.closest('[data-fondos-sync-refresh]')){void syncTracked();return;}
       if(e.target.closest('[data-fondos-more]')){visibleLimit+=8;applySearch();return;}
       const quick=e.target.closest('[data-fondos-view]');
       if(quick){mode=quick.dataset.fondosView;visibleLimit=8;render();return;}
@@ -795,10 +948,11 @@
     document.getElementById('fondosDetalleModal')?.addEventListener('click',e=>{if(e.target.id==='fondosDetalleModal')close();});
     render();
     load();
+    void syncTracked();
     // Ventana abierta durante horas: recordar nuevas aperturas y cierres.
     setInterval(notifyToday,15*60*1000);
   }
-  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode,runDemoAgent,demoAgentState:()=>({...demoAgent}),openWorkspace,trackFund,stageFund,toggleFlowCheck,workspaceAnalyze,workspaceState:()=>({...workspaceResult}),fundWindow};
+  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode,runDemoAgent,demoAgentState:()=>({...demoAgent}),openWorkspace,trackFund,stageFund,toggleFlowCheck,workspaceAnalyze,workspaceState:()=>({...workspaceResult}),fundWindow,syncTracked,sharedStatus:()=>({status:fundsSync,message:fundsSyncMessage,revision:fundsRevision})};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();

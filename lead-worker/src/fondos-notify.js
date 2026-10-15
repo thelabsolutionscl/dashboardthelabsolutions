@@ -26,22 +26,40 @@ function valid(f){
   if(!f||!/^[-a-z0-9]{3,90}$/.test(f.id||'')||typeof f.name!=='string'||f.name.length<4||f.name.length>200)return false;
   try{const u=new URL(f.source);return u.protocol==='https:'&&SOURCES.has(u.hostname);}catch{return false;}
 }
-export function dueNotifications(catalog,date=new Date()){
+const reminders=[7,3,1];
+function addChileDays(day,days){
+  const [y,m,d]=day.split('-').map(Number);
+  const dt=new Date(Date.UTC(y,m-1,d+days,12));
+  return dt.toISOString().slice(0,10);
+}
+export function dueNotifications(catalog,date=new Date(),daysAhead=0){
+  if(![0,1,3,7].includes(daysAhead))return [];
   const now=chileNow(date);
   if(!Array.isArray(catalog?.funds)||catalog?.schema!==1||catalog.funds.length>250)return [];
   const found=[];
   for(const f of catalog.funds){
     if(!valid(f))continue;
     for(const [phase,field] of [['apertura','open'],['cierre','close']]){
-      if(dateOnly(f[field])!==now.date)continue;
+      if(dateOnly(f[field])!==addChileDays(now.date,daysAhead))continue;
       // A number of 2026 calls are historical; day-of matching alone prevents
       // stale calls being replayed after a new code release.
       const link=String(f.info||f.source);
       const detailUrl=(()=>{try{const u=new URL(link);return u.protocol==='https:'&&SOURCES.has(u.hostname)?u.href:f.source;}catch{return f.source;}})();
-      found.push({id:f.id,phase,date:now.date,time:f[field].slice(11,16),name:f.name,organizer:String(f.organizer||''),requirements:String(f.requirements||''),url:detailUrl});
+      found.push({id:f.id,phase,date:addChileDays(now.date,daysAhead),time:f[field].slice(11,16),name:f.name,organizer:String(f.organizer||''),requirements:String(f.requirements||''),url:detailUrl,daysAhead});
+    }
+    for(const m of Array.isArray(f.milestones)?f.milestones.slice(0,12):[]){
+      if(!m||m.kind!=='mandatory'||!/^[a-z0-9-]{3,60}$/.test(String(m.id||''))||
+         typeof m.name!=='string'||m.name.length>160||
+         dateOnly(m.date)!==addChileDays(now.date,daysAhead))continue;
+      let source;try{const u=new URL(m.source);source=u.protocol==='https:'&&SOURCES.has(u.hostname)?u.href:'';}catch(_){}
+      if(!source)continue;
+      found.push({id:f.id,phase:'hito-'+m.id,date:addChileDays(now.date,daysAhead),
+        time:m.date.slice(11,16),name:f.name,organizer:String(f.organizer||''),
+        milestone:String(m.name).slice(0,160),requirements:String(m.verified||f.requirements||'').slice(0,500),
+        url:source,daysAhead});
     }
   }
-  return found.slice(0,50);
+  return found.slice(0,70);
 }
 function address(env,person){
   const value=String(env['FONDOS_NOTIFY_TO_'+person.toUpperCase()]||PEOPLE[person]).trim().toLowerCase();
@@ -49,12 +67,13 @@ function address(env,person){
   return /^[a-z0-9._%+-]+@thelab\.solutions$/.test(value)?value:null;
 }
 export function emailFor(f,person,address){
-  const action=f.phase==='apertura'?'ABRE HOY':'CIERRA HOY';
-  const subject='🏛 Fondo concursable '+action+': '+f.name;
+  const action=f.phase==='apertura'?'ABRE':f.phase==='cierre'?'CIERRA':'HITO OBLIGATORIO';
+  const when=f.daysAhead>0?'EN '+f.daysAhead+' DÍA'+(f.daysAhead===1?'':'S'):'HOY';
+  const subject='🏛 Fondo concursable '+action+' '+when+': '+(f.milestone?f.milestone+' · ':'')+f.name;
   const body='<div style="font-family:Arial,sans-serif;color:#1d2636;line-height:1.5;max-width:650px">'+
     '<h2>'+esc(subject)+'</h2>'+
     '<p>Hola '+esc(person==='gustavo'?'Gustavo':'Nicanor')+',</p>'+
-    '<p>Hoy, <b>'+esc(f.date)+'</b>, corresponde la <b>'+esc(f.phase)+'</b> de esta convocatoria ('+esc(f.organizer)+').</p>'+
+    '<p><b>'+esc(f.date)+'</b>: '+esc(f.milestone||f.phase)+' de esta convocatoria ('+esc(f.organizer)+'). '+(f.daysAhead?'Recordatorio anticipado de '+f.daysAhead+' día(s).':'Aviso del día del hito.')+'</p>'+
     '<p><b>Horario:</b> '+(f.time==='00:00'?'No consta hora oficial en esta ficha; consulta las bases para el plazo exacto.':esc(f.time)+' (Chile continental)')+'. Confirma cualquier cambio directamente en el organismo.</p>'+
     '<p><b>Requisitos por verificar:</b> '+esc(f.requirements)+'</p>'+
     '<p><a href="'+esc(f.url)+'">Consultar convocatoria oficial y bases</a></p>'+
@@ -81,13 +100,13 @@ export async function deliverFundAlerts(env,date=new Date(),fetcher=fetch){
     }catch(e){sourceError=e;console.warn('[fondos-notify] fallo fuente catálogo:',url,String(e.message||e));}
   }
   if(!data)throw Error('No hay catálogo de fondos verificable: '+String(sourceError?.message||sourceError));
-  const candidates=dueNotifications(data,date);
+  const candidates=[...dueNotifications(data,date),...reminders.flatMap(days=>dueNotifications(data,date,days))];
   const result={date:clock.date,events:candidates.length,sent:0,alreadySent:0,errors:[]};
   for(const f of candidates){
     for(const person of ['gustavo','nicanor']){
       const email=address(env,person);
       if(!email){result.errors.push('Correo corporativo inválido: '+person);continue;}
-      const key='fondos:alert:'+f.id+':'+f.phase+':'+f.date+':'+person;
+      const key='fondos:alert:'+f.id+':'+f.phase+':'+f.date+':'+f.daysAhead+':'+person;
       let old;
       try{old=await env.RL.get(key);}catch(e){result.errors.push('KV inaccesible: '+person);continue;}
       if(old){result.alreadySent++;continue;}

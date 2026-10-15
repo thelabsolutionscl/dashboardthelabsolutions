@@ -107,7 +107,17 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
       "verified": "Corfo 2026: apertura 19/05 17:00; fase de perfil obligatorio hasta 09/06 17:00 y postulación final 04/08 17:00. Perfil es requisito previo; no basta la fecha final.",
-      "requirements": "Empresa jurídica constituida en Chile con al menos 24 meses de inicio de actividades de primera categoría y ventas acreditadas últimos 24 meses; proyecto de I+D, perfil previo y cofinanciamiento."
+      "requirements": "Empresa jurídica constituida en Chile con al menos 24 meses de inicio de actividades de primera categoría y ventas acreditadas últimos 24 meses; proyecto de I+D, perfil previo y cofinanciamiento.",
+      "milestones": [
+        {
+          "id": "perfil-obligatorio",
+          "name": "Cierre de perfil de proyecto (obligatorio)",
+          "date": "2026-06-09T17:00",
+          "kind": "mandatory",
+          "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
+          "verified": "Corfo, ficha oficial Crea y Valida 2026: Fase 1, presentación de perfil obligatorio hasta las 17:00 del 09/06/2026; sin esta etapa no se habilita postulación final."
+        }
+      ]
     },
     {
       "id": "corfo-consolida-expande-innovacion-2026",
