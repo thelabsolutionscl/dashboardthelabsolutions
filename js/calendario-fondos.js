@@ -161,6 +161,8 @@
     ['plazos','Confirmé apertura y cierre en la fuente oficial']
   ];
   let tracked={},workspaceId='',workspaceBrief='',workspaceBusy=false,workspaceRunId=0;
+  let fundsSync='local',fundsSyncMessage='Guardado solo en este navegador',
+      fundsRevision='',fundsQueue=Promise.resolve(),fundsRemoteReady=false;
   let workspaceResult={status:'idle',source:'',text:'',error:''},visibleLimit=8;
   function trackKey(){
     let person='local';
@@ -184,14 +186,101 @@
       }]));
     }catch(_){return {};}
   }
-  function saveTracked(){
+  function fundsSharedConfig(){
+    try{
+      const p=typeof _proxyCfg==='function'?_proxyCfg():null;
+      if(!p?.url||!p.key)return null;
+      const url=new URL(p.url);
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
+         url.search||url.hash)return null;
+      if(url.protocol==='http:'&&!['localhost','127.0.0.1'].includes(url.hostname))return null;
+      return {url:url.origin+url.pathname.replace(/\/$/,'')+'/shared/funds',key:p.key};
+    }catch(_){return null;}
+  }
+  async function fundsSharedRequest(method,body){
+    const cfg=fundsSharedConfig();
+    if(!cfg)throw Error('Proxy de fondos no configurado');
+    return fetch(cfg.url,{method,credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+  }
+  function absorbSharedData(data){
+    if(!data||data.schema!==1||!data.funds||typeof data.funds!=='object')return false;
+    const clean={};
+    for(const [id,r] of Object.entries(data.funds)){
+      if(!/^[a-z0-9-]{3,90}$/.test(id)||!r||!FLOW_STAGES.has(r.stage)||
+         !Array.isArray(r.checks)||r.watching!==true)continue;
+      clean[id]={stage:r.stage,checks:r.checks.filter(k=>FLOW_CHECKS.some(x=>x[0]===k)),watching:true};
+    }
+    tracked=clean;
+    try{localStorage.setItem(trackKey(),JSON.stringify(clean));}catch(_){}
+    return true;
+  }
+  async function syncTracked(){
+    if(!fundsSharedConfig()){
+      fundsSync='local';fundsSyncMessage='Sin conexión al proxy: guardado solo en este navegador';
+      render();return false;
+    }
+    fundsSync='loading';fundsSyncMessage='Conectando seguimiento compartido…';render();
+    try{
+      const r=await fundsSharedRequest('GET');
+      if(!r.ok)throw Error('HTTP '+r.status);
+      const d=await r.json();
+      if(!d.ok||typeof d.revision!=='string'||!absorbSharedData(d.data))throw Error('Respuesta inválida');
+      fundsRevision=d.revision;fundsRemoteReady=true;
+      fundsSync='connected';fundsSyncMessage='Seguimiento compartido con TLS · sincronizado';
+      render();return true;
+    }catch(e){
+      fundsRemoteReady=false;fundsSync='error';
+      fundsSyncMessage='Sin sincronización: '+String(e?.message||e).slice(0,100)+'. Cambios solo locales';
+      render();return false;
+    }
+  }
+  function persistFundRecord(id,record){
+    // Enviar únicamente la edición del fondo afectado, no un reemplazo completo del documento.
+    fundsQueue=fundsQueue.catch(()=>false).then(async()=>{
+      if(!fundsRemoteReady)return false;
+      const safeRecord={stage:FLOW_STAGES.has(record?.stage)?record.stage:'seguimiento',
+        checks:Array.isArray(record?.checks)?record.checks.filter(k=>FLOW_CHECKS.some(x=>x[0]===k)).slice(0,7):[],
+        watching:!!record?.watching};
+      try{
+        for(let attempt=0;attempt<2;attempt++){
+          const r=await fundsSharedRequest('PUT',{fundId:id,record:safeRecord,expectedRevision:fundsRevision});
+          if(r.status===409&&attempt===0){
+            const d=await r.json();
+            if(typeof d.revision!=='string')throw Error('Conflicto sin versión');
+            fundsRevision=d.revision;
+            continue;
+          }
+          if(!r.ok)throw Error('HTTP '+r.status);
+          const d=await r.json();
+          if(!d.ok||typeof d.revision!=='string')throw Error('Respuesta no confirmada');
+          fundsRevision=d.revision;
+          fundsSync='connected';fundsSyncMessage='Seguimiento compartido con TLS · sincronizado';
+          render();return true;
+        }
+        throw Error('Otro usuario modificó los fondos; actualiza la vista');
+      }catch(e){
+        fundsSync='error';
+        fundsSyncMessage='Error al guardar en equipo ('+String(e?.message||e).slice(0,75)+'). Cambio local sin confirmar';
+        render();return false;
+      }
+    });
+    return fundsQueue;
+  }
+  function saveTracked(id){
     try{localStorage.setItem(trackKey(),JSON.stringify(tracked));}catch(_){}
+    if(id&&fundsRemoteReady){
+      const record=tracked[id]||{stage:'seguimiento',checks:[],watching:false};
+      void persistFundRecord(id,{stage:record.stage,checks:[...(record.checks||[])],watching:record.watching===true});
+    }
   }
   function trackFund(id){
     if(!byId(id))return false;
     if(tracked[id]?.watching){delete tracked[id];if(workspaceId===id){workspaceRunId++;workspaceBusy=false;workspaceId='';workspaceBrief='';workspaceResult={status:'idle',source:'',text:'',error:''};}}
     else tracked[id]={stage:'seguimiento',checks:tracked[id]?.checks||[],watching:true};
-    saveTracked();render();return !!tracked[id]?.watching;
+    saveTracked(id);render();return !!tracked[id]?.watching;
   }
   function openWorkspace(id){
     if(!byId(id))return false;
@@ -203,20 +292,20 @@
     }
     workspaceId=id;
     if(!tracked[id])tracked[id]={stage:'seguimiento',checks:[],watching:true};
-    saveTracked();
+    saveTracked(id);
     render();
     document.getElementById('fondosMesa')?.scrollIntoView?.({behavior:'smooth',block:'start'});
     return true;
   }
   function stageFund(id,next){
     if(!byId(id)||!FLOW_STAGES.has(next)||!tracked[id])return false;
-    tracked[id].stage=next;saveTracked();render();return true;
+    tracked[id].stage=next;saveTracked(id);render();return true;
   }
   function toggleFlowCheck(id,key,checked){
     if(!byId(id)||!tracked[id]||!FLOW_CHECKS.some(x=>x[0]===key))return false;
     const current=new Set(tracked[id].checks||[]);
     if(checked)current.add(key);else current.delete(key);
-    tracked[id].checks=[...current];saveTracked();render();return true;
+    tracked[id].checks=[...current];saveTracked(id);render();return true;
   }
   function fundWindow(f){
     const d=today(),opening=iso(f.open),closing=iso(f.close);
@@ -602,6 +691,8 @@
         future>0?'Hay '+future+' apertura(s) futura(s) registradas.':
         'No hay un fondo con apertura vigente o futura registrada en este catálogo.'
       )+'</strong><p>Trabaja el proyecto y los requisitos mientras se vigilan nuevas convocatorias. No se presentan fondos cerrados como abiertos.</p></div>'+workspaceHtml()))+
+      '<div class="fondos-shared-status" role="status" data-sync="'+esc(fundsSync)+'">'+esc(fundsSyncMessage)+
+        ' <button type="button" class="fondos-sync-refresh" data-fondos-sync-refresh>↻ Actualizar seguimiento</button></div>'+
       '<div class="fondos-toolbar"><div class="fondos-filter-pills" role="group" aria-label="Filtrar convocatorias">'+chips+'</div>'+
         '<label class="fondos-search-wrap"><span class="fondos-search-icon" aria-hidden="true">⌕</span><input type="search" id="fondosBuscar" autocomplete="off" aria-label="Buscar por programa, institución o categoría" placeholder="Buscar fondo, organismo o proyecto…" value="'+esc(searchTerm)+'"></label></div>'+
       '<div class="fondos-list-header"><b>Catálogo · '+funds.length+' programas</b><span data-fondos-count>'+ordered.length+' oportunidades visibles</span></div>'+
@@ -788,6 +879,7 @@
         }else if(note)note.textContent='Selecciona el texto para copiar';
         return;
       }
+      if(e.target.closest('[data-fondos-sync-refresh]')){void syncTracked();return;}
       if(e.target.closest('[data-fondos-more]')){visibleLimit+=8;applySearch();return;}
       const quick=e.target.closest('[data-fondos-view]');
       if(quick){mode=quick.dataset.fondosView;visibleLimit=8;render();return;}
@@ -827,10 +919,11 @@
     document.getElementById('fondosDetalleModal')?.addEventListener('click',e=>{if(e.target.id==='fondosDetalleModal')close();});
     render();
     load();
+    void syncTracked();
     // Ventana abierta durante horas: recordar nuevas aperturas y cierres.
     setInterval(notifyToday,15*60*1000);
   }
-  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode,runDemoAgent,demoAgentState:()=>({...demoAgent}),openWorkspace,trackFund,stageFund,toggleFlowCheck,workspaceAnalyze,workspaceState:()=>({...workspaceResult}),fundWindow};
+  window.TLSFondos={load,render,eventList,open,prepare,draft,copyDraft,status,clean,iso,allDates,goTo,goToClosest,renderCalendarSummary,notifyToday,toggleDemo,isDemo:()=>demoMode,runDemoAgent,demoAgentState:()=>({...demoAgent}),openWorkspace,trackFund,stageFund,toggleFlowCheck,workspaceAnalyze,workspaceState:()=>({...workspaceResult}),fundWindow,syncTracked,sharedStatus:()=>({status:fundsSync,message:fundsSyncMessage,revision:fundsRevision})};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();
