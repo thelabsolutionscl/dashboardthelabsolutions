@@ -295,3 +295,24 @@ test('buscar conserva foco de input y paginación de ocho; histórico nunca se a
   v.hooks['list:input']({target:{id:'fondosBuscar',value:'xyz_inexistente'}});
   assert.equal(c.hidden,true);
 });
+
+test('cambiar de fondo no deja el agente bloqueado ni mezcla resultados tardíos',async()=>{
+  const v=view();await v.api.load();
+  const one='sercotec-crece-proximas',two='corfo-crea-y-valida-proxima-vigilar';
+  let finish;
+  v.ctx.window.callAgentClaude=()=>new Promise(resolve=>{finish=resolve;});
+  v.api.openWorkspace(one);
+  v.hooks['list:input']({target:{id:'fondosMesaIdea',value:'Ampliar capacidad de impresión 3D con equipos para TLS, sujeto a elegibilidad y bases.'}});
+  const run=v.api.workspaceAnalyze();
+  assert.equal(v.api.workspaceState().status,'working');
+  v.api.openWorkspace(two);
+  assert.equal(v.api.workspaceState().status,'idle');
+  v.hooks['list:input']({target:{id:'fondosMesaIdea',value:'Nuevo desarrollo de materiales 3D para pruebas verificables y evaluación de I+D de TLS.'}});
+  const result=await v.api.workspaceAnalyze(true);
+  assert.equal(result,true,'la ficha nueva debe ejecutar su propio plan');
+  const visible=v.api.workspaceState().text;
+  finish('Respuesta tardía del fondo anterior');
+  await run;
+  assert.equal(v.api.workspaceState().text,visible);
+  assert.doesNotMatch(v.list.innerHTML,/Respuesta tardía del fondo anterior/);
+});
