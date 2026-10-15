@@ -189,7 +189,7 @@
   function fundsSharedConfig(){
     try{
       const p=typeof _proxyCfg==='function'?_proxyCfg():null;
-      if(!p?.url||!p.key)return null;
+      if(!p?.url)return null;
       const url=new URL(p.url);
       if(!['https:','http:'].includes(url.protocol)||url.username||url.password||
          url.search||url.hash)return null;
@@ -201,7 +201,7 @@
     const cfg=fundsSharedConfig();
     if(!cfg)throw Error('Proxy de fondos no configurado');
     return fetch(cfg.url,{method,credentials:'include',redirect:'error',
-      headers:{'X-App-Key':cfg.key,...(body?{'Content-Type':'application/json'}:{})},
+      headers:{...(cfg.key?{'X-App-Key':cfg.key}:{}),...(body?{'Content-Type':'application/json'}:{})},
       ...(body?{body:JSON.stringify(body)}:{})
     });
   }
