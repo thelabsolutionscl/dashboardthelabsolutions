@@ -14,7 +14,12 @@
     if(v.length>10&&(Number(v.slice(11,13))>23||Number(v.slice(14,16))>59))return '';
     return v.slice(0,10);
   };
-  const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');};
+  // Un día de apertura/cierre siempre corresponde a Chile, no a la zona del equipo.
+  const today=()=>{
+    const pieces=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const part=k=>pieces.find(x=>x.type===k)?.value||'';
+    return [part('year'),part('month'),part('day')].join('-');
+  };
   const pretty=v=>{if(!iso(v))return 'Por confirmar';const d=new Date(v.slice(0,10)+'T12:00:00');return d.toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'})+(v.includes('T')&&v.slice(11,16)!=='00:00'?' · '+v.slice(11,16)+' h':'');};
   const allowedUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&/^(?:www\.)?(?:sercotec\.cl|corfo\.cl|corfo\.gob\.cl|fondos\.gob\.cl|prochile\.gob\.cl|startupchile\.org)$/.test(u.hostname);}catch{return false;}};
   const clean=f=>{
@@ -28,7 +33,7 @@
       source:f.source,info:allowedUrl(f.info)?f.info:f.source,
       verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900)};
   };
-  let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false,searchTerm='';
+  let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false,searchTerm='',draftReady=false,draftFor='';
   // DEMO independiente: solo UI local, nunca toca catálogos, eventos ni avisos.
   let demoMode=false,demoStep='inicio',demoRunId=0;
   const DEMO_QUESTION='TLS quiere evaluar un proyecto piloto para mejorar el prototipado y la impresión 3D. ¿Qué debería incluir en una postulación a un fondo de innovación y qué antecedentes faltan?';
@@ -209,20 +214,21 @@
   }
   function fundWindow(f){
     const d=today(),opening=iso(f.open),closing=iso(f.close);
+    if((opening&&!closing)||(!opening&&closing))return {tone:'watch',label:'Fechas incompletas',reason:'No está confirmada toda la ventana del concurso. Revisar la fuente antes de considerarlo disponible.'};
     if(!opening&&!closing)return {tone:'watch',label:'Sin fecha oficial',reason:'No hay nueva apertura confirmada. Seguir noticias y revisar bases cuando se publique un llamado.'};
-    if(closing&&closing<d)return {tone:'closed',label:'Convocatoria cerrada',reason:'Esta edición ya cerró. Sus fechas quedan solo como referencia histórica.'};
-    if(opening&&opening>d)return {tone:'future',label:'Apertura programada',reason:'Fecha incluida en catálogo oficial; validar condiciones y cambios antes de postular.'};
-    if(opening&&opening<=d&&(!closing||closing>=d))return {tone:'window',label:'Dentro de ventana publicada',reason:'La ventana registrada incluye hoy, pero es obligatorio confirmar vigencia y bases en la fuente oficial.'};
+    // Cierre/apertura son horas de Chile; después del plazo de la jornada
+    // no debe seguir mostrándose "Dentro de ventana publicada".
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Santiago',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+    const hour=parts.find(x=>x.type==='hour')?.value||'00';
+    const min=parts.find(x=>x.type==='minute')?.value||'00';
+    const nowTime=hour+':'+min;
+    const hasExactTime=v=>typeof v==='string'&&v.length===16&&v.slice(11,16)!=='00:00';
+    const pastClosing=closing<d||(closing===d&&hasExactTime(f.close)&&nowTime>=f.close.slice(11,16));
+    const beforeOpening=opening>d||(opening===d&&hasExactTime(f.open)&&nowTime<f.open.slice(11,16));
+    if(pastClosing)return {tone:'closed',label:'Convocatoria cerrada',reason:'La fecha u hora de cierre registrada ya pasó. Confirmar eventuales prórrogas en la fuente oficial.'};
+    if(beforeOpening)return {tone:'future',label:'Apertura programada',reason:'Fecha incluida en catálogo oficial; validar condiciones y cambios antes de postular.'};
+    if(opening&&opening<=d&&closing>=d)return {tone:'window',label:'Dentro de ventana publicada',reason:'La ventana registrada incluye el momento actual, pero es obligatorio confirmar vigencia y bases en la fuente oficial.'};
     return {tone:'watch',label:'Fechas por validar',reason:'Revisar la fuente oficial antes de tomar decisiones.'};
-  }
-  function flowTemplate(f){
-    return [
-      'Describe el objetivo del proyecto de TLS para esta convocatoria y qué problema concreto resolverá.',
-      '¿Qué innovación o mejora verificable se propone y cómo se medirá?',
-      'Indica actividades, plazos, presupuesto, aporte propio y resultados esperados. No supongas montos.',
-      'Analiza riesgos de elegibilidad, requisitos no verificados y documentos faltantes.',
-      'Requisitos orientativos del catálogo (confirmar en bases): '+f.requirements
-    ].join('\n\n');
   }
   function offlinePlan(f,idea){
     const missing=FLOW_CHECKS.filter(([key])=>!tracked[f.id]?.checks?.includes(key)).map(([,label])=>'• '+label);
@@ -331,8 +337,11 @@
   function prepareFromWorkspace(){
     const f=byId(workspaceId);if(!f)return false;
     const existing=document.getElementById('fondosPreguntas');
-    // Se presenta una guía de preguntas si aún no se han copiado las preguntas auténticas.
-    if(existing&&!existing.value.trim())existing.value=flowTemplate(f);
+    // No completar preguntas ficticias: la IA debe recibir texto REAL del formulario.
+    // Dar una instrucción visible; un placeholder no se envía al servicio de IA.
+    if(existing&&!existing.value.trim()){
+      existing.placeholder='Copia aquí las preguntas TEXTUALES del formulario oficial. Si todavía no existen, revisa primero las bases del organismo.';
+    }
     const notes=document.getElementById('fondosAntecedentes');
     if(notes&&!notes.value.trim()&&workspaceBrief.trim())notes.value=workspaceBrief.trim();
     prepare(f.id);
@@ -343,12 +352,12 @@
   const hasDate=f=>!!(f.open||f.close);
   const pending=f=>!hasDate(f);
   const status=f=>{
-    const now=today();
+    const stage=fundWindow(f);
     if(!hasDate(f))return 'Sin fechas publicadas';
-    if(f.close&&f.close.slice(0,10)<now)return 'Cerrado';
-    if(f.open&&f.open.slice(0,10)>now)return 'Próximamente';
-    if(f.open&&f.open.slice(0,10)<=now&&(!f.close||f.close.slice(0,10)>=now))return 'Posiblemente abierto · verificar';
-    return 'Por confirmar';
+    if(stage.tone==='closed')return 'Cerrado';
+    if(stage.tone==='future')return 'Próximamente';
+    if(stage.tone==='window')return 'Posiblemente abierto · verificar';
+    return stage.label;
   };
   // Avisos persistentes del dashboard al usuario autenticado: Gustavo y Nicanor.
   // El envío POR CORREO corre 24/7 en lead-worker y no depende de esta pestaña.
@@ -452,11 +461,8 @@
   const radarIds=new Set(['corfo-semilla-inicia-nueva-vigilar','corfo-semilla-expande-nueva-vigilar','corfo-crea-y-valida-proxima-vigilar','startupchile-big-proximo-vigilar']);
   const compact=txt=>String(txt||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   function tone(f){
-    const s=status(f);
-    if(pending(f))return 'seguimiento';
-    if(s==='Cerrado')return 'cerrado';
-    if(s==='Próximamente')return 'proximo';
-    return 'abierto';
+    const windowInfo=fundWindow(f).tone;
+    return windowInfo==='closed'?'cerrado':windowInfo==='future'?'proximo':windowInfo==='window'?'abierto':'seguimiento';
   }
   function countFor(f){return compact([f.name,f.organizer,f.region,f.category,f.fit,f.fitReason].join(' '));}
   function applySearch(){
@@ -473,7 +479,12 @@
     const count=root.querySelector('[data-fondos-count]');
     if(count)count.textContent=total===0?'0 oportunidades visibles':visible+' de '+total+' oportunidades visibles';
     const empty=root.querySelector('[data-fondos-no-match]');
-    if(empty)empty.hidden=total!==0;
+    if(empty){
+      empty.hidden=total!==0;
+      if(!total)empty.innerHTML=mode==='mios'&&!q?
+        '<strong>Aún no sigues fondos</strong>Usa ☆ Seguir o Revisar para TLS para comenzar.':
+        '<strong>No hay resultados en esta vista</strong>Prueba otra categoría o modifica la búsqueda.';
+    }
     const more=root.querySelector('[data-fondos-more]');
     if(more){more.hidden=total<=visibleLimit;more.textContent='Ver '+Math.min(8,total-visibleLimit)+' oportunidades más ↓';}
   }
@@ -485,7 +496,7 @@
     const check=document.getElementById('fondosShowOnCalendar');
     if(check)try{check.checked=localStorage.getItem(KEY)!=='false';}catch{check.checked=true;}
     const filter=document.getElementById('fondosFiltro');
-    if(filter)filter.value=mode;
+    if(filter&&Array.from(filter.options||[]).some(x=>x.value===mode))filter.value=mode;
     const now=today();
     const watch=funds.filter(f=>fundWindow(f).tone==='watch').length;
     const future=funds.filter(f=>fundWindow(f).tone==='future').length;
@@ -493,10 +504,18 @@
     const openWindow=funds.filter(f=>fundWindow(f).tone==='window').length;
     const myCount=funds.filter(f=>tracked[f.id]?.watching).length;
     const shown=funds.filter(f=>mode==='todos'||(mode==='mios'?!!tracked[f.id]?.watching:mode==='sin-fechas'?pending(f):
-      mode==='proximos'?(!pending(f)&&(!f.close||f.close.slice(0,10)>=now)):
-      mode==='cerrados'&&hasDate(f)&&!!f.close&&f.close.slice(0,10)<now));
+      mode==='proximos'?['window','future'].includes(fundWindow(f).tone):
+      mode==='cerrados'&&fundWindow(f).tone==='closed'));
     const ordered=shown.slice().sort((a,b)=>{
-      const rank=f=>radarIds.has(f.id)?0:tone(f)==='abierto'?1:tone(f)==='proximo'?2:pending(f)?3:4;
+      const rank=f=>{
+        // La prioridad comercial precede a una lista histórica de programas.
+        if(tone(f)==='abierto')return 0;
+        if(tone(f)==='proximo')return 1;
+        if(tracked[f.id]?.watching)return 2;
+        if(tone(f)==='cerrado')return 6;
+        if(/no elegible|no apto|baja|indirecta|hist[oó]ric/i.test(f.fit))return 5;
+        return radarIds.has(f.id)?3:4;
+      };
       const difference=rank(a)-rank(b);
       if(difference)return difference;
       if(tone(a)==='cerrado'&&tone(b)==='cerrado')return (b.close||'').localeCompare(a.close||'');
@@ -617,6 +636,16 @@
   function close(){const m=document.getElementById('fondosDetalleModal');if(m)m.style.display='none';}
   function prepare(id){
     const f=byId(id);if(!f)return;
+    // Invalidar el borrador previo al cambiar la selección: nunca copiar contenido
+    // que fue generado para otra convocatoria.
+    const previous=document.getElementById('fondosConvocatoria')?.value||selected;
+    if(previous!==f.id){
+      draftReady=false;draftFor='';
+      const out=document.getElementById('fondosRespuesta');
+      if(out)out.textContent='';
+      const notice=document.getElementById('fondosCopyNotice');
+      if(notice)notice.textContent='';
+    }
     close();selected=f.id;mode='todos';render();
     const select=document.getElementById('fondosConvocatoria');if(select)select.value=f.id;
     document.getElementById('fondosCopiloto')?.scrollIntoView({behavior:'smooth',block:'center'});
@@ -624,6 +653,7 @@
   }
   async function draft(){
     if(busy)return;
+    draftReady=false;draftFor='';
     const id=document.getElementById('fondosConvocatoria')?.value;
     const typed=(document.getElementById('fondosOtroFondo')?.value||'').trim();
     const f=id==='otro'&&typed.length>=5?{name:typed.slice(0,200),organizer:'Por identificar',source:'No proporcionada',verified:'Convocatoria ingresada manualmente: revisar bases originales.',open:'',close:'',requirements:'Verificar requisitos y antecedentes de la convocatoria original.'}:byId(id);
@@ -659,7 +689,11 @@
     output.setAttribute?.('aria-busy','true');
     output.textContent='✦ AGENTE TLS PROCESANDO\n\nAnalizando las preguntas y requisitos…\nPreparando un borrador sin inventar información…';
     try{const result=await window.callAgentClaude('CEO',sys,user,{maxTokens:1400});
-      output.textContent=String(result||'Sin respuesta del motor IA.');
+      const body=String(result||'').trim();
+      if(!body)throw Error('El motor no devolvió contenido.');
+      output.textContent=body;
+      draftReady=true;
+      draftFor=id;
     }catch(e){output.textContent='No se pudo generar el borrador: '+String(e.message||e)+'. Puedes reintentar.';}
     finally{
       busy=false;
@@ -670,7 +704,12 @@
   }
   async function copyDraft(){
     const value=document.getElementById('fondosRespuesta')?.textContent||'';
-    if(!value||value.startsWith('Preparando'))return;
+    const current=document.getElementById('fondosConvocatoria')?.value||'';
+    const notice=document.getElementById('fondosCopyNotice');
+    if(busy||!draftReady||!value||draftFor!==current){
+      if(notice)notice.textContent='Primero genera un borrador válido para el fondo seleccionado.';
+      return;
+    }
     try{await navigator.clipboard.writeText(value);const m=document.getElementById('fondosCopyNotice');if(m)m.textContent='Copiado al portapapeles.';}
     catch{const m=document.getElementById('fondosCopyNotice');if(m)m.textContent='No se pudo copiar. Selecciona el texto manualmente.';}
   }
@@ -744,6 +783,12 @@
     });
     document.getElementById('fondosShowOnCalendar')?.addEventListener('change',syncCalendar);
     document.getElementById('fondosReload')?.addEventListener('click',load);
+    // Un cambio posterior del texto o del fondo invalida la copia previa.
+    const invalidateDraft=()=>{draftReady=false;draftFor='';};
+    for(const id of ['fondosPreguntas','fondosAntecedentes','fondosOtroFondo']){
+      document.getElementById(id)?.addEventListener('input',invalidateDraft);
+    }
+    document.getElementById('fondosConvocatoria')?.addEventListener('change',invalidateDraft);
     document.getElementById('fondosGenerar')?.addEventListener('click',draft);
     document.getElementById('fondosCopiar')?.addEventListener('click',copyDraft);
     document.getElementById('fondosCerrarDetalle')?.addEventListener('click',close);

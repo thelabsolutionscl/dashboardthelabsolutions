@@ -9,7 +9,7 @@ const root=path.join(__dirname,'..');
 const script=fs.readFileSync(path.join(root,'js/calendario-fondos.js'),'utf8');
 const catalog=JSON.parse(fs.readFileSync(path.join(root,'data/fondos-concursables.json'),'utf8'));
 const css=fs.readFileSync(path.join(root,'fondos-tls.css'),'utf8');
-function view(){
+function view(options={}){
   const hooks={}, cards=[], links=[];
   const list={innerHTML:'',addEventListener:(event,fn)=>{hooks['list:'+event]=fn;},
     querySelectorAll:()=>cards,
@@ -28,7 +28,7 @@ function view(){
     getElementById:id=>nodes[id]||null,
     addEventListener:(event,fn)=>{hooks['doc:'+event]=fn;}
   };
-  const ctx={window:{renderCalendario(){}},document:doc,URL,Date,Intl,Number,JSON,Promise,console,
+  const ctx={window:{renderCalendario(){}},document:doc,URL,Date:options.Date||Date,Intl,Number,JSON,Promise,console,
     setInterval:()=>0,setTimeout:(fn)=>{fn();return 0;},localStorage:{
       getItem:k=>state.get(k)||null,
       setItem:(k,v)=>state.set(k,v)
@@ -315,4 +315,61 @@ test('cambiar de fondo no deja el agente bloqueado ni mezcla resultados tardíos
   await run;
   assert.equal(v.api.workspaceState().text,visible);
   assert.doesNotMatch(v.list.innerHTML,/Respuesta tardía del fondo anterior/);
+});
+
+test('auditoría: fechas incompletas nunca aparecen como convocatorias abiertas o próximas',async()=>{
+  const v=view();await v.api.load();
+  const base=catalog.funds.find(f=>f.id==='corfo-crea-y-valida-2026');
+  assert.equal(v.api.fundWindow({...base,open:'2026-01-01T12:00',close:''}).tone,'watch');
+  assert.match(v.api.fundWindow({...base,open:'2026-01-01T12:00',close:''}).label,/incompletas/);
+  assert.equal(v.api.fundWindow({...base,open:'',close:'2027-11-30T12:00'}).tone,'watch');
+  assert.equal(v.api.fundWindow({...base,open:'2026-05-01T12:00',close:'2026-05-20T12:00'}).tone,'closed');
+  const future=v.api.fundWindow({...base,open:'2027-06-01T12:00',close:'2027-07-20T12:00'});
+  assert.equal(future.tone,'future');
+});
+test('auditoría: formulario no recibe preguntas ficticias al abrir mesa de trabajo',async()=>{
+  const v=view();await v.api.load();
+  const questions={value:'',placeholder:'',focus(){}},antecedentes={value:''};
+  const selected={value:'',innerHTML:''};
+  v.nodes.fondosPreguntas=questions;v.nodes.fondosAntecedentes=antecedentes;
+  v.nodes.fondosConvocatoria=selected;
+  v.api.openWorkspace('corfo-crea-y-valida-proxima-vigilar');
+  v.hooks['root:click']({target:{closest:selector=>selector==='[data-fondos-work-form]'?{}:null}});
+  assert.equal(questions.value,'','nunca completar preguntas que la institución no entregó');
+  assert.match(questions.placeholder,/preguntas TEXTUALES/);
+  assert.equal(selected.value,'corfo-crea-y-valida-proxima-vigilar');
+  assert.doesNotMatch(v.list.innerHTML,/PREGUNTAS COPIADAS POR EL USUARIO/);
+});
+test('auditoría: ranking deja fondos no elegibles detrás de seguimiento razonable',async()=>{
+  const v=view();await v.api.load();
+  const html=v.list.innerHTML;
+  const viable=html.indexOf('data-fondos-card="corfo-crea-y-valida-proxima-vigilar"');
+  const ineligible=html.indexOf('data-fondos-card="corfo-semilla-inicia-nueva-vigilar"');
+  assert.ok(viable>=0&&ineligible>viable,'un fondo no elegible no encabeza la lista');
+  assert.match(html,/No hay un fondo con apertura vigente o futura registrada/);
+});
+
+test('auditoría: usa la fecha de Chile incluso con navegador adelantado en UTC',async()=>{
+  class FixedDate extends Date{
+    constructor(...args){super(...(args.length?args:['2026-10-16T01:30:00.000Z']));}
+    static now(){return new Date('2026-10-16T01:30:00.000Z').getTime();}
+  }
+  const v=view({Date:FixedDate});await v.api.load();
+  const call={id:'fondo-prueba',open:'2026-10-15T12:00',close:'2026-10-15T23:00'};
+  assert.equal(v.api.fundWindow(call).tone,'window','en Santiago sigue siendo 15 de octubre, no 16');
+  assert.equal(v.api.fundWindow({...call,close:'2026-10-14T23:00'}).tone,'closed');
+});
+
+test('auditoría: horas de cierre y apertura del mismo día se respetan en Santiago',async()=>{
+  // 18:20 UTC = 15:20 Chile. Abre a las 16:00, cierra a las 15:00.
+  class FixedDate extends Date{
+    constructor(...args){super(...(args.length?args:['2026-10-15T18:20:00.000Z']));}
+    static now(){return new Date('2026-10-15T18:20:00.000Z').getTime();}
+  }
+  const v=view({Date:FixedDate});await v.api.load();
+  const f={id:'simulada',name:'Prueba',open:'2026-10-15T12:00',close:'2026-10-15T15:00'};
+  assert.equal(v.api.fundWindow(f).tone,'closed','una convocatoria ya cerrada a las 15:00 no aparece abierta a las 15:20');
+  assert.equal(v.api.fundWindow({...f,open:'2026-10-15T16:00',close:'2026-10-20T12:00'}).tone,'future','una apertura a las 16:00 sigue futura a las 15:20');
+  assert.equal(v.api.fundWindow({...f,close:'2026-10-15T16:00'}).tone,'window');
+  assert.equal(v.api.fundWindow({...f,close:'2026-10-15T00:00'}).tone,'window','00:00 de catálogos históricos no se interpreta como plazo oficial exacto');
 });
