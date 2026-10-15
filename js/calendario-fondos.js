@@ -108,6 +108,8 @@
   }
   function toggleDemo(){
     demoMode=!demoMode;demoRunId++;
+    workspaceRunId++;workspaceBusy=false;
+    if(workspaceResult.status==='working')workspaceResult={status:'idle',source:'',text:'',error:''};
     demoStep=demoMode?'borrador':'inicio';
     demoAgent={status:'idle',prompt:DEMO_QUESTION,result:'',error:'',source:''};
     render();
@@ -184,6 +186,7 @@
     if(!byId(id))return false;
     if(workspaceId!==id){
       workspaceRunId++;
+      workspaceBusy=false;
       workspaceBrief='';
       workspaceResult={status:'idle',source:'',text:'',error:''};
     }
