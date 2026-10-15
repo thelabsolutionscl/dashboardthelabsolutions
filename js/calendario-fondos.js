@@ -134,6 +134,208 @@
       '<p class="fondos-demo-footnote">Los nombres y plazos mostrados en DEMO son simulados. Ningún evento, notificación o solicitud será real.</p>'+
     '</section>';
   }
+
+  // Mesa de trabajo: solo preferencias y casillas manuales del navegador, no información tributaria.
+  const FLOW_STORAGE='thelab_fondos_mesa_v1';
+  const FLOW_STAGES=new Set(['seguimiento','evaluando','preparando','postulado','descartado']);
+  const FLOW_CHECKS=[
+    ['bases','Leí las bases de la convocatoria vigente'],
+    ['empresa','Revisé antigüedad, ventas y condiciones tributarias'],
+    ['proyecto','Definí objetivos, innovación y resultados medibles'],
+    ['finanzas','Revisé presupuesto, cofinanciamiento y gastos permitidos'],
+    ['documentos','Identifiqué documentos y cotizaciones necesarios'],
+    ['formulario','Tengo las preguntas del formulario original'],
+    ['plazos','Confirmé apertura y cierre en la fuente oficial']
+  ];
+  let tracked={},workspaceId='',workspaceBrief='',workspaceBusy=false,workspaceRunId=0;
+  let workspaceResult={status:'idle',source:'',text:'',error:''},visibleLimit=8;
+  function trackKey(){
+    let person='local';
+    try{
+      const notice=typeof NOTIFY!=='undefined'?NOTIFY:null;
+      const value=notice?.persona?.();
+      if(value==='gustavo'||value==='nicanor')person=value;
+    }catch(_){}
+    return FLOW_STORAGE+':'+person;
+  }
+  function readTracked(){
+    try{
+      const data=JSON.parse(localStorage.getItem(trackKey())||'{}');
+      if(!data||typeof data!=='object'||Array.isArray(data))return {};
+      return Object.fromEntries(Object.entries(data).slice(0,100).filter(([id,v])=>
+        /^[a-z0-9-]{3,90}$/.test(id)&&v&&typeof v==='object'
+      ).map(([id,v])=>[id,{
+        stage:FLOW_STAGES.has(v.stage)?v.stage:'seguimiento',
+        checks:Array.isArray(v.checks)?v.checks.filter(x=>FLOW_CHECKS.some(y=>y[0]===x)):[],
+        watching:v.watching!==false
+      }]));
+    }catch(_){return {};}
+  }
+  function saveTracked(){
+    try{localStorage.setItem(trackKey(),JSON.stringify(tracked));}catch(_){}
+  }
+  function trackFund(id){
+    if(!byId(id))return false;
+    if(tracked[id]?.watching){delete tracked[id];if(workspaceId===id){workspaceResult={status:'idle',source:'',text:'',error:''};}}
+    else tracked[id]={stage:'seguimiento',checks:tracked[id]?.checks||[],watching:true};
+    saveTracked();render();return !!tracked[id]?.watching;
+  }
+  function openWorkspace(id){
+    if(!byId(id))return false;
+    if(workspaceId!==id){
+      workspaceRunId++;
+      workspaceBrief='';
+      workspaceResult={status:'idle',source:'',text:'',error:''};
+    }
+    workspaceId=id;
+    if(!tracked[id])tracked[id]={stage:'seguimiento',checks:[],watching:true};
+    saveTracked();
+    render();
+    document.getElementById('fondosMesa')?.scrollIntoView?.({behavior:'smooth',block:'start'});
+    return true;
+  }
+  function stageFund(id,next){
+    if(!byId(id)||!FLOW_STAGES.has(next)||!tracked[id])return false;
+    tracked[id].stage=next;saveTracked();render();return true;
+  }
+  function toggleFlowCheck(id,key,checked){
+    if(!byId(id)||!tracked[id]||!FLOW_CHECKS.some(x=>x[0]===key))return false;
+    const current=new Set(tracked[id].checks||[]);
+    if(checked)current.add(key);else current.delete(key);
+    tracked[id].checks=[...current];saveTracked();render();return true;
+  }
+  function fundWindow(f){
+    const d=today(),opening=iso(f.open),closing=iso(f.close);
+    if(!opening&&!closing)return {tone:'watch',label:'Sin fecha oficial',reason:'No hay nueva apertura confirmada. Seguir noticias y revisar bases cuando se publique un llamado.'};
+    if(closing&&closing<d)return {tone:'closed',label:'Convocatoria cerrada',reason:'Esta edición ya cerró. Sus fechas quedan solo como referencia histórica.'};
+    if(opening&&opening>d)return {tone:'future',label:'Apertura programada',reason:'Fecha incluida en catálogo oficial; validar condiciones y cambios antes de postular.'};
+    if(opening&&opening<=d&&(!closing||closing>=d))return {tone:'window',label:'Dentro de ventana publicada',reason:'La ventana registrada incluye hoy, pero es obligatorio confirmar vigencia y bases en la fuente oficial.'};
+    return {tone:'watch',label:'Fechas por validar',reason:'Revisar la fuente oficial antes de tomar decisiones.'};
+  }
+  function flowTemplate(f){
+    return [
+      'Describe el objetivo del proyecto de TLS para esta convocatoria y qué problema concreto resolverá.',
+      '¿Qué innovación o mejora verificable se propone y cómo se medirá?',
+      'Indica actividades, plazos, presupuesto, aporte propio y resultados esperados. No supongas montos.',
+      'Analiza riesgos de elegibilidad, requisitos no verificados y documentos faltantes.',
+      'Requisitos orientativos del catálogo (confirmar en bases): '+f.requirements
+    ].join('\n\n');
+  }
+  function offlinePlan(f,idea){
+    const missing=FLOW_CHECKS.filter(([key])=>!tracked[f.id]?.checks?.includes(key)).map(([,label])=>'• '+label);
+    return [
+      'GUÍA DE TRABAJO — GENERADA EN EL NAVEGADOR (NO IA)',
+      'Fondo: '+f.name,
+      'Situación: '+fundWindow(f).label+'. '+fundWindow(f).reason,
+      '',
+      'PROYECTO PROPUESTO:',
+      idea||'Aún no has descrito el proyecto de TLS.',
+      '',
+      'COMPATIBILIDAD ORIENTATIVA:',
+      f.fit+'. '+f.fitReason,
+      '',
+      'VERIFICAR ANTES DE POSTULAR:',
+      f.requirements,
+      '',
+      'TAREAS PENDIENTES (según casillas marcadas manualmente):',
+      ...(missing.length?missing:['• Todas las casillas están marcadas; de todos modos verifica la convocatoria vigente.']),
+      '',
+      'PRÓXIMO PASO: abrir las bases oficiales, copiar las preguntas del llamado real y preparar respuestas con datos comprobados.',
+      'No es confirmación de elegibilidad ni una postulación enviada.'
+    ].join('\n');
+  }
+  async function workspaceAnalyze(forceLocal=false){
+    const f=byId(workspaceId);
+    if(!f||workspaceBusy||demoMode)return false;
+    const idea=String(document.getElementById('fondosMesaIdea')?.value??workspaceBrief).trim();
+    if(idea.length<20){
+      workspaceBrief=idea;
+      workspaceResult={status:'error',source:'',text:'',error:'Describe tu proyecto en al menos 20 caracteres para generar un análisis útil.'};
+      render();return false;
+    }
+    if(idea.length>3000){
+      workspaceResult={status:'error',source:'',text:'',error:'Resume el proyecto a un máximo de 3.000 caracteres.'};
+      render();return false;
+    }
+    if(/(?:\bpat[A-Za-z0-9_.-]{20,}|\bsk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._-]{20,})/.test(idea)){
+      workspaceResult={status:'error',source:'',text:'',error:'Detecté una posible clave privada. Retírala antes de continuar.'};render();return false;
+    }
+    workspaceBrief=idea;
+    const id=++workspaceRunId;
+    workspaceBusy=true;
+    workspaceResult={status:'working',source:'',text:'',error:''};
+    render();
+    try{
+      let textResult,source='ia';
+      if(forceLocal||typeof window.callAgentClaude!=='function'){
+        source='local';
+        textResult=offlinePlan(f,idea);
+      }else{
+        const system='Eres asesor de postulaciones de The Lab Solutions (fabricación digital, señalética, impresión 3D) en Chile. Usa SOLO los datos proporcionados, sin inventar bases, fechas, ventas, montos, requisitos cumplidos, ingresos ni elegibilidad. No digas que revisaste internet. Responde en español sencillo con 1) Resumen de proyecto, 2) Encaje potencial y límites, 3) Requisitos a comprobar en bases oficiales, 4) Texto borrador editable, 5) Lista concreta de antecedentes pendientes y próxima acción. No envíes postulación ni prometas financiamiento.';
+        const user='CONVOCATORIA DEL CATÁLOGO (NO VERIFICADA EN VIVO):\n'+f.name+'\nOrganismo: '+f.organizer+'\nVentana: '+(f.open||'Sin fecha')+' a '+(f.close||'Sin fecha')+'\nEncaje orientativo: '+f.fitReason+'\nRequisitos preliminares: '+f.requirements+'\n\nDESCRIPCIÓN DEL PROYECTO ESCRITA POR EL USUARIO:\n'+idea+'\n\nEl usuario debe validar todos los requisitos en la fuente oficial.';
+        textResult=String(await window.callAgentClaude('CEO',system,user,{maxTokens:1200})||'').trim();
+        if(!textResult)throw new Error('La IA no entregó texto.');
+      }
+      if(id!==workspaceRunId||workspaceId!==f.id||demoMode)return false;
+      workspaceResult={status:'done',source,text:textResult,error:''};render();return true;
+    }catch(e){
+      if(id!==workspaceRunId||workspaceId!==f.id||demoMode)return false;
+      workspaceResult={status:'error',source:'',text:'',error:String(e?.message||e).slice(0,300)};render();return false;
+    }finally{
+      if(id===workspaceRunId)workspaceBusy=false;
+    }
+  }
+  function workspaceHtml(){
+    const f=byId(workspaceId);
+    const count=Object.keys(tracked).filter(id=>tracked[id]?.watching&&byId(id)).length;
+    if(!f){
+      return '<section id="fondosMesa" class="fondos-workspace fondos-workspace-empty" aria-label="Mesa de trabajo de fondos">'+
+        '<div class="fondos-workspace-intro"><span class="fondos-eyebrow">01 · DECIDIR Y PREPARAR</span><h3>Un fondo a la vez. Un plan claro.</h3>'+
+        '<p>Elige <strong>Revisar para TLS</strong> en una oportunidad para ver sus condiciones, marcar antecedentes pendientes y trabajar un borrador. El seguimiento se guarda solo en este navegador.</p></div>'+
+        '<span class="fondos-workspace-count">'+count+' en mi seguimiento</span></section>';
+    }
+    const win=fundWindow(f),record=tracked[f.id]||{stage:'seguimiento',checks:[]};
+    const checked=record.checks||[];
+    const stageLabels={seguimiento:'Por revisar',evaluando:'Revisando requisitos',preparando:'Preparando borrador',postulado:'Enviado (marcado manualmente)',descartado:'Descartado'};
+    const status=workspaceResult.status;
+    const result=status==='working'?'<div class="fondos-workspace-working" role="status" aria-live="polite" aria-busy="true"><span class="fondos-mini-spinner" aria-hidden="true"></span><span><strong>Agente TLS procesando tu proyecto…</strong><small>Evaluando el caso y preparando pasos concretos</small></span></div>':
+      status==='done'?'<div class="fondos-workspace-output" role="status"><b>✓ Plan preparado · '+(workspaceResult.source==='ia'?'Generado con IA':'Guía local sin IA')+'</b><pre>'+esc(workspaceResult.text)+'</pre><button type="button" class="fondos-outline-action" data-fondos-work-copy>Copiar plan</button><span data-fondos-copy-note aria-live="polite"></span></div>':
+      status==='error'?'<div class="fondos-workspace-error" role="alert"><b>No se completó el análisis</b><p>'+esc(workspaceResult.error)+'</p><button type="button" class="fondos-outline-action" data-fondos-work-local>Crear guía local sin IA</button></div>':'';
+    return '<section id="fondosMesa" class="fondos-workspace" aria-label="Mesa de trabajo de '+esc(f.name)+'">'+
+      '<div class="fondos-workspace-heading"><div><div class="fondos-eyebrow">MI MESA DE TRABAJO · 3 PASOS</div><h3>'+esc(f.name)+'</h3><span class="fondos-workspace-agency">'+esc(f.organizer)+' · '+esc(f.region)+'</span></div>'+
+        '<button type="button" class="fondos-outline-action" data-fondos-work-close>✕ Cerrar ficha</button></div>'+
+      '<div class="fondos-workspace-window" data-tone="'+win.tone+'"><strong>'+esc(win.label)+'</strong><span>'+esc(win.reason)+'</span></div>'+
+      '<div class="fondos-workspace-steps">'+
+        '<div class="fondos-workspace-step"><div class="fondos-step-index">01</div><h4>¿Conviene postular?</h4><p>'+esc(f.fit)+' · '+esc(f.fitReason)+'</p><p class="fondos-workspace-req"><b>Requisitos que debes verificar:</b> '+esc(f.requirements)+'</p>'+
+          '<div class="fondos-workspace-sources">'+link(f.source,'↗ Bases y fuente oficial')+(f.info!==f.source?' · '+link(f.info,'↗ Ficha del organismo'):'')+'</div>'+
+          '<label for="fondosMesaEtapa">Estado que marca TLS (manual)</label><select id="fondosMesaEtapa" aria-label="Estado de seguimiento">'+Object.entries(stageLabels).map(([val,l])=>'<option value="'+val+'"'+(record.stage===val?' selected':'')+'>'+l+'</option>').join('')+'</select>'+
+          '<small>El estado es una anotación local; no significa que la institución haya aceptado una solicitud.</small>'+
+        '</div>'+
+        '<div class="fondos-workspace-step"><div class="fondos-step-index">02</div><h4>¿Qué falta reunir?</h4><p>Marca solo lo que hayas revisado realmente. <b>'+checked.length+' de '+FLOW_CHECKS.length+'</b> controles completados manualmente.</p>'+
+          '<div class="fondos-workspace-meter" role="progressbar" aria-valuenow="'+checked.length+'" aria-valuemin="0" aria-valuemax="'+FLOW_CHECKS.length+'" aria-label="Antecedentes revisados"><span style="width:'+(checked.length/FLOW_CHECKS.length*100).toFixed(0)+'%"></span></div>'+
+          '<div class="fondos-workspace-checks">'+FLOW_CHECKS.map(([key,label])=>'<label><input type="checkbox" data-fondos-work-check="'+key+'"'+(checked.includes(key)?' checked':'')+'><span>'+esc(label)+'</span></label>').join('')+'</div>'+
+          '<small>Son recordatorios generales; la lista vinculante está en las bases oficiales.</small>'+
+        '</div>'+
+        '<div class="fondos-workspace-step fondos-workspace-agent"><div class="fondos-step-index">03</div><h4>Preparar con el agente</h4><p>Describe qué quieres financiar o desarrollar. Generaremos un plan o un borrador sin suponer que cumples las bases.</p>'+
+          '<label for="fondosMesaIdea">Tu proyecto o necesidad</label><textarea id="fondosMesaIdea" rows="5" maxlength="3000" placeholder="Ej.: Queremos desarrollar y validar un nuevo proceso de producción que reduzca tiempos y desperdicio en impresiones 3D…">'+esc(workspaceBrief)+'</textarea>'+
+          '<div class="fondos-workspace-agent-actions"><button type="button" class="fondos-main-action" data-fondos-work-analyze'+(workspaceBusy?' disabled':'')+'>'+(workspaceBusy?'✦ Procesando…':'✦ Analizar con IA')+'</button>'+
+            '<button type="button" class="fondos-outline-action" data-fondos-work-form>Preparar respuestas del formulario</button></div>'+
+          '<small>La IA redacta borradores; no completa ni envía formularios. Copia las preguntas reales en el copiloto.</small>'+result+
+        '</div>'+
+      '</div>'+
+    '</section>';
+  }
+  function prepareFromWorkspace(){
+    const f=byId(workspaceId);if(!f)return false;
+    const existing=document.getElementById('fondosPreguntas');
+    // Se presenta una guía de preguntas si aún no se han copiado las preguntas auténticas.
+    if(existing&&!existing.value.trim())existing.value=flowTemplate(f);
+    const notes=document.getElementById('fondosAntecedentes');
+    if(notes&&!notes.value.trim()&&workspaceBrief.trim())notes.value=workspaceBrief.trim();
+    prepare(f.id);
+    return true;
+  }
+
   const byId=id=>funds.find(f=>f.id===id);
   const hasDate=f=>!!(f.open||f.close);
   const pending=f=>!hasDate(f);
