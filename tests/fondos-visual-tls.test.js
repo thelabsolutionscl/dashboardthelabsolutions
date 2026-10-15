@@ -316,3 +316,35 @@ test('cambiar de fondo no deja el agente bloqueado ni mezcla resultados tardíos
   assert.equal(v.api.workspaceState().text,visible);
   assert.doesNotMatch(v.list.innerHTML,/Respuesta tardía del fondo anterior/);
 });
+
+test('auditoría: fechas incompletas nunca aparecen como convocatorias abiertas o próximas',async()=>{
+  const v=view();await v.api.load();
+  const base=catalog.funds.find(f=>f.id==='corfo-crea-y-valida-2026');
+  assert.equal(v.api.fundWindow({...base,open:'2026-01-01T12:00',close:''}).tone,'watch');
+  assert.match(v.api.fundWindow({...base,open:'2026-01-01T12:00',close:''}).label,/incompletas/);
+  assert.equal(v.api.fundWindow({...base,open:'',close:'2027-11-30T12:00'}).tone,'watch');
+  assert.equal(v.api.fundWindow({...base,open:'2026-05-01T12:00',close:'2026-05-20T12:00'}).tone,'closed');
+  const future=v.api.fundWindow({...base,open:'2027-06-01T12:00',close:'2027-07-20T12:00'});
+  assert.equal(future.tone,'future');
+});
+test('auditoría: formulario no recibe preguntas ficticias al abrir mesa de trabajo',async()=>{
+  const v=view();await v.api.load();
+  const questions={value:'',placeholder:''},antecedentes={value:''};
+  const selected={value:'',innerHTML:''};
+  v.nodes.fondosPreguntas=questions;v.nodes.fondosAntecedentes=antecedentes;
+  v.nodes.fondosConvocatoria=selected;
+  v.api.openWorkspace('corfo-crea-y-valida-proxima-vigilar');
+  v.hooks['root:click']({target:{closest:selector=>selector==='[data-fondos-work-form]'?{}:null}});
+  assert.equal(questions.value,'','nunca completar preguntas que la institución no entregó');
+  assert.match(questions.placeholder,/preguntas TEXTUALES/);
+  assert.equal(selected.value,'corfo-crea-y-valida-proxima-vigilar');
+  assert.doesNotMatch(v.list.innerHTML,/PREGUNTAS COPIADAS POR EL USUARIO/);
+});
+test('auditoría: ranking deja fondos no elegibles detrás de seguimiento razonable',async()=>{
+  const v=view();await v.api.load();
+  const html=v.list.innerHTML;
+  const viable=html.indexOf('data-fondos-card="corfo-crea-y-valida-proxima-vigilar"');
+  const ineligible=html.indexOf('data-fondos-card="corfo-semilla-inicia-nueva-vigilar"');
+  assert.ok(viable>=0&&ineligible>viable,'un fondo no elegible no encabeza la lista');
+  assert.match(html,/No hay un fondo con apertura vigente o futura registrada/);
+});
