@@ -93,7 +93,7 @@ test('detalle TLS muestra requisitos, fechas y vínculo oficial válido, sin alt
   assert.match(v.detail.innerHTML,/Por confirmar/);
   assert.match(v.detail.innerHTML,/https:\/\/www\.corfo\.gob\.cl/);
   assert.equal(v.nodes.fondosDetallePreparar.dataset.fondosDraft,'corfo-semilla-inicia-nueva-vigilar');
-  assert.equal(v.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2);
+  assert.equal(v.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2 + catalog.funds.reduce((n,f)=>n+(f.milestones||[]).length,0));
 });
 
 test('botón DEMO cambia solo la presentación, nunca los eventos oficiales o calendario compartido',async()=>{
@@ -143,7 +143,7 @@ test('recarga nueva arranca siempre en modo real, no reutiliza estado DEMO',asyn
   const another=view();await another.api.load();
   assert.equal(another.api.isDemo(),false);
   assert.match(another.list.innerHTML,/DEMO · Ver funcionamiento/);
-  assert.equal(another.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2);
+  assert.equal(another.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2 + catalog.funds.reduce((n,f)=>n+(f.milestones||[]).length,0));
 });
 
 test('DEMO ejecuta IA de verdad, muestra spinner mientras responde y después el resultado',async()=>{
