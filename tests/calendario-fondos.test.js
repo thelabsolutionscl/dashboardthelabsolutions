@@ -188,7 +188,7 @@ test('el catálogo contiene fuentes primarias auditables e identifica elegibilid
 test('auditoría: cambiar de convocatoria invalida borrador anterior y bloquea copiar',async()=>{
   const nodes={
     fondosConvocatoria:{value:'sercotec-crece-urbano-rm-2026'},
-    fondosPreguntas:{value:'Describa el objetivo del proyecto y presupuesto solicitado con datos reales.'},
+    fondosPreguntas:{value:'Describa el objetivo del proyecto y presupuesto solicitado con datos reales.',focus(){}},
     fondosAntecedentes:{value:'Proyecto concreto por verificar.'},
     fondosRespuesta:{textContent:''},fondosGenerar:{disabled:false},
     fondosCopyNotice:{textContent:''}
