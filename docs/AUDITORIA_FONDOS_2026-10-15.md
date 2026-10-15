@@ -15,6 +15,7 @@
 | F-04 | Alta | `draft()` mantenía respuesta previa visible al cambiar fondo; `copyDraft()` permitía copiar texto de error o un borrador para otro concurso. | Invalidación y limpieza por cambio de selección, error y edición; copia solo después de respuesta satisfactoria para el fondo actual. |
 | F-05 | Media | `fundWindow()` interpretaba una fecha de apertura antigua sin cierre como ventana actualmente abierta. | Estados sin ambas fechas quedan marcados como incompletos y se excluyen del filtro de ventanas vigentes/futuras. |
 | F-06 | Baja | Filtro «Mi seguimiento» sin elementos presentaba un vacío genérico. | Mensaje accionable para comenzar seguimiento. |
+| F-07 | Alta | En días de apertura o cierre, el estado de la convocatoria comparaba únicamente la fecha y podía indicar abierta una vez superada la hora de cierre. | Comparación de horas/minutos en horario de Santiago, con pruebas de frontera. El valor 00:00 se conserva como hora desconocida. |
 
 ## Aspectos todavía pendientes
 
