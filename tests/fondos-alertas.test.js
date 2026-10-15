@@ -192,3 +192,46 @@ test('auditoría de cobertura: nuevos programas sin fechas falsas ni notificacio
  assert.equal(new Set(catalog.funds.map(f=>f.id)).size,catalog.funds.length,'evitar duplicados');
  assert.ok(catalog.funds.length>=19);
 });
+
+test('hito obligatorio Corfo tiene fecha oficial, calendario y correo de vencimiento',async()=>{
+ const m=await module();
+ const f=catalog.funds.find(x=>x.id==='corfo-crea-y-valida-2026');
+ assert.ok(f&&Array.isArray(f.milestones));
+ assert.equal(f.milestones[0].date,'2026-06-09T17:00');
+ const date=new Date('2026-06-09T13:20:00.000Z');
+ const hitos=m.dueNotifications({schema:1,funds:[f]},date);
+ assert.equal(hitos.length,1);
+ assert.equal(hitos[0].phase,'hito-perfil-obligatorio');
+ assert.match(hitos[0].milestone,/perfil/i);
+ const h=harness({provided:{schema:1,funds:[f]},now:date});
+ const delivered=await m.deliverFundAlerts(h.env,date,h.fetcher);
+ assert.equal(delivered.sent,2);
+ assert.equal(delivered.errors.length,0);
+ assert.ok(h.calls().every(x=>JSON.parse(x.options.body).subject.includes('HITO OBLIGATORIO')));
+ const repeat=await m.deliverFundAlerts(h.env,date,h.fetcher);
+ assert.equal(repeat.sent,0);
+});
+test('alertas anticipadas 7, 3 y 1 días son independientes de la alerta de cierre',async()=>{
+ const m=await module();
+ const f={...fake.funds[0],open:'2026-10-01T12:00',close:'2026-10-22T15:00'};
+ const now=new Date('2026-10-15T12:20:00Z');
+ assert.equal(m.dueNotifications({schema:1,funds:[f]},now,7).length,1);
+ assert.equal(m.dueNotifications({schema:1,funds:[f]},now,3).length,0);
+ assert.equal(m.dueNotifications({schema:1,funds:[f]},now,1).length,0);
+ const h=harness({provided:{schema:1,funds:[f]},now});
+ const first=await m.deliverFundAlerts(h.env,now,h.fetcher);
+ assert.equal(first.events,1);
+ assert.equal(first.sent,2);
+ const emails=h.calls().map(x=>JSON.parse(x.options.body));
+ assert.ok(emails.every(x=>/EN 7 DÍAS/.test(x.subject)));
+ assert.equal(new Set(h.calls().map(x=>x.options.headers['Idempotency-Key'])).size,2);
+ assert.equal((await m.deliverFundAlerts(h.env,now,h.fetcher)).alreadySent,2);
+});
+test('hito sin URL verificable no genera notificaciones',async()=>{
+ const m=await module();
+ const f={...fake.funds[0],open:null,close:null,milestones:[{
+   id:'perfil-obligatorio',name:'Perfil obligatorio',kind:'mandatory',
+   date:'2026-10-15T15:00',source:'https://evil.example/collect'
+ }]};
+ assert.equal(m.dueNotifications({schema:1,funds:[f]},at).length,0);
+});
