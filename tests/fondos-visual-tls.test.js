@@ -29,10 +29,11 @@ function view(options={}){
     addEventListener:(event,fn)=>{hooks['doc:'+event]=fn;}
   };
   const ctx={window:{renderCalendario(){}},document:doc,URL,Date:options.Date||Date,Intl,Number,JSON,Promise,console,
+    ...(options.proxy?{_proxyCfg:()=>options.proxy}:{}),
     setInterval:()=>0,setTimeout:(fn)=>{fn();return 0;},localStorage:{
       getItem:k=>state.get(k)||null,
       setItem:(k,v)=>state.set(k,v)
-    },fetch:async()=>({ok:true,json:async()=>catalog})};
+    },fetch:options.fetch|| (async()=>({ok:true,json:async()=>catalog}))};
   vm.runInNewContext(script,ctx);
   return {api:ctx.window.TLSFondos,ctx,nodes,list,modal,detail,links,hooks,cards,counter,empty,state};
 }
@@ -372,4 +373,38 @@ test('auditoría: horas de cierre y apertura del mismo día se respetan en Santi
   assert.equal(v.api.fundWindow({...f,open:'2026-10-15T16:00',close:'2026-10-20T12:00'}).tone,'future','una apertura a las 16:00 sigue futura a las 15:20');
   assert.equal(v.api.fundWindow({...f,close:'2026-10-15T16:00'}).tone,'window');
   assert.equal(v.api.fundWindow({...f,close:'2026-10-15T00:00'}).tone,'window','00:00 de catálogos históricos no se interpreta como plazo oficial exacto');
+});
+
+test('seguimiento del equipo se comparte entre dos vistas y no persiste textos sensibles',async()=>{
+ const backend={revision:'',data:{schema:1,funds:{}}};let calls=[];
+ const fetch=async(url,opts={})=>{
+   if(!String(url).includes('/shared/funds'))return {ok:true,json:async()=>catalog};
+   calls.push([opts.method,opts.headers]);
+   if(opts.method==='GET')return {ok:true,status:200,json:async()=>({ok:true,revision:backend.revision,data:backend.data})};
+   const body=JSON.parse(opts.body);
+   if(body.expectedRevision!==backend.revision)return {ok:false,status:409,json:async()=>({revision:backend.revision,code:'FUNDS_REVISION_CONFLICT'})};
+   backend.data.funds[body.fundId]=body.record.watching?
+      {...body.record,updatedAt:'2026-10-15T16:00:00Z',updatedBy:'operator@thelab.solutions'}:undefined;
+   if(!body.record.watching)delete backend.data.funds[body.fundId];
+   backend.revision='rev'+(Number(backend.revision.slice(3)||0)+1);
+   return {ok:true,status:200,json:async()=>({ok:true,revision:backend.revision,data:backend.data})};
+ };
+ const proxy={url:'https://proxy.thelab.solutions',key:''};
+ const one=view({fetch,proxy});await one.api.load();await one.api.syncTracked();
+ const id='corfo-crea-y-valida-proxima-vigilar';
+ one.api.openWorkspace(id);
+ await new Promise(resolve=>setImmediate(resolve));
+ one.api.stageFund(id,'evaluando');
+ one.api.toggleFlowCheck(id,'bases',true);
+ await new Promise(resolve=>setImmediate(resolve));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(one.api.sharedStatus().status,'connected');
+ assert.ok(calls.some(([method,headers])=>method==='GET'&&!headers['X-App-Key']), 'Access no publica la clave compartida');
+ assert.equal(Object.keys(backend.data.funds).length,1);
+ assert.deepEqual(Array.from(backend.data.funds[id].checks),['bases']);
+ const two=view({fetch,proxy});await two.api.load();await two.api.syncTracked();
+ assert.match(two.list.innerHTML,/Mi seguimiento \(1\)/);
+ two.api.openWorkspace(id);
+ assert.match(two.list.innerHTML,/1 de 7/);
+ assert.doesNotMatch(JSON.stringify(backend.data),/impresora|formulario textual|RUT|password/i);
 });
