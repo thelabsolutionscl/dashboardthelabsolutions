@@ -31,7 +31,13 @@
       fit:String(f.fit||'Por evaluar').slice(0,120),fitReason:String(f.fitReason||'').slice(0,650),
       open:begin?String(f.open):'',close:end?String(f.close):'',
       source:f.source,info:allowedUrl(f.info)?f.info:f.source,
-      verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900)};
+      verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900),
+      milestones:(Array.isArray(f.milestones)?f.milestones:[]).slice(0,12).map(m=>{
+        if(!m||typeof m!=='object'||!/^[a-z0-9-]{3,60}$/.test(String(m.id||''))||
+          typeof m.name!=='string'||m.name.length<6||m.name.length>160||
+          !iso(m.date)||!allowedUrl(m.source)||!['mandatory','informative'].includes(m.kind))return null;
+        return {id:m.id,name:m.name,date:m.date,kind:m.kind,source:m.source,verified:String(m.verified||'').slice(0,500)};
+      }).filter(Boolean)};
   };
   let funds=[],error='',updated='',mode='todos',selected='',inFlight=null,busy=false,searchTerm='',draftReady=false,draftFor='';
   // DEMO independiente: solo UI local, nunca toca catálogos, eventos ni avisos.
@@ -314,6 +320,9 @@
       '<div class="fondos-workspace-heading"><div><div class="fondos-eyebrow">MI MESA DE TRABAJO · 3 PASOS</div><h3>'+esc(f.name)+'</h3><span class="fondos-workspace-agency">'+esc(f.organizer)+' · '+esc(f.region)+'</span></div>'+
         '<button type="button" class="fondos-outline-action" data-fondos-work-close>✕ Cerrar ficha</button></div>'+
       '<div class="fondos-workspace-window" data-tone="'+win.tone+'"><strong>'+esc(win.label)+'</strong><span>'+esc(win.reason)+'</span></div>'+
+      (confirmedMilestones(f).length?'<div class="fondos-workspace-milestones"><strong>⚠ Etapas adicionales del organismo</strong>'+
+        confirmedMilestones(f).map(m=>'<div><b>'+esc(m.name)+'</b> · '+esc(pretty(m.date))+
+          ' · '+link(m.source,'Comprobar en organismo')+'</div>').join('')+'</div>':'')+
       '<div class="fondos-workspace-steps">'+
         '<div class="fondos-workspace-step"><div class="fondos-step-index">01</div><h4>¿Conviene postular?</h4><p>'+esc(f.fit)+' · '+esc(f.fitReason)+'</p><p class="fondos-workspace-req"><b>Requisitos que debes verificar:</b> '+esc(f.requirements)+'</p>'+
           '<div class="fondos-workspace-sources">'+link(f.source,'↗ Bases y fuente oficial')+(f.info!==f.source?' · '+link(f.info,'↗ Ficha del organismo'):'')+'</div>'+
@@ -390,29 +399,46 @@
     }
     return count;
   }
+  function confirmedMilestones(f){
+    const ids=new Set();
+    return (f.milestones||[]).filter(m=>{
+      if(ids.has(m.id))return false;ids.add(m.id);
+      return !!iso(m.date)&&allowedUrl(m.source);
+    });
+  }
   function eventList(){
     let on=true;try{on=localStorage.getItem(KEY)!=='false';}catch{}
     if(!on)return [];
-    return funds.flatMap(f=>[["open","fondo_inicio","🟢 Abre"],["close","fondo_cierre","🔴 Cierra"]]
-      .filter(([field])=>iso(f[field]))
-      .map(([field,type,prefix])=>({
-        id:'fondo-'+f.id+'-'+field,source:'fondos',type,fecha:iso(f[field]),
-        titulo:prefix+' · '+f.name,desc:f.verified,personas:[],allDay:true,
-        color:field==='open'?'#3dbd92':'#e69b55',fundId:f.id,phase:field,
-        risk:'normal',gcal:{}
-      })));
+    return funds.flatMap(f=>[
+      ...[["open","fondo_inicio","🟢 Abre"],["close","fondo_cierre","🔴 Cierra"]]
+        .filter(([field])=>iso(f[field]))
+        .map(([field,type,prefix])=>({
+          id:'fondo-'+f.id+'-'+field,source:'fondos',type,fecha:iso(f[field]),
+          titulo:prefix+' · '+f.name,desc:f.verified,personas:[],allDay:true,
+          color:field==='open'?'#3dbd92':'#e69b55',fundId:f.id,phase:field,risk:'normal',gcal:{}
+        })),
+      ...confirmedMilestones(f).map(m=>({
+        id:'fondo-'+f.id+'-milestone-'+m.id,source:'fondos',type:'fondo_hito',
+        fecha:iso(m.date),titulo:(m.kind==='mandatory'?'⚠ Hito obligatorio':'📌 Hito')+' · '+m.name+' · '+f.name,
+        desc:m.verified,personas:[],allDay:true,color:'#e4ae4a',fundId:f.id,
+        phase:'milestone:'+m.id,risk:m.kind==='mandatory'?'alto':'normal',gcal:{}
+      }))
+    ]);
   }
   /* Los hitos son eventos virtuales con fecha oficial. Los fondos sin fecha
      se muestran al pie de la grilla, nunca sobre una fecha inventada. */
   function allDates(){
-    return funds.flatMap(f=>['open','close']
-      .filter(phase=>!!iso(f[phase]))
-      .map(phase=>({id:f.id,phase,fecha:iso(f[phase]),name:f.name}))
-    ).sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.name.localeCompare(b.name));
+    return funds.flatMap(f=>[
+      ...['open','close'].filter(phase=>!!iso(f[phase]))
+        .map(phase=>({id:f.id,phase,fecha:iso(f[phase]),name:f.name})),
+      ...confirmedMilestones(f).map(m=>({
+        id:f.id,phase:'milestone:'+m.id,fecha:iso(m.date),name:m.name+' · '+f.name
+      }))
+    ]).sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.name.localeCompare(b.name));
   }
   function goTo(id,phase){
     const f=byId(id);
-    const fecha=f&&iso(f[phase]);
+    const fecha=f&&iso(phase?.startsWith('milestone:')?confirmedMilestones(f).find(m=>m.id===phase.slice(10))?.date:f[phase]);
     if(!fecha)return false;
     // Un enlace explícito a la fecha habilita de nuevo los hitos, incluso si
     // estaban ocultos localmente, para evitar un calendario aparentemente vacío.
@@ -609,8 +635,9 @@
     return inFlight;
   }
   function open(id){
+    const marker=/^fondo-(.*)-milestone-([a-z0-9-]+)$/.exec(id||'');
     const match=/^fondo-(.*)-(open|close)$/.exec(id||'');
-    const f=byId(match?match[1]:id);
+    const f=byId(marker?marker[1]:match?match[1]:id);
     if(!f)return;
     const modal=document.getElementById('fondosDetalleModal');
     const container=document.getElementById('fondosDetalleBody');
@@ -625,6 +652,11 @@
         '<div class="fondos-detail-cell"><small>Apertura</small><b>'+esc(pretty(f.open))+'</b></div>'+
         '<div class="fondos-detail-cell"><small>Cierre</small><b>'+esc(pretty(f.close))+'</b></div>'+
       '</div>'+
+      '<div class="fondos-detail-section"><h4>Hitos y entregas obligatorias verificadas</h4>'+
+        (confirmedMilestones(f).length?'<ul>'+confirmedMilestones(f).map(m=>'<li><strong>'+
+          esc(m.name)+'</strong> · '+esc(pretty(m.date))+' · '+link(m.source,'Fuente oficial')+
+          ' <button type="button" class="btn btn-ghost btn-sm" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="milestone:'+esc(m.id)+'">Ver en calendario</button></li>').join('')+'</ul>':
+          '<p>Sin hitos adicionales acreditados en esta ficha; revisar bases antes de postular.</p>')+'</div>'+
       '<div class="fondos-detail-section"><h4>Lo que debes verificar antes de postular</h4><p>'+esc(f.requirements)+'</p></div>'+
       '<div class="fondos-detail-section"><h4>Respaldo y territorio</h4><p>'+esc(f.region)+'. '+esc(f.verified)+'</p></div>'+
       '<div class="fondos-detail-section"><h4>Información oficial</h4><p>'+link(f.source,'↗ Abrir fuente y bases del organismo')+'</p></div>'+
