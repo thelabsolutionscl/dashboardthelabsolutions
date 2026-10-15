@@ -277,10 +277,10 @@
         if(!textResult)throw new Error('La IA no entregó texto.');
       }
       if(id!==workspaceRunId||workspaceId!==f.id||demoMode)return false;
-      workspaceResult={status:'done',source,text:textResult,error:''};render();return true;
+      workspaceBusy=false;workspaceResult={status:'done',source,text:textResult,error:''};render();return true;
     }catch(e){
       if(id!==workspaceRunId||workspaceId!==f.id||demoMode)return false;
-      workspaceResult={status:'error',source:'',text:'',error:String(e?.message||e).slice(0,300)};render();return false;
+      workspaceBusy=false;workspaceResult={status:'error',source:'',text:'',error:String(e?.message||e).slice(0,300)};render();return false;
     }finally{
       if(id===workspaceRunId)workspaceBusy=false;
     }
@@ -460,17 +460,19 @@
     const root=document.getElementById('fondosList');
     if(!root||typeof root.querySelectorAll!=='function')return;
     const q=compact(searchTerm.trim());
-    let visible=0;
+    let total=0,visible=0;
     root.querySelectorAll('[data-fondos-card]').forEach(node=>{
       const item=byId(node.dataset.fondosCard);
       const matches=!!item&&(!q||countFor(item).includes(q));
-      node.hidden=!matches;
-      if(matches)visible++;
+      if(matches){total++;if(total<=visibleLimit)visible++;}
+      node.hidden=!matches||total>visibleLimit;
     });
     const count=root.querySelector('[data-fondos-count]');
-    if(count)count.textContent=visible+' '+(visible===1?'oportunidad':'oportunidades')+' visibles';
+    if(count)count.textContent=total===0?'0 oportunidades visibles':visible+' de '+total+' oportunidades visibles';
     const empty=root.querySelector('[data-fondos-no-match]');
-    if(empty)empty.hidden=visible!==0;
+    if(empty)empty.hidden=total!==0;
+    const more=root.querySelector('[data-fondos-more]');
+    if(more){more.hidden=total<=visibleLimit;more.textContent='Ver '+Math.min(8,total-visibleLimit)+' oportunidades más ↓';}
   }
   function render(){
     const root=document.getElementById('fondosList');
@@ -482,10 +484,12 @@
     const filter=document.getElementById('fondosFiltro');
     if(filter)filter.value=mode;
     const now=today();
-    const watch=funds.filter(pending).length;
-    const future=funds.filter(f=>!!iso(f.open)&&iso(f.open)>=now).length;
-    const historical=funds.filter(f=>hasDate(f)&&f.close&&f.close.slice(0,10)<now).length;
-    const shown=funds.filter(f=>mode==='todos'||(mode==='sin-fechas'?pending(f):
+    const watch=funds.filter(f=>fundWindow(f).tone==='watch').length;
+    const future=funds.filter(f=>fundWindow(f).tone==='future').length;
+    const historical=funds.filter(f=>fundWindow(f).tone==='closed').length;
+    const openWindow=funds.filter(f=>fundWindow(f).tone==='window').length;
+    const myCount=funds.filter(f=>tracked[f.id]?.watching).length;
+    const shown=funds.filter(f=>mode==='todos'||(mode==='mios'?!!tracked[f.id]?.watching:mode==='sin-fechas'?pending(f):
       mode==='proximos'?(!pending(f)&&(!f.close||f.close.slice(0,10)>=now)):
       mode==='cerrados'&&hasDate(f)&&!!f.close&&f.close.slice(0,10)<now));
     const ordered=shown.slice().sort((a,b)=>{
@@ -495,15 +499,15 @@
       if(tone(a)==='cerrado'&&tone(b)==='cerrado')return (b.close||'').localeCompare(a.close||'');
       return a.name.localeCompare(b.name,'es');
     });
-    const groups=[['todos','Todos'],['sin-fechas','En seguimiento'],['proximos','Con fechas próximas'],['cerrados','Históricos']];
+    const groups=[['todos','Explorar'],['mios','Mi seguimiento ('+myCount+')'],['sin-fechas','Sin fecha oficial'],['proximos','Fechas vigentes / futuras'],['cerrados','Históricos']];
     const chips=groups.map(([value,title])=>
       '<button type="button" class="fondos-filter-pill'+(mode===value?' is-active':'')+
       '" data-fondos-view="'+value+'" aria-pressed="'+(mode===value?'true':'false')+'">'+esc(title)+'</button>'
     ).join('');
     const card=f=>{
       const stage=tone(f),dating=!pending(f),restricted=/no elegible|no apto|baja|indirecta/i.test(f.fit);
-      const title=status(f)==='Sin fechas publicadas'?'Por anunciar':status(f)==='Cerrado'?'Finalizado':status(f)==='Próximamente'?'Próxima apertura':'Revisar vigencia';
-      const label=radarIds.has(f.id)?'VIGILANCIA PRIORITARIA':f.category;
+      const title=fundWindow(f).label;
+      const label=tracked[f.id]?.watching?'EN MI SEGUIMIENTO':radarIds.has(f.id)?'PROGRAMA EN VIGILANCIA':f.category;
       const acronym=String(f.organizer||'TLS').split(/[\s/]+/).filter(Boolean).map(x=>x[0]).join('').slice(0,2).toUpperCase();
       const dates=dating?
         '<div class="fondos-date-strip" aria-label="Fechas de la convocatoria">'+
