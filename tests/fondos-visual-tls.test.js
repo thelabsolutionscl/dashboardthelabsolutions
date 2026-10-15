@@ -329,7 +329,7 @@ test('auditoría: fechas incompletas nunca aparecen como convocatorias abiertas 
 });
 test('auditoría: formulario no recibe preguntas ficticias al abrir mesa de trabajo',async()=>{
   const v=view();await v.api.load();
-  const questions={value:'',placeholder:''},antecedentes={value:''};
+  const questions={value:'',placeholder:'',focus(){}},antecedentes={value:''};
   const selected={value:'',innerHTML:''};
   v.nodes.fondosPreguntas=questions;v.nodes.fondosAntecedentes=antecedentes;
   v.nodes.fondosConvocatoria=selected;
