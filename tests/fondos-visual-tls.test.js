@@ -359,3 +359,17 @@ test('auditoría: usa la fecha de Chile incluso con navegador adelantado en UTC'
   assert.equal(v.api.fundWindow(call).tone,'window','en Santiago sigue siendo 15 de octubre, no 16');
   assert.equal(v.api.fundWindow({...call,close:'2026-10-14T23:00'}).tone,'closed');
 });
+
+test('auditoría: horas de cierre y apertura del mismo día se respetan en Santiago',async()=>{
+  // 18:20 UTC = 15:20 Chile. Abre a las 16:00, cierra a las 15:00.
+  class FixedDate extends Date{
+    constructor(...args){super(...(args.length?args:['2026-10-15T18:20:00.000Z']));}
+    static now(){return new Date('2026-10-15T18:20:00.000Z').getTime();}
+  }
+  const v=view({Date:FixedDate});await v.api.load();
+  const f={id:'simulada',name:'Prueba',open:'2026-10-15T12:00',close:'2026-10-15T15:00'};
+  assert.equal(v.api.fundWindow(f).tone,'closed','una convocatoria ya cerrada a las 15:00 no aparece abierta a las 15:20');
+  assert.equal(v.api.fundWindow({...f,open:'2026-10-15T16:00',close:'2026-10-20T12:00'}).tone,'future','una apertura a las 16:00 sigue futura a las 15:20');
+  assert.equal(v.api.fundWindow({...f,close:'2026-10-15T16:00'}).tone,'window');
+  assert.equal(v.api.fundWindow({...f,close:'2026-10-15T00:00'}).tone,'window','00:00 de catálogos históricos no se interpreta como plazo oficial exacto');
+});
