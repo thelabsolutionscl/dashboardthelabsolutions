@@ -227,8 +227,30 @@
       const r=await fundsSharedRequest('GET');
       if(!r.ok)throw Error('HTTP '+r.status);
       const d=await r.json();
-      if(!d.ok||typeof d.revision!=='string'||!absorbSharedData(d.data))throw Error('Respuesta inválida');
+      if(!d.ok||typeof d.revision!=='string'||d.data?.schema!==1||!d.data.funds||typeof d.data.funds!=='object')
+        throw Error('Respuesta inválida');
       fundsRevision=d.revision;fundsRemoteReady=true;
+      // Migración no destructiva: solo cuando la mesa compartida recién se crea.
+      // No sobreescribir el trabajo existente de otros operadores.
+      const old=readTracked(),migrationKey=FLOW_STORAGE+':shared-migrated';
+      let migrated=false;try{migrated=localStorage.getItem(migrationKey)==='1';}catch(_){}
+      const records=Object.entries(old).filter(([id,r])=>r?.watching&&/^[a-z0-9-]{3,90}$/.test(id));
+      if(!Object.keys(d.data.funds).length&&!migrated&&records.length){
+        fundsSyncMessage='Importando '+records.length+' fichas locales a la mesa compartida…';
+        for(const [id,r] of records){
+          const ok=await persistFundRecord(id,{stage:r.stage,checks:r.checks,watching:true});
+          if(!ok)throw Error('No se pudo migrar el seguimiento local; sigue disponible en este navegador');
+        }
+        try{localStorage.setItem(migrationKey,'1');}catch(_){}
+        const fresh=await fundsSharedRequest('GET');
+        if(!fresh.ok)throw Error('No se pudo verificar la importación');
+        const confirmed=await fresh.json();
+        if(!confirmed.ok||typeof confirmed.revision!=='string')throw Error('La importación no fue confirmada');
+        fundsRevision=confirmed.revision;
+        if(!absorbSharedData(confirmed.data))throw Error('Documento compartido inválido');
+      }else{
+        if(!absorbSharedData(d.data))throw Error('Documento compartido inválido');
+      }
       fundsSync='connected';fundsSyncMessage='Seguimiento compartido con TLS · sincronizado';
       render();return true;
     }catch(e){
