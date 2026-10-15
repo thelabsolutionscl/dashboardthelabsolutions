@@ -47,7 +47,9 @@ test('radar TLS carga un CSS externo con marca propia y sin romper Calendario',a
   assert.match(v.list.innerHTML,/fondos-filter-pills/);
   assert.match(v.list.innerHTML,/fondosBuscar/);
   assert.match(v.list.innerHTML,/fondos-grid/);
-  assert.match(v.list.innerHTML,/Preparar borrador/);
+  assert.match(v.list.innerHTML,/Revisar para TLS/);
+  assert.match(v.list.innerHTML,/fondosMesa/);
+  assert.match(v.list.innerHTML,/Catálogo/);
   assert.match(v.list.innerHTML,/Encaje estimado/);
   assert.match(css,/#tab-calendario/);
   assert.match(css,/@media\(max-width:650px\)/);
@@ -70,7 +72,7 @@ test('filtros visuales y búsqueda actualizan tarjetas sin alterar fechas ni cat
   await v.api.load();
   v.hooks['root:click']({target:{closest:selector=>selector==='[data-fondos-view]'?
     {dataset:{fondosView:'sin-fechas'}}:null}});
-  assert.match(v.list.innerHTML,/aria-pressed="true">En seguimiento/);
+  assert.match(v.list.innerHTML,/aria-pressed="true">Sin fecha oficial/);
   assert.ok(v.list.innerHTML.includes('data-fondos-card="startupchile-big-proximo-vigilar"'));
   assert.ok(!v.list.innerHTML.includes('data-fondos-card="corfo-crea-y-valida-2026"'));
   const c={dataset:{fondosCard:'corfo-semilla-inicia-nueva-vigilar'},hidden:false};
@@ -209,4 +211,87 @@ test('al salir de DEMO se descartan respuestas pendientes del agente',async()=>{
   assert.equal(v.api.isDemo(),false);
   assert.doesNotMatch(v.list.innerHTML,/Resultado que llegó después/);
   assert.equal(v.api.demoAgentState().status,'idle');
+});
+
+test('mesa TLS abre una ficha real con requisitos, fuente, checklist y CTA al agente',async()=>{
+  const v=view();await v.api.load();
+  assert.match(v.list.innerHTML,/Un fondo a la vez. Un plan claro./);
+  const selected='corfo-crea-y-valida-proxima-vigilar';
+  assert.equal(v.api.openWorkspace(selected),true);
+  assert.match(v.list.innerHTML,/MI MESA DE TRABAJO · 3 PASOS/);
+  assert.match(v.list.innerHTML,/¿Conviene postular?/);
+  assert.match(v.list.innerHTML,/¿Qué falta reunir?/);
+  assert.match(v.list.innerHTML,/Preparar con el agente/);
+  assert.match(v.list.innerHTML,/Bases y fuente oficial/);
+  assert.match(v.list.innerHTML,/Sin fecha oficial/);
+  assert.match(v.list.innerHTML,/data-fondos-work-form/);
+  assert.match(v.list.innerHTML,/data-fondos-work-check="bases"/);
+  assert.equal(v.api.fundWindow(catalog.funds.find(f=>f.id===selected)).tone,'watch');
+  assert.equal(v.api.openWorkspace('<script>'),false);
+  assert.match(css,/fondos-workspace-steps/);
+});
+test('seguimiento local y checklist manual se guardan sin datos financieros ni formularios',async()=>{
+  const v=view();await v.api.load();
+  const id='corfo-crea-y-valida-proxima-vigilar';
+  v.api.openWorkspace(id);
+  assert.equal(v.api.stageFund(id,'preparando'),true);
+  assert.equal(v.api.toggleFlowCheck(id,'bases',true),true);
+  assert.equal(v.api.toggleFlowCheck(id,'documentos',true),true);
+  assert.equal(v.api.stageFund(id,'publicado'),false);
+  assert.match(v.list.innerHTML,/2 de 7/);
+  assert.match(v.list.innerHTML,/value="preparando" selected/);
+  assert.match(v.list.innerHTML,/data-fondos-work-check="bases" checked/);
+  const records=[...v.state.entries()].filter(([k])=>k.startsWith('thelab_fondos_mesa_v1'));
+  assert.equal(records.length,1);
+  assert.match(records[0][1],/"stage":"preparando"/);
+  assert.doesNotMatch(records[0][1],/presupuesto|RUT|formulario|respuesta/i);
+  assert.equal(v.api.trackFund(id),false);
+  assert.match(v.list.innerHTML,/Un fondo a la vez/);
+});
+test('el agente de la mesa muestra procesamiento, entrega texto y no crea eventos',async()=>{
+  const v=view();await v.api.load();
+  const id='corfo-crea-y-valida-proxima-vigilar';
+  const original=JSON.stringify(v.api.eventList());
+  let complete,callArgs;
+  v.ctx.window.callAgentClaude=(...args)=>{callArgs=args;return new Promise(resolve=>{complete=resolve;});};
+  v.api.openWorkspace(id);
+  v.hooks['list:input']({target:{id:'fondosMesaIdea',value:'Validación técnica de un proceso mejorado de prototipado 3D para nuevos productos TLS.'}});
+  const inFlight=v.api.workspaceAnalyze();
+  assert.equal(v.api.workspaceState().status,'working');
+  assert.match(v.list.innerHTML,/Agente TLS procesando tu proyecto/);
+  assert.match(v.list.innerHTML,/aria-busy="true"/);
+  assert.equal(callArgs[0],'CEO');
+  assert.match(callArgs[1],/sin inventar bases/);
+  complete('Plan contextualizado: validar antigüedad, cofinanciamiento y métricas.');
+  assert.equal(await inFlight,true);
+  assert.equal(v.api.workspaceState().status,'done');
+  assert.match(v.list.innerHTML,/Plan contextualizado/);
+  assert.doesNotMatch(v.list.innerHTML,/data-fondos-work-analyze disabled/);
+  assert.equal(JSON.stringify(v.api.eventList()),original);
+});
+test('sin IA ofrece una guía local explícita; error remoto no se disfraza de éxito',async()=>{
+  const v=view();await v.api.load();v.api.openWorkspace('sercotec-crece-proximas');
+  v.hooks['list:input']({target:{id:'fondosMesaIdea',value:'Comprar impresoras para ampliar la capacidad productiva de TLS y evaluar un fondo de inversión.'}});
+  const result=await v.api.workspaceAnalyze();
+  assert.equal(result,true);
+  assert.equal(v.api.workspaceState().source,'local');
+  assert.match(v.list.innerHTML,/NO IA/);
+  v.ctx.window.callAgentClaude=async()=>{throw Error('Conexión no disponible');};
+  const failed=await v.api.workspaceAnalyze();
+  assert.equal(failed,false);
+  assert.equal(v.api.workspaceState().status,'error');
+  assert.match(v.list.innerHTML,/Conexión no disponible/);
+  assert.match(v.list.innerHTML,/Crear guía local sin IA/);
+});
+test('buscar conserva foco de input y paginación de ocho; histórico nunca se anuncia como abierto',async()=>{
+  const v=view();await v.api.load();
+  assert.match(v.list.innerHTML,/data-fondos-more/);
+  assert.match(v.list.innerHTML,/No hay un fondo con apertura vigente o futura registrada/);
+  assert.match(v.list.innerHTML,/Sin fecha oficial/);
+  const c={dataset:{fondosCard:'corfo-semilla-inicia-nueva-vigilar'},hidden:false};
+  v.cards.push(c);
+  v.hooks['list:input']({target:{id:'fondosBuscar',value:'semilla inicia'}});
+  assert.equal(c.hidden,false);
+  v.hooks['list:input']({target:{id:'fondosBuscar',value:'xyz_inexistente'}});
+  assert.equal(c.hidden,true);
 });
