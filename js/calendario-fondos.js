@@ -471,15 +471,22 @@
     const day=[field('year'),field('month'),field('day')].join('-');
     let count=0;
     for(const f of funds){
-      for(const [phase,name] of [['open','Apertura'],['close','Cierre']]){
-        if(iso(f[phase])!==day)continue;
-        const key='fondos:'+who+':'+f.id+':'+phase+':'+day;
+      const phases=[
+        ...[['open','Apertura',''],['close','Cierre','']].map(([key,label])=>
+          ({key,label,date:f[key],kind:key,source:f.source})),
+        ...confirmedMilestones(f).filter(m=>m.kind==='mandatory').map(m=>({
+          key:'hito-'+m.id,label:m.name,date:m.date,kind:'hito',source:m.source
+        }))
+      ];
+      for(const phase of phases){
+        if(iso(phase.date)!==day)continue;
+        const key='fondos:'+who+':'+f.id+':'+phase.key+':'+day;
         try{if(localStorage.getItem(key)==='1')continue;}catch(_){}
-        const title=(phase==='open'?'🟢 Abre hoy: ':'🔴 Cierra hoy: ')+f.name;
-        const detail=name+' a las '+f[phase].slice(11,16)+' h (Chile) · Revisa las bases oficiales antes de postular.';
+        const title=(phase.kind==='open'?'🟢 Abre hoy: ':phase.kind==='close'?'🔴 Cierra hoy: ':'⚠ Hito obligatorio hoy: ')+
+          (phase.kind==='hito'?phase.label+' · ':'')+f.name;
+        const detail=phase.label+' a las '+phase.date.slice(11,16)+' h (Chile) · Confirma en '+phase.source;
         if(n.priority('info',title,detail,'calendario',{
-          personas:['gustavo','nicanor'],
-          tone:phase==='close'?'warning':'info',key
+          personas:['gustavo','nicanor'],tone:phase.kind==='open'?'info':'warning',key
         })){
           count++;
           try{localStorage.setItem(key,'1');}catch(_){}
