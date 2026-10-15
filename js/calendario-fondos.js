@@ -528,31 +528,37 @@
           '<p class="fondos-card-summary">'+esc(f.fitReason)+'</p>'+dates+
         '</div>'+
         '<div class="fondos-actions">'+
-          '<button type="button" class="btn btn-ghost btn-sm" data-fondos-open="'+esc(f.id)+'">Ver detalles</button>'+
+          '<button type="button" class="btn btn-primary btn-sm" data-fondos-work-open="'+esc(f.id)+'">Revisar para TLS →</button>'+
+          '<button type="button" class="btn btn-ghost btn-sm" data-fondos-work-track="'+esc(f.id)+'" aria-pressed="'+(!!tracked[f.id]?.watching)+'">'+(tracked[f.id]?.watching?'★ Siguiendo':'☆ Seguir')+'</button>'+
+          '<button type="button" class="btn btn-ghost btn-sm" data-fondos-open="'+esc(f.id)+'">Detalles</button>'+
           link(f.info,'↗ Fuente oficial')+
-          '<button type="button" class="btn btn-primary btn-sm" data-fondos-draft="'+esc(f.id)+'">✦ Preparar borrador</button>'+
         '</div></article>';
     };
     root.innerHTML='<div class="fondos-tls'+(demoMode?' is-demo':'')+'">'+
       '<section class="fondos-hero" aria-label="Radar de oportunidades TLS">'+
         '<div><div class="fondos-eyebrow"><span class="fondos-live-dot" aria-hidden="true"></span> THE LAB SOLUTIONS · OPPORTUNITY RADAR</div>'+
-          '<h2 class="fondos-title">'+(demoMode?'Explora TLS en <span>modo DEMO.</span>':'Oportunidades para <span>seguir creciendo.</span>')+'</h2>'+
-          '<p class="fondos-lead">Fondos, innovación y programas para impulsar nuevos proyectos de TLS. Encuentra lo que vale la pena revisar, mira fechas oficiales y prepara tu postulación con ayuda del asistente.</p>'+
+          '<h2 class="fondos-title">'+(demoMode?'Explora TLS en <span>modo DEMO.</span>':'Fondos para TLS. <span>De la idea a la postulación.</span>')+'</h2>'+
+          '<p class="fondos-lead">Identifica oportunidades, comprueba condiciones y prepara respuestas con el agente. Las fechas y los requisitos se validan siempre en la fuente oficial.</p>'+
           '<div class="fondos-hero-chips"><span class="fondos-micro fondos-micro--cyan">'+(demoMode?'◈ ENTORNO DE PRUEBA':'✓ Fechas respaldadas')+'</span><span class="fondos-micro">◷ Seguimiento continuo</span><span class="fondos-micro">✦ Asistente IA</span></div>'+ 
           '<div class="fondos-demo-hero-action"><button type="button" data-fondos-demo-toggle class="fondos-demo-button" aria-pressed="'+(demoMode?'true':'false')+'">'+(demoMode?'↩ Salir de DEMO':'▶ DEMO · Ver funcionamiento')+'</button></div>'+
         '</div>'+
         '<div class="fondos-kpis" aria-label="Resumen de programas">'+
-          '<div class="fondos-kpi fondos-kpi--focus"><b>'+funds.length+'</b><small>Programas en radar</small></div>'+
-          '<div class="fondos-kpi fondos-kpi--attention"><b>'+watch+'</b><small>Por anunciar</small></div>'+
-          '<div class="fondos-kpi"><b>'+future+'</b><small>Con apertura futura verificada</small></div>'+
-          '<div class="fondos-kpi"><b>'+historical+'</b><small>Convocatorias cerradas</small></div>'+
+          '<div class="fondos-kpi fondos-kpi--focus"><b>'+openWindow+'</b><small>Ventanas publicadas · confirmar</small></div>'+
+          '<div class="fondos-kpi fondos-kpi--attention"><b>'+watch+'</b><small>Sin fecha oficial confirmada</small></div>'+
+          '<div class="fondos-kpi"><b>'+future+'</b><small>Aperturas futuras registradas</small></div>'+
+          '<div class="fondos-kpi"><b>'+myCount+'</b><small>Fondos en mi seguimiento</small></div>'+
         '</div>'+
       '</section>'+ 
-      (demoMode?demoIllustration():'')+
+      (demoMode?demoIllustration():('<div class="fondos-action-banner"><span>ESTADO REAL DEL CATÁLOGO</span><strong>'+(
+        openWindow>0?'Hay '+openWindow+' ventana(s) que requieren verificar vigencia.':
+        future>0?'Hay '+future+' apertura(s) futura(s) registradas.':
+        'No hay un fondo con apertura vigente o futura registrada en este catálogo.'
+      )+'</strong><p>Trabaja el proyecto y los requisitos mientras se vigilan nuevas convocatorias. No se presentan fondos cerrados como abiertos.</p></div>'+workspaceHtml()))+
       '<div class="fondos-toolbar"><div class="fondos-filter-pills" role="group" aria-label="Filtrar convocatorias">'+chips+'</div>'+
         '<label class="fondos-search-wrap"><span class="fondos-search-icon" aria-hidden="true">⌕</span><input type="search" id="fondosBuscar" autocomplete="off" aria-label="Buscar por programa, institución o categoría" placeholder="Buscar fondo, organismo o proyecto…" value="'+esc(searchTerm)+'"></label></div>'+
-      '<div class="fondos-list-header"><b>Explora las oportunidades</b><span data-fondos-count>'+ordered.length+' oportunidades visibles</span></div>'+
-      '<div class="fondos-grid">'+ordered.map(card).join('')+'</div>'+
+      '<div class="fondos-list-header"><b>Catálogo · '+funds.length+' programas</b><span data-fondos-count>'+ordered.length+' oportunidades visibles</span></div>'+
+      '<div class="fondos-grid">'+ordered.map(card).join('')+'</div>'+ 
+      '<button type="button" class="fondos-more" data-fondos-more hidden>Ver más oportunidades ↓</button>'+
       '<div class="fondos-empty" data-fondos-no-match'+(ordered.length?' hidden':'')+'><strong>No encontramos resultados en esta vista</strong>Prueba otra categoría o cambia el texto de búsqueda.</div>'+
       '<p class="fondos-summary-footnote">El encaje con TLS es orientativo, no significa aprobación ni elegibilidad. Sin fecha oficial publicada, el programa queda en seguimiento y no genera alertas de apertura o cierre. <span aria-hidden="true">·</span> Catálogo actualizado: '+esc(updated||'sin fecha')+'.</p>'+
     '</div>';
@@ -671,10 +677,11 @@
   }
   function init(){
     const root=document.getElementById('tab-calendario');if(!root)return;
+    tracked=readTracked();
     if(typeof document.createElement==='function'&&document.head&&!document.getElementById('fondosTlsStyles')){
       const sheet=document.createElement('link');
       sheet.rel='stylesheet';sheet.id='fondosTlsStyles';
-      sheet.href=new URL('fondos-tls.css?v=20261014agent',document.baseURI).href;
+      sheet.href=new URL('fondos-tls.css?v=20261015workflow',document.baseURI).href;
       document.head.appendChild(sheet);
     }
     root.addEventListener('click',e=>{
