@@ -1,40 +1,68 @@
 /* js/web-analytics.js — módulo extraído de index.html (carga en el mismo punto). */
 // ── Tráfico del sitio web (GA4 vía Script 1, action=web) ──────────────
 const WEB_CANAL_ES={'Organic Search':'Búsqueda orgánica','Paid Search':'Google Ads (búsqueda)','Direct':'Directo','Organic Social':'Redes sociales','Paid Social':'Redes sociales (pago)','Referral':'Referidos','Email':'Email','Display':'Display','Cross-network':'Multired','Organic Video':'Video orgánico','Paid Video':'Video (pago)','Unassigned':'Sin asignar'};
+let _webStatsPending=null;
 async function loadWebStats(){
   const panel=document.getElementById('webTrafficPanel');if(!panel)return;
-  const cfg=getAdsConfig();
-  const days=parseInt(document.getElementById('adsPeriodSelect')?.value||'30');
-  if(window._DEMO_MODE){renderWebStats(getWebDemoData(days),days);return;}
-  if(!cfg.endpoint){renderWebStats(getWebDemoData(days),days);return;}
-  try{
-    const url=cfg.endpoint+(cfg.endpoint.includes('?')?'&':'?')+'action=web&days='+days+'&_t='+Date.now();
-    const r=await fetch(url);
-    const data=await r.json().catch(()=>null);
-    if(data&&data.ok&&data.web){renderWebStats(data,days);return;}
-    if(!data||!data.web){showWebTrafficHint('script');return;}
-    if(data.error==='no-config'){showWebTrafficHint('property');return;}
-    if(data.error==='no-service'){showWebTrafficHint('service');return;}
-    showWebTrafficHint('error',data.error);
-  }catch(e){showWebTrafficHint('error',e.message);}
+  // WEB no debe esperar Google Ads, Airtable ni la cola de campañas.
+  if(_webStatsPending)return _webStatsPending;
+  const run=async()=>{
+    const days=Math.max(1,parseInt(document.getElementById('adsPeriodSelect')?.value||'30',10)||30);
+    if(window._DEMO_MODE){renderWebStats(getWebDemoData(days),days);return;}
+    showWebTrafficHint('loading');
+    const cfg=getAdsConfig();
+    if(!cfg.endpoint){showWebTrafficHint('script');return;}
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),25000);
+    try{
+      const url=new URL(cfg.endpoint);
+      url.searchParams.set('action','web');
+      url.searchParams.set('days',String(days));
+      url.searchParams.set('_t',String(Date.now()));
+      const r=await fetch(url.toString(),{signal:controller.signal});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const data=await r.json().catch(()=>null);
+      if(!data||typeof data!=='object'){showWebTrafficHint('script');return;}
+      // Errores del backend deben tener precedencia: suelen llegar sin web=true.
+      if(data.error==='no-config'){showWebTrafficHint('property');return;}
+      if(data.error==='no-service'){showWebTrafficHint('service');return;}
+      if(data.error){showWebTrafficHint('error',String(data.error));return;}
+      if(data.ok===true&&data.web===true&&Number.isFinite(Number(data.usuarios))&&Number.isFinite(Number(data.sesiones))){
+        renderWebStats(data,days);return;
+      }
+      showWebTrafficHint('script');
+    }catch(e){
+      showWebTrafficHint('error',e?.name==='AbortError'
+        ?'La consulta tardó más de 25 segundos. Comprueba Apps Script y vuelve a intentar.'
+        :String(e?.message||'No se pudo contactar con Google Analytics.'));
+    }finally{clearTimeout(timer);}
+  };
+  _webStatsPending=run().finally(()=>{_webStatsPending=null;});
+  return _webStatsPending;
 }
 function showWebTrafficHint(tipo,detalle){
+  const panel=document.getElementById('webTrafficPanel');
   const hint=document.getElementById('webTrafficHint'),body=document.getElementById('webTrafficBody');
-  if(!hint)return;
-  body.style.display='none';hint.style.display='block';
-  document.getElementById('webKpiAhoraBadge').style.display='none';
+  if(!panel||!hint)return;
+  panel.dataset.gaStatus=tipo;
+  if(body)body.style.display='none';
+  hint.style.display='block';
+  const badge=document.getElementById('webKpiAhoraBadge');if(badge)badge.style.display='none';
   const pasos={
-    script:'<b style="color:var(--warn)">El Script 1 necesita actualizarse</b> para mostrar el tráfico web:<br>1. Botón <b>⚙ Configurar</b> (arriba) → <b>Ver Apps Script</b> → copia el bloque del <b>Script 1</b>.<br>2. En <b>script.google.com</b> abre tu proyecto y reemplaza TODO el código por el nuevo.<br>3. <b>Desplegar → Administrar implementaciones → ✏ → Versión: Nueva versión → Desplegar</b>.<br>4. Sigue los pasos de GA4 que vienen en los comentarios del script.',
-    service:'<b style="color:var(--warn)">Falta el servicio de Analytics en el Script 1</b>:<br>En el editor de Apps Script → menú izquierdo <b>Servicios (+)</b> → busca <b>Google Analytics Data API</b> → Añadir → autoriza cuando lo pida → <b>Desplegar → nueva versión</b>.',
-    property:'<b style="color:var(--warn)">Falta el ID de la propiedad GA4</b>:<br>1. En <b>analytics.google.com</b> → ⚙ Administrar → <b>Detalles de la propiedad</b> → copia el <b>ID de la propiedad</b> (número, ej. 123456789).<br>2. En el Script 1 pégalo en la línea <code>var GA4_PROPERTY = \'\';</code><br>3. <b>Desplegar → Administrar implementaciones → ✏ → Nueva versión</b>.',
-    error:'<b style="color:var(--danger)">No se pudo leer GA4:</b> '+escapeHtml(detalle||'error desconocido')+'<br>Verifica que la cuenta del Script 1 tenga acceso a la propiedad GA4 y que el ID en <code>GA4_PROPERTY</code> sea el numérico.'
+    loading:'<b style="color:var(--accent)">Consultando Google Analytics 4…</b> Obteniendo los visitantes y sesiones del período seleccionado.',
+    script:'<b style="color:var(--warn)">Google Analytics no entregó estadísticas válidas.</b> Comprueba que el Script 1 admita <code>action=web</code> y esté publicado en una versión nueva. En Google Ads → Configurar → Ver Apps Script puedes consultar las instrucciones.',
+    service:'<b style="color:var(--warn)">Falta Google Analytics Data API en Apps Script.</b> Abre Script 1 → Servicios (+) → Google Analytics Data API → Añadir y vuelve a implementar.',
+    property:'<b style="color:var(--warn)">Falta configurar la propiedad GA4.</b> En Google Analytics → Administrar → Detalles de la propiedad, copia el ID numérico a <code>GA4_PROPERTY</code> en Script 1 y vuelve a implementar.',
+    error:'<b style="color:var(--danger)">No se pudo conectar con Google Analytics 4:</b> '+escapeHtml(detalle||'Error desconocido')+'. Comprueba permisos del Script 1 sobre la propiedad GA4, su URL y que esté desplegado.'
   };
-  hint.innerHTML='📈 '+ (pasos[tipo]||pasos.error);
+  const retry=tipo==='loading'?'':'<div style="margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" onclick="loadWebStats()">↻ Reintentar conexión GA4</button></div>';
+  hint.innerHTML='📈 '+(pasos[tipo]||pasos.error)+retry;
 }
 function renderWebStats(data,days){
   const hint=document.getElementById('webTrafficHint'),body=document.getElementById('webTrafficBody');
   if(!body)return;
-  hint.style.display='none';body.style.display='block';
+  const panel=document.getElementById('webTrafficPanel');if(panel)panel.dataset.gaStatus=data.demo?'demo':'ok';
+  if(hint)hint.style.display='none';body.style.display='block';
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   set('web-kpi-usuarios',fmtNum(data.usuarios||0));
   set('web-kpi-periodo',(data.demo?'demo · ':'')+days+' días');
