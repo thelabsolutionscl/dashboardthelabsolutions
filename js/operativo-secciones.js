@@ -75,7 +75,9 @@
     if(pending)return {rank:1,reason:`${pending} cotizaciones pendientes de envío`,next:'Preparar propuesta'};
     if(sent)return {rank:2,reason:`${sent} cotizaciones enviadas, sin aprobación registrada`,next:'Revisar seguimiento'};
     if(days!==null&&days>=60)return {rank:3,reason:`${days} días desde la última cotización o pedido`,next:'Revisar oportunidad de reactivación'};
-    return {rank:4,reason:days===null?'Sin cotizaciones ni pedidos registrados':'Con actividad comercial registrada',next:'Consultar ficha y próxima gestión'};
+    const total=(counts.total||0),orders=(counts.orders||0);
+    if(total||orders)return {rank:4,reason:total?total+' '+(total===1?'cotización registrada':'cotizaciones registradas')+(orders?' · '+orders+' pedidos vinculados':''):orders+' pedidos vinculados',next:'Consultar ficha y próxima gestión'};
+    return {rank:4,reason:'Sin cotizaciones ni pedidos registrados',next:'Consultar ficha y próxima gestión'};
   }
   function clientCategoryState(){
     const active=$('cliCatBar')?.querySelector?.('.cli-cat-chip.active')?.dataset?.cat||'todos';
@@ -139,24 +141,60 @@
     else if(!clientsInitialized&&typeof state!=='undefined'&&Array.isArray(state.clientes)){clientRows=state.clientes;clientsInitialized=true;}
     const el=$('opClients');if(!el)return;
     const visible=typeof isVendorMode==='function'&&isVendorMode()?clientRows.filter(vendorOwnsRecord):clientRows;
+    // La relación Cliente↔Cotizaciones puede venir en uno u otro extremo.
+    // Los conjuntos evitan duplicar registros si Airtable devuelve ambos enlaces.
     const index=new Map();
-    (state.cotizaciones||[]).forEach(q=>{
-      if(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(q))return;
-      (Array.isArray(q.fields.Cliente)?q.fields.Cliente:[]).forEach(id=>{const n=index.get(id)||{sent:0,pending:0,open:0,purchases:0};if(q.fields['Estado cotización']==='Enviada')n.sent++;if(q.fields['Estado cotización']==='Solicitada')n.pending++;if(['Solicitada','Enviada','Negociación'].includes(q.fields['Estado cotización']))n.open++;index.set(id,n);});
-    });
-    (state.pedidos||[]).forEach(p=>{
-      if(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(p))return;
-      if(!['Despachado','Completado'].includes(p.fields?.['Estado pedido']))return;
-      (Array.isArray(p.fields.Cliente)?p.fields.Cliente:[]).forEach(id=>{const n=index.get(id)||{sent:0,pending:0,open:0,purchases:0};n.purchases++;index.set(id,n);});
-    });
+    const linkedIds=value=>(Array.isArray(value)?value:[value])
+      .map(v=>typeof v==='string'?v:(v&&typeof v==='object'?v.id:''))
+      .filter(Boolean);
+    const ensure=id=>{
+      let n=index.get(id);
+      if(!n){n={sent:0,pending:0,open:0,total:0,orders:0,purchases:0,quoteIds:new Set(),orderIds:new Set()};index.set(id,n);}
+      return n;
+    };
+    const quoteRows=(state.cotizaciones||[]).filter(q=>!(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(q)));
+    const quoteById=new Map(quoteRows.map(q=>[q.id,q]));
+    const addQuote=(id,q)=>{
+      if(!id||!q?.id)return;
+      const n=ensure(id);
+      if(n.quoteIds.has(q.id))return;
+      n.quoteIds.add(q.id);n.total++;
+      const status=q.fields?.['Estado cotización']||'';
+      if(status==='Enviada')n.sent++;
+      if(status==='Solicitada')n.pending++;
+      if(['Solicitada','Enviada','Negociación'].includes(status))n.open++;
+    };
+    quoteRows.forEach(q=>linkedIds(q.fields?.['Cliente']).forEach(id=>addQuote(id,q)));
+    visible.forEach(c=>linkedIds(c.fields?.['Cotizaciones']).forEach(qid=>{
+      const q=quoteById.get(qid);if(!q)return;
+      const direct=linkedIds(q.fields?.['Cliente']);
+      if(direct.length&&!direct.includes(c.id))return; // no ocultar vínculos contradictorios
+      addQuote(c.id,q);
+    }));
+    const orderRows=(state.pedidos||[]).filter(p=>!(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(p)));
+    const orderById=new Map(orderRows.map(p=>[p.id,p]));
+    const addOrder=(id,p)=>{
+      if(!id||!p?.id)return;
+      const n=ensure(id);
+      if(n.orderIds.has(p.id))return;
+      n.orderIds.add(p.id);n.orders++;
+      if(['Despachado','Completado'].includes(p.fields?.['Estado pedido']))n.purchases++;
+    };
+    orderRows.forEach(p=>linkedIds(p.fields?.['Cliente']).forEach(id=>addOrder(id,p)));
+    visible.forEach(c=>linkedIds(c.fields?.['Pedidos']).forEach(pid=>{
+      const p=orderById.get(pid);if(!p)return;
+      const direct=linkedIds(p.fields?.['Cliente']);
+      if(direct.length&&!direct.includes(c.id))return;
+      addOrder(c.id,p);
+    }));
     const ranked=visible.map(c=>({c,info:clientInfo(c,index)})).sort((a,b)=>a.info.rank-b.info.rank);
     try{global.DashboardNotificationBadges?.render?.();}catch(e){}
     el.innerHTML=`${clientToolbar()}<div class="op-section-heading op-client-list-heading"><div><span class="op-eyebrow">VISTA TARJETAS</span><h2>Próximas gestiones</h2><p>${ranked.length} registros en la selección · prioridades según actividad real del CRM.</p></div></div><div class="op-records op-client-records">${ranked.slice(0,clientLimit).map(({c,info})=>{
       const f=c.fields||{},activity=typeof _cliUltInteraccion==='function'?_cliUltInteraccion(c):null;
       const last=activity&&Number.isFinite(activity.ts)?new Date(activity.ts).toLocaleDateString('es-CL'):'Sin registro';
       const activityLabel=activity?.src==='ingreso'?'Ingreso al CRM':'Última cotización o pedido';
-      const count=index.get(c.id)||{sent:0,pending:0,open:0,purchases:0};
-      return `<article class="op-record"><header><div><h3>${esc(f.Empresa||f.Contacto||'Sin nombre')}</h3><p>${esc(f.Contacto||'Contacto sin registrar')}</p></div><span class="op-pill">${esc(f['Etapa venta']||'Sin etapa')}</span></header><p class="op-caption">${esc(info.reason)}</p><div class="op-facts"><div><span>${esc(activityLabel)}</span><b>${esc(last)}</b><small>${activity&&Number.isFinite(activity.dias)?esc(activity.dias===0?'Hoy':'Hace '+activity.dias+' días'):'Sin actividad registrada'}</small></div><div><span>Actividad comercial</span><b>${count.open} cotizaciones abiertas</b><small>${count.purchases} pedidos despachados o completados</small></div></div><footer><span><small>Siguiente paso</small>${esc(info.next)}</span>${clientCardMenu(c)}</footer></article>`;
+      const count=index.get(c.id)||{sent:0,pending:0,open:0,total:0,orders:0,purchases:0};
+      return `<article class="op-record"><header><div><h3>${esc(f.Empresa||f.Contacto||'Sin nombre')}</h3><p>${esc(f.Contacto||'Contacto sin registrar')}</p></div><span class="op-pill">${esc(f['Etapa venta']||'Sin etapa')}</span></header><p class="op-caption">${esc(info.reason)}</p><div class="op-facts"><div><span>${esc(activityLabel)}</span><b>${esc(last)}</b><small>${activity&&Number.isFinite(activity.dias)?esc(activity.dias===0?'Hoy':'Hace '+activity.dias+' días'):'Sin actividad registrada'}</small></div><div><span>Actividad comercial</span><b>${count.total} ${count.total===1?'cotización':'cotizaciones'} · ${count.open} abiertas</b><small>${count.orders} pedidos vinculados · ${count.purchases} despachados o completados</small></div></div><footer><span><small>Siguiente paso</small>${esc(info.next)}</span>${clientCardMenu(c)}</footer></article>`;
     }).join('')||'<p class="op-empty">No hay clientes en esta selección. Revisa la búsqueda y los filtros.</p>'}</div>${ranked.length>clientLimit?action('Ver más clientes','more-clients'):''}`;
   }
   function reportSummary(raw){

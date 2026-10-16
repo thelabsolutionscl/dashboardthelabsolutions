@@ -83,6 +83,26 @@ test('buscar FEDESKI encuentra las 7 cotizaciones del cliente aunque dos tengan 
   assert.equal(matches().length,2,'al limpiar la búsqueda se conserva el filtro de estado');
 });
 
+test('Ver cotizaciones desde un lead filtra Tarjetas, incluye aprobadas y respeta vínculo inverso',()=>{
+  const {context,op,element}=setup();
+  const cli=record('lead-a',{Empresa:'Lead A',Cotizaciones:['q-inversa','q-inversa','q-cerrada','q-ajena']});
+  context.state.clientes=[cli];
+  context.state.clientesByIdRec={'lead-a':cli};
+  const rows=[
+    record('q-inversa',{Cliente:[],'Estado cotización':'Enviada'}),
+    record('q-cerrada',{Cliente:['lead-a'],'Estado cotización':'Aprobada'}),
+    record('q-ajena',{Cliente:['otro'],'Estado cotización':'Enviada'})
+  ];
+  context.state.cotizaciones=rows;
+  op.scopeQuotes('lead-a','Lead A');
+  const selection=op.filterQuotes(rows);
+  assert.deepEqual(Array.from(selection,q=>q.id),['q-inversa','q-cerrada']);
+  op.quotes(selection);
+  assert.match(element('opQuoteSelection').textContent,/Cotizaciones de Lead A · 2 cotizaciones/);
+  assert.doesNotMatch(element('opQuotes').innerHTML,/q-ajena/);
+  op.scopeQuotes(null);
+  assert.equal(op.filterQuotes(rows).length,3,'Ver todas debe restaurar la lista completa');
+});
 test('una aprobada sin pedido muestra la acción de recuperación correcta',()=>{
   const missing=setup();missing.context._pedidoDeCot=()=>null;
   const cot=record('c',{'Estado cotización':'Aprobada','Cliente':'ABC','Total final (CLP)':119000});

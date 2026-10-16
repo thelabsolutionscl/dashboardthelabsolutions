@@ -6,7 +6,7 @@
   const expertOnlyViews=new Set(['reporte','newsletter']);
   const closed=['Despachado','Completado','Cancelado'];
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
-  const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null};
+  const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null,quoteClient:null};
   const $=id=>document.getElementById(id);
   const detailState=new Map();
   const allowed=page=>typeof AUTH!=='undefined'&&typeof RBAC!=='undefined'&&(RBAC.tabs[AUTH.getUser()?.role]||[]).includes(page);
@@ -203,6 +203,19 @@
         (parts[0].slice(0,4)+parts[1]).includes(query);
     });
   }
+  // El atajo "Ver cotizaciones" debe filtrar tanto Tabla como Tarjetas.
+  function scopeQuotes(clientId,name){
+    ui.quoteClient=clientId?{id:String(clientId),name:String(name||'Cliente')}:null;
+    ui.cot='all';ui.search='';ui.limit=24;
+    const input=$('opQuoteSearch');if(input)input.value='';
+  }
+  function quoteBelongsToClient(c,clientId){
+    const direct=cotClientIds(c.fields?.['Cliente']);
+    if(direct.includes(clientId))return true;
+    if(direct.length)return false;
+    const client=state.clientesByIdRec?.[clientId]||(state.clientes||[]).find(x=>x.id===clientId);
+    return cotClientIds(client?.fields?.['Cotizaciones']).includes(c.id);
+  }
   function filterQuotes(rows){
     const query=cotSearchKey(ui.search);
     // Solo nombres de clientes visibles para la sesión actual.
@@ -224,6 +237,7 @@
       });
     }
     return rows.filter(c=>{
+      if(ui.quoteClient&&!quoteBelongsToClient(c,ui.quoteClient.id))return false;
       const q=quoteInfo(c),f=c.fields;
       const match=ui.cot==='all'||ui.cot==='open'&&(q.pending||q.awaiting)||ui.cot==='pending'&&q.pending||ui.cot==='awaiting'&&q.awaiting||ui.cot==='expiring'&&q.awaiting&&q.expires!==null&&q.expires>=0&&q.expires<=3;
       if(!match||!query)return match;
@@ -416,7 +430,7 @@
     const all=own(state.cotizaciones);
     const metrics=[['Sin respuesta',all.filter(c=>quoteInfo(c).awaiting).length,'awaiting'],['Por vencer · 3 días',all.filter(c=>{const q=quoteInfo(c);return q.awaiting&&q.expires!==null&&q.expires>=0&&q.expires<=3;}).length,'expiring'],['Pendientes de envío',all.filter(c=>quoteInfo(c).pending).length,'pending']];
     $('opQuoteMetrics').innerHTML=metrics.map(([l,n,f])=>metric(l,String(n),'Filtrar cotizaciones','cot-filter',f)).join('');
-    $('opQuoteSelection').textContent=({all:'Todas',open:'Gestiones comerciales',awaiting:'Sin respuesta',expiring:'Por vencer en 3 días',pending:'Pendientes de envío'})[ui.cot]+' · '+rows.length+' cotizaciones';
+    $('opQuoteSelection').textContent=(ui.quoteClient?'Cotizaciones de '+ui.quoteClient.name:({all:'Todas',open:'Gestiones comerciales',awaiting:'Sin respuesta',expiring:'Por vencer en 3 días',pending:'Pendientes de envío'})[ui.cot])+' · '+rows.length+' cotizaciones';
     el.innerHTML=rows.length?rows.slice(0,ui.limit).map(c=>{
       const f=c.fields,q=quoteInfo(c),m=getMargenCot(f);
       const missingOrder=q.e==='Aprobada'&&!q.historical&&q.linkedOrder===null;
@@ -822,7 +836,7 @@
   if(typeof document!=='undefined'&&typeof document.addEventListener==='function')
     document.addEventListener('DOMContentLoaded',()=>{vaiConfigureFrame();vaiWatchTab();});
 
-  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,quoteWorkItems,quoteWorkDetail,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
+  global.OP={mount,mode,reveal,orders,quotes,overview,finance,collections,ads,client,filterQuotes,scopeQuotes,payment,paymentControls,orderPaymentDropdown,quoteInfo,quoteStateActions,marginColor,orderTeamControls,orderStateTone,orderStatusDropdown,quoteWorkItems,quoteWorkDetail,orderWorkItems,orderWorkDetail,agingMatch,day,until,openRecord,nextOrderStage};
   // Los botones de pago en Vista Tarjetas viven dentro de <details> y pueden
   // quedar aislados por handlers que detienen el bubbling en menús/tarjetas.
   // Interceptamos SOLO esas acciones en capture y reutilizamos el mismo dispatcher

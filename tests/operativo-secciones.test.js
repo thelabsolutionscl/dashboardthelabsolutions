@@ -53,8 +53,29 @@ test('el resumen de cliente incluye última actividad y sólo operaciones de su 
   sections.clients([client,rec('b',{Empresa:'Otro cliente',Vendedor:'otro'})]);
   const html=node('opClients').innerHTML;
   assert.match(html,/&lt;Cliente&gt;/);assert.match(html,/Hace 13 días/);
-  assert.match(html,/1 cotizaciones abiertas/);assert.match(html,/1 pedidos despachados o completados/);
+  assert.match(html,/1 cotización · 1 abiertas/);assert.match(html,/2 pedidos vinculados · 1 despachados o completados/);
   assert.doesNotMatch(html,/Otro cliente/);
+});
+test('lead con cotización aprobada muestra una vinculada aunque haya cero abiertas',()=>{
+  const {ctx,sections,node}=setup();
+  ctx.state.cotizaciones=[rec('q-aprobada',{Cliente:['lead-nuevo'],'Estado cotización':'Aprobada'})];
+  sections.clients([rec('lead-nuevo',{Empresa:'Lead con propuesta'})]);
+  const html=node('opClients').innerHTML;
+  assert.match(html,/1 cotización · 0 abiertas/);
+  assert.match(html,/1 cotización registrada/);
+  assert.doesNotMatch(html,/Sin cotizaciones ni pedidos registrados/);
+});
+test('la relación inversa Clientes.Cotizaciones se cuenta una sola vez, sin mezclar clientes',()=>{
+  const {ctx,sections,node}=setup();
+  ctx.state.cotizaciones=[
+    rec('q-1',{Cliente:[],'Estado cotización':'Enviada'}),
+    rec('q-2',{Cliente:['otro'],'Estado cotización':'Enviada'})
+  ];
+  sections.clients([rec('lead',{Empresa:'Lead vinculado',Cotizaciones:['q-1','q-1','q-2']})]);
+  const html=node('opClients').innerHTML;
+  assert.match(html,/1 cotización · 1 abiertas/);
+  assert.match(html,/1 cotizaciones enviadas, sin aprobación registrada/);
+  assert.doesNotMatch(html,/2 cotizaciones/);
 });
 test('la fecha de ingreso no se presenta como actividad comercial',()=>{
   const {ctx,sections,node}=setup();

@@ -9957,9 +9957,22 @@ function getSortValue(c,key){const f=c.fields;switch(key){case 'empresa':return(
 let _cliLastAct=null;
 function _buildCliLastAct(){
   const m={};
-  const upd=(campo,ts)=>{if(!campo||!ts)return;const id=Array.isArray(campo)?campo[0]:null;if(!id)return;if(!m[id]||ts>m[id])m[id]=ts;};
+  const upd=(campo,ts)=>{if(!campo||!ts)return;(Array.isArray(campo)?campo:[campo]).forEach(entry=>{const id=typeof entry==='string'?entry:entry?.id;if(!id)return;if(!m[id]||ts>m[id])m[id]=ts;});};
   (state.cotizaciones||[]).forEach(c=>{const f=c.fields;const d=f['Fecha cotización']||(c.createdTime||'').slice(0,10);if(d)upd(f['Cliente'],new Date(d+'T00:00:00').getTime());});
   (state.pedidos||[]).forEach(p=>{const f=p.fields;const d=f['Fecha despacho']||f['Fecha entrega']||(p.createdTime||'').slice(0,10);if(d)upd(f['Cliente'],new Date(d+'T00:00:00').getTime());});
+  // Airtable también puede entregar la asociación desde Clientes.Cotizaciones.
+  // Recuperar esas fechas sin inventar vínculos cuando Cliente apunta a otra ficha.
+  const quoteById=new Map((state.cotizaciones||[]).map(q=>[q.id,q]));
+  (state.clientes||[]).forEach(c=>{
+    const refs=c.fields?.['Cotizaciones'];
+    (Array.isArray(refs)?refs:[]).forEach(qid=>{
+      const q=quoteById.get(typeof qid==='string'?qid:qid?.id);if(!q)return;
+      const direct=q.fields?.['Cliente'];
+      if(Array.isArray(direct)&&direct.length&&!direct.includes(c.id))return;
+      const d=q.fields?.['Fecha cotización']||(q.createdTime||'').slice(0,10);
+      if(d)upd([c.id],new Date(d+'T00:00:00').getTime());
+    });
+  });
   _cliLastAct=m;
 }
 function _cliSilencioDias(c){
@@ -10325,8 +10338,17 @@ async function revertirALead(id){
   }catch(e){toast('Error: '+e.message,'error');}
 }
 function verCotizacionesCliente(clienteId,empresa){
+  if(window.OP?.scopeQuotes)OP.scopeQuotes(clienteId,empresa);
   switchTab('cotizaciones');
-  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cots=state.cotizaciones.filter(c=>{const campo=c.fields['Cliente'];if(!campo) return false;if(Array.isArray(campo)) return campo.includes(clienteId);return campo===empresa;});const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`);return;}_setRows(tbody,cots.map(c=>buildCotRow(c)).join(''));},50);
+  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{if(window.OP?.scopeQuotes)OP.scopeQuotes(null);document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cliente=state.clientesByIdRec?.[clienteId]||(state.clientes||[]).find(x=>x.id===clienteId);
+  const reverse=new Set(Array.isArray(cliente?.fields?.['Cotizaciones'])?cliente.fields['Cotizaciones'].map(id=>typeof id==='string'?id:id?.id):[]);
+  const cots=state.cotizaciones.filter(c=>{
+    if(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(c))return false;
+    const campo=c.fields?.['Cliente'];
+    const direct=(Array.isArray(campo)?campo:[campo]).map(id=>typeof id==='string'?id:id?.id).filter(Boolean);
+    if(direct.includes(clienteId)||campo===empresa)return true;
+    return !direct.length&&reverse.has(c.id);
+  });const tbody=document.getElementById('cotsTableBodyFull');if(!cots.length){_setRows(tbody,`<tr><td colspan="10"><div class="empty-state">Sin cotizaciones para ${escapeHtml(empresa)}</div></td></tr>`);return;}_setRows(tbody,cots.map(c=>buildCotRow(c)).join(''));},50);
 }
 function cotizarParaCliente(clienteId){const c=state.clientes.find(x=>x.id===clienteId);if(!c) return;switchTab('nueva-cot');setTimeout(()=>{selectCliente(clienteId);initDates();toast(`Cotizando para ${c.fields['Empresa']}`,'info');},100);}
 // El portal lo sirve el lead-worker, no este dashboard: acá solo se pide el
@@ -11787,7 +11809,7 @@ async function saveEditCot(){
       const _pedidoCreado=await crearPedidoDesdeCotizacion(cotId);
       _pedidoPendiente=!_pedidoCreado&&!_pedidoDeCot(_cotRec);
     }
-    toast(_pedidoPendiente?'⚠ Cotización aprobada, pero el pedido quedó pendiente de creación':'✓ Cotización actualizada',_pedidoPendiente?'error':'success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderCotToOrderTray();renderOverview();
+    toast(_pedidoPendiente?'⚠ Cotización aprobada, pero el pedido quedó pendiente de creación':'✓ Cotización actualizada',_pedidoPendiente?'error':'success');closeEditCot();switchTab('cotizaciones');await loadAllDataSilent();renderCotizaciones();renderCotToOrderTray();renderClientes();renderOverview();
     syncCotizacionADrive(cotId);
   }catch(e){toast('Error: '+e.message,'error');}
   btn.disabled=false;btn.textContent='💾 Guardar';
