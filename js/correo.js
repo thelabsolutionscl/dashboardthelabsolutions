@@ -704,7 +704,7 @@ const MAIL={
     const _propio=/@thelab\.solutions$/i.test(this._fromEmail(data.from_email));
     const _crmLine=_cli
       ?`<div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="badge-cliente">👤 Cliente: ${this.esc(_cli.fields['Empresa']||_cli.fields['Contacto']||'—')}</span><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="openClienteDetalle('${_cli.id}')">Ver ficha CRM →</button></div>`
-      :(!_propio&&this._fromEmail(data.from_email)?`<div style="margin-top:7px"><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="MAIL.crearLeadDesdeCorreo()" title="Crea un lead en el CRM con los datos de este correo">➕ Crear lead desde este correo</button></div>`:'');
+      :(!_propio&&this._fromEmail(data.from_email)?`<div style="margin-top:7px"><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:3px 10px" onclick="MAIL.crearLeadDesdeCorreo()" title="Crea un cliente en el CRM con los datos de este correo">➕ Crear cliente desde este correo</button></div>`:'');
     // Todas estas piezas son cabeceras que escribe QUIEN ENVÍA el correo: van
     // escapadas sin excepción. La fecha se escapaba sola por olvido, y es una
     // cabecera más (Date:), así que bastaba un correo para inyectar aquí.
