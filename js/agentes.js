@@ -1242,7 +1242,7 @@ function runSalesAgent(cliId){
 function runLeadGenAgent(){
   if(!state.loaded){toast('Carga los datos primero (↺ Actualizar)','error');return;}
   const ctx='En base a mi cartera actual (ver contexto), propón 3 nichos nuevos con potencial alto que aún no estoy atacando, con el formato completo por nicho.';
-  runAgentInline('LEADGEN',ctx,()=>`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();switchTab('nuevo-lead')">➕ Crear lead</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`);
+  runAgentInline('LEADGEN',ctx,()=>`<button class="btn btn-primary btn-sm" onclick="closeAgentInlineModal();switchTab('nuevo-lead')">➕ Crear cliente</button><button class="btn btn-ghost btn-sm" onclick="copyAgentResult()">📋 Copiar</button>`);
 }
 
 // — SALES: ranking diario de prioridad de leads
