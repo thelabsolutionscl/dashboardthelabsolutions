@@ -40,6 +40,11 @@ test('la interfaz presenta la creación manual como Nuevo cliente, no como Nuevo
   assert.match(cards,/data-ops="client-new"[^>]*>[\s\S]*?<b>Nuevo cliente<\/b>/);
   assert.doesNotMatch(cards,/data-ops="client-new"[^>]*>[\s\S]*?<b>Nuevo lead<\/b>/);
 });
+test('newsletter: ingreso manual de destinatario no contamina la cola de leads inbound',()=>{
+  const redes=fs.readFileSync(path.join(root,'js/redes.js'),'utf8');
+  assert.match(redes,/Suscrito newsletter':true,'Email válido':true,'Validado':true/);
+  assert.doesNotMatch(redes,/Suscrito newsletter':true,'Email válido':true,'Validado':false/);
+});
 test('las integraciones digitales conservan la condición LEAD sin validar',()=>{
   assert.match(worker,/Validado:\s*false/);
   assert.match(worker,/source:\s*"linkedin"/);
