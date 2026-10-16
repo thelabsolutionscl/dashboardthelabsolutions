@@ -1502,7 +1502,8 @@ async function loadAdsData(){
       try{ renderAdsCapacidad(demo); }catch(err){}
       try{ renderAdsSugerencias(demo); }catch(err){}
       renderPendingMutations();
-      try{ renderWebStats(getWebDemoData(days),days); }catch(err){}
+      // Un fallo de Google Ads no autoriza inventar visitantes de GA4.
+      try{ loadWebStats(); }catch(err){ console.error('loadWebStats',err); }
       const dot=document.getElementById('adsStatusDot');
       if(dot){dot.style.background='var(--warn)';dot.title='Modo demo — endpoint no disponible ('+e.message+')';}
       return;
