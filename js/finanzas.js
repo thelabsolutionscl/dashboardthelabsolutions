@@ -2182,7 +2182,7 @@ const GS_SECTIONS=[
   {tab:'redes',         icon:'icon-redes',          c:'#ec4899',title:'Redes Sociales',  kw:'instagram tiktok linkedin facebook social media contenido calendario posts comunidad'},
 ];
 const GS_ACTIONS=[
-  {nuevo:'nuevo-lead',     icon:'icon-user-plus',    title:'Nuevo Lead / Cliente',    kw:'crear agregar nuevo cliente contacto lead',  run:()=>switchTab('nuevo-lead')},
+  {nuevo:'nuevo-lead',     icon:'icon-user-plus',    title:'Nuevo cliente',         kw:'crear agregar nuevo cliente contacto lead',  run:()=>switchTab('nuevo-lead')},
   {nuevo:'nuevo-proveedor',icon:'icon-proveedores',  title:'Nuevo Proveedor',         kw:'crear agregar proveedor',                    run:()=>switchTab('nuevo-proveedor')},
   {nuevo:'nueva-cot',      icon:'icon-cotizaciones', title:'Nueva Cotización',        kw:'crear cotizar presupuesto',                  run:()=>switchTab('nueva-cot')},
   {nuevo:'nueva-venta',    icon:'icon-trending',     title:'Nueva Venta',             kw:'registrar venta ingreso',                    run:()=>{try{irANuevaVenta();}catch(e){}}},
