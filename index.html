@@ -9155,7 +9155,7 @@ function switchTab(name){
   if(name==='oficina'){ofSetView(_ofView);startOficinaPolling();}
   else stopOficinaPolling();
   if(name==='remuneraciones') renderRemuneraciones();
-  if(name==='web'){loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
+  if(name==='web'){loadWebStats().catch(e=>console.error('GA4',e));loadAdsSnapshotsFromAirtable().catch(()=>{}).finally(()=>loadAdsData());_startAdsMutationPoll();}
   if(name==='visual'){const vf=document.getElementById('vaiFrame');if(vf&&vf.src==='about:blank'&&vf.dataset.src){vf.src=vf.dataset.src;}}
   if(name==='correo') MAIL.init();
   if(name==='redes') initRedes();
