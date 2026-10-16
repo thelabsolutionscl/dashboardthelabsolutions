@@ -1568,10 +1568,16 @@ function webVisualSyncGuide(){
   const seo=document.getElementById('webGuideSeoValue');
   const seoMeta=document.getElementById('webGuideSeoMeta');
   const action=document.getElementById('webGuideAction');
-  webVisualSetText(visitors,webVisualText('web-kpi-usuarios'));
+  const gaStatus=document.getElementById('webTrafficPanel')?.dataset.gaStatus||'idle';
+  webVisualSetText(visitors,gaStatus==='loading'?'…':
+    ['script','service','property','error'].includes(gaStatus)?'No disponible':
+    webVisualText('web-kpi-usuarios'));
   if(trafficMeta){
     const sessions=webVisualText('web-kpi-sesiones','sin datos');
-    webVisualSetText(trafficMeta,sessions==='sin datos'?'Personas que llegan a tu sitio':'Sesiones: '+sessions);
+    webVisualSetText(trafficMeta,gaStatus==='loading'?'Conectando con Google Analytics 4…':
+      ['script','service','property','error'].includes(gaStatus)?'Revisa diagnóstico GA4':
+      gaStatus==='demo'?'Datos DEMO · no son visitas reales':
+      sessions==='sin datos'?'Personas que llegan a tu sitio':'Sesiones: '+sessions);
   }
   webVisualSetText(ads,webVisualText('ads-kpi-roas'));
   if(adsMeta){
@@ -1587,7 +1593,9 @@ function webVisualSyncGuide(){
     const stale=document.getElementById('adsStaleWarning');
     const pending=document.getElementById('adsPendingPanel');
     const score=webVisualNumber(webVisualText('seoAuditScore',''));
-    if(stale&&getComputedStyle(stale).display!=='none'){
+    if(['script','service','property','error'].includes(gaStatus)){
+      webVisualSetAction(action,'<b>1.</b> Revisa la conexión de Analytics para recuperar las visitas.','traffic');
+    }else if(stale&&getComputedStyle(stale).display!=='none'){
       webVisualSetAction(action,'<b>1.</b> Actualiza Google Ads: los datos están desactualizados.','ads');
     }else if(pending&&getComputedStyle(pending).display!=='none'){
       webVisualSetAction(action,'<b>1.</b> Revisa los cambios de Google Ads que aún están pendientes.','ads');
