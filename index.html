@@ -1415,11 +1415,11 @@
   </div>
 </div>
 
-<!-- NUEVO LEAD -->
+<!-- ALTA MANUAL DE CLIENTE (los leads externos ingresan por integraciones) -->
 <div class="tab-panel pf" id="tab-nuevo-lead">
-  <div class="section-header"><div class="section-title">Nuevo Lead / Cliente</div></div>
+  <div class="section-header"><div class="section-title">Nuevo cliente</div></div>
   <div class="card">
-    <div class="card-header"><span class="card-title">Datos del Lead</span><button id="watiConfigBtn" onclick="openWatiModal()" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer">⚙ WATI</button></div>
+    <div class="card-header"><span class="card-title">Datos del cliente</span><button id="watiConfigBtn" onclick="openWatiModal()" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer">⚙ WATI</button></div>
     <div class="form-grid">
       <div class="field-group" style="position:relative">
         <label class="field-label">Empresa * <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">— escribe para buscar una existente o crear una nueva</span></label>
@@ -1450,7 +1450,7 @@
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="clearForm('lead')">Limpiar</button>
       <button class="btn btn-ghost" id="leadAgentBtn" onclick="runLeadAgent()" style="color:var(--accent2);border-color:rgba(255,107,53,0.4)"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-settings"/></svg> Analizar con IA</button>
-      <button class="btn btn-primary" id="createLeadBtn" onclick="createLead()">✚ Crear en Airtable</button>
+      <button class="btn btn-primary" id="createLeadBtn" onclick="createLead()">✚ Crear cliente</button>
     </div>
   </div>
   <!-- Panel resultado LEAD_AGENT -->
@@ -13677,7 +13677,8 @@ async function createLead(){
   try{provenance=_crmNewClientProvenance(document.getElementById('nl-primer-contacto').value,document.getElementById('nl-evidencia-contacto').value);}
   catch(e){toast(e.message,'error');return;}
   btn.disabled=true;btn.textContent='Creando...';
-  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0};
+  // Alta MANUAL: es un cliente, nunca un lead inbound aunque el origen registrado sea Instagram o LinkedIn.
+  const fields={'Empresa':empresa,'Contacto':contacto,'Cargo contacto':document.getElementById('nl-cargo').value,'Teléfono':document.getElementById('nl-telefono').value,'Email':email,'Origen lead':document.getElementById('nl-origen').value,'Notas internas':document.getElementById('nl-notas').value,'Validado':true,'Estado cuenta':'Al día','Facturas vencidas':0};
   if(provenance.date)fields['Fecha primer contacto']=provenance.date;
   if(provenance.note)fields['Notas internas']=(fields['Notas internas']?fields['Notas internas'].trimEnd()+'\n\n':'')+provenance.note;
   // No inventar canal de adquisición al crear un lead sin atribución confirmada.
@@ -13702,18 +13703,19 @@ async function createLead(){
     return rec;
   };
   try{
-    await saveAndPatch(fields);
-    toast(`✓ "${empresa}" creado${_leadAgentResponse?' + análisis guardado':''}`, 'success');
+    const rec=await saveAndPatch(fields);
+    if(rec?.id){state.clientes=_mergeRecords(state.clientes,[rec]);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}
+    toast(`✓ Cliente "${empresa}" creado${_leadAgentResponse?' + análisis guardado':''}`, 'success');
     _leadAgentResponse=null;
     document.getElementById('leadAgentPanel').style.display='none';
-    clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();
+    clearForm('lead');if(typeof setCliCat==='function')setCliCat('cliente');switchTab('clientes');await loadAllDataSilent();renderClientes();renderOverview();
   }catch(e){
     if(ciudadVal&&_clienteSchemaRetryable(e)){
-      try{delete fields['Comuna'];await saveAndPatch(fields);toast(`✓ "${empresa}" creado`,'success');_leadAgentResponse=null;document.getElementById('leadAgentPanel').style.display='none';clearForm('lead');await loadAllDataSilent();renderClientes();renderOverview();}
+      try{delete fields['Comuna'];const rec=await saveAndPatch(fields);if(rec?.id){state.clientes=_mergeRecords(state.clientes,[rec]);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}toast(`✓ Cliente "${empresa}" creado`,'success');_leadAgentResponse=null;document.getElementById('leadAgentPanel').style.display='none';clearForm('lead');if(typeof setCliCat==='function')setCliCat('cliente');switchTab('clientes');await loadAllDataSilent();renderClientes();renderOverview();}
       catch(e2){toast('Error: '+e2.message,'error');}
     }else{toast('Error: '+e.message,'error');}
   }
-  btn.disabled=false;btn.textContent='✚ Crear en Airtable';
+  btn.disabled=false;btn.textContent='✚ Crear cliente';
 }
 
 // ── NUEVA COT ─────────────────────────────────────────────────
@@ -14351,7 +14353,7 @@ async function gfClientCreate(){
   if(!empresa){toast('Empresa requerida','error');return;}
   try{
     toast('Creando cliente…','info');
-    const f={'Empresa':empresa,'Contacto':contacto||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0}; // Alta rápida: fecha desconocida
+    const f={'Empresa':empresa,'Contacto':contacto||'','Validado':true,'Estado cuenta':'Al día','Facturas vencidas':0}; // Alta rápida manual: CLIENTE; fecha de primer contacto desconocida
     if(isVendorMode())f['Vendedor']=currentVendorId();
     const rec=await airtableWrite('Clientes','POST',null,f);
     if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=empresa;state.clientesByIdRec[rec.id]=rec;}
@@ -14536,7 +14538,7 @@ function startNewClientFlow(){
     {key:'rut',type:'text',q:'¿RUT?',sub:'Opcional.',rows:1,placeholder:'76.123.456-7'},
     {key:'ciudad',type:'text',q:'¿Ciudad?',sub:'Opcional.',rows:1,placeholder:'Ej: Santiago'},
     {key:'web',type:'text',q:'¿Sitio web?',sub:'Opcional.',rows:1,placeholder:'https://…'},
-    {key:'origen',type:'chips',q:'¿De dónde viene el lead?',options:_ORIGEN_OPTS},
+    {key:'origen',type:'chips',q:'¿Cuál fue el origen del contacto?',options:_ORIGEN_OPTS},
     {key:'fechaPrimerContacto',type:'date',q:'¿Cuándo fue realmente el primer contacto?',sub:'Opcional. Vacío si se desconoce: la fecha de alta no prueba adquisición.'},
     {key:'evidenciaPrimerContacto',type:'text',q:'¿Qué evidencia confirma esa fecha antigua?',sub:'Referencia al correo, mensaje, formulario o contrato original.',rows:2,skip:a=>!a.fechaPrimerContacto||a.fechaPrimerContacto>=hoyCL()},
     {key:'notas',type:'text',q:'Notas internas',sub:'Opcional.',rows:2,placeholder:'Contexto, necesidades…'},
@@ -14546,7 +14548,8 @@ function startNewClientFlow(){
     let provenance;
     try{provenance=_crmNewClientProvenance(a.fechaPrimerContacto||'',a.fechaPrimerContacto?a.evidenciaPrimerContacto||'':'');}
     catch(e){toast(e.message,'error');return;}
-    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Notas internas':a.notas||'','Validado':false,'Estado cuenta':'Al día','Facturas vencidas':0};
+    // Alta manual guiada: categoría Cliente, incluso si el contacto procede de una red social.
+    const f={'Empresa':a.empresa,'Contacto':a.contacto||'','Cargo contacto':a.cargo||'','Teléfono':a.telefono||'','Email':a.email||'','RUT':a.rut||'','Ciudad':a.ciudad||'','Sitio web':a.web||'','Notas internas':a.notas||'','Validado':true,'Estado cuenta':'Al día','Facturas vencidas':0};
     if(a.origen)f['Origen lead']=a.origen;
     if(provenance.date)f['Fecha primer contacto']=provenance.date;
     if(provenance.note)f['Notas internas']=(f['Notas internas']?f['Notas internas'].trimEnd()+'\n\n':'')+provenance.note;
@@ -14556,7 +14559,7 @@ function startNewClientFlow(){
     try{rec=await airtableWrite('Clientes','POST',null,f);}
     catch(e){if(_clienteSchemaRetryable(e)){['Origen lead','Sitio web','Ciudad','RUT','Cargo contacto'].forEach(k=>delete f[k]);rec=await airtableWrite('Clientes','POST',null,f);}else throw e;}
     if(rec&&rec.id){state.clientes.push(rec);state.clientesById[rec.id]=a.empresa;state.clientesByIdRec[rec.id]=rec;}
-    _gfClearDraft();gfClose();switchTab('clientes');if(typeof renderClientes==='function')renderClientes();renderOverview();
+    _gfClearDraft();gfClose();if(typeof setCliCat==='function')setCliCat('cliente');switchTab('clientes');if(typeof renderClientes==='function')renderClientes();renderOverview();
     toast('✓ Cliente "'+a.empresa+'" creado','success');
   }});
 }
