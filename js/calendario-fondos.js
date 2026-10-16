@@ -22,6 +22,21 @@
   };
   const pretty=v=>{if(!iso(v))return 'Por confirmar';const d=new Date(v.slice(0,10)+'T12:00:00');return d.toLocaleDateString('es-CL',{day:'2-digit',month:'short',year:'numeric'})+(v.includes('T')&&v.slice(11,16)!=='00:00'?' · '+v.slice(11,16)+' h':'');};
   const allowedUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&/^(?:www\.)?(?:sercotec\.cl|corfo\.cl|corfo\.gob\.cl|fondos\.gob\.cl|prochile\.gob\.cl|startupchile\.org)$/.test(u.hostname);}catch{return false;}};
+  const validFunding=f=>{
+    const d=f?.funding;if(!d||typeof d!=='object'||!allowedUrl(d.source)||
+      !['verified','reference'].includes(d.status))return null;
+    const max=Number(d.maxCLP),min=d.minCLP==null?0:Number(d.minCLP);
+    if(!Number.isSafeInteger(max)||max<=0||max>100000000000||
+      !Number.isSafeInteger(min)||min<0||min>max)return null;
+    return {maxCLP:max,minCLP:min,status:d.status,detail:String(d.detail||'').slice(0,450),source:d.source};
+  };
+  const money=n=>'$'+new Intl.NumberFormat('es-CL',{maximumFractionDigits:0}).format(n);
+  const fundingHeading=f=>f.funding?.status==='verified'?'SUBSIDIO MÁXIMO':'REFERENCIA ANTERIOR';
+  const fundingValue=f=>f.funding?'Hasta '+money(f.funding.maxCLP):'Por confirmar';
+  const fundingExplanation=f=>f.funding
+    ?(f.funding.minCLP?'Rango: '+money(f.funding.minCLP)+' a '+money(f.funding.maxCLP)+'. ':'')+
+      f.funding.detail+(f.funding.status==='reference'?' La próxima convocatoria puede cambiar el tope.':'')
+    :'Sin monto verificable en la ficha de este llamado. Consultar bases oficiales.';
   const clean=f=>{
     if(!f||typeof f!=='object'||!/^[a-z0-9-]{3,90}$/.test(f.id||'')||typeof f.name!=='string'||!allowedUrl(f.source))return null;
     const begin=iso(f.open),end=iso(f.close);
@@ -32,6 +47,7 @@
       open:begin?String(f.open):'',close:end?String(f.close):'',
       source:f.source,info:allowedUrl(f.info)?f.info:f.source,
       verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900),
+      funding:validFunding(f),
       milestones:(Array.isArray(f.milestones)?f.milestones:[]).slice(0,12).map(m=>{
         if(!m||typeof m!=='object'||!/^[a-z0-9-]{3,60}$/.test(String(m.id||''))||
           typeof m.name!=='string'||m.name.length<6||m.name.length>160||
@@ -683,10 +699,15 @@
             (iso(f.close)?'<button type="button" class="fondos-inline-jump" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="close">Ver en calendario ↗</button>':'')+
           '</div></div>':
         '<div class="fondos-date-strip"><div class="fondos-date fondos-date--unknown"><small>Próximo llamado</small><b>Fechas por confirmar en fuente oficial</b></div></div>';
+      const amount='<div class="fondos-funding" data-kind="'+(f.funding?f.funding.status:'unknown')+
+        '" title="'+esc(fundingExplanation(f))+'" aria-label="Financiamiento: '+esc(fundingValue(f))+'">'+
+        '<small>'+(f.funding?esc(fundingHeading(f)):'MONTO A ENTREGAR')+'</small>'+
+        '<strong>'+esc(fundingValue(f))+'</strong>'+
+        (f.funding?.minCLP?'<span>Desde '+esc(money(f.funding.minCLP))+'</span>':'')+'</div>';
       return '<article class="fondos-row" data-status="'+stage+'" data-fondos-card="'+esc(f.id)+'">'+
         '<div class="fondos-row-main">'+
           '<div class="fondos-card-top"><span class="fondos-card-org"><span class="fondos-org-icon" aria-hidden="true">'+esc(acronym)+'</span><span>'+esc(f.organizer)+'</span></span>'+
-          '<span class="fondos-status" data-tone="'+stage+'">'+esc(title)+'</span></div>'+
+          '<div class="fondos-card-side">'+amount+'<span class="fondos-status" data-tone="'+stage+'">'+esc(title)+'</span></div></div>'+
           '<div class="fondos-eyebrow">'+esc(label)+'</div>'+
           '<h3 class="fondos-card-name">'+esc(f.name)+'</h3>'+
           '<div class="fondos-card-meta">⌖ '+esc(f.region)+'</div>'+
@@ -769,9 +790,12 @@
       '<div class="fondos-detail-grid">'+
         '<div class="fondos-detail-cell"><small>Estado</small><b>'+esc(status(f))+'</b></div>'+
         '<div class="fondos-detail-cell"><small>Encaje estimado</small><b>'+esc(f.fit)+'</b></div>'+
+        '<div class="fondos-detail-cell fondos-detail-funding"><small>'+esc(f.funding?fundingHeading(f):'Monto a entregar')+'</small><b>'+esc(fundingValue(f))+'</b></div>'+
         '<div class="fondos-detail-cell"><small>Apertura</small><b>'+esc(pretty(f.open))+'</b></div>'+
         '<div class="fondos-detail-cell"><small>Cierre</small><b>'+esc(pretty(f.close))+'</b></div>'+
       '</div>'+
+      '<div class="fondos-funding-detail"><b>Condiciones del financiamiento</b><p>'+esc(fundingExplanation(f))+'</p>'+
+        (f.funding?'<a href="'+esc(f.funding.source)+'" target="_blank" rel="noopener noreferrer">Consultar monto oficial ↗</a>':'')+'</div>'+
       '<div class="fondos-detail-section"><h4>Hitos y entregas obligatorias verificadas</h4>'+
         (confirmedMilestones(f).length?'<ul>'+confirmedMilestones(f).map(m=>'<li><strong>'+
           esc(m.name)+'</strong> · '+esc(pretty(m.date))+' · '+link(m.source,'Fuente oficial')+

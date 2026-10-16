@@ -17,7 +17,13 @@
       "source": "https://www.sercotec.cl/wp-content/uploads/2026/06/Bases-de-Convocatoria_Crece-Multisectorial_Urbano-2026_Metropolitana.pdf",
       "info": "https://www.sercotec.cl/convocatoria/crece-urbano-region-metropolitana-2026/",
       "verified": "Bases oficiales 2026, sección 2.1; confirmar eventuales prórrogas.",
-      "requirements": "Empresa activa 1ª categoría y ventas anuales de 200 UF a menos de 25.000 UF, además de restricciones regionales y otras condiciones en bases."
+      "requirements": "Empresa activa 1ª categoría y ventas anuales de 200 UF a menos de 25.000 UF, además de restricciones regionales y otras condiciones en bases.",
+      "funding": {
+        "maxCLP": 5000000,
+        "status": "verified",
+        "detail": "Subsidio no reembolsable por empresa; requiere aporte propio según bases.",
+        "source": "https://www.sercotec.cl/convocatoria/crece-urbano-region-metropolitana-2026/"
+      }
     },
     {
       "id": "sercotec-crece-sostenible-rm-2026",
@@ -32,7 +38,14 @@
       "source": "https://www.sercotec.cl/wp-content/uploads/2026/06/Bases-de-Convocatoria_Crece-Sostenible-2026_Metropolitana.pdf",
       "info": "https://www.sercotec.cl/convocatoria/crece-sostenible-region-metropolitana-2026/",
       "verified": "Bases oficiales 2026, sección 2.1; confirmar modificaciones.",
-      "requirements": "Empresa activa con ventas netas anuales de 200 UF hasta 25.000 UF, plan de sostenibilidad y restricciones del instrumento."
+      "requirements": "Empresa activa con ventas netas anuales de 200 UF hasta 25.000 UF, plan de sostenibilidad y restricciones del instrumento.",
+      "funding": {
+        "minCLP": 7000000,
+        "maxCLP": 9000000,
+        "status": "verified",
+        "detail": "Rango neto por proyecto RM, más aporte de la empresa e impuestos asociados.",
+        "source": "https://www.sercotec.cl/convocatoria/crece-sostenible-region-metropolitana-2026/"
+      }
     },
     {
       "id": "sercotec-kit-digital-2026",
@@ -47,7 +60,13 @@
       "source": "https://www.sercotec.cl/wp-content/uploads/2026/06/Bases-RUTA-DIGITAL-Kit-Digital-2026-Metropolitana-VB%C2%B0.pdf",
       "info": "https://www.sercotec.cl/programas/ruta-digital/",
       "verified": "Bases RM 2026, sección de calendario: 16 a 26 junio, ambas 12:00; revisar avisos de prórroga.",
-      "requirements": "Empresa formalizada en 1ª categoría, ventas netas positivas hasta 25.000 UF, nueve cursos de Ruta Digital aprobados previamente, no haber sido beneficiaria anterior y requisitos tributarios según bases."
+      "requirements": "Empresa formalizada en 1ª categoría, ventas netas positivas hasta 25.000 UF, nueve cursos de Ruta Digital aprobados previamente, no haber sido beneficiaria anterior y requisitos tributarios según bases.",
+      "funding": {
+        "maxCLP": 1200000,
+        "status": "verified",
+        "detail": "Subsidio del programa Ruta Digital para herramientas digitales, condicionado a nueve cursos aprobados y bases regionales.",
+        "source": "https://www.sercotec.cl/programas/ruta-digital/"
+      }
     },
     {
       "id": "sercotec-crece-proximas",
@@ -62,7 +81,13 @@
       "source": "https://www.sercotec.cl/convocatoria/",
       "info": "https://www.sercotec.cl/convocatoria/",
       "verified": "Programa recurrente; sin fechas confirmadas para una nueva convocatoria al 14/10/2026.",
-      "requirements": "Revisar tamaño de empresa, ventas, RUT, beneficiarios anteriores y bases del llamado."
+      "requirements": "Revisar tamaño de empresa, ventas, RUT, beneficiarios anteriores y bases del llamado.",
+      "funding": {
+        "maxCLP": 5000000,
+        "status": "reference",
+        "detail": "Referencia de Crece Urbano RM 2026; el monto de la siguiente convocatoria puede cambiar.",
+        "source": "https://www.sercotec.cl/convocatoria/crece-urbano-region-metropolitana-2026/"
+      }
     },
     {
       "id": "corfo-sumate-innovar",
@@ -92,7 +117,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/gestion-de-innovacion-en-pymes-2026/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/gestion-de-innovacion-en-pymes-2026/",
       "verified": "Ficha convocatoria Corfo 2026: apertura 19/05 17:00, cierre 15/07 17:00; se orienta a gestión de innovación y grupos de empresas.",
-      "requirements": "Verificar modalidad individual o grupal, constitución, giro, implementación, gastos elegibles y cofinanciamiento en bases del llamado."
+      "requirements": "Verificar modalidad individual o grupal, constitución, giro, implementación, gastos elegibles y cofinanciamiento en bases del llamado.",
+      "funding": {
+        "maxCLP": 7200000,
+        "status": "verified",
+        "detail": "Tope POR BENEFICIARIO atendido. El máximo agregado por proyecto es $72.000.000 (70% del costo); no equivale al beneficio individual.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/gestion-de-innovacion-en-pymes-2026/"
+      }
     },
     {
       "id": "corfo-crea-y-valida-2026",
@@ -117,7 +148,13 @@
           "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
           "verified": "Corfo, ficha oficial Crea y Valida 2026: Fase 1, presentación de perfil obligatorio hasta las 17:00 del 09/06/2026; sin esta etapa no se habilita postulación final."
         }
-      ]
+      ],
+      "funding": {
+        "maxCLP": 180000000,
+        "status": "verified",
+        "detail": "Hasta $180.000.000 por proyecto individual; hasta $220.000.000 colaborativo, con cofinanciamiento según tamaño y bases 2026.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/"
+      }
     },
     {
       "id": "corfo-consolida-expande-innovacion-2026",
@@ -132,7 +169,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/consolida-y-expande-innovacion-2026/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/consolida-y-expande-innovacion-2026/",
       "verified": "Ficha Corfo 2026: 05/05 17:00 a 18/06 17:00; convocatoria cerrada.",
-      "requirements": "Primera categoría vigente con al menos 18 meses, ventas en ese período, innovación validada basada en I+D y plan de escalamiento; cofinanciamiento."
+      "requirements": "Primera categoría vigente con al menos 18 meses, ventas en ese período, innovación validada basada en I+D y plan de escalamiento; cofinanciamiento.",
+      "funding": {
+        "maxCLP": 150000000,
+        "status": "verified",
+        "detail": "Tope por proyecto; porcentaje cofinanciado varía con tamaño de la empresa (40–60%, condiciones especiales aparte).",
+        "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/consolida-y-expande-innovacion-2026/"
+      }
     },
     {
       "id": "corfo-desarrolla-inversion-rm-descarbonizacion-2026",
@@ -147,7 +190,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/desarrolla-inversion-productiva-region-metropolitana-foco-descarbonizacion-2026/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/desarrolla-inversion-productiva-region-metropolitana-foco-descarbonizacion-2026/",
       "verified": "Ficha Corfo RM 2026: apertura 18/02 15:00 y cierre 15/05 15:00; línea descarbonización/economía circular.",
-      "requirements": "Contribuyente primera categoría, proyecto de inversión total igual o superior a $12 millones, ejecución RM, coherencia con foco descarbonización y cofinanciamiento (hasta 60%, tope $20 millones según ficha)."
+      "requirements": "Contribuyente primera categoría, proyecto de inversión total igual o superior a $12 millones, ejecución RM, coherencia con foco descarbonización y cofinanciamiento (hasta 60%, tope $20 millones según ficha).",
+      "funding": {
+        "maxCLP": 20000000,
+        "status": "verified",
+        "detail": "Hasta 60% del costo total del proyecto RM; inversión mínima del proyecto: $12.000.000.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/desarrolla-inversion-productiva-region-metropolitana-foco-descarbonizacion-2026/"
+      }
     },
     {
       "id": "corfo-red-proveedores-rm-2026",
@@ -162,7 +211,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/red-proveedores-region-metropolitana-etapa-desarrollo-2026/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/red-proveedores-region-metropolitana-etapa-desarrollo-2026/",
       "verified": "Ficha Corfo RM 2026: apertura 18/02 15:00 y cierre 09/09 15:00, ejecutable como proveedor colaborador, no individual.",
-      "requirements": "Postula empresa demandante con ventas sobre 25.000 UF; al menos cinco proveedoras; revisar convenios, territorialidad RM, foco inteligente e innovación."
+      "requirements": "Postula empresa demandante con ventas sobre 25.000 UF; al menos cinco proveedoras; revisar convenios, territorialidad RM, foco inteligente e innovación.",
+      "funding": {
+        "maxCLP": 60000000,
+        "status": "verified",
+        "detail": "Tope POR PROYECTO Y PERÍODO para iniciativa sustentable (50%). Proyectos no sustentables: hasta $50.000.000 (40%). Postula empresa demandante, no directamente TLS.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/red-proveedores-region-metropolitana-etapa-desarrollo-2026/"
+      }
     },
     {
       "id": "sercotec-pymes-globales-vigilar",
@@ -207,7 +262,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/programa/innova-region/",
       "info": "https://www.corfo.gob.cl/sites/cpp/programa/innova-region/",
       "verified": "Programa Corfo. El último llamado RM identificado en el portal es 2025; no extrapolar fechas 2026/2027.",
-      "requirements": "Empresa con primera categoría por al menos 18 meses, ventas y proyecto con contenido innovador; verificar focalización y bases RM."
+      "requirements": "Empresa con primera categoría por al menos 18 meses, ventas y proyecto con contenido innovador; verificar focalización y bases RM.",
+      "funding": {
+        "maxCLP": 60000000,
+        "status": "reference",
+        "detail": "Tope general del instrumento Innova Región. El llamado RM próximo puede modificar el financiamiento y focalización.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/programa/innova-region/"
+      }
     },
     {
       "id": "corfo-focal-rm-vigilar",
@@ -237,7 +298,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea_valida_eureka/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea_valida_eureka/",
       "verified": "Página Corfo con postulación permanente condicionada a fase I internacional; sin una fecha única de cierre para mostrar.",
-      "requirements": "Socio internacional, selección fase I Eureka, empresa chilena y 24 meses de antigüedad, innovación real, cofinanciamiento."
+      "requirements": "Socio internacional, selección fase I Eureka, empresa chilena y 24 meses de antigüedad, innovación real, cofinanciamiento.",
+      "funding": {
+        "maxCLP": 220000000,
+        "status": "reference",
+        "detail": "Tope vigente del instrumento Crea y Valida Eureka; requiere colaboración internacional y admisión a la fase correspondiente.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea_valida_eureka/"
+      }
     },
     {
       "id": "sercotec-mejoranegocios-vigilar",
@@ -312,7 +379,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/programa/programa-absorcion-tecnologica-innovacion/",
       "info": "https://www.corfo.gob.cl/sites/cpp/programa/programa-absorcion-tecnologica-innovacion/",
       "verified": "La tabla de convocatorias del programa oficial reporta apertura 18/11/2025 y término 15/07/2026, sin hora; 00:00 se usa solo como marcador de día. Corroborar restricciones/suspensiones.",
-      "requirements": "Beneficiaria o gestora con al menos 24 meses de inicio de actividades de primera categoría y ventas en los 24 meses previos; trabajo con conjunto de empresas y proyecto de absorción."
+      "requirements": "Beneficiaria o gestora con al menos 24 meses de inicio de actividades de primera categoría y ventas en los 24 meses previos; trabajo con conjunto de empresas y proyecto de absorción.",
+      "funding": {
+        "maxCLP": 350000000,
+        "status": "verified",
+        "detail": "Monto máximo POR PROYECTO AGRUPADO gestionado para varias empresas, no una asignación individual directa a TLS.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/nacional/corfo-abre-convocatorias-para-apoyar-a-pymes-en-absorcion-tecnologica-y-contratacion-de-capital-humano-para-innovar/"
+      }
     },
     {
       "id": "corfo-capital-humano-innovacion-2025-2026",
@@ -327,7 +400,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/capital-humano-para-la-innovacion-2025/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/capital-humano-para-la-innovacion-2025/",
       "verified": "Ficha oficial Corfo Capital Humano para la Innovación (convocatoria 2025, cierre en mayo 2026). Postulaciones cerradas.",
-      "requirements": "Empresa constituida en Chile; contratación de profesional o técnico superior calificado para abordar desafío demostrable de I+D+i, sujeto a bases y contrapartes."
+      "requirements": "Empresa constituida en Chile; contratación de profesional o técnico superior calificado para abordar desafío demostrable de I+D+i, sujeto a bases y contrapartes.",
+      "funding": {
+        "maxCLP": 40000000,
+        "status": "verified",
+        "detail": "Subsidio de hasta $40.000.000 por proyecto para contratación de personal especializado; porcentaje depende del tamaño de la empresa.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/nacional/corfo-abre-convocatorias-para-apoyar-a-pymes-en-absorcion-tecnologica-y-contratacion-de-capital-humano-para-innovar/"
+      }
     },
     {
       "id": "corfo-pati-futuras",
@@ -342,7 +421,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/programa/programa-absorcion-tecnologica-innovacion/",
       "info": "https://www.corfo.gob.cl/sites/cpp/programa/programa-absorcion-tecnologica-innovacion/",
       "verified": "Programa oficial identificado. La última ventana registrada terminó 15/07/2026; sin nueva fecha validada al 14/10/2026.",
-      "requirements": "Verificar bases de futura convocatoria, elegibilidad como beneficiaria o gestora, consorcio de empresas, ventas y cofinanciamiento."
+      "requirements": "Verificar bases de futura convocatoria, elegibilidad como beneficiaria o gestora, consorcio de empresas, ventas y cofinanciamiento.",
+      "funding": {
+        "maxCLP": 350000000,
+        "status": "reference",
+        "detail": "Referencia 2025–2026 del monto POR PROYECTO AGRUPADO; no compromete fondos individuales ni la próxima edición.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/nacional/corfo-abre-convocatorias-para-apoyar-a-pymes-en-absorcion-tecnologica-y-contratacion-de-capital-humano-para-innovar/"
+      }
     },
     {
       "id": "corfo-capital-humano-futuras",
@@ -357,7 +442,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/capital-humano-para-la-innovacion-2025/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/capital-humano-para-la-innovacion-2025/",
       "verified": "Última ficha oficial 2025–2026 cerrada el 28/05/2026. Sin nueva apertura confirmada al 14/10/2026.",
-      "requirements": "Validar bases futuras, actividades técnicas de I+D+i, especialista, antigüedad/ventas y porcentaje de contraparte."
+      "requirements": "Validar bases futuras, actividades técnicas de I+D+i, especialista, antigüedad/ventas y porcentaje de contraparte.",
+      "funding": {
+        "maxCLP": 40000000,
+        "status": "reference",
+        "detail": "Referencia 2025–2026; nuevo llamado y monto por confirmar en bases oficiales.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/nacional/corfo-abre-convocatorias-para-apoyar-a-pymes-en-absorcion-tecnologica-y-contratacion-de-capital-humano-para-innovar/"
+      }
     },
     {
       "id": "corfo-innova-alta-tecnologia-eureka-vigilar",
@@ -417,7 +508,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-inicia/",
       "info": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-inicia/",
       "verified": "Ficha Corfo: RM abrió 30/04/2026 y cerró 29/05/2026; ninguna nueva apertura en noviembre de 2026 confirmada oficialmente al 14/10/2026.",
-      "requirements": "La versión consultada exige personas jurídicas con menos de 18 meses de iniciación de actividades y sin ventas. Validar bases, territorio y requisitos del nuevo llamado."
+      "requirements": "La versión consultada exige personas jurídicas con menos de 18 meses de iniciación de actividades y sin ventas. Validar bases, territorio y requisitos del nuevo llamado.",
+      "funding": {
+        "maxCLP": 15000000,
+        "status": "reference",
+        "detail": "Tope general por proyecto Semilla Inicia. Exige emprendimientos sin ventas y antigüedad limitada: TLS existente podría no ser elegible.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-inicia/"
+      }
     },
     {
       "id": "corfo-semilla-expande-nueva-vigilar",
@@ -432,7 +529,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-expande/",
       "info": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-expande/",
       "verified": "Ficha Corfo: llamado nacional 15/01/2026 a 24/02/2026; no hay fecha confirmada oficialmente para otro llamado en noviembre de 2026 al 14/10/2026.",
-      "requirements": "Persona jurídica con menos de 36 meses de iniciación de actividades y ventas netas máximo $80.000.000 en últimos 12 meses, según ficha del programa. Confirmar cambios en nuevas bases."
+      "requirements": "Persona jurídica con menos de 36 meses de iniciación de actividades y ventas netas máximo $80.000.000 en últimos 12 meses, según ficha del programa. Confirmar cambios en nuevas bases.",
+      "funding": {
+        "maxCLP": 25000000,
+        "status": "reference",
+        "detail": "Etapa 1 hasta $25.000.000; posible etapa 2 adicional hasta $20.000.000 previa aprobación. No sumar como monto seguro.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-expande/"
+      }
     },
     {
       "id": "corfo-crea-y-valida-proxima-vigilar",
@@ -447,7 +550,13 @@
       "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
       "info": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
       "verified": "Convocatoria oficial 2026 abrió 19/05 y cerró 04/08. La fecha 27/11/2026 en la ficha es de resultados, NO una nueva apertura. No hay segunda ventana confirmada al 14/10/2026.",
-      "requirements": "Personas jurídicas con al menos 24 meses de primera categoría, ventas previas e I+D. En 2026 el perfil era obligatorio y tenía fecha independiente; comprobar nuevas bases y fases."
+      "requirements": "Personas jurídicas con al menos 24 meses de primera categoría, ventas previas e I+D. En 2026 el perfil era obligatorio y tenía fecha independiente; comprobar nuevas bases y fases.",
+      "funding": {
+        "maxCLP": 180000000,
+        "status": "reference",
+        "detail": "Referencia del llamado 2026 para proyecto individual; modalidad colaborativa tuvo tope de $220.000.000. Próxima edición no confirmada.",
+        "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/"
+      }
     },
     {
       "id": "startupchile-big-proximo-vigilar",
@@ -479,5 +588,6 @@
       "verified": "Ficha oficial Corfo Start-Up Chile Build 11: apertura 05/11/2025 13:00 y cierre 28/11/2025 13:00. Histórico; sin alertas retroactivas.",
       "requirements": "Se aplicaron las bases de BIG 11. La nueva convocatoria debe evaluarse por separado, según su publicación oficial."
     }
-  ]
+  ],
+  "fundingReviewedAt": "2026-10-16"
 }
