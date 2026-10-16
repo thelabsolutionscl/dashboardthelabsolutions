@@ -216,7 +216,7 @@
       ➕ Nuevo <span id="nuevoDropArrow" style="font-size:9px;margin-left:2px;transition:transform .2s">▾</span>
     </button>
     <div id="nuevoDropPanel" style="display:none;position:fixed;min-width:210px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 36px rgba(0,0,0,0.5);z-index:99999;overflow:hidden;padding:4px 0">
-      <button data-nuevo="nuevo-lead" onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-user-plus"/></svg> Nuevo Lead / Cliente</button>
+      <button data-nuevo="nuevo-lead" onclick="closeNuevoMenu();switchTab('nuevo-lead')" class="nuevo-item"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-user-plus"/></svg> Nuevo cliente</button>
       <button data-nuevo="nuevo-proveedor" onclick="closeNuevoMenu();switchTab('nuevo-proveedor')" class="nuevo-item"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-proveedores"/></svg> Nuevo Proveedor</button>
       <button data-nuevo="nueva-cot" onclick="closeNuevoMenu();switchTab('nueva-cot')" class="nuevo-item"><svg class="dashboard-icon" width="14" height="14" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg> Nueva Cotización</button>
       <div data-nuevo-sep style="height:1px;background:var(--border);margin:3px 0"></div>
@@ -392,7 +392,7 @@
         <span id="mobileNuevoChevron" style="font-size:11px;transition:transform .2s">▾</span>
       </button>
       <div id="mobileNuevoBody" style="display:none;background:rgba(0,0,0,0.18)">
-        <button data-nuevo="nuevo-lead" onclick="closeMobileMenu();switchTab('nuevo-lead')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-user-plus"/></svg></span>Nuevo Lead / Cliente</button>
+        <button data-nuevo="nuevo-lead" onclick="closeMobileMenu();switchTab('nuevo-lead')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-user-plus"/></svg></span>Nuevo cliente</button>
         <button data-nuevo="nuevo-proveedor" onclick="closeMobileMenu();switchTab('nuevo-proveedor')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-proveedores"/></svg></span>Nuevo Proveedor</button>
         <button data-nuevo="nueva-cot" onclick="closeMobileMenu();switchTab('nueva-cot')" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg></span>Nueva Cotización</button>
         <button data-nuevo="nueva-venta" onclick="closeMobileMenu();irANuevaVenta()" class="mobile-tab-btn" style="padding-left:32px"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-trending"/></svg></span>Nueva Venta</button>
@@ -812,7 +812,7 @@
     <div class="card-header">
       <span class="card-title">Base CRM</span>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="switchTab('nuevo-lead')">➕ Nuevo Lead / Cliente</button>
+        <button class="btn btn-primary btn-sm" onclick="switchTab('nuevo-lead')">➕ Nuevo cliente</button>
         <button class="btn btn-ghost btn-sm" onclick="runLeadGenAgent()" style="color:var(--accent);border-color:rgba(0,212,204,0.3)">🎯 Prospección IA</button>
         <button class="btn btn-ghost btn-sm" onclick="runLeadRankingAgent()" style="color:var(--accent);border-color:rgba(0,212,204,0.3)">📊 Ranking leads IA</button>
         <input class="field-input" style="width:180px;font-size:11px;padding:5px 10px" id="clienteSearch" placeholder="🔍 buscar..." oninput="debInput('cli',filterClientes)">
@@ -1418,6 +1418,7 @@
 <!-- ALTA MANUAL DE CLIENTE (los leads externos ingresan por integraciones) -->
 <div class="tab-panel pf" id="tab-nuevo-lead">
   <div class="section-header"><div class="section-title">Nuevo cliente</div></div>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Los clientes ingresados aquí se guardan directamente en <b>Clientes</b>. Los leads nuevos llegan automáticamente desde la web, Instagram y LinkedIn.</p>
   <div class="card">
     <div class="card-header"><span class="card-title">Datos del cliente</span><button id="watiConfigBtn" onclick="openWatiModal()" style="background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;padding:3px 10px;font-size:10px;cursor:pointer">⚙ WATI</button></div>
     <div class="form-grid">
@@ -13539,7 +13540,7 @@ function renderLeadAgentResult(raw){
   document.getElementById('leadAgentPanel').style.display='block';
   document.getElementById('leadAgentPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-// ── Buscador de empresa en "Nuevo Lead / Cliente" ─────────────────────────────
+// ── Buscador de empresa en "Nuevo cliente" ─────────────────────────────
 // Al escribir en Empresa se ofrecen las que ya existen en el CRM (para no crear
 // duplicados y poder sumar un contacto nuevo a una empresa ya registrada) o
 // seguir con una empresa nueva.
