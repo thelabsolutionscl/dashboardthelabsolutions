@@ -59,25 +59,26 @@ test('radar TLS carga un CSS externo con marca propia y sin romper Calendario',a
 test('cada tarjeta muestra monto en rojo arriba a la derecha, con alcance correcto',async()=>{
   const v=view();await v.api.load();
   const card=id=>{
-    const match=v.list.innerHTML.match(new RegExp('<article class="fondos-row"[^>]*data-fondos-card="'+id+'"[^>]*>[\\s\\S]*?<\\/article>'));
-    assert.ok(match,'falta tarjeta '+id);
-    return match[0];
+    const start=v.list.innerHTML.indexOf('data-fondos-card="'+id+'"');
+    const end=start<0?-1:v.list.innerHTML.indexOf('</article>',start);
+    assert.ok(start>=0&&end>start,'falta tarjeta '+id);
+    return v.list.innerHTML.slice(start,end);
   };
   const historical=card('corfo-crea-y-valida-2026');
-  assert.match(historical,/fondos-card-top[\\s\\S]*fondos-card-side[\\s\\S]*fondos-funding/);
+  assert.match(historical,/fondos-card-top[\s\S]*fondos-card-side[\s\S]*fondos-funding/);
   assert.match(historical,/SUBSIDIO MÁXIMO/);
-  assert.match(historical,/Hasta \$180\\.000\\.000/);
+  assert.match(historical,/Hasta \$180\.000\.000/);
   const next=card('corfo-crea-y-valida-proxima-vigilar');
   assert.match(next,/REFERENCIA ANTERIOR/);
   assert.match(next,/data-kind="reference"/);
-  assert.match(next,/Hasta \$180\\.000\\.000/);
+  assert.match(next,/Hasta \$180\.000\.000/);
   const unknown=card('startupchile-big-proximo-vigilar');
   assert.match(unknown,/data-kind="unknown"/);
   assert.match(unknown,/Por confirmar/);
   const range=card('sercotec-crece-sostenible-rm-2026');
-  assert.match(range,/Hasta \$9\\.000\\.000/);
-  assert.match(range,/Desde \$7\\.000\\.000/);
-  assert.match(css,/fondos-funding\\{/);
+  assert.match(range,/Hasta \$9\.000\.000/);
+  assert.match(range,/Desde \$7\.000\.000/);
+  assert.match(css,/fondos-funding\{/);
   assert.match(css,/color:#ff6976/);
 });
 test('modal de montos distingue referencia y muestra fuente oficial',async()=>{
@@ -93,10 +94,11 @@ test('no se inventa monto ni se aceptan fuentes externas para montos',async()=>{
   hacked.funds[0].funding={maxCLP:9000000000000,status:'verified',source:'https://evil.test/fake'};
   const v=view({fetch:async()=>({ok:true,json:async()=>hacked})});
   await v.api.load();
-  const card=v.list.innerHTML.match(/data-fondos-card="sercotec-crece-urbano-rm-2026"[\\s\\S]*?<\\/article>/)?.[0];
+  const start=v.list.innerHTML.indexOf('data-fondos-card="sercotec-crece-urbano-rm-2026"');
+  const card=start<0?'':v.list.innerHTML.slice(start,v.list.innerHTML.indexOf('</article>',start));
   assert.ok(card);
   assert.match(card,/Por confirmar/);
-  assert.doesNotMatch(card,/9000000000000|evil\\.test/);
+  assert.doesNotMatch(card,/9000000000000|evil\.test/);
   assert.equal(v.api.eventList().length,catalog.funds.filter(f=>f.open&&f.close).length*2 +
     catalog.funds.reduce((n,f)=>n+(f.milestones||[]).length,0),'montos nunca crean eventos de calendario');
 });
@@ -106,7 +108,7 @@ test('montos del catálogo son verificables o expresamente referenciales',()=>{
   for(const f of listed){
     assert.ok(['verified','reference'].includes(f.funding.status),f.id);
     assert.ok(Number.isSafeInteger(f.funding.maxCLP)&&f.funding.maxCLP>0,f.id);
-    assert.match(f.funding.source,/^https:\/\/(?:www\\.)?(?:sercotec\\.cl|corfo\\.gob\\.cl|corfo\\.cl)\//,f.id);
+    assert.match(f.funding.source,/^https:\/\/(?:www\.)?(?:sercotec\.cl|corfo\.gob\.cl|corfo\.cl)\//,f.id);
     if(f.funding.status==='reference')assert.equal(f.open,null,'referencias no deben declarar nueva apertura: '+f.id);
   }
 });
