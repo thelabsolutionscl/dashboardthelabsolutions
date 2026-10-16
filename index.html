@@ -10338,8 +10338,9 @@ async function revertirALead(id){
   }catch(e){toast('Error: '+e.message,'error');}
 }
 function verCotizacionesCliente(clienteId,empresa){
+  if(window.OP?.scopeQuotes)OP.scopeQuotes(clienteId,empresa);
   switchTab('cotizaciones');
-  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cliente=state.clientesByIdRec?.[clienteId]||(state.clientes||[]).find(x=>x.id===clienteId);
+  setTimeout(()=>{document.getElementById('cotTableTitle').textContent=`Cotizaciones de ${empresa}`;document.getElementById('btnVerTodas')?.remove();const header=document.querySelector('#tab-cotizaciones .card-header');if(header){const btn=document.createElement('button');btn.id='btnVerTodas';btn.className='btn btn-ghost btn-sm';btn.textContent='← Ver todas';btn.onclick=()=>{if(window.OP?.scopeQuotes)OP.scopeQuotes(null);document.getElementById('cotTableTitle').textContent='Todas las Cotizaciones';btn.remove();renderCotizaciones();};header.appendChild(btn);}const cliente=state.clientesByIdRec?.[clienteId]||(state.clientes||[]).find(x=>x.id===clienteId);
   const reverse=new Set(Array.isArray(cliente?.fields?.['Cotizaciones'])?cliente.fields['Cotizaciones'].map(id=>typeof id==='string'?id:id?.id):[]);
   const cots=state.cotizaciones.filter(c=>{
     if(typeof isVendorMode==='function'&&isVendorMode()&&!vendorOwnsRecord(c))return false;
