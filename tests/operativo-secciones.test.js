@@ -168,7 +168,7 @@ test('modo Tarjetas de Clientes conserva filtros y menú completo del modo Exper
   ctx.state.clientes=[cli];
   sections.clients([cli]);
   const html=node('opClients').innerHTML;
-  for(const label of ['BASE CRM','Clientes y leads','LEADS EN COLA','4','Nuevo lead','Prospección IA','Ranking IA','Por score','Inactivos','CSV','VISTA TARJETAS']){
+  for(const label of ['BASE CRM','Clientes y leads','LEADS EN COLA','4','Nuevo cliente','Prospección IA','Ranking IA','Por score','Inactivos','CSV','VISTA TARJETAS']){
     assert.ok(html.includes(label),`falta ${label}`);
   }
   for(const action of ['Ver detalle','Editar (guiado)','Validar como cliente','Ver cotizaciones','Nueva cotización','Cotizar con KAI (guiado)','Portal cliente','Revocar links del portal','Estrategia venta IA','Bienvenida IA','Recordatorio pago IA']){

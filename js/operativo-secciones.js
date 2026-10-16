@@ -91,7 +91,7 @@
     return `<section class="op-client-command">
       <div class="op-client-command-head">
         <div><span class="op-eyebrow">BASE CRM</span><h2>Clientes y leads</h2><p>Filtra, prioriza y ejecuta las mismas acciones del modo Experto sin salir de Tarjetas.</p></div>
-        <div class="op-client-queue ${Number(s.leads)>0?'has-leads':''}"><span>LEADS EN COLA</span><strong>${esc(s.leads)}</strong><small>pendientes de validar</small></div>
+        <div class="op-client-queue ${Number(s.leads)>0?'has-leads':''}"><span>LEADS EN COLA</span><strong>${esc(s.leads)}</strong><small>captados por canales digitales</small></div>
       </div>
       <div class="op-client-command-row">
         <div class="op-client-segments">${seg('lead','🎯','Leads',s.leads)}${seg('cliente','✓','Clientes',s.clientes)}${seg('todos','◎','Todos',s.todos)}</div>
@@ -99,7 +99,7 @@
       </div>
       ${originHtml?`<div class="op-client-origins">${originHtml}</div>`:''}
       <div class="op-client-command-actions">
-        <button type="button" class="op-client-tool primary" data-ops="client-new"><span>＋</span><b>Nuevo lead</b></button>
+        <button type="button" class="op-client-tool primary" data-ops="client-new"><span>＋</span><b>Nuevo cliente</b></button>
         <button type="button" class="op-client-tool" data-ops="client-prospect"><span>🎯</span><b>Prospección IA</b></button>
         <button type="button" class="op-client-tool" data-ops="client-ranking"><span>✦</span><b>Ranking IA</b></button>
         <button type="button" class="op-client-tool" data-ops="client-sort" data-sort="score"><span>🔥</span><b>Por score</b></button>

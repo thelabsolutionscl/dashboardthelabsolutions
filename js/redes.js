@@ -1014,7 +1014,8 @@ async function nlSubSave(){
         const res=await airtableWrite('Clientes','PATCH',exist.id,fields);Object.assign(exist.fields,res.fields||fields);
         toast('Cliente existente suscrito con evidencia ✓','success');
       }else{
-        let fields=withConsent({'Empresa':nombre||email,'Email':email,'Suscrito newsletter':true,'Email válido':true,'Validado':false},'');
+        // Alta MANUAL de un destinatario en el CRM: no agregarlo a la bandeja de LEADS inbound.
+        let fields=withConsent({'Empresa':nombre||email,'Email':email,'Suscrito newsletter':true,'Email válido':true,'Validado':true},'');
         if(rubro)fields['Industria / Rubro']=rubro;
         const res=await airtableWrite('Clientes','POST',null,fields);
         state.clientes=state.clientes||[];state.clientes.unshift(res);if(state.clientesByIdRec)state.clientesByIdRec[res.id]=res;

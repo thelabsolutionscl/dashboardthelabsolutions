@@ -267,7 +267,7 @@ CAPACIDADES Y REGLAS:
     cleaned=cleaned.replace(reNuevo,'').trim();
     while((m=reNuevo.exec(text))!==null){
       const tipo=m[1].toLowerCase().trim();
-      const labels={cliente:'Nuevo Lead/Cliente',lead:'Nuevo Lead/Cliente',cotizacion:'Nueva Cotizacion',cot:'Nueva Cotizacion',proveedor:'Nuevo Proveedor',venta:'Nueva Venta',diario:'Libro Diario'};
+      const labels={cliente:'Nuevo cliente',lead:'Nuevo cliente',cotizacion:'Nueva Cotizacion',cot:'Nueva Cotizacion',proveedor:'Nuevo Proveedor',venta:'Nueva Venta',diario:'Libro Diario'};
       addMsg('a',`Abriendo formulario: ${labels[tipo]||tipo}`);
       try{
         if(tipo==='cliente'||tipo==='lead') window.switchTab('nuevo-lead');
@@ -463,7 +463,7 @@ CAPACIDADES Y REGLAS:
     input=input||{};
     try{
       if(name==='navegar'){ const mod=String(input.modulo||'').toLowerCase().trim(); if(typeof window.switchTab==='function') window.switchTab(mod); addMsg('a','Navegando a '+mod.toUpperCase()); return 'Navegación realizada a '+mod+'.'; }
-      if(name==='abrir_formulario'){ const tipo=String(input.tipo||'').toLowerCase().trim(); const labels={cliente:'Nuevo Lead/Cliente',cotizacion:'Nueva Cotización',proveedor:'Nuevo Proveedor',venta:'Nueva Venta',diario:'Libro Diario'}; addMsg('a','Abriendo formulario: '+(labels[tipo]||tipo));
+      if(name==='abrir_formulario'){ const tipo=String(input.tipo||'').toLowerCase().trim(); const labels={cliente:'Nuevo cliente',cotizacion:'Nueva Cotización',proveedor:'Nuevo Proveedor',venta:'Nueva Venta',diario:'Libro Diario'}; addMsg('a','Abriendo formulario: '+(labels[tipo]||tipo));
         if(tipo==='cliente') window.switchTab('nuevo-lead');
         else if(tipo==='cotizacion') window.switchTab('nueva-cot');
         else if(tipo==='proveedor') window.switchTab('nuevo-proveedor');
