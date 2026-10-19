@@ -8,7 +8,10 @@ globalThis.File ||= File;
 let library;
 async function moduleUnderTest(){
   if(!library){
-    const source=fs.readFileSync('airtable-proxy/src/catalogos.js','utf8');
+    const worker=fs.readFileSync('airtable-proxy/src/worker.js','utf8');
+    const source=worker.split('// BEGIN_CATALOGOS_MODULE')[1]
+      .split('// END_CATALOGOS_MODULE')[0].trim().replace('function catalogosRoute','function catalogosRoute')
+      +'\nexport {catalogosRoute,handleCatalogos};';
     library=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
   }
   return library;
