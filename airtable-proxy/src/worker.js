@@ -1,4 +1,5 @@
 import { accessAuthorize } from './access-auth.js';
+import { catalogosRoute, handleCatalogos } from './catalogos.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
 
 
@@ -5173,7 +5174,7 @@ export default {
     // depends on a credential shared with the public Pages bundle.
     const authPath=leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/funds'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/funds'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||catalogosRoute(url.pathname)||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname;
     const authorized=await accessAuthorize(request,env,authPath);
     if(authorized.response){
@@ -5195,6 +5196,14 @@ export default {
       return json(authorized.identity
         ?{enabled:true,authenticated:true,role:authorized.identity.role,email:authorized.identity.email}
         :{enabled:false,authenticated:false},200,{...CORS,'Cache-Control':'no-store'});
+    }
+
+    // Biblioteca R2: ninguna petición llega al bucket sin JWT verificado.
+    // La APP_KEY heredada no habilita leer, subir ni eliminar documentos.
+    if(catalogosRoute(url.pathname)){
+      if(!authorized.identity)return json({error:'Cloudflare Access requerido para catálogos'},401,
+        {...CORS,'Cache-Control':'private, no-store'});
+      return handleCatalogos(request,url,env,authorized.identity,CORS);
     }
 
     if(url.pathname==='/tts/elevenlabs'){
