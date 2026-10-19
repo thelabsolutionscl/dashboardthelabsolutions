@@ -3,6 +3,7 @@
 #tab-catalogos .cat-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px}
 #tab-catalogos .cat-head .section-desc{max-width:640px}
 #tab-catalogos .cat-head-stats{font-size:11px;color:var(--text3);letter-spacing:.5px}
+#tab-catalogos .cat-shell:has(#catUploadArea[hidden]){grid-template-columns:1fr}
 #tab-catalogos .cat-shell{display:grid;grid-template-columns:minmax(230px,320px) 1fr;gap:18px;align-items:start}
 #tab-catalogos .cat-upload-card,#tab-catalogos .cat-library{border:1px solid var(--border2);background:var(--surface);border-radius:14px;min-width:0;overflow:hidden}
 #tab-catalogos .cat-upload-card{padding:18px;position:sticky;top:16px}
