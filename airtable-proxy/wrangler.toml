@@ -45,6 +45,13 @@ ANTHROPIC_DAILY_BUDGET_USD = "0.50"
 # Tope conservador por solicitud para impedir una generación accidental enorme.
 ANTHROPIC_REQUEST_BUDGET_USD = "0.10"
 
+# Catálogos compartidos. El bucket R2 PRIVADO debe existir ANTES del primer
+# despliegue de esta versión: npx wrangler r2 bucket create tls-catalogos
+# No habilitar dominio público ni r2.dev.
+[[r2_buckets]]
+binding = "CATALOGOS_BUCKET"
+bucket_name = "tls-catalogos"
+
 # Reutiliza el KV ya disponible en esta cuenta Cloudflare para el control de costo.
 [[kv_namespaces]]
 binding = "AI_BUDGET"
