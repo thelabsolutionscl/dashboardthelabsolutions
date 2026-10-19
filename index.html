@@ -7124,7 +7124,7 @@ function openMobileGrid(){
   const active=sessionStorage.getItem('thelab_active_tab')||'overview';
   appsEl.innerHTML=visibles.map(t=>`
     <button class="mg-item${t.tab===active?' active':''}" data-tab="${t.tab}" onclick="switchTab('${t.tab}');closeMobileGrid()">
-      <span class="dock-icon"><svg class="dashboard-icon" width="26" height="26" stroke-width="1.5"><use href="#icon-${t.tab}"/></svg></span>
+      <span class="dock-icon"><svg class="dashboard-icon" width="26" height="26" stroke-width="1.5"><use href="#icon-${t.tab==='catalogos'?'file':t.tab}"/></svg></span>
       <span class="mg-label">${t.label}</span>
     </button>`).join('');
   // User info
