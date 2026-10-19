@@ -52,9 +52,11 @@
 <link rel="stylesheet" href="styles.css?v=%%BUILD%%">
 <link rel="stylesheet" href="operativo-visual.css?v=%%BUILD%%">
 <link rel="stylesheet" href="semantic-colors.css?v=%%BUILD%%">
+<link rel="stylesheet" href="catalogos.css?v=%%BUILD%%">
 <script src="js/semantic-colors.js?v=%%BUILD%%" defer></script>
 <script src="js/operativo-visual.js?v=%%BUILD%%" defer></script>
 <script src="js/operativo-secciones.js?v=%%BUILD%%" defer></script>
+<script src="js/catalogos.js?v=%%BUILD%%" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -359,6 +361,7 @@
     <button class="dock-btn" data-tab="cotizaciones" onclick="switchTab('cotizaciones')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg></span><span class="dock-label">Cotizaciones</span></button>
     <button class="dock-btn" data-tab="pedidos" onclick="switchTab('pedidos')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-pedidos"/></svg></span><span class="dock-label">Pedidos</span><span class="dock-badge" id="badge-pedidos" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="proveedores" onclick="switchTab('proveedores')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-proveedores"/></svg></span><span class="dock-label">Proveedores</span></button>
+    <button class="dock-btn" data-tab="catalogos" onclick="switchTab('catalogos')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-file"/></svg></span><span class="dock-label">Catálogos</span></button>
     <button class="dock-btn" data-tab="agentes" onclick="switchTab('agentes')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-agentes"/></svg></span><span class="dock-label">Agentes</span></button>
     <button class="dock-btn" data-tab="oficina" onclick="switchTab('oficina')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-oficina"/></svg></span><span class="dock-label">Oficina</span><span class="dock-badge dock-badge-live" id="badge-oficina" style="display:none">0</span></button>
     <button class="dock-btn" data-tab="maquinas" onclick="switchTab('maquinas')"><span class="dock-icon"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-maquinas"/></svg></span><span class="dock-label">Máquinas</span></button>
@@ -404,6 +407,7 @@
     <button class="mobile-tab-btn" data-tab="cotizaciones" onclick="switchTabMobile('cotizaciones')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-cotizaciones"/></svg></span>Cotizaciones</button>
     <button class="mobile-tab-btn" data-tab="pedidos" onclick="switchTabMobile('pedidos')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-pedidos"/></svg></span>Pedidos</button>
     <button class="mobile-tab-btn" data-tab="proveedores" onclick="switchTabMobile('proveedores')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-proveedores"/></svg></span>Proveedores</button>
+    <button class="mobile-tab-btn" data-tab="catalogos" onclick="switchTabMobile('catalogos')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-file"/></svg></span>Catálogos</button>
     <button class="mobile-tab-btn" data-tab="agentes" onclick="switchTabMobile('agentes')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-agentes"/></svg></span>Agentes IA</button>
     <button class="mobile-tab-btn" data-tab="oficina" onclick="switchTabMobile('oficina')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-oficina"/></svg></span>Oficina Virtual</button>
     <button class="mobile-tab-btn" data-tab="maquinas" onclick="switchTabMobile('maquinas')"><span class="mobile-tab-icon"><svg class="dashboard-icon" width="18" height="18" stroke-width="1.5"><use href="#icon-maquinas"/></svg></span>Máquinas</button>
@@ -1269,6 +1273,64 @@
     </div>
   </div>
 </div>
+
+<!-- CATÁLOGOS · DOCUMENTOS PDF COMPARTIDOS -->
+<div class="tab-panel pf" id="tab-catalogos">
+  <div class="cat-head">
+    <div><div class="section-title">Catálogos</div>
+      <div class="section-desc">Biblioteca de presentaciones y catálogos comerciales de The Lab Solutions. Archivos PDF privados, disponibles para el equipo.</div></div>
+    <div class="cat-head-stats" id="catTotal">0 catálogos</div>
+  </div>
+  <div class="cat-shell">
+    <aside class="cat-upload-card" id="catUploadArea" hidden>
+      <span class="cat-eyebrow">BIBLIOTECA TLS</span>
+      <h3>Nuevo catálogo</h3>
+      <p class="cat-help">Sube archivos PDF de hasta 25 MB. Se guardarán para todo el equipo en almacenamiento seguro.</p>
+      <form id="catUploadForm">
+        <label class="cat-drop" id="catDropzone">
+          <svg class="dashboard-icon" width="30" height="30" stroke-width="1.5"><use href="#icon-file"/></svg>
+          <span id="catFileLabel">Arrastra aquí tu PDF o selecciónalo desde el equipo</span>
+          <input id="catFile" type="file" accept=".pdf,application/pdf" aria-label="Seleccionar PDF">
+        </label>
+        <div class="cat-fields">
+          <label>Nombre del catálogo <input id="catName" maxlength="140" placeholder="Ej. Catálogo Merchandising 2026" required></label>
+          <label>Categoría <select id="catCategory" aria-label="Categoría del catálogo"></select></label>
+        </div>
+        <button class="btn btn-primary btn-sm" type="submit" id="catUploadBtn">Subir catálogo</button>
+      </form>
+    </aside>
+    <section class="cat-library" aria-label="Catálogos almacenados">
+      <div class="cat-library-head">
+        <h3>Biblioteca de documentos</h3>
+        <div class="cat-tools">
+          <input type="search" id="catSearch" placeholder="Buscar por nombre o categoría…" aria-label="Buscar catálogos">
+          <select id="catFilter" aria-label="Filtrar por categoría"></select>
+          <button type="button" class="btn btn-ghost btn-sm" id="catReload">Actualizar</button>
+        </div>
+      </div>
+      <p id="catalogosStatus" class="cat-status" role="status" aria-live="polite" hidden></p>
+      <div class="cat-grid" id="catGrid">
+        <div class="cat-empty"><div class="cat-empty-icon">▤</div><h3>Tu biblioteca TLS</h3><p>Ingresa para consultar los documentos.</p></div>
+      </div>
+      <div class="cat-footer"><span id="catShown">0 mostrados</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="catMore" hidden>Cargar más</button>
+      </div>
+    </section>
+  </div>
+</div>
+<dialog id="catalogosPreview" class="cat-preview-dialog" aria-label="Vista previa del catálogo">
+  <div class="cat-preview-box">
+    <div class="cat-preview-top">
+      <div><strong id="catPreviewTitle">Catálogo</strong><small id="catPreviewMeta"></small></div>
+      <div class="cat-preview-actions">
+        <button type="button" id="catOpenPreview" disabled>Descargar PDF</button>
+        <button type="button" id="catPreviewClose" aria-label="Cerrar vista previa">✕</button>
+      </div>
+    </div>
+    <div class="cat-preview-loading" id="catPreviewLoading" role="status"></div>
+    <iframe id="catPreviewFrame" class="cat-preview-frame" title="Documento PDF" sandbox="allow-scripts allow-downloads"></iframe>
+  </div>
+</dialog>
 
 <!-- PROVEEDORES -->
 <div class="tab-panel pf" id="tab-proveedores">
@@ -7041,6 +7103,7 @@ function openMobileGrid(){
     {tab:'cotizaciones',label:'Cotizaciones'},
     {tab:'pedidos',label:'Pedidos'},
     {tab:'proveedores',label:'Proveedores'},
+    {tab:'catalogos',label:'Catálogos'},
     {tab:'agentes',label:'Agentes IA'},
     {tab:'oficina',label:'Oficina'},
     {tab:'maquinas',label:'Máquinas'},
@@ -9168,6 +9231,7 @@ function switchTab(name){
   if(name==='equipo') initEquipo();
   if(name==='calendario') try{renderCalendario();}catch(e){}
   if(name==='inventario') loadInventario();
+  if(name==='catalogos') window.TLSCatalogos?.activate();
   if(name==='nueva-cot'){const cn=document.getElementById('cot-num');if(cn) cn.value=generarNumeroCotizacion();updateVtoPreview();}
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -19246,12 +19310,12 @@ const RBAC={
   //
   // Tabs de navegación visibles + tabs auxiliares accesibles por rol
   tabs:{
-    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','simulacion','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','simulacion','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d'],
-    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','oficina','calendario','remuneraciones','correo','redes','newsletter','nuevo-lead','nueva-cot','cot3d'],
-    produccion: ['overview','pedidos','maquinas','inventario','equipo','visual','correo'],
-    finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo'],
-    marketing:  ['overview','web','agentes','oficina','reporte','correo','redes','newsletter','simulacion'],
+    admin:      ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','simulacion','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d','catalogos'],
+    gerencia:   ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','calendario','reporte','web','finanzas','visual','correo','redes','newsletter','simulacion','nuevo-lead','nuevo-proveedor','nueva-cot','cot3d','catalogos'],
+    comercial:  ['overview','clientes','cotizaciones','pedidos','agentes','oficina','calendario','remuneraciones','correo','redes','newsletter','nuevo-lead','nueva-cot','cot3d','catalogos'],
+    produccion: ['overview','pedidos','maquinas','inventario','equipo','visual','correo','catalogos'],
+    finanzas:   ['overview','clientes','pedidos','finanzas','reporte','correo','catalogos'],
+    marketing:  ['overview','web','agentes','oficina','reporte','correo','redes','newsletter','simulacion','catalogos'],
     demo:       ['overview','clientes','cotizaciones','pedidos','proveedores','agentes','oficina','maquinas','inventario','equipo','reporte','web','finanzas','visual','remuneraciones','redes','newsletter','simulacion'],
   },
   // Items del menú "Nuevo" visibles por rol
