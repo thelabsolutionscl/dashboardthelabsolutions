@@ -236,6 +236,13 @@ function accessAllows(identity,method,path){
   const operator=identity.role==='operator';
   const isWrite=method!=='GET';
   if(path==='/access/me')return method==='GET';
+  // Biblioteca privada: lectura para sesiones firmadas, altas para el equipo y
+  // borrado irreversible únicamente para administrador de Cloudflare Access.
+  if(path==='/catalogos')return method==='GET'||
+    (method==='POST'&&['sales','operator','finance','admin'].includes(identity.role));
+  if(/^\/catalogos\/[0-9a-f-]{36}$/i.test(path))return method==='GET'||
+    (method==='DELETE'&&admin);
+
   // Solo administradores verificados consultan las claves de servicios externos.
   if(path==='/integrations/check')return admin&&method==='GET';
   if(path==='/ads/campaign-shell')return method==='POST'&&(operator||finance||admin);
