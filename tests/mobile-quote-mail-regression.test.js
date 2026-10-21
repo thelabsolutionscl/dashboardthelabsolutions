@@ -103,3 +103,28 @@ test('correo móvil tiene controles táctiles y un panel de redacción dentro de
   assert.match(CSS,/\.mail-account-tools button\{width:44px;height:44px\}/);
   assert.match(CSS,/\.mail-client\{min-height:0;height:max\(270px,calc\(100dvh - 230px\)\)\}/);
 });
+
+test('un nuevo usuario del dashboard no reutiliza la bandeja del usuario anterior',async()=>{
+  const m=mail({startMailPolling:()=>{}});
+  m._sessionOwner='anterior@thelab.solutions';
+  m._init=true;
+  m._secureMailReady=true;
+  m._authorizedAccounts=['anterior@thelab.solutions'];
+  m._legacyPassByAccount={'anterior@thelab.solutions':'in-memory-old-password'};
+  m.msgs=[{subject:'mensaje anterior'}];
+  m._currentMsg={subject:'mensaje anterior'};
+  m._clearReceivedAttCache=()=>{};
+  m.closeReceivedAttPreview=()=>{};
+  m.renderAccounts=()=>{};
+  m._hydrateSharedMailboxState=()=>Promise.resolve();
+  m._loadAuthorizedAccounts=async()=>true;
+  m.loadFolders=async()=>true;
+  m.loadMessages=async()=>{};
+  m.preloadSentAddrs=()=>{};
+  await m.init();
+  assert.equal(m._sessionOwner,'user@thelab.solutions');
+  assert.equal(m.msgs.length,0);
+  assert.equal(m._currentMsg,null);
+  assert.equal(m._legacyPassByAccount['anterior@thelab.solutions'],undefined);
+  assert.equal(m._authorizedAccounts,null);
+});
