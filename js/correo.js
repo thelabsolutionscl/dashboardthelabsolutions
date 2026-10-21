@@ -10,6 +10,7 @@ const MAIL={
   composeMode:null,
   _searchTimer:null,
   _init:false,
+  _sessionOwner:null,
   _currentMsg:null,
   _readSeq:0,
   _sending:false,
@@ -72,19 +73,21 @@ const MAIL={
     }catch(_){return null;}
   },
   async _loadAuthorizedAccounts(){
+    const wasSecure=this._secureMailReady===true;
     const cfg=this._sharedMailConfig();
-    if(!cfg){this._secureMailReady=false;this._authorizedAccounts=null;return false;}
+    // Tras activar Access, una caída de /mail/accounts nunca debe degradar
+    // la casilla al transporte legado (ni pedir una clave innecesariamente).
+    if(!cfg){
+      if(!wasSecure){this._secureMailReady=false;this._authorizedAccounts=null;}
+      return false;
+    }
     try{
       const r=await fetch(cfg.base+'/mail/accounts',{method:'GET',credentials:'include',redirect:'error',
         headers:{'X-App-Key':cfg.key}});
       const d=await r.json().catch(()=>null);
-      if(!r.ok||!d?.ok||!Array.isArray(d.accounts))throw Error('not ready');
-      // Una respuesta de identidad válida no significa que el cutover de correo
-      // esté activo. Sin el switch explícito, no ocultar las cuentas locales ni
-      // forzar sesiones backend a medio configurar.
+      if(!r.ok||!d?.ok||!Array.isArray(d.accounts))throw Error('Mail access unavailable');
       if(d.enforced!==true){
-        this._secureMailReady=false;
-        this._authorizedAccounts=null;
+        if(!wasSecure){this._secureMailReady=false;this._authorizedAccounts=null;}
         return false;
       }
       this._authorizedAccounts=d.accounts.map(x=>String(x).toLowerCase());
@@ -97,7 +100,10 @@ const MAIL={
       }
       this.setAccounts(list);
       return true;
-    }catch(_){this._secureMailReady=false;this._authorizedAccounts=null;return false;}
+    }catch(_){
+      if(!wasSecure){this._secureMailReady=false;this._authorizedAccounts=null;}
+      return false;
+    }
   },
   async _secureMailSession(account,password){
     const cfg=this._sharedMailConfig();if(!cfg)return {error:'Proxy seguro no configurado'};
@@ -333,10 +339,26 @@ const MAIL={
 
   async init(){
     this._purgeLegacyMailPasswords();
+    const owner=String(AUTH.getUser()?.username||'').trim().toLowerCase();
+    // El singleton MAIL sobrevive a la navegación SPA: una sesión de dashboard
+    // diferente jamás puede heredar correos/credenciales del usuario previo.
+    if(this._sessionOwner&&this._sessionOwner!==owner){
+      this._init=false;
+      this._secureMailReady=false;this._authorizedAccounts=null;
+      this._legacyPassByAccount={};this._accountUnseen={};this._sharedMailRevisions={};
+      this.folder='INBOX';this.page=1;this.msgs=[];this.selUid=null;this._currentMsg=null;
+      ++this._readSeq;
+      try{this.closeReceivedAttPreview();this._clearReceivedAttCache();}catch(_){}
+      const list=document.getElementById('mailList');if(list)list.replaceChildren();
+      const reader=document.getElementById('mailReaderContent');if(reader)reader.style.display='none';
+      const empty=document.getElementById('mailReaderEmpty');if(empty)empty.style.display='flex';
+    }
+    this._sessionOwner=owner;
+    // Cambiar de sección no implica cerrar ni volver a validar la sesión IMAP.
+    if(this._init){this.renderAccounts();return;}
     await this._loadAuthorizedAccounts();
     this.renderAccounts();
     this._hydrateSharedMailboxState().catch(()=>{});
-    if(this._init) return;
     if(!this._secureMailReady&&!this.getMailPass()){this.showPassModal();return;}
     this._init=true;
     document.getElementById('mailConnStatus').textContent='Conectando...';
@@ -378,10 +400,16 @@ const MAIL={
   async loadFolders(){
     const data=await this.post({action:'folders'});
     if(data.error){
-      if(data.error==='MAIL_SESSION_REQUIRED'||data.error.toLowerCase().includes('auth')||data.error.toLowerCase().includes('login')){
+      if(data.error==='MAIL_SESSION_REQUIRED'){
         this.clearMailPass();this._init=false;
-        this.showPassModal('Contraseña incorrecta. Inténtalo de nuevo.');
-        return false;   // corta init(): sin clave, pedir la lista es un viaje perdido
+        // post() ya muestra el aviso correcto para la sesión segura.
+        if(!this._secureMailReady)this.showPassModal('Inicia sesión en el buzón para continuar.');
+        return false;
+      }
+      if(data.error.toLowerCase().includes('auth')||data.error.toLowerCase().includes('login')){
+        this.clearMailPass();this._init=false;
+        this.showPassModal('Contraseña incorrecta. El servidor rechazó la clave; inténtalo de nuevo.');
+        return false;
       }
       document.getElementById('mailFolderList').innerHTML=`<div style="padding:8px;font-size:11px;color:var(--danger)">${this.esc(data.error)}</div>`;return;
     }
@@ -1310,7 +1338,8 @@ const MAIL={
     document.getElementById('mailConnStatus').textContent='';
     this.renderAccounts();
     this._hydrateSharedMailboxState(email).catch(()=>{});
-    if(!this.getMailPass()){ this.showPassModal(); return; }
+    // En modo Access, la sesión está en el servidor, no en getMailPass().
+    if(!this._secureMailReady&&!this.getMailPass()){this.showPassModal();return;}
     this.init();
   },
 

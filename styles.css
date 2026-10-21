@@ -3086,3 +3086,102 @@ html[data-theme="light"] .appearance-choice.is-active{background:rgba(0,158,154,
   html[data-wallpaper] body::before{animation:none!important;}
   .appearance-choice{transition:none!important;}
 }
+
+/* TLS MOBILE QUOTE + MAIL UX — 2026-10-21 */
+/* Estructura de ítems creada por addItemRow y addEditItemRow. En escritorio
+   los cinco elementos siguen ocupando las columnas originales. */
+.quote-mobile-field{min-width:0}
+.quote-mobile-field>input{width:100%;min-width:0}
+@media (max-width:768px){
+  /* La tabla de productos original mide más que un teléfono y su padre corta
+     el overflow; transformarla en tarjetas evita perder precio y eliminación. */
+  #tab-nueva-cot .quote-items-heading,
+  #editCotModal .quote-items-heading{display:none!important}
+  #itemsContainer .item-row,
+  #editItemsContainer .edit-item-row{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+    column-gap:10px;row-gap:12px;
+    padding:14px 12px;margin:8px;
+    border:1px solid var(--border2)!important;border-radius:10px;
+    background:var(--surface2);
+    min-width:0
+  }
+  #itemsContainer .item-row>.quote-mobile-desc,
+  #editItemsContainer .edit-item-row>.quote-mobile-desc{grid-column:1/-1;min-width:0}
+  #itemsContainer .item-row>.quote-mobile-desc{
+    display:flex!important;flex-wrap:wrap;align-items:center
+  }
+  #itemsContainer .item-row>.quote-mobile-desc>input{flex:1 1 100px;width:0!important;min-width:0!important}
+  #editItemsContainer .edit-item-row>.quote-mobile-desc>input{width:100%!important;min-width:0}
+  #itemsContainer .quote-mobile-desc::before,
+  #editItemsContainer .quote-mobile-desc::before,
+  #itemsContainer .quote-mobile-field::before,
+  #editItemsContainer .quote-mobile-field::before{
+    content:attr(data-mobile-label);display:block;width:100%;
+    margin-bottom:6px;color:var(--text2);
+    font-size:11px;font-weight:700;line-height:1.25
+  }
+  #itemsContainer .quote-mobile-desc::before,
+  #editItemsContainer .quote-mobile-desc::before{flex:0 0 100%}
+  #itemsContainer .quote-mobile-field,
+  #editItemsContainer .quote-mobile-field{display:flex;flex-direction:column;min-width:0}
+  #itemsContainer .quote-mobile-qty,
+  #editItemsContainer .quote-mobile-qty{grid-column:1}
+  #itemsContainer .quote-mobile-cost,
+  #editItemsContainer .quote-mobile-cost{grid-column:2}
+  #itemsContainer .quote-mobile-price,
+  #editItemsContainer .quote-mobile-price{grid-column:1/-1}
+  #itemsContainer .item-row input,
+  #editItemsContainer .edit-item-row input{
+    box-sizing:border-box;min-height:44px;
+    padding:10px 12px!important;font-size:16px!important;
+    border:1px solid var(--border2)!important;border-radius:7px;
+    background:var(--surface)!important;max-width:100%
+  }
+  #itemsContainer .item-row input:focus,
+  #editItemsContainer .edit-item-row input:focus{border-color:var(--accent)!important;outline:2px solid rgba(0,212,204,.18)}
+  #itemsContainer .quote-mobile-desc input,
+  #editItemsContainer .quote-mobile-desc input{min-width:0;flex:1}
+  #itemsContainer .item-row>.quote-mobile-delete,
+  #editItemsContainer .edit-item-row>.quote-mobile-delete{
+    grid-column:1/-1;justify-self:end;min-width:44px;min-height:44px;
+    padding:10px!important;border:1px solid var(--border2)!important;
+    border-radius:8px;color:var(--danger)!important
+  }
+  /* Totales y descuentos sin retícula rígida de cinco columnas. */
+  #itemsTotalRow>div,#editItemsTotalRow>div{
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center;gap:6px;padding:6px 9px
+  }
+  #itemsTotalRow>div>div:first-child,
+  #editItemsTotalRow>div>div:first-child{
+    grid-column:1!important;min-width:0;
+    padding:6px 4px!important;flex-wrap:wrap
+  }
+  #itemsTotalRow>div>div[id],
+  #editItemsTotalRow>div>div[id]{
+    grid-column:2!important;padding:6px 4px!important;
+    border-left:none!important;min-width:0;
+    overflow-wrap:anywhere;text-align:right!important
+  }
+  #itemsTotalRow>div>div:empty,
+  #editItemsTotalRow>div>div:empty{display:none!important}
+  #cot-descuento,#editCotDescuento{min-height:38px;font-size:16px!important}
+  /* Operaciones principales al alcance del pulgar. */
+  #tab-nueva-cot .field-group.form-full>.btn,
+  #editCotModal .field-group.form-full>.btn{min-height:44px;margin:4px 4px 4px 0}
+  /* El alto de 520px era mayor que el espacio real disponible en teléfonos. */
+  .mail-client{min-height:0;height:max(270px,calc(100dvh - 230px))}
+  .mail-compose-panel{
+    right:0;bottom:env(safe-area-inset-bottom,0px);
+    width:100%;max-width:100%;max-height:calc(100dvh - 86px);
+    border-radius:12px 12px 0 0
+  }
+  .mail-compose-field input,.mail-search-input,#mailPassInput{font-size:16px!important;min-width:0}
+  .mail-account-tools button{width:44px;height:44px}
+  .mail-compose-btn,.mail-folder-item,.mail-page-btn,
+  .mail-mob-nav button,.mail-reader-actions button{min-height:44px}
+  .mail-compose-hdr-btn{min-width:36px;min-height:36px}
+  .mail-compose-footer{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));flex-wrap:wrap}
+}
