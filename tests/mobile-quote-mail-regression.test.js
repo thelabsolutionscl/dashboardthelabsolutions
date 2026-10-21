@@ -117,7 +117,7 @@ test('un nuevo usuario del dashboard no reutiliza la bandeja del usuario anterio
   m.closeReceivedAttPreview=()=>{};
   m.renderAccounts=()=>{};
   m._hydrateSharedMailboxState=()=>Promise.resolve();
-  m._loadAuthorizedAccounts=async()=>true;
+  m._loadAuthorizedAccounts=async()=>{m._secureMailReady=true;m._authorizedAccounts=['user@thelab.solutions'];return true;};
   m.loadFolders=async()=>true;
   m.loadMessages=async()=>{};
   m.preloadSentAddrs=()=>{};
@@ -126,5 +126,5 @@ test('un nuevo usuario del dashboard no reutiliza la bandeja del usuario anterio
   assert.equal(m.msgs.length,0);
   assert.equal(m._currentMsg,null);
   assert.equal(m._legacyPassByAccount['anterior@thelab.solutions'],undefined);
-  assert.equal(m._authorizedAccounts,null);
+  assert.equal(m._authorizedAccounts[0],'user@thelab.solutions');
 });
