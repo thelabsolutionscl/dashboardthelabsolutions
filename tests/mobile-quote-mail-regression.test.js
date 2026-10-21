@@ -22,7 +22,7 @@ function mail(extra={}){
   const elements={
     mailRdrAtts:{style:{},replaceChildren(){}},
     mailReaderEmpty:{style:{}},mailReaderContent:{style:{}},
-    mailList:{innerHTML:''},mailConnStatus:{textContent:''}
+    mailList:{innerHTML:'',replaceChildren(){}},mailConnStatus:{textContent:''}
   };
   const ctx={
     AUTH:{getUser:()=>({username:'user@thelab.solutions',name:'Usuario'})},
