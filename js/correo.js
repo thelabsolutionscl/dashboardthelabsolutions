@@ -10,6 +10,7 @@ const MAIL={
   composeMode:null,
   _searchTimer:null,
   _init:false,
+  _sessionOwner:null,
   _currentMsg:null,
   _readSeq:0,
   _sending:false,
@@ -338,6 +339,21 @@ const MAIL={
 
   async init(){
     this._purgeLegacyMailPasswords();
+    const owner=String(AUTH.getUser()?.username||'').trim().toLowerCase();
+    // El singleton MAIL sobrevive a la navegación SPA: una sesión de dashboard
+    // diferente jamás puede heredar correos/credenciales del usuario previo.
+    if(this._sessionOwner&&this._sessionOwner!==owner){
+      this._init=false;
+      this._secureMailReady=false;this._authorizedAccounts=null;
+      this._legacyPassByAccount={};this._accountUnseen={};this._sharedMailRevisions={};
+      this.folder='INBOX';this.page=1;this.msgs=[];this.selUid=null;this._currentMsg=null;
+      ++this._readSeq;
+      try{this.closeReceivedAttPreview();this._clearReceivedAttCache();}catch(_){}
+      const list=document.getElementById('mailList');if(list)list.replaceChildren();
+      const reader=document.getElementById('mailReaderContent');if(reader)reader.style.display='none';
+      const empty=document.getElementById('mailReaderEmpty');if(empty)empty.style.display='flex';
+    }
+    this._sessionOwner=owner;
     // Cambiar de sección no implica cerrar ni volver a validar la sesión IMAP.
     if(this._init){this.renderAccounts();return;}
     await this._loadAuthorizedAccounts();
