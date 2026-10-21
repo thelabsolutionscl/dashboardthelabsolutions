@@ -392,7 +392,7 @@ const MAIL={
       }
       if(data.error.toLowerCase().includes('auth')||data.error.toLowerCase().includes('login')){
         this.clearMailPass();this._init=false;
-        this.showPassModal('El servidor rechazó la contraseña. Inténtalo de nuevo.');
+        this.showPassModal('Contraseña incorrecta. El servidor rechazó la clave; inténtalo de nuevo.');
         return false;
       }
       document.getElementById('mailFolderList').innerHTML=`<div style="padding:8px;font-size:11px;color:var(--danger)">${this.esc(data.error)}</div>`;return;
