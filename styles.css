@@ -1034,22 +1034,31 @@ body.mail-fs-on .mail-compose-panel{z-index:460!important;}
 .mail-folder-item.active{background:rgba(0,243,255,.08);color:var(--accent);}
 .mail-folder-name{display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mail-unseen-badge{background:var(--accent);color:#000;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800;flex-shrink:0;}
-.mail-list-wrap{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.mail-list-topbar{padding:10px 10px 8px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:7px;flex-shrink:0;}
+.mail-list-wrap{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.mail-list-topbar{padding:10px 10px 8px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:7px;flex-shrink:0;min-width:0;}
 .mail-list-title{font-weight:700;font-size:13px;color:var(--text);}
 .mail-search-wrap{position:relative;}
 .mail-search-wrap svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:none;}
 .mail-search-input{width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 10px 6px 28px;font-size:12px;color:var(--text);font-family:inherit;outline:none;box-sizing:border-box;}
 .mail-search-input:focus{border-color:var(--accent);}
+/* El botón Todos no debe ocupar toda la anchura de la columna de mensajes. */
+.mail-list-topbar>.mail-cmp-tool{align-self:flex-end;width:auto;margin-left:0!important;}
 .mail-list{flex:1;overflow-y:auto;}
 .mail-item{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-bottom:1px solid var(--border2);cursor:pointer;transition:background .1s;}
 .mail-item-chk{flex-shrink:0;margin-top:2px;width:15px;height:15px;cursor:pointer;accent-color:var(--accent);}
 .mail-item-main{flex:1;min-width:0;}
 .mail-item.sel-checked{background:rgba(0,243,255,.05);}
 /* Barra de selección múltiple de la bandeja */
-.mail-sel-bar{display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface2);border-bottom:1px solid var(--border2);font-size:12px;}
-.mail-sel-bar label{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text2);white-space:nowrap;}
-.mail-sel-bar input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:15px;height:15px;}
+/* La lista ocupa 320px en escritorio: las acciones deben fluir a otra fila
+   cuando no caben, nunca quedar recortadas por overflow:hidden del panel. */
+.mail-sel-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;min-width:0;box-sizing:border-box;background:var(--surface2);border-bottom:1px solid var(--border2);font-size:12px;}
+.mail-sel-bar label{display:flex;align-items:center;gap:7px;flex:1 1 100%;min-width:0;cursor:pointer;color:var(--text2);white-space:nowrap;}
+.mail-sel-bar label span{min-width:0;overflow:hidden;text-overflow:ellipsis;}
+/* El espaciador antiguo forzaba a los botones fuera de la columna. */
+.mail-sel-bar>div{display:none;}
+.mail-sel-bar>button{display:inline-flex;align-items:center;justify-content:center;flex:1 0 auto;max-width:100%;gap:4px;padding:6px 8px;white-space:nowrap;line-height:1.3;}
+.mail-sel-bar>button svg{flex-shrink:0;}
+.mail-sel-bar input[type=checkbox]{cursor:pointer;accent-color:var(--accent);width:15px;height:15px;flex-shrink:0;}
 .mail-item:hover{background:rgba(255,255,255,.03);}
 .mail-item.selected{background:rgba(0,243,255,.07);border-left:2px solid var(--accent);padding-left:8px;}
 .mail-item.unread .mail-item-from{font-weight:700;color:var(--text);}
