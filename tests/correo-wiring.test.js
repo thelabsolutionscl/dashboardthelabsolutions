@@ -598,3 +598,12 @@ test('diagnóstico Resend prioriza evidencia reciente y clasifica el permiso de 
   assert.match(branch,/'error_code'=>'send_unauthorized'/);
   assert.match(branch,/'error_code'=>'send_forbidden'/);
 });
+
+test('selección de correos: acciones visibles sin desbordar la columna de escritorio', () => {
+  assert.match(INDEX, /id=["']mailSelBar["']/, 'la barra de selección debe existir');
+  assert.match(CSS, /\.mail-sel-bar\{[^}]*flex-wrap:wrap/, 'las acciones deben saltar de línea en 320px');
+  assert.match(CSS, /\.mail-sel-bar label\{[^}]*flex:1 1 100%/, 'el contador debe tener su propia fila');
+  assert.match(CSS, /\.mail-sel-bar>div\{display:none/, 'el espaciador no debe desplazar las acciones');
+  assert.match(CSS, /\.mail-sel-bar>button\{[^}]*max-width:100%/, 'ningún botón debe exceder el panel');
+  assert.match(CSS, /\.mail-list-topbar>\.mail-cmp-tool\{[^}]*align-self:flex-end/, 'Todos no debe estirarse en toda la columna');
+});
