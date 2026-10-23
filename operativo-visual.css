@@ -349,3 +349,12 @@ dialog.op-drawer[data-kind="quote"]{inset:0;width:100vw;max-width:100vw;height:1
   .op-team-chip{min-height:34px}
   .op-status-select{max-width:154px;min-height:36px;font-size:10px;padding-left:28px;padding-right:28px}
 }
+
+/* Cotizaciones: selector de orden junto a los filtros, adaptable a móvil. */
+#tab-cotizaciones .op-quote-sort-field{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;color:var(--text2);font-size:13px}
+#tab-cotizaciones #opQuoteSort{min-width:195px;max-width:240px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text);font:inherit;padding:10px 12px;cursor:pointer}
+#tab-cotizaciones #opQuoteSort:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:720px){
+  #tab-cotizaciones .op-quote-sort-field{width:100%;justify-content:space-between;gap:12px}
+  #tab-cotizaciones #opQuoteSort{flex:1;min-width:0;max-width:none}
+}
