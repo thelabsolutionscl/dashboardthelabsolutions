@@ -448,3 +448,31 @@ test('el selector de orden se inserta una sola vez, conserva la selección y se 
   assert.match(css,/#tab-cotizaciones \.op-quote-sort-field/);
   assert.match(css,/@media\(max-width:720px\)/);
 });
+
+test('los pedidos repetidos por cliente y precio muestran sus cotizaciones de origen, sin colapsar dos registros válidos',()=>{
+  const {context,op,element}=setup();
+  context.state.cotizacionesById={
+    'q-old':record('q-old',{'N° Cotización':'260614','Alias / Título':'PAPEL MANTEQUILLA'}),
+    'q-new':record('q-new',{'N° Cotización':'261004'})
+  };
+  const rows=[
+    record('p-old',{'N° Pedido':'PED-2026-037','Cliente':'BIG CUT SPA','Cotizaciones':['q-old'],'Fecha ingreso':'2026-09-30','Estado pedido':'Listo para despacho','Monto total (CLP)':123760}),
+    record('p-new',{'N° Pedido':'PED-2026-039','Cliente':'BIG CUT SPA','Cotizaciones':['q-new'],'Fecha ingreso':'2026-10-21','Estado pedido':'Listo para despacho','Monto total (CLP)':123760})
+  ];
+  op.orders(rows,rows);
+  const html=element('opOrders').innerHTML;
+  assert.match(html,/PED-2026-037/);assert.match(html,/PED-2026-039/);
+  assert.match(html,/Cotización 260614 · Ingreso 30\/09\/2026/);
+  assert.match(html,/Cotización 261004 · Ingreso 21\/10\/2026/);
+  assert.match(html,/PAPEL MANTEQUILLA/);
+  assert.match(html,/Sin título registrado/,'no inventa el producto de una cotización que no tiene título');
+  assert.equal((html.match(/op-record op-order-record/g)||[]).length,2,'no debe esconder registros de origen diferente');
+});
+test('pedidos sin enlace no heredan los datos de otra cotización del mismo cliente',()=>{
+  const {op,context,element}=setup();
+  context.state.cotizacionesById={q1:record('q1',{'N° Cotización':'261004'})};
+  op.orders([record('no-cot',{'N° Pedido':'PED-000','Cliente':'BIG CUT SPA','Fecha ingreso':'2026-10-22'})],[]);
+  const html=element('opOrders').innerHTML;
+  assert.match(html,/Sin cotización vinculada · Ingreso 22\/10\/2026/);
+  assert.doesNotMatch(html,/261004/);
+});

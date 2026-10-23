@@ -472,13 +472,19 @@
   function orderCard(p,detail=false){
     const f=p.fields,e=f['Estado pedido']||'Sin estado',pay=payment(p),late=until(f['Fecha entrega'])<0&&until(f['Fecha entrega'])!==null&&!closed.includes(e);
     const nextStage=detail?nextOrderStage(p):null;
-    const cot=state.cotizacionesById?.[f['Cotizaciones']?.[0]];
-    const title=f['Alias / Título']||cot?.fields?.['Alias / Título']||f['N° Pedido']||'Pedido';
+    const cotIds=Array.isArray(f['Cotizaciones'])?f['Cotizaciones']:[f['Cotizaciones']];
+    const cotId=cotIds.find(Boolean);
+    const cot=cotId?state.cotizacionesById?.[cotId]:null;
+    const cotNum=String(cot?.fields?.['N° Cotización']||'').trim();
+    const date=String(f['Fecha ingreso']||'').slice(0,10);
+    const received=/^\d{4}-\d{2}-\d{2}$/.test(date)?date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4):'';
+    const origin=[cotNum?'Cotización '+cotNum:cotId?'Cotización vinculada':'Sin cotización vinculada',received?'Ingreso '+received:''].filter(Boolean).join(' · ');
+    const title=f['Alias / Título']||cot?.fields?.['Alias / Título']||(cotId?'Sin título registrado':f['N° Pedido']||'Pedido');
     const next=e==='Listo para despacho'&&f['Resultado QA']!=='QA aprobado'?'Revisar control de calidad':e==='Confirmado'?'Preparar producción':e==='En producción'?'Revisar avance y entrega':e==='Despachado'?'Revisar entrega y pago':e==='Cancelado'?'Pedido cancelado':'Consultar detalle';
     const cardMenu=!detail&&typeof pedidoActMenuHtml==='function'?pedidoActMenuHtml(p,`actmenu-ped-card-${p.id}`):'';
     const mainAction=detail&&nextStage?button(nextStage==='En producción'?'Pasar a producción':nextStage==='Completado'?'Marcar completado':`Pasar a ${nextStage}`,'order-advance',p.id,'op-primary'):detail?'':button('Ver pedido','order',p.id,'op-primary');
     const statusControl=detail||late?pill(late?'Entrega atrasada':e,late?'danger':'neutral'):orderStatusDropdown(p);
-    return `<article class="op-record op-order-record ${late?'op-record-alert':''}"><header><div class="op-order-head-copy"><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p></div>${statusControl}</header>
+    return `<article class="op-record op-order-record ${late?'op-record-alert':''}"><header><div class="op-order-head-copy"><span class="op-eyebrow">${esc(f['N° Pedido']||'Pedido')}</span><h3>${esc(resolveClienteName(f['Cliente']))}</h3><p>${esc(title)}</p><small class="op-order-source">${esc(origin)}</small></div>${statusControl}</header>
       <div class="op-facts"><div><span>Entrega</span><b>${esc(f['Fecha entrega']?(closed.includes(e)?'Fecha programada':dateText(f['Fecha entrega'])):'Sin fecha registrada')}</b><small>${esc(f['Fecha entrega']||'')}</small></div><div><span>Saldo ${pay.estimated?'estimado':'pendiente'} · con IVA</span><b>${money(pay.remaining)}</b><small>${esc(pay.label)}</small></div></div>
       ${detail?orderWorkDetail(p):''}
       <div class="op-payment"><b>Pago</b> ${detail?pill(pay.label,pay.tone):orderPaymentDropdown(p)}<span>${esc(pay.form||'Condición sin definir')}</span>${/D[ÍI]AS/i.test(pay.form)&&pay.remaining!==0?'<small>Vencimiento de pago: revisar fecha de OC / factura</small>':''}</div>
