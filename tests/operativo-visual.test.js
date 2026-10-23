@@ -3,10 +3,10 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 function setup(role='admin'){
-  const elements=new Map(),listeners={};
+  const elements=new Map(),listeners={},saved=new Map();
   const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:'',dataset:{},style:{},querySelector:()=>null,querySelectorAll:()=>[],scrollIntoView(){}});return elements.get(id);};
   const context={window:{},document:{getElementById:element,addEventListener:(name,fn)=>listeners[name]=fn},
-    localStorage:{getItem:()=>null,setItem:()=>{}},AUTH:{getUser:()=>({role})},RBAC:{tabs:{admin:['overview','pedidos','cotizaciones','finanzas','clientes'],produccion:['overview','pedidos'],comercial:['overview','pedidos','cotizaciones','clientes']}},
+    localStorage:{getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value)},AUTH:{getUser:()=>({role})},RBAC:{tabs:{admin:['overview','pedidos','cotizaciones','finanzas','clientes'],produccion:['overview','pedidos'],comercial:['overview','pedidos','cotizaciones','clientes']}},
     isVendorMode:()=>role==='comercial',vendorOwnsRecord:r=>r.fields.Vendedor==='propio',
     escapeHtml:x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'),
     formatCLP:x=>'$'+x,resolveClienteName:x=>Array.isArray(x)?x.join(','):x||'Sin cliente',
@@ -17,7 +17,7 @@ function setup(role='admin'){
     renderCotizaciones:()=>{},renderPedidos:()=>{},_pagosProg:()=>[],ldGetAll:()=>[],
     console,Date,Number,Math};
   vm.createContext(context);vm.runInContext(fs.readFileSync('js/operativo-visual.js','utf8'),context);context.OP=context.window.OP;
-  return {context,op:context.OP,element,click:(action,arg='')=>listeners.click({target:{closest:()=>({dataset:{op:action,arg}})}}),search:value=>listeners.input({target:{id:'opQuoteSearch',value}})};
+  return {context,op:context.OP,element,click:(action,arg='')=>listeners.click({target:{closest:()=>({dataset:{op:action,arg}})}}),search:value=>listeners.input({target:{id:'opQuoteSearch',value}}),changeSort:value=>listeners.change({target:{id:'opQuoteSort',value}}),saved};
 }
 const record=(id,fields)=>({id,fields});
 test('saldo parcial usa el abono registrado y distingue la estimación del 50%',()=>{
@@ -66,19 +66,19 @@ test('buscar FEDESKI encuentra las 7 cotizaciones del cliente aunque dos tengan 
   context.state.cotizaciones=rows;
   const matches=()=>Array.from(op.filterQuotes(rows),c=>c.id);
   search(' FEDESKI ');
-  assert.deepEqual(matches(),titles.map(([id])=>id));
+  assert.deepEqual(matches(),titles.slice().reverse().map(([id])=>id));
   op.quotes(op.filterQuotes(rows));
   assert.match(element('opQuoteSelection').textContent,/7 cotizaciones/);
   assert.match(element('opQuotes').innerHTML,/260908/);
   search('federacion');
   assert.equal(matches().length,7,'busca sin tilde aun cuando Empresa tiene tilde');
   search('medallas');
-  assert.deepEqual(matches(),titles.slice(0,5).map(([id])=>id),'buscar un producto no arrastra las otras cotizaciones del cliente');
+  assert.deepEqual(matches(),titles.slice(0,5).reverse().map(([id])=>id),'buscar un producto no arrastra las otras cotizaciones del cliente');
   search('260908');
   assert.deepEqual(matches(),['260908'],'buscar por número sigue siendo exacto en su selección');
   search('fedeski');
   click('cot-filter','awaiting');
-  assert.deepEqual(matches(),['260706','260908'],'el filtro de estado también se aplica a todos los resultados del cliente');
+  assert.deepEqual(matches(),['260908','260706'],'el filtro de estado también se aplica a todos los resultados del cliente');
   search('');
   assert.equal(matches().length,2,'al limpiar la búsqueda se conserva el filtro de estado');
 });
@@ -394,4 +394,57 @@ test('REPORTES queda fijo en modo Experto y no muestra selector Simple/Experto',
   assert.match(src,/expertOnlyViews=new Set\(\[[^\]]*'reporte'[^\]]*\]\)/);
   assert.match(src,/value=simpleOnlyViews\.has\(page\)\?'simple':expertOnlyViews\.has\(page\)\?'expert'/);
   assert.match(src,/else if\(expertOnlyViews\.has\(page\)\)\{[\s\S]*?header\.querySelector\?\.\('\.op-switch'\)\?\.remove\?\.\(\);[\s\S]*?mode\(page,'expert'\)/);
+});
+
+test('cotizaciones se muestran por número descendente y permiten ordenar por fecha, cliente, neto y margen',()=>{
+  const {op,changeSort,saved}=setup();
+  const rows=[
+    record('b',{'N° Cotización':'261011','Fecha cotización':'2026-10-20',Cliente:'Zulu','Total final (CLP)':119000,'Margen':12}),
+    record('a',{'N° Cotización':'261014','Fecha cotización':'2026-10-18',Cliente:'Ámbar','Total final (CLP)':595000,'Margen':31}),
+    record('d',{'N° Cotización':'261012','Fecha cotización':'2026-10-21',Cliente:'Beta','Total final (CLP)':238000,'Margen':45}),
+    record('c',{'N° Cotización':'261013','Fecha cotización':'2026-10-19',Cliente:'Delta','Total final (CLP)':357000,'Margen':22})
+  ];
+  const ids=()=>Array.from(op.filterQuotes(rows),c=>c.id);
+  assert.deepEqual(ids(),['a','c','d','b'],'por defecto mayor número primero, sin depender del orden de Airtable');
+  changeSort('number-asc');assert.deepEqual(ids(),['b','d','c','a']);
+  changeSort('date-desc');assert.deepEqual(ids(),['d','b','c','a']);
+  changeSort('date-asc');assert.deepEqual(ids(),['a','c','b','d']);
+  changeSort('client-asc');assert.deepEqual(ids(),['a','d','c','b']);
+  changeSort('client-desc');assert.deepEqual(ids(),['b','c','d','a']);
+  changeSort('total-desc');assert.deepEqual(ids(),['a','c','d','b']);
+  changeSort('total-asc');assert.deepEqual(ids(),['b','d','c','a']);
+  assert.equal(saved.get('op_quote_sort'),'total-asc');
+});
+
+test('las fechas y montos desconocidos se dejan al final, sin perder cotizaciones ni modificar el listado origen',()=>{
+  const {op,changeSort}=setup();
+  const rows=[
+    record('missing',{'N° Cotización':'261099'}),
+    record('old',{'N° Cotización':'261011','Fecha cotización':'2026-10-20','Total final (CLP)':119000}),
+    record('new',{'N° Cotización':'261014','Fecha cotización':'2026-10-21','Total final (CLP)':238000})
+  ];
+  changeSort('date-desc');
+  assert.deepEqual(Array.from(op.filterQuotes(rows),c=>c.id),['new','old','missing']);
+  changeSort('date-asc');
+  assert.deepEqual(Array.from(op.filterQuotes(rows),c=>c.id),['old','new','missing']);
+  changeSort('total-desc');
+  assert.deepEqual(Array.from(op.filterQuotes(rows),c=>c.id),['new','old','missing']);
+  assert.deepEqual(rows.map(c=>c.id),['missing','old','new'],'el estado del CRM no se reordena ni muta');
+});
+
+test('el selector de orden se inserta una sola vez, conserva la selección y se adapta a móvil',()=>{
+  const {op,context,changeSort,element}=setup();
+  let count=0,markup='',sortControl=null;
+  element('opQuoteSearch').insertAdjacentHTML=(_,html)=>{count++;markup=html;sortControl={value:''};};
+  context.document.querySelector=selector=>selector==='#opQuoteSort'?sortControl:null;
+  op.quotes([]);op.quotes([]);
+  assert.equal(count,1,'no se duplica el selector al redibujar');
+  assert.match(markup,/id="opQuoteSort"/);
+  assert.match(markup,/Ordenar por/);
+  assert.match(markup,/margin-desc/);
+  changeSort('client-asc');op.quotes([]);
+  assert.equal(sortControl.value,'client-asc');
+  const css=fs.readFileSync('operativo-visual.css','utf8');
+  assert.match(css,/#tab-cotizaciones \.op-quote-sort-field/);
+  assert.match(css,/@media\(max-width:720px\)/);
 });

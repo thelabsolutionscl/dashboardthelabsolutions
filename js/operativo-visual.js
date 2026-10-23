@@ -6,7 +6,24 @@
   const expertOnlyViews=new Set(['reporte','newsletter']);
   const closed=['Despachado','Completado','Cancelado'];
   const stages=['Confirmado','En producción','Listo para despacho','Despachado','Completado'];
-  const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null,quoteClient:null};
+  const ui={cot:'all',search:'',aging:'all',limit:24,returnFocus:null,quoteClient:null,quoteSort:'number-desc'};
+
+  const quoteSortOptions=[
+    ['number-desc','Número · mayor a menor'],
+    ['number-asc','Número · menor a mayor'],
+    ['date-desc','Fecha · más recientes'],
+    ['date-asc','Fecha · más antiguas'],
+    ['client-asc','Cliente · A a Z'],
+    ['client-desc','Cliente · Z a A'],
+    ['total-desc','Total neto · mayor a menor'],
+    ['total-asc','Total neto · menor a mayor'],
+    ['margin-desc','Margen · mayor a menor'],
+    ['margin-asc','Margen · menor a mayor']
+  ];
+  try{
+    const saved=localStorage.getItem('op_quote_sort');
+    if(quoteSortOptions.some(option=>option[0]===saved))ui.quoteSort=saved;
+  }catch(_){}
   const $=id=>document.getElementById(id);
   const detailState=new Map();
   const allowed=page=>typeof AUTH!=='undefined'&&typeof RBAC!=='undefined'&&(RBAC.tabs[AUTH.getUser()?.role]||[]).includes(page);
@@ -216,6 +233,56 @@
     const client=state.clientesByIdRec?.[clientId]||(state.clientes||[]).find(x=>x.id===clientId);
     return cotClientIds(client?.fields?.['Cotizaciones']).includes(c.id);
   }
+
+  // El orden se aplica DESPUÉS de los filtros, tanto a Tarjetas como a Tabla.
+  // Los valores ausentes quedan al final y los empates son deterministas.
+  const quoteCollator=new Intl.Collator('es',{numeric:true,sensitivity:'base'});
+  function quoteSortText(a,b,direction){
+    const x=String(a??'').trim(),y=String(b??'').trim();
+    if(!x||!y)return !x&&!y?0:!x?1:-1;
+    return quoteCollator.compare(x,y)*direction;
+  }
+  function quoteSortNumber(a,b,direction){
+    if(a===null||b===null)return a===b?0:a===null?1:-1;
+    return (a-b)*direction;
+  }
+  function quoteAmount(c){
+    const value=c.fields?.['Total final (CLP)'];
+    const n=value==null||value===''?NaN:Number(value);
+    return Number.isFinite(n)?n/1.19:null;
+  }
+  function quoteMargin(c){
+    try{
+      const value=getMargenCot(c.fields||{});
+      if(value==null||value==='')return null;
+      const n=Number(value);
+      return Number.isFinite(n)?n:null;
+    }catch(_){return null;}
+  }
+  function quoteDate(c){
+    const value=c.fields?.['Fecha cotización']||c.createdTime||'';
+    const s=String(value).slice(0,10);
+    return day(s);
+  }
+  function sortQuoteRows(rows){
+    const [field,order]=ui.quoteSort.split('-'),direction=order==='asc'?1:-1;
+    return [...rows].sort((a,b)=>{
+      const fa=a.fields||{},fb=b.fields||{};
+      let difference=0;
+      if(field==='number')difference=quoteSortText(fa['N° Cotización'],fb['N° Cotización'],direction);
+      else if(field==='date')difference=quoteSortNumber(quoteDate(a),quoteDate(b),direction);
+      else if(field==='client')difference=quoteSortText(resolveClienteName(fa['Cliente']),resolveClienteName(fb['Cliente']),direction);
+      else if(field==='total')difference=quoteSortNumber(quoteAmount(a),quoteAmount(b),direction);
+      else if(field==='margin')difference=quoteSortNumber(quoteMargin(a),quoteMargin(b),direction);
+      if(difference)return difference;
+      // Una misma fecha o monto siempre se desempata por el número más alto.
+      // Si tampoco existe número, conserva el orden previo estable.
+      return field==='number'
+        ?quoteSortNumber(quoteDate(a),quoteDate(b),-1)
+        :quoteSortText(fa['N° Cotización'],fb['N° Cotización'],-1);
+    });
+  }
+
   function filterQuotes(rows){
     const query=cotSearchKey(ui.search);
     // Solo nombres de clientes visibles para la sesión actual.
@@ -236,7 +303,7 @@
         if(cotClientMatches(names,query))ids.forEach(id=>matchedClients.add(id));
       });
     }
-    return rows.filter(c=>{
+    return sortQuoteRows(rows.filter(c=>{
       if(ui.quoteClient&&!quoteBelongsToClient(c,ui.quoteClient.id))return false;
       const q=quoteInfo(c),f=c.fields;
       const match=ui.cot==='all'||ui.cot==='open'&&(q.pending||q.awaiting)||ui.cot==='pending'&&q.pending||ui.cot==='awaiting'&&q.awaiting||ui.cot==='expiring'&&q.awaiting&&q.expires!==null&&q.expires>=0&&q.expires<=3;
@@ -244,7 +311,7 @@
       const direct=[f['N° Cotización'],f['Alias / Título']].some(v=>cotSearchKey(v).includes(query));
       return direct||cotClientMatches(namesByQuote.get(c.id)||[],query)||
         cotClientIds(f['Cliente']).some(id=>matchedClients.has(id));
-    });
+    }));
   }
   function stepper(e){const current=stages.indexOf(e);return `<ol class="op-stages" aria-label="Etapas de producción">${stages.map((s,i)=>`<li class="${current>=i?'is-done':''}"${i===current?' aria-current="step"':''}><span>${esc(s)}</span></li>`).join('')}</ol>`;}
   function nextOrderStage(p){
@@ -427,6 +494,16 @@
   }
   function quotes(rows){
     mount();const el=$('opQuotes');if(!el)return;
+    const search=$('opQuoteSearch');
+    // El HTML existente conserva su buscador y filtros; incorporamos un selector
+    // a su lado, sin duplicarlo en cada recarga.
+    if(search?.insertAdjacentHTML&&!document.querySelector?.('#opQuoteSort')){
+      const options=quoteSortOptions.map(([key,label])=>'<option value="'+esc(key)+'">'+esc(label)+'</option>').join('');
+      search.insertAdjacentHTML('beforebegin','<label class="op-quote-sort-field" for="opQuoteSort">Ordenar por <select id="opQuoteSort" aria-label="Ordenar cotizaciones">'+options+'</select></label>');
+    }
+    const sortSelect=document.querySelector?.('#opQuoteSort');
+    if(sortSelect)sortSelect.value=ui.quoteSort;
+    rows=sortQuoteRows(rows);
     const all=own(state.cotizaciones);
     const metrics=[['Sin respuesta',all.filter(c=>quoteInfo(c).awaiting).length,'awaiting'],['Por vencer · 3 días',all.filter(c=>{const q=quoteInfo(c);return q.awaiting&&q.expires!==null&&q.expires>=0&&q.expires<=3;}).length,'expiring'],['Pendientes de envío',all.filter(c=>quoteInfo(c).pending).length,'pending']];
     $('opQuoteMetrics').innerHTML=metrics.map(([l,n,f])=>metric(l,String(n),'Filtrar cotizaciones','cot-filter',f)).join('');
@@ -851,6 +928,14 @@
   },true);
   document.addEventListener('click',events);
   document.addEventListener('input',e=>{if(e.target.id==='opQuoteSearch'){ui.search=e.target.value;ui.limit=24;renderCotizaciones(true);}});
+  document.addEventListener('change',e=>{
+    if(e.target?.id!=='opQuoteSort')return;
+    const choice=e.target.value;
+    if(!quoteSortOptions.some(([key])=>key===choice))return;
+    ui.quoteSort=choice;ui.limit=24;
+    try{localStorage.setItem('op_quote_sort',choice);}catch(_){}
+    renderCotizaciones(true);
+  });
   // Carga diferida del monitor con el hash actual: no mezcla versiones.
   (function loadConnections(){
     const src=document.currentScript?.src;
