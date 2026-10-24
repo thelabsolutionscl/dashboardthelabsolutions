@@ -13,13 +13,22 @@ const VALID_MATERIALS=new Set(['PLA','PLA+','PETG','TPU','TPU-95A','ABS','ASA','
 const SLICE_NAME=/^(slice|slice_model|slice_stl|slice_file|orca_slice|orcaslicer_slice|laminar|laminar_modelo)$/i;
 
 function settings(env=process.env){
-  const command=String(env.ORCA_MCP_COMMAND||'').trim();
+  const configFile=env.ORCA_MCP_CONFIG_FILE||
+    path.join(env.FARM_DATA_DIR||path.join(os.homedir(),'Library','Application Support','TheLabFarm'),'orca-mcp.json');
+  let saved={};
+  try{
+    const st=fs.statSync(configFile);
+    if(st.size>8192)throw new Error('Configuracion MCP demasiado grande');
+    saved=JSON.parse(fs.readFileSync(configFile,'utf8'));
+    if(!saved||typeof saved!=='object'||Array.isArray(saved))throw new Error('Configuracion MCP invalida');
+  }catch(e){if(e.code!=='ENOENT')throw new Error('No se pudo leer orca-mcp.json: '+e.message);}
+  const command=String(env.ORCA_MCP_COMMAND||saved.command||'').trim();
   let args=[];
-  try{args=JSON.parse(env.ORCA_MCP_ARGS_JSON||'[]');}
+  try{args=JSON.parse(env.ORCA_MCP_ARGS_JSON||JSON.stringify(saved.args||[]));}
   catch(_){throw new Error('ORCA_MCP_ARGS_JSON debe ser un array JSON');}
   if(!Array.isArray(args)||args.some(a=>typeof a!=='string')||args.length>12)
     throw new Error('ORCA_MCP_ARGS_JSON invalido');
-  return{command,args,preferredTool:String(env.ORCA_MCP_SLICE_TOOL||'').trim()};
+  return{command,args,preferredTool:String(env.ORCA_MCP_SLICE_TOOL||saved.sliceTool||'').trim()};
 }
 function cleanName(s){
   return String(s||'modelo.stl').split(/[\\/]/).pop().replace(/[^\w.\- ]/g,'_').slice(0,100);
@@ -86,7 +95,7 @@ function selectTool(tools,name){
 }
 async function status(env=process.env){
   let config;try{config=settings(env);}catch(e){return{ok:false,available:false,reason:e.message,tools:[]};}
-  if(!config.command)return{ok:true,available:false,reason:'Configura ORCA_MCP_COMMAND y ORCA_MCP_ARGS_JSON en el equipo del Farm Controller.',tools:[]};
+  if(!config.command)return{ok:true,available:false,reason:'Configura orca-mcp.json o las variables ORCA_MCP_COMMAND / ORCA_MCP_ARGS_JSON en el equipo del Farm Controller.',tools:[]};
   try{
     return await withTools(config,10000,async tools=>{
       const tool=selectTool(tools,config.preferredTool);
