@@ -10,6 +10,7 @@ const MAX_MODEL=12*1024*1024;
 const MAX_GCODE=32*1024*1024;
 const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
 const VALID_MATERIALS=new Set(['PLA','PLA+','PETG','TPU','TPU-95A','ABS','ASA','PA','PC']);
+let slicing=false;
 const SLICE_NAME=/^(slice|slice_model|slice_stl|slice_file|orca_slice|orcaslicer_slice|laminar|laminar_modelo)$/i;
 
 function settings(env=process.env){
@@ -43,11 +44,13 @@ function mcpClient(config, timeoutMs){
     pending.clear();
   };
   child.on('error',e=>cleanup(new Error('No se pudo iniciar MCP: '+e.message)));
+  child.stdin.on('error',e=>cleanup(new Error('Canal MCP stdin: '+e.message)));
+  child.stdout.on('error',e=>cleanup(new Error('Canal MCP stdout: '+e.message)));
   child.on('close',()=>cleanup(new Error('Servidor MCP finalizo la sesion')));
   child.stdout.setEncoding('utf8');
   child.stdout.on('data',chunk=>{
     buffer+=chunk;
-    if(buffer.length>2*1024*1024){cleanup(new Error('Respuesta MCP demasiado grande'));child.kill();return;}
+    if(buffer.length>48*1024*1024){cleanup(new Error('Respuesta MCP demasiado grande'));child.kill();return;}
     let split;
     while((split=buffer.indexOf('\n'))!==-1){
       const line=buffer.slice(0,split).trim();buffer=buffer.slice(split+1);
@@ -143,6 +146,9 @@ function gcodeFromMcp(result,workspace,output){
   return null;
 }
 async function slice(request,env=process.env){
+  if(slicing)throw new Error('OrcaSlicer ya esta laminando otro trabajo');
+  slicing=true;
+  try{
   const config=settings(env);
   if(!config.command)throw new Error('MCP de OrcaSlicer no configurado en Farm Controller');
   const name=cleanName(request.filename||'modelo.stl');
@@ -178,5 +184,6 @@ async function slice(request,env=process.env){
         grams:finite(stats.grams??stats.filament_grams,100000)};
     });
   }finally{await fsp.rm(workspace,{recursive:true,force:true});}
+  }finally{slicing=false;}
 }
 module.exports={status,slice,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
