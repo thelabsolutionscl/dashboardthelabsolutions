@@ -1,0 +1,173 @@
+'use strict';
+
+// Adaptador MCP de OrcaSlicer (stdio / JSON-RPC). Solo lamina: no envia G-code a impresoras.
+const fs=require('node:fs');
+const fsp=fs.promises;
+const os=require('node:os');
+const path=require('node:path');
+const {spawn}=require('node:child_process');
+const MAX_MODEL=12*1024*1024;
+const MAX_GCODE=32*1024*1024;
+const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
+const VALID_MATERIALS=new Set(['PLA','PLA+','PETG','TPU','TPU-95A','ABS','ASA','PA','PC']);
+const SLICE_NAME=/^(slice|slice_model|slice_stl|slice_file|orca_slice|orcaslicer_slice|laminar|laminar_modelo)$/i;
+
+function settings(env=process.env){
+  const command=String(env.ORCA_MCP_COMMAND||'').trim();
+  let args=[];
+  try{args=JSON.parse(env.ORCA_MCP_ARGS_JSON||'[]');}
+  catch(_){throw new Error('ORCA_MCP_ARGS_JSON debe ser un array JSON');}
+  if(!Array.isArray(args)||args.some(a=>typeof a!=='string')||args.length>12)
+    throw new Error('ORCA_MCP_ARGS_JSON invalido');
+  return{command,args,preferredTool:String(env.ORCA_MCP_SLICE_TOOL||'').trim()};
+}
+function cleanName(s){
+  return String(s||'modelo.stl').split(/[\\/]/).pop().replace(/[^\w.\- ]/g,'_').slice(0,100);
+}
+function mcpClient(config, timeoutMs){
+  const child=spawn(config.command,config.args,{stdio:['pipe','pipe','pipe'],env:process.env,windowsHide:true});
+  let seq=0,buffer='',dead=false;
+  const pending=new Map();
+  const cleanup=(error)=>{
+    if(dead)return;dead=true;
+    for(const p of pending.values())p.reject(error||new Error('MCP desconectado'));
+    pending.clear();
+  };
+  child.on('error',e=>cleanup(new Error('No se pudo iniciar MCP: '+e.message)));
+  child.on('close',()=>cleanup(new Error('Servidor MCP finalizo la sesion')));
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data',chunk=>{
+    buffer+=chunk;
+    if(buffer.length>2*1024*1024){cleanup(new Error('Respuesta MCP demasiado grande'));child.kill();return;}
+    let split;
+    while((split=buffer.indexOf('\n'))!==-1){
+      const line=buffer.slice(0,split).trim();buffer=buffer.slice(split+1);
+      if(!line.startsWith('{'))continue;
+      let obj;try{obj=JSON.parse(line);}catch(_){continue;}
+      if(!Object.prototype.hasOwnProperty.call(obj,'id'))continue;
+      const entry=pending.get(obj.id);if(!entry)continue;pending.delete(obj.id);
+      if(obj.error)entry.reject(new Error('MCP: '+String(obj.error.message||'error').slice(0,250)));
+      else entry.resolve(obj.result||{});
+    }
+  });
+  const timer=setTimeout(()=>{cleanup(new Error('Tiempo de espera MCP agotado'));child.kill();},timeoutMs);
+  timer.unref?.();
+  function send(method,params,notification=false){
+    if(dead)return Promise.reject(new Error('MCP no esta disponible'));
+    const id=++seq,body={jsonrpc:'2.0',method,params};
+    if(!notification)body.id=id;
+    if(notification){child.stdin.write(JSON.stringify(body)+'\n');return Promise.resolve({});}
+    return new Promise((resolve,reject)=>{
+      pending.set(id,{resolve,reject});
+      child.stdin.write(JSON.stringify(body)+'\n',err=>{if(err){pending.delete(id);reject(err);}});
+    });
+  }
+  return{
+    async initialize(){
+      await send('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'thelab-dashboard',version:'1.0.0'}});
+      await send('notifications/initialized',{},true);
+    },
+    send,
+    close(){clearTimeout(timer);cleanup(new Error('MCP cerrado'));child.kill();}
+  };
+}
+async function withTools(config,timeout,callback){
+  const client=mcpClient(config,timeout);
+  try{
+    await client.initialize();
+    const list=await client.send('tools/list',{});
+    if(!Array.isArray(list.tools))throw new Error('MCP no anuncio herramientas');
+    return await callback(list.tools,client);
+  }finally{client.close();}
+}
+function selectTool(tools,name){
+  return tools.find(t=>t.name===name)||
+    (!name?tools.find(t=>SLICE_NAME.test(t.name)):null);
+}
+async function status(env=process.env){
+  let config;try{config=settings(env);}catch(e){return{ok:false,available:false,reason:e.message,tools:[]};}
+  if(!config.command)return{ok:true,available:false,reason:'Configura ORCA_MCP_COMMAND y ORCA_MCP_ARGS_JSON en el equipo del Farm Controller.',tools:[]};
+  try{
+    return await withTools(config,10000,async tools=>{
+      const tool=selectTool(tools,config.preferredTool);
+      return{ok:true,available:!!tool,tool:tool?.name||null,
+        tools:tools.map(t=>t.name).filter(n=>/slice|orca|lamin|gcode|profile/i.test(n)).slice(0,25),
+        reason:tool?'':'MCP conectado, pero no se encontro una herramienta de laminado. Configura ORCA_MCP_SLICE_TOOL.'};
+    });
+  }catch(e){return{ok:true,available:false,reason:e.message.slice(0,300),tools:[]};}
+}
+function argumentsForTool(tool,request,input,output){
+  const properties=tool.inputSchema?.properties||{};
+  const values={
+    model_path:input,input_path:input,file_path:input,stl_path:input,input_file:input,
+    filename:input,path:input,file:input,
+    output_path:output,output_file:output,gcode_path:output,destination:output,
+    printer:request.model,printer_model:request.model,machine_model:request.model,
+    model:request.model,material:request.material,filament:request.material,
+    filament_type:request.material,profile:request.profile,profile_name:request.profile,
+    process_profile:request.profile
+  };
+  const args={};
+  for(const key of Object.keys(properties))if(Object.prototype.hasOwnProperty.call(values,key)){
+    if(values[key])args[key]=values[key];
+  }
+  const required=tool.inputSchema?.required||[];
+  const missing=required.filter(key=>!(key in args));
+  if(missing.length)throw new Error('La herramienta MCP requiere parametros no soportados: '+missing.join(', '));
+  if(!Object.keys(args).length)throw new Error('La herramienta MCP no acepta rutas de archivo conocidas');
+  return args;
+}
+function gcodeFromMcp(result,workspace,output){
+  const obj=result.structuredContent||{};
+  const candidates=[output,obj.output_path,obj.gcode_path,obj.output_file,obj.file_path];
+  for(const candidate of candidates){
+    if(typeof candidate!=='string')continue;
+    const filepath=path.resolve(candidate);
+    if(!filepath.startsWith(workspace+path.sep))continue;
+    try{
+      const st=fs.statSync(filepath);
+      if(st.isFile()&&st.size>0&&st.size<=MAX_GCODE)return fs.readFileSync(filepath);
+    }catch(_){}
+  }
+  if(typeof obj.gcode_base64==='string')return Buffer.from(obj.gcode_base64,'base64');
+  if(typeof obj.gcode==='string')return Buffer.from(obj.gcode,'utf8');
+  return null;
+}
+async function slice(request,env=process.env){
+  const config=settings(env);
+  if(!config.command)throw new Error('MCP de OrcaSlicer no configurado en Farm Controller');
+  const name=cleanName(request.filename||'modelo.stl');
+  if(!/\.(stl|3mf)$/i.test(name))throw new Error('Solo se aceptan modelos STL o 3MF');
+  if(!VALID_MODELS.has(request.model))throw new Error('Modelo de impresora no compatible');
+  if(!VALID_MATERIALS.has(request.material))throw new Error('Material no compatible');
+  if(request.profile!=null&&(typeof request.profile!=='string'||request.profile.length>120))
+    throw new Error('Perfil demasiado largo');
+  if(typeof request.modelBase64!=='string'||request.modelBase64.length>Math.ceil(MAX_MODEL*4/3)+16)
+    throw new Error('Modelo vacio o demasiado grande (maximo 12 MB)');
+  const model=Buffer.from(request.modelBase64,'base64');
+  if(!model.length||model.length>MAX_MODEL)throw new Error('Modelo vacio o demasiado grande');
+  const workspace=await fsp.mkdtemp(path.join(os.tmpdir(),'tls-orca-'));
+  try{
+    const input=path.join(workspace,name),output=path.join(workspace,'laminado.gcode');
+    await fsp.writeFile(input,model,{mode:0o600});
+    return await withTools(config,180000,async(tools,client)=>{
+      const tool=selectTool(tools,config.preferredTool);
+      if(!tool)throw new Error('El MCP no expone herramienta de laminado. Revisa ORCA_MCP_SLICE_TOOL');
+      const args=argumentsForTool(tool,request,input,output);
+      const result=await client.send('tools/call',{name:tool.name,arguments:args});
+      if(result.isError)throw new Error('El MCP devolvio un error de laminado: '+String(result.content?.[0]?.text||'sin detalle').slice(0,250));
+      const gcode=gcodeFromMcp(result,workspace,output);
+      if(!gcode||!gcode.length||gcode.length>MAX_GCODE)throw new Error('El MCP no produjo un G-code valido de hasta 32 MB en el directorio temporal');
+      const sample=gcode.subarray(0,8192).toString('utf8');
+      if(!/(?:^|\n)\s*(?:G[01289][01]?|M10[49]|;)/m.test(sample))
+        throw new Error('El archivo devuelto no parece ser G-code');
+      const stats=result.structuredContent||{};
+      const finite=(v,max)=>Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=max?Number(v):null;
+      return{ok:true,filename:name.replace(/\.(stl|3mf)$/i,'')+'.gcode',
+        gcodeBase64:gcode.toString('base64'),bytes:gcode.length,tool:tool.name,
+        seconds:finite(stats.seconds??stats.secs??stats.estimated_time_seconds,10000000),
+        grams:finite(stats.grams??stats.filament_grams,100000)};
+    });
+  }finally{await fsp.rm(workspace,{recursive:true,force:true});}
+}
+module.exports={status,slice,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
