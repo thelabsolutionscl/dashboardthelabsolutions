@@ -67,3 +67,65 @@ test('las rutas MCP requieren roles y nunca invocan print/start',()=>{
   assert.match(front,/\/farm\/orca\/slice/);
   assert.doesNotMatch(front.slice(front.indexOf('// ── OrcaSlicer por MCP:')),/_queueStartNext|print\/start/);
 });
+
+
+
+const liveFixture=path.join(os.tmpdir(),'tls-test-real-orca-'+process.pid+'.js');
+const liveMock=[
+  "'use strict';",
+  "const fs=require('node:fs');const path=require('node:path');",
+  "let text='';",
+  "process.stdin.setEncoding('utf8');",
+  "process.stdin.on('data',chunk=>{text+=chunk;let i;while((i=text.indexOf('\\n'))!==-1){const line=text.slice(0,i);text=text.slice(i+1);",
+  "let req;try{req=JSON.parse(line);}catch(_){continue;}if(!req.id)continue;",
+  "let value={};",
+  "if(req.method==='initialize')value={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'orca',version:'0.1'}};",
+  "if(req.method==='tools/list')value={tools:['get_status','list_objects','load_model','slice_and_wait','save_gcode'].map(name=>({name,inputSchema:{type:'object',properties:{}}}))};",
+  "if(req.method==='tools/call'){const name=req.params.name;",
+  "let payload={};",
+  "if(name==='get_status')payload={presets:{printer:'Creality K1 (0.4 nozzle) - Copiar',filament:'Creality Generic TPU TEKNIPAK',print:'TecniPak'},modified:{print:['wall_loops']}};",
+  "if(name==='list_objects')payload={objects:[]};",
+  "if(name==='load_model'){if(!fs.existsSync(req.params.arguments.path))payload={error:'missing model'};else payload={loaded:true};}",
+  "if(name==='slice_and_wait')payload={state:'done',stats:{estimated_time_seconds:450,filament_used_g:17.25},warnings:[]};",
+  "if(name==='save_gcode'){const dest=path.join(process.env.PRINT_OUTCOMES_DIR,'gcode');fs.mkdirSync(dest,{recursive:true});const file=path.join(dest,'laminado.gcode');fs.writeFileSync(file,'; OrcaSlicer G-code\\nG1 X10 Y20 F1000\\n');payload={path:file};}",
+  "value={structuredContent:payload};}",
+  "process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:value})+'\\n');}});"
+].join('\n');
+test.before(()=>fs.writeFileSync(liveFixture,liveMock));
+test.after(()=>{try{fs.unlinkSync(liveFixture);}catch(_){}});
+function liveConfig(){
+  return{ORCA_MCP_COMMAND:process.execPath,ORCA_MCP_ARGS_JSON:JSON.stringify([liveFixture]),
+    ORCA_MCP_CONFIG_FILE:path.join(os.tmpdir(),'missing-real-orca-'+process.pid+'.json')};
+}
+test('MCP real se detecta y valida get_status',async()=>{
+  const result=await adapter.status(liveConfig());
+  assert.equal(result.available,true);
+  assert.equal(result.mode,'live');
+});
+test('MCP real carga el STL, lamina usando perfiles activos y guarda G-code temporal',async()=>{
+  const result=await adapter.slice({
+    filename:'prueba.stl',model:'K1',material:'TPU',profile:'',
+    modelBase64:Buffer.from('solid\nendsolid').toString('base64')
+  },liveConfig());
+  assert.equal(result.ok,true);
+  assert.equal(result.seconds,450);
+  assert.equal(result.grams,17.25);
+  assert.match(Buffer.from(result.gcodeBase64,'base64').toString(),/G1 X10/);
+  assert.equal(result.activePresets.printer,'Creality K1 (0.4 nozzle) - Copiar');
+});
+test('rechaza material o máquina distintos sin cambiar presets',async()=>{
+  const base={filename:'pieza.stl',model:'K1',material:'PLA',
+    modelBase64:Buffer.from('stl').toString('base64')};
+  await assert.rejects(adapter.slice(base,liveConfig()),/Filamento activo/);
+  await assert.rejects(adapter.slice({...base,model:'K2',material:'TPU'},liveConfig()),/Perfil de impresora activo/);
+});
+test('configuracion local del token pasa al proceso sin mostrar secretos',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tls-orca-secret-'));
+  try{
+    const file=path.join(dir,'orca-mcp.json');
+    fs.writeFileSync(file,JSON.stringify({command:'orca',args:[],env:{ORCA_API_TOKEN:'hidden-secret'}}));
+    const cfg=adapter.settings({ORCA_MCP_CONFIG_FILE:file});
+    assert.equal(cfg.childEnv.ORCA_API_TOKEN,'hidden-secret');
+    assert.equal(JSON.stringify({...cfg,childEnv:null}).includes('hidden-secret'),false);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
