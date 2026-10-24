@@ -3975,3 +3975,146 @@ function clearForm(type){
   if(type==='cot'){['cot-num','cot-alias','cot-subtotal','cot-total','cot-solicitud','cot-solicitud-inp','cot-notas','cot-cliente-search','cot-cliente-id','cot-tiempo-prod','cot-tiempo-prod-max','cot-fecha-entrega','cot-fecha-limite','cot-descuento'].forEach(id=>{const el=document.getElementById(id);if(el) el.value=id==='cot-descuento'?'0':'';});const si=document.getElementById('solicitudItems');if(si) si.innerHTML='';const fp=document.getElementById('cot-forma-pago');if(fp) fp.value='';const cu=document.getElementById('cot-urgente');if(cu) cu.value='false';const ce=document.getElementById('cot-estado-inicial');if(ce)ce.value='Enviada';try{cotPlazoLoad('new',{});}catch(e){};document.getElementById('cot-cliente-info').textContent='';document.getElementById('cot-cliente-dropdown')?.classList.remove('open');initDates();initItemsContainer();const c3dp=document.getElementById('c3d-inline-panel');if(c3dp) c3dp.style.display='none';Object.values(_c3dBtns()).forEach(b=>{if(b)b.style.background='';});const c3dl=document.getElementById('c3d-i-piezas');if(c3dl) c3dl.innerHTML='';c3dPiezasActivas=[];c3dPiezaCounter=0;['lsr','neo'].forEach(k=>{const p=document.getElementById(k+'-inline-panel');if(p)p.style.display='none';Object.values(_qcalcBtns(k)).forEach(b=>{if(b)b.style.background='';});});}
   if(type==='proveedor'){['np-nombre','np-contacto','np-cargo','np-telefono','np-whatsapp','np-email','np-web','np-rut','np-comuna','np-region','np-plazo','np-productos','np-notas'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});setPvSelectedCats('np',[]);const rep=document.getElementById('np-rep');if(rep) rep.value='3';const est=document.getElementById('np-estado');if(est) est.value='Activo';const cp=document.getElementById('np-condpago');if(cp) cp.value='';}
 }
+
+
+// ── OrcaSlicer por MCP: laminado en el Farm Controller, sin inicio automatico ──
+(function(){
+'use strict';
+if(typeof window==='undefined'||window.TLSOrcaMCP)return;
+const PANEL_ID='tlsOrcaMcpPanel',MODEL_TYPES=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
+let latest=null,busy=false;
+function $(id){return document.getElementById(id);}
+function notice(message,error){
+  const el=$('tlsOrcaMcpMessage');if(!el)return;
+  el.textContent=String(message||'');el.style.color=error?'var(--danger,#d55)':'var(--text2,inherit)';
+}
+function base(){return typeof getPrinterTunnel==='function'?getPrinterTunnel().replace(/\/$/,''):'';}
+function token(){return typeof getPrinterTunnelToken==='function'?getPrinterTunnelToken():'';}
+async function request(route,body){
+  const url=base(),auth=token();
+  if(!url||!auth)throw new Error('Empareja primero el dashboard con el Farm Controller del taller.');
+  const controller=new AbortController(),t=setTimeout(()=>controller.abort(),body?195000:12500);
+  try{
+    const response=await fetch(url+route,{
+      method:body?'POST':'GET',
+      headers:{'X-Bridge-Token':auth,...(body?{'Content-Type':'application/json'}:{})},
+      ...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:controller.signal
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok||data.ok===false)throw new Error(data.error||data.reason||('Farm Controller HTTP '+response.status));
+    return data;
+  }finally{clearTimeout(t);}
+}
+function machines(){
+  try{return typeof MAQUINAS!=='undefined'&&Array.isArray(MAQUINAS)?MAQUINAS:[];}
+  catch(_){return[];}
+}
+function populate(){
+  const select=$('tlsOrcaMcpPrinter');if(!select)return;
+  const previous=select.value;
+  select.replaceChildren();
+  for(const m of machines()){
+    if(!MODEL_TYPES.has(m.modelo))continue;
+    const opt=document.createElement('option');
+    opt.value=String(m.id);opt.textContent=(m.nombre||m.modelo)+' #'+(m.numG||m.num||'')+' — '+m.modelo;
+    select.append(opt);
+  }
+  if([...select.options].some(o=>o.value===previous))select.value=previous;
+  if(!select.options.length){
+    const opt=document.createElement('option');opt.value='';opt.textContent='No hay maquinas FDM configuradas';select.append(opt);
+  }
+}
+async function status(){
+  const check=$('tlsOrcaMcpCheck');if(check)check.disabled=true;
+  notice('Comprobando servidor MCP…');
+  try{
+    const data=await request('/farm/orca/status');
+    notice(data.available?'OrcaSlicer MCP disponible — '+data.tool:
+      (data.reason||'MCP no disponible'),!data.available);
+    const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=!data.available;
+    return data.available;
+  }catch(e){
+    notice(e.message,true);const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=true;return false;
+  }finally{if(check)check.disabled=false;}
+}
+function fileBase64(file){
+  return file.arrayBuffer().then(buf=>{
+    const bytes=new Uint8Array(buf),chunks=[];
+    for(let i=0;i<bytes.length;i+=32768)chunks.push(String.fromCharCode(...bytes.subarray(i,i+32768)));
+    return btoa(chunks.join(''));
+  });
+}
+function download(){
+  if(!latest?.gcodeBase64)return;
+  const binary=atob(latest.gcodeBase64),pieces=[];
+  for(let i=0;i<binary.length;i+=32768){
+    const chunk=binary.slice(i,i+32768),arr=new Uint8Array(chunk.length);
+    for(let j=0;j<chunk.length;j++)arr[j]=chunk.charCodeAt(j);
+    pieces.push(arr);
+  }
+  const blob=new Blob(pieces,{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=latest.filename||'orca.gcode';document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+async function slice(){
+  if(busy)return;
+  const file=$('tlsOrcaMcpFile')?.files?.[0],machine=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value);
+  if(!file||!/\.((stl)|(3mf))$/i.test(file.name)||file.size>12*1024*1024||!file.size){
+    notice('Selecciona un STL o 3MF de hasta 12 MB.',true);return;
+  }
+  if(!machine||!MODEL_TYPES.has(machine.modelo)){notice('Selecciona una impresora compatible.',true);return;}
+  if(!confirm('Laminar con OrcaSlicer para '+(machine.nombre||machine.modelo)+'? Se generara un G-code, sin iniciar impresion.'))return;
+  busy=true;latest=null;
+  const btn=$('tlsOrcaMcpSlice'),dl=$('tlsOrcaMcpDownload');
+  if(btn)btn.disabled=true;if(dl)dl.disabled=true;
+  try{
+    notice('Enviando modelo al MCP del taller y laminando…');
+    const data=await request('/farm/orca/slice',{
+      filename:file.name,model:machine.modelo,material:$('tlsOrcaMcpMaterial').value,
+      profile:$('tlsOrcaMcpProfile').value.trim(),
+      modelBase64:await fileBase64(file)
+    });
+    if(!data.gcodeBase64)throw new Error('El servidor no devolvio G-code.');
+    latest=data;if(dl)dl.disabled=false;
+    const stats=[data.bytes?Math.round(data.bytes/1024)+' KB':'',
+      data.seconds!=null?Math.round(data.seconds/60)+' min estimados':'',
+      data.grams!=null?data.grams.toFixed(1)+' g':''].filter(Boolean).join(' · ');
+    notice('Laminado correcto — '+data.filename+(stats?' · '+stats:'')+'. Descarga el G-code y cargalo en Trabajos planificados.');
+    download();
+  }catch(e){notice('No se pudo laminar: '+e.message,true);}
+  finally{busy=false;if(btn)btn.disabled=false;}
+}
+function mount(){
+  const host=$('tab-maquinas');if(!host||$(PANEL_ID))return false;
+  const panel=document.createElement('div');panel.id=PANEL_ID;panel.className='card';
+  panel.style.cssText='padding:14px 16px;margin-bottom:16px';
+  panel.innerHTML=[
+    '<details><summary style="cursor:pointer;font-weight:700">🧩 OrcaSlicer MCP — Laminado real <span style="font-weight:400;font-size:12px;color:var(--text3)">· desde el taller</span></summary>',
+    '<div style="padding-top:12px"><p style="font-size:12px;color:var(--text2)">Lamina STL/3MF con el MCP del equipo del taller. No mueve ejes ni inicia impresiones.</p>',
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">',
+    '<label style="flex:2;min-width:180px;font-size:12px">Archivo STL/3MF<input id="tlsOrcaMcpFile" type="file" accept=".stl,.3mf" class="field-input" style="width:100%"></label>',
+    '<label style="flex:2;min-width:180px;font-size:12px">Impresora<select id="tlsOrcaMcpPrinter" class="field-input" style="width:100%"></select></label>',
+    '<label style="flex:1;min-width:110px;font-size:12px">Material<select id="tlsOrcaMcpMaterial" class="field-input" style="width:100%"><option>PLA</option><option>PLA+</option><option>PETG</option><option>TPU</option><option>TPU-95A</option><option>ABS</option><option>ASA</option><option>PA</option><option>PC</option></select></label>',
+    '<label style="flex:2;min-width:155px;font-size:12px">Perfil de proceso (opcional)<input id="tlsOrcaMcpProfile" class="field-input" maxlength="120" placeholder="Nombre exacto en OrcaSlicer" style="width:100%"></label>',
+    '</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">',
+    '<button id="tlsOrcaMcpCheck" class="btn btn-ghost btn-sm" type="button">Comprobar MCP</button>',
+    '<button id="tlsOrcaMcpSlice" class="btn btn-primary btn-sm" type="button" disabled>Laminar con OrcaSlicer</button>',
+    '<button id="tlsOrcaMcpDownload" class="btn btn-ghost btn-sm" type="button" disabled>Descargar G-code otra vez</button>',
+    '</div><p id="tlsOrcaMcpMessage" aria-live="polite" style="font-size:12px;margin-top:8px;color:var(--text2)">Abre el panel y comprueba la conexion con el Farm Controller.</p></div></details>'
+  ].join('');
+  host.insertBefore(panel,host.firstChild);
+  populate();
+  $('tlsOrcaMcpCheck').addEventListener('click',status);
+  $('tlsOrcaMcpSlice').addEventListener('click',slice);
+  $('tlsOrcaMcpDownload').addEventListener('click',download);
+  panel.querySelector('details').addEventListener('toggle',e=>{if(e.target.open){populate();status();}});
+  return true;
+}
+function init(){
+  if(mount())return;
+  const observer=new MutationObserver(()=>{if(mount())observer.disconnect();});
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+}
+window.TLSOrcaMCP={status,slice,mount};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
