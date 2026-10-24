@@ -16,6 +16,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFile, execFileSync } = require('child_process');
 const SafetyPolicy = require('../js/machineops-unattended-safety.js');
+const OrcaMCP = require('./orca-mcp.js');
 
 const ROOT = __dirname;
 const DATA_DIR = process.env.FARM_DATA_DIR || path.join(ROOT, 'data');
@@ -1131,6 +1132,27 @@ const server = http.createServer(async (req, res) => {
     const role=requireRole(req,res,'viewer');if(!role)return;
     const session=issueSession(role);
     return json(res,201,{ok:true,token:session.token,role:session.role,expiresAt:session.expiresAt,ttlMs:SESSION_TTL_MS},{'X-Farm-Role':role});
+  }
+  // Solo laminado: esta API nunca inicia impresiones ni agrega trabajos a la cola.
+  if(p==='/farm/orca/status'){
+    if(req.method!=='GET'){res.setHeader('Allow','GET');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'viewer');if(!role)return;
+    const result=await OrcaMCP.status();
+    return json(res,200,result);
+  }
+  if(p==='/farm/orca/slice'){
+    if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'operator');if(!role)return;
+    try{
+      const raw=await readBody(req,17*1024*1024);
+      const body=JSON.parse(raw.toString('utf8')||'{}');
+      const result=await OrcaMCP.slice(body);
+      return json(res,200,result);
+    }catch(e){
+      const msg=String(e?.message||'Laminado MCP fallido').slice(0,320);
+      const clientError=/Solo se aceptan|Modelo de impresora|Material no compatible|Perfil demasiado|Modelo vacio|demasiado grande|JSON|Unexpected token/i.test(msg);
+      return json(res,clientError?400:502,{ok:false,error:msg});
+    }
   }
   const auditScan=p.match(/^\/farm\/audit-scan\/([^/]+)$/);
   if(auditScan&&req.method==='POST'){
