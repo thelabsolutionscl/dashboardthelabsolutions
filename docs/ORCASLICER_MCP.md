@@ -21,13 +21,19 @@ Crear el archivo privado de configuración fuera de Git, en la cuenta del usuari
     mkdir -p "$HOME/Library/Application Support/TheLabFarm"
     nano "$HOME/Library/Application Support/TheLabFarm/orca-mcp.json"
 
-Ejemplo de contenido; sustituir las rutas por las reales y el nombre de herramienta por el que exponga el MCP instalado:
+Ejemplo recomendado para el MCP real MaxEllis/orcaslicer-mcp encontrado en el MacBook Air (instalar también en el host que ejecuta Farm Controller):
 
     {
-      "command": "/opt/homebrew/bin/python3",
-      "args": ["/Users/USUARIO/orcaslicer-mcp/server.py"],
-      "sliceTool": "slice_model"
+      "command": "/Users/USUARIO/.local/bin/orcaslicer-mcp",
+      "args": [],
+      "env": {
+        "ORCA_API_TOKEN": "PEGAR_TOKEN_LOCALMENTE_SIN_SUBIR_A_GIT"
+      }
     }
+
+La ruta del comando debe corresponder al equipo del taller. El token lo genera OrcaSlicer en Preferences → Remote API; debe permanecer **solo en el archivo privado del servidor**, nunca en el repositorio ni en capturas. No es necesario compartirlo con ChatGPT.
+
+Este MCP real funciona en tres etapas: load_model(path), slice_and_wait(timeout), save_gcode(filename). El adaptador llama a las tres en orden, utiliza un directorio temporal para la exportación y comprueba los perfiles activos mediante get_status. **No selecciona ni sobrescribe perfiles**: si máquina, material o perfil no coincide, pide corregirlos manualmente en OrcaSlicer para evitar descartar ajustes sin guardar. También rechaza cargar modelos si ya hay otros objetos en la placa.
 
 Restringir permisos:
 
@@ -37,7 +43,7 @@ Si Farm Controller utiliza otra ruta FARM_DATA_DIR, guardar allí orca-mcp.json,
 
 Se reconocen automáticamente los nombres de herramienta: slice, slice_model, slice_stl, slice_file, orca_slice, orcaslicer_slice, laminar, laminar_modelo. Para otro nombre, especificar sliceTool.
 
-Contrato esperado del servidor MCP: debe aceptar alguno de los parámetros de entrada model_path, input_path, file_path, stl_path, input_file, filename, path o file, y una ruta de salida output_path, output_file, gcode_path o destination. Adicionalmente se pasan printer/printer_model/machine_model, material/filament y profile cuando estén declarados en inputSchema. La herramienta debe crear el archivo G-code en la ruta temporal de salida. También se acepta structuredContent.gcode_base64 o structuredContent.gcode. Si el MCP real expone una interfaz distinta, es necesario adaptar el mapeo antes de activarlo.
+Para un MCP distinto del MaxEllis/orcaslicer-mcp se conserva la modalidad de una sola herramienta de laminado, cuyo contrato esperado es: debe aceptar alguno de los parámetros de entrada model_path, input_path, file_path, stl_path, input_file, filename, path o file, y una ruta de salida output_path, output_file, gcode_path o destination. Adicionalmente se pasan printer/printer_model/machine_model, material/filament y profile cuando estén declarados en inputSchema. La herramienta debe crear el archivo G-code en la ruta temporal de salida. También se acepta structuredContent.gcode_base64 o structuredContent.gcode. Si el MCP real expone una interfaz distinta, es necesario adaptar el mapeo antes de activarlo.
 
 ## Comprobar en el dashboard
 

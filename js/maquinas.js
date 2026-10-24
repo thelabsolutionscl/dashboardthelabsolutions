@@ -4079,7 +4079,7 @@ async function slice(){
     const stats=[data.bytes?Math.round(data.bytes/1024)+' KB':'',
       data.seconds!=null?Math.round(data.seconds/60)+' min estimados':'',
       data.grams!=null?data.grams.toFixed(1)+' g':''].filter(Boolean).join(' · ');
-    notice('Laminado correcto — '+data.filename+(stats?' · '+stats:'')+'. Descarga el G-code y cargalo en Trabajos planificados.');
+    notice('OrcaSlicer termino el laminado — '+data.filename+(stats?' · '+stats:'')+'. Descarga el G-code y cargalo en Trabajos planificados.');
     download();
   }catch(e){notice('No se pudo laminar: '+e.message,true);}
   finally{busy=false;if(btn)btn.disabled=false;}
@@ -4090,7 +4090,7 @@ function mount(){
   panel.style.cssText='padding:14px 16px;margin-bottom:16px';
   panel.innerHTML=[
     '<details><summary style="cursor:pointer;font-weight:700">🧩 OrcaSlicer MCP — Laminado real <span style="font-weight:400;font-size:12px;color:var(--text3)">· desde el taller</span></summary>',
-    '<div style="padding-top:12px"><p style="font-size:12px;color:var(--text2)">Lamina STL/3MF con el MCP del equipo del taller. No mueve ejes ni inicia impresiones.</p>',
+    '<div style="padding-top:12px"><p style="font-size:12px;color:var(--text2)">Usa los perfiles que esten activos en OrcaSlicer en el equipo del taller. No cambia presets, no mueve ejes ni inicia impresiones. Si hay modificaciones sin guardar, se conservan.</p>',
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">',
     '<label style="flex:2;min-width:180px;font-size:12px">Archivo STL/3MF<input id="tlsOrcaMcpFile" type="file" accept=".stl,.3mf" class="field-input" style="width:100%"></label>',
     '<label style="flex:2;min-width:180px;font-size:12px">Impresora<select id="tlsOrcaMcpPrinter" class="field-input" style="width:100%"></select></label>',
