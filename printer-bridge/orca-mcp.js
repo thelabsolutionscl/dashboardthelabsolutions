@@ -161,6 +161,8 @@ async function liveSlice(client,request,input,workspace){
   if(Array.isArray(objects.objects)&&objects.objects.length)
     throw Error('La placa de OrcaSlicer ya contiene modelos. Guardalos o limpiala antes de continuar.');
   await invoke(client,'load_model',{path:input});
+  // 3MF can carry project presets: verify again after importing, not only before it.
+  verifyProfiles(await invoke(client,'get_status'),request);
   const result=await invoke(client,'slice_and_wait',{timeout:150});
   if(result.state!=='done')throw Error('Laminado no completado: '+String(result.message||result.state||'desconocido').slice(0,200));
   const saved=await invoke(client,'save_gcode',{filename:'laminado.gcode'});
