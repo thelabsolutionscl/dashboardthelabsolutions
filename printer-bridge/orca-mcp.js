@@ -29,13 +29,26 @@ function settings(env=process.env){
   catch(_){throw new Error('ORCA_MCP_ARGS_JSON debe ser un array JSON');}
   if(!Array.isArray(args)||args.some(a=>typeof a!=='string')||args.length>12)
     throw new Error('ORCA_MCP_ARGS_JSON invalido');
-  return{command,args,preferredTool:String(env.ORCA_MCP_SLICE_TOOL||saved.sliceTool||'').trim()};
+  const e=saved.env&&typeof saved.env==='object'&&!Array.isArray(saved.env)?saved.env:{};
+  const childEnv={};
+  for(const key of ['ORCA_API_TOKEN','ORCA_API_URL']){
+    const v=env[key]||e[key];
+    if(v!=null){if(typeof v!=='string'||v.length>2048)throw Error('Invalid MCP environment: '+key);childEnv[key]=v;}
+  }
+  if(childEnv.ORCA_API_URL){
+    let url;try{url=new URL(childEnv.ORCA_API_URL);}catch(_){throw Error('ORCA_API_URL invalida');}
+    if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname))
+      throw Error('ORCA_API_URL solo permite localhost');
+  }
+  return{command,args,childEnv,preferredTool:String(env.ORCA_MCP_SLICE_TOOL||saved.sliceTool||'').trim()};
 }
 function cleanName(s){
   return String(s||'modelo.stl').split(/[\\/]/).pop().replace(/[^\w.\- ]/g,'_').slice(0,100);
 }
-function mcpClient(config, timeoutMs){
-  const child=spawn(config.command,config.args,{stdio:['pipe','pipe','pipe'],env:process.env,windowsHide:true});
+function mcpClient(config, timeoutMs,workspace=''){
+  const childEnv={...process.env,...config.childEnv};
+  if(workspace)childEnv.PRINT_OUTCOMES_DIR=workspace;
+  const child=spawn(config.command,config.args,{stdio:['pipe','pipe','pipe'],env:childEnv,windowsHide:true});
   let seq=0,buffer='',dead=false;
   const pending=new Map();
   const cleanup=(error)=>{
@@ -83,8 +96,8 @@ function mcpClient(config, timeoutMs){
     close(){clearTimeout(timer);cleanup(new Error('MCP cerrado'));child.kill();}
   };
 }
-async function withTools(config,timeout,callback){
-  const client=mcpClient(config,timeout);
+async function withTools(config,timeout,callback,workspace=''){
+  const client=mcpClient(config,timeout,workspace);
   try{
     await client.initialize();
     const list=await client.send('tools/list',{});
@@ -96,15 +109,90 @@ function selectTool(tools,name){
   return tools.find(t=>t.name===name)||
     (!name?tools.find(t=>SLICE_NAME.test(t.name)):null);
 }
+
+function isLiveOrca(tools){
+  return ['get_status','load_model','slice_and_wait','save_gcode'].every(name=>tools.some(t=>t.name===name));
+}
+function unpack(result){
+  if(result?.isError)throw Error(String(result.content?.[0]?.text||'MCP error').slice(0,280));
+  let data=result?.structuredContent;
+  if(!data||typeof data!=='object'){
+    const txt=result?.content?.find(c=>typeof c.text==='string')?.text||'';
+    try{data=JSON.parse(txt);}catch(_){throw Error('Respuesta MCP sin JSON');}
+  }
+  if(data?.result&&typeof data.result==='object'&&!data.error)data=data.result;
+  if(!data||typeof data!=='object')throw Error('Respuesta MCP vacia');
+  if(data.error)throw Error('OrcaSlicer: '+String(data.error).slice(0,260));
+  return data;
+}
+async function invoke(client,name,args={}){
+  return unpack(await client.send('tools/call',{name,arguments:args}));
+}
+function asName(item){
+  if(Array.isArray(item))return item.map(asName).join(' / ');
+  if(typeof item==='string')return item;
+  if(item&&typeof item==='object')return String(item.name||item.selected||item.value||'');
+  return '';
+}
+function verifyProfiles(state,request){
+  const presets=state.presets||state.active_presets||{};
+  const printer=asName(presets.printer),filament=asName(presets.filament||presets.filaments),
+    print=asName(presets.print||presets.process);
+  if(!printer||!filament||!print)throw Error('OrcaSlicer no devuelve los 3 presets activos; verifica los perfiles en la app.');
+  const detected=(printer.match(/\b(K2\s*Plus|K2|K1|Ender[- ]?5\s*Max|OrangeStorm\s*Giga|Giga)\b/i)||[])[0]||'';
+  const norm=v=>String(v).toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(!detected||(norm(detected)!==norm(request.model)&&!(request.model==='Giga'&&/giga/i.test(detected))))
+    throw Error('Perfil de impresora activo: '+printer+'. Debes seleccionar '+request.model+' en OrcaSlicer primero.');
+  const selected=filament.toUpperCase(),need=request.material.toUpperCase();
+  let matches=false;
+  if(need==='PLA+')matches=/PLA\+|PLA\s*PLUS/.test(selected);
+  else if(need==='TPU-95A')matches=/TPU[\s_-]*95A|95A[\s_-]*TPU/.test(selected);
+  else matches=selected.split(/[^A-Z0-9+]+/).includes(need);
+  if(!matches)throw Error('Filamento activo: '+filament+'. Cambia al material '+request.material+' en OrcaSlicer.');
+  if(request.profile&&norm(request.profile)!==norm(print))
+    throw Error('Perfil activo: '+print+'. Selecciona '+request.profile+' en OrcaSlicer.');
+  if(state.slicing||state.is_slicing)throw Error('OrcaSlicer ya esta laminando');
+  return{printer,filament,print};
+}
+async function liveSlice(client,request,input,workspace){
+  const state=await invoke(client,'get_status');
+  const profiles=verifyProfiles(state,request);
+  const objects=await invoke(client,'list_objects');
+  if(Array.isArray(objects.objects)&&objects.objects.length)
+    throw Error('La placa de OrcaSlicer ya contiene modelos. Guardalos o limpiala antes de continuar.');
+  await invoke(client,'load_model',{path:input});
+  const result=await invoke(client,'slice_and_wait',{timeout:150});
+  if(result.state!=='done')throw Error('Laminado no completado: '+String(result.message||result.state||'desconocido').slice(0,200));
+  const saved=await invoke(client,'save_gcode',{filename:'laminado.gcode'});
+  const output=String(saved.path||saved.gcode_path||saved.saved_path||'');
+  const location=path.resolve(output);
+  if(!output||!location.startsWith(workspace+path.sep))
+    throw Error('El MCP no guardo el archivo en PRINT_OUTCOMES_DIR temporal');
+  const stat=await fsp.stat(location);
+  if(!stat.isFile()||stat.size<=0||stat.size>MAX_GCODE)throw Error('G-code vacio o excede 32 MB');
+  const gcode=await fsp.readFile(location);
+  const metric=result.stats||{};
+  const safe=(v,max)=>v!=null&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=max?Number(v):null;
+  return{ok:true,tool:'load_model / slice_and_wait / save_gcode',
+    filename:request.filename.replace(/\.(stl|3mf)$/i,'')+'.gcode',
+    gcodeBase64:gcode.toString('base64'),bytes:gcode.length,
+    seconds:safe(metric.estimated_time_seconds??metric.seconds,10000000),
+    grams:safe(metric.filament_used_g??metric.grams,100000),
+    activePresets:profiles,warnings:result.warnings||[]};
+}
+
 async function status(env=process.env){
   let config;try{config=settings(env);}catch(e){return{ok:false,available:false,reason:e.message,tools:[]};}
   if(!config.command)return{ok:true,available:false,reason:'Configura orca-mcp.json o las variables ORCA_MCP_COMMAND / ORCA_MCP_ARGS_JSON en el equipo del Farm Controller.',tools:[]};
   try{
-    return await withTools(config,10000,async tools=>{
-      const tool=selectTool(tools,config.preferredTool);
-      return{ok:true,available:!!tool,tool:tool?.name||null,
+    return await withTools(config,10000,async(tools,client)=>{
+      const live=isLiveOrca(tools);
+      let problem='';
+      if(live){try{await invoke(client,'get_status');}catch(e){problem=e.message;}}
+      const tool=live?{name:'OrcaSlicer Remote API'}:selectTool(tools,config.preferredTool);
+      return{ok:true,available:!!tool&&!problem,tool:tool?.name||null,mode:live?'live':'legacy',
         tools:tools.map(t=>t.name).filter(n=>/slice|orca|lamin|gcode|profile/i.test(n)).slice(0,25),
-        reason:tool?'':'MCP conectado, pero no se encontro una herramienta de laminado. Configura ORCA_MCP_SLICE_TOOL.'};
+        reason:problem||(tool?'':'MCP conectado, pero no se encontro una herramienta de laminado. Configura ORCA_MCP_SLICE_TOOL.')};
     });
   }catch(e){return{ok:true,available:false,reason:e.message.slice(0,300),tools:[]};}
 }
@@ -166,6 +254,7 @@ async function slice(request,env=process.env){
     const input=path.join(workspace,name),output=path.join(workspace,'laminado.gcode');
     await fsp.writeFile(input,model,{mode:0o600});
     return await withTools(config,180000,async(tools,client)=>{
+      if(isLiveOrca(tools))return await liveSlice(client,request,input,workspace);
       const tool=selectTool(tools,config.preferredTool);
       if(!tool)throw new Error('El MCP no expone herramienta de laminado. Revisa ORCA_MCP_SLICE_TOOL');
       const args=argumentsForTool(tool,request,input,output);
@@ -182,7 +271,7 @@ async function slice(request,env=process.env){
         gcodeBase64:gcode.toString('base64'),bytes:gcode.length,tool:tool.name,
         seconds:finite(stats.seconds??stats.secs??stats.estimated_time_seconds,10000000),
         grams:finite(stats.grams??stats.filament_grams,100000)};
-    });
+    },workspace);
   }finally{await fsp.rm(workspace,{recursive:true,force:true});}
   }finally{slicing=false;}
 }
