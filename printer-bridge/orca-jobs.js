@@ -18,13 +18,14 @@ function createOrcaJobs(sliceFn){
   }
   function publicJob(job){
     if(!job)return null;
-    const {id,state,createdAt,finishedAt,filename,bytes,seconds,grams,error,warnings,activePresets,gcodeCheck,technicalAnalysis,profileChanges}=job;
+    const {id,state,createdAt,finishedAt,filename,bytes,seconds,grams,error,warnings,activePresets,gcodeCheck,technicalAnalysis,profileChanges,unitPreflight}=job;
     return{ok:true,jobId:id,state,createdAt,finishedAt,
       filename,bytes,seconds,grams,error,warnings:state==='done'?warnings:undefined,
       activePresets:state==='done'?activePresets:undefined,
       gcodeCheck:state==='done'?gcodeCheck:undefined,
       technicalAnalysis:state==='done'?technicalAnalysis:undefined,
-      profileChanges:state==='done'?profileChanges:undefined};
+      profileChanges:state==='done'?profileChanges:undefined,
+      unitPreflight:state==='done'?unitPreflight:undefined};
   }
   function start(input){
     prune();
@@ -38,7 +39,7 @@ function createOrcaJobs(sliceFn){
     const id=crypto.randomBytes(24).toString('hex');
     const job={id,state:'running',createdAt:Date.now(),finishedAt:0,
       filename:'',bytes:0,seconds:null,grams:null,error:'',gcode:null,warnings:[],
-      activePresets:null,gcodeCheck:null,technicalAnalysis:null,profileChanges:[],facts:null};
+      activePresets:null,gcodeCheck:null,technicalAnalysis:null,profileChanges:[],unitPreflight:null,facts:null};
     jobs.set(id,job);
     Promise.resolve().then(()=>sliceFn(input)).then(result=>{
       if(!result?.ok||typeof result.gcodeBase64!=='string')throw Error('El servidor MCP no entrego un G-code.');
@@ -51,6 +52,7 @@ function createOrcaJobs(sliceFn){
       job.seconds=result.seconds??null;
       job.grams=result.grams??null;
       job.activePresets=result.activePresets||null;
+      job.unitPreflight=result.unitPreflight||null;
       job.profileChanges=Array.isArray(result.profileChanges)?result.profileChanges.slice(0,3):[];
       job.gcodeCheck=result.gcodeCheck||null;
       job.technicalAnalysis=result.technicalAnalysis||null;
