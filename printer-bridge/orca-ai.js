@@ -20,17 +20,41 @@ function config(env=process.env){
   return{key,model};
 }
 function available(env=process.env){try{return !!config(env).key;}catch(_){return false;}}
+function numbersOnly(value,depth=0){
+  if(depth>5||value==null)return undefined;
+  if(typeof value==='number')return Number.isFinite(value)?value:undefined;
+  if(typeof value==='boolean')return value;
+  if(Array.isArray(value))return value.slice(0,12).map(x=>numbersOnly(x,depth+1)).filter(x=>x!==undefined);
+  if(typeof value==='object'){
+    const safe={};
+    for(const [key,v] of Object.entries(value).slice(0,70)){
+      if(!/^[A-Za-z0-9_]{1,55}$/.test(key)||/name|filename|path|host|token|url|secret|password|apikey|notes|prompt|gcode|stl/i.test(key))continue;
+      const n=numbersOnly(v,depth+1);
+      if(n!==undefined)safe[key]=n;
+    }
+    return safe;
+  }
+  return undefined;
+}
 function minimalFacts(result){
-  return{
+  const a=result?.technicalAnalysis||{};
+  const settings={};
+  for(const [key,v] of Object.entries(a.settings||{})){
+    if(!/^(?:layer_height|initial_layer_print_height|wall_loops|top_shell_layers|bottom_shell_layers|sparse_infill_density|sparse_infill_pattern|enable_support|support_type|brim_type|brim_width|outer_wall_speed|inner_wall_speed|nozzle_temperature|hot_plate_temp|filament_max_volumetric_speed|nozzle_diameter)$/.test(key))continue;
+    if(typeof v==='number'||typeof v==='boolean')settings[key]=v;
+    else if(typeof v==='string'&&/^[0-9.,%\s-]{1,50}$/.test(v))settings[key]=v;
+  }
+  return {
     machineModel:result?.machineModel,
     filament:result?.material,
-    activePrinterFamily:result?.gcodeCheck?.expected,
-    nozzleProfile:result?.activePresets?.printer,
-    processPreset:result?.activePresets?.print,
+    verifiedPrinterModel:result?.gcodeCheck?.confirmed===true?result?.gcodeCheck?.expected:null,
     seconds:result?.seconds,
     grams:result?.grams,
-    gcodeMetadata:result?.gcodeCheck?.confirmed?'verificado':'no declarado',
-    diagnostics:result?.technicalAnalysis||{}
+    physics:{verdict:['ok','warnings','blocked'].includes(a.physics?.verdict)?a.physics.verdict:'unavailable',
+      passed:Array.isArray(a.physics?.pass)?a.physics.pass.length:0,
+      warned:Array.isArray(a.physics?.warn)?a.physics.warn.length:0,
+      failed:Array.isArray(a.physics?.fail)?a.physics.fail.length:0},
+    settings,geometryMetrics:numbersOnly(a.geometry),breakdownMetrics:numbersOnly(a.breakdown)
   };
 }
 function sanitize(result){
