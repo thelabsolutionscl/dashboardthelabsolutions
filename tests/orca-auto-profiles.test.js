@@ -17,7 +17,7 @@ test('PLA vs PLA+ and TPU vs TPU-95A do not cross-match',()=>{
 const snapshot={presets:{printer:'Creality K1 (0.4 nozzle)',filament:'Generic PLA',print:'0.20 Standard'},modified:{printer:[],filament:[],print:[]}};
 const printers={printer:[{name:'Creality K2 0.2 nozzle'},{name:'Creality K2 0.4 nozzle'},{name:'Creality K2 Plus 0.4 nozzle'}]};
 test('does not silently guess a nozzle when printer has several presets',()=>{
-  assert.throws(()=>Auto.choosePrinter(snapshot,'K2',printers),/Hay 2 perfiles/);
+  assert.throws(()=>Auto.choosePrinter(snapshot,'K2',printers),/varios perfiles|Hay 2 perfiles/);
   assert.deepEqual(Auto.choosePrinter(snapshot,'K2',printers,'Creality K2 0.4 nozzle'),
     {chosen:'Creality K2 0.4 nozzle',change:true});
   assert.throws(()=>Auto.choosePrinter(snapshot,'K2',printers,'Creality K2 Plus 0.4 nozzle'),/no corresponde/);
@@ -35,7 +35,7 @@ test('does not reuse K1 No2 when physical machine K1 #1 was requested',()=>{
 });
 test('filament ambiguity is blocked until operator has identified the spool',()=>{
   const incompatible={...snapshot,presets:{...snapshot.presets,filament:'Generic PETG'}};
-  assert.throws(()=>Auto.chooseFilament(incompatible,'PLA',{filament:[{name:'Generic PLA'},{name:'Generic PLA Silk'}]}),/Hay 2 perfiles/);
+  assert.throws(()=>Auto.chooseFilament(incompatible,'PLA',{filament:[{name:'Generic PLA'},{name:'Generic PLA Silk'}]}),/varios perfiles|Hay 2 perfiles/);
   assert.deepEqual(Auto.chooseFilament(incompatible,'PLA',{filament:[{name:'Generic PLA'}]}),
     {chosen:'Generic PLA',change:true});
 });
@@ -56,7 +56,7 @@ test('automatically switches printer and filament in same MCP session, slices va
   assert.match(Buffer.from(r.gcodeBase64,'base64').toString(),/printer_settings_id = Creality K2 0.4 nozzle/);
 });
 test('ambiguous nozzle blocks safely before any G-code is created',async()=>{
-  await assert.rejects(MCP.slice(input,cfg()),/Hay 2 perfiles/);
+  await assert.rejects(MCP.slice(input,cfg()),/varios perfiles|Hay 2 perfiles/);
 });
 test('dirty Orca session is preserved and app refuses to switch',async()=>{
   await assert.rejects(MCP.slice({...input,printerPresetName:'Creality K2 0.4 nozzle'},cfg(true)),/modificaciones sin guardar/);
