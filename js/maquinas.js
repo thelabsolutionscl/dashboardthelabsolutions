@@ -4131,6 +4131,8 @@ async function slice(){
     const data=await pollOrcaJob(started.jobId);
     latest=data;if(dl)dl.disabled=false;
     const scale=data.unitPreflight;
+    if(scale?.orientationRepaired)notice('Se corrigio orientacion de '+scale.orientationFlippedFaces+
+      ' caras del STL temporal sin cambiar sus dimensiones. Verifica la geometria en el G-code.');
     if(scale?.changed)notice('STL convertido a milimetros (factor '+scale.factor+'). Dimensiones: '+
       (scale.dimensions||[]).map(x=>x.toFixed(1)).join(' × ')+' mm. Verificando resultado…');
     const applied=(data.profileChanges||[]).map(c=>c.type+': '+c.name).join(' · ');
@@ -4153,6 +4155,7 @@ async function slice(){
       data.grams!=null?data.grams.toFixed(1)+' g':''].filter(Boolean).join(' · ');
     notice('OrcaSlicer termino el laminado — '+data.filename+(stats?' · '+stats:'')+
       (scale?.changed?' · STL convertido a mm ×'+scale.factor:'')+
+      (scale?.orientationRepaired?' · caras STL corregidas sin cambio de escala':'')+
       '. Confirma las medidas antes de imprimir.');
     await download();
     if(aiEnabled && autoAIEnabled())await requestOrcaAI(true);

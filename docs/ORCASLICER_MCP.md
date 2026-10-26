@@ -137,3 +137,31 @@ corrección: se debe cerrar una vez por acceso remoto al escritorio o presencial
 Otros avisos de proyectos 3MF o modelos importados pueden requerir protecciones
 separadas; esta protección cubre específicamente los STL diminutos.
 
+
+
+## STL planos con dimensiones reales, pero volumen de malla erróneo
+
+OrcaSlicer comprueba volumen de malla inferior a 8 mm³ para advertir sobre
+pulgadas. Eso no significa que 8 mm³ sea el volumen mínimo físicamente
+imprimible. Algunas mallas STL aparentemente planas (por ejemplo 102 × 101 ×
+1,34 mm) tienen triángulos con orientación inconsistente o una superficie
+abierta; un volumen firmado casi cero puede confundirse con STL en metros.
+
+Cuando el preflight detecta un volumen bajo, ahora:
+- Comprueba las aristas de la malla y exige exactamente dos caras por arista
+  antes de intentar repararla; no inventa tapas ni rellena huecos.
+- Reorienta SOLO las caras de mallas cerradas y orientables si esto recupera
+  un volumen de malla superior al umbral que dispara el aviso de OrcaSlicer.
+- Mantiene TODAS las coordenadas en milímetros o en la unidad que el usuario
+  haya seleccionado. Solo modifica la copia temporal, nunca el STL original.
+- Rechaza mallas abiertas o no-manifold; el mensaje desde el dashboard
+  muestra la razón y el número de aristas abiertas cuando se conoce.
+- Sigue bloqueando los modelos cuyo volumen real sería tan pequeño que
+  OrcaSlicer mostraría una confirmación presencial. No se pulsa Yes
+  automáticamente ni se ignoran advertencias en el iMac.
+
+El banner de éxito explica cuántas caras se reorientaron y recuerda que el
+G-code debe inspeccionarse antes de imprimir. Si una malla abierta debe
+repararse, hay que exportarla como sólido cerrado o procesarla con una
+herramienta de reparación explícita; nunca añadir material a ciegas.
+

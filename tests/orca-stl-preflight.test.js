@@ -38,7 +38,7 @@ test('normal 10 mm binary STL imports untouched and can be sliced unattended',()
 });
 test('tiny meters STL cannot open a modal; selected meters scales to mm',()=>{
   const original=binaryCube(0.05);
-  assert.throws(()=>STL.prepare(original,{filename:'tiny.stl',units:'auto'}),/Escala sin confirmar.*Geometria STL/);
+  assert.throws(()=>STL.prepare(original,{filename:'tiny.stl',units:'auto'}),/No se puede laminar de forma desatendida.*Geometria STL/);
   const result=STL.prepare(original,{filename:'tiny.stl',units:'m'});
   assert.equal(result.factor,1000);
   assert.equal(Math.round(result.dimensions[0]),50);
@@ -53,7 +53,7 @@ test('inch units convert to 25.4 mm without GUI dialog',()=>{
 });
 test('sub-millimeter parts fail closed, even if explicitly marked mm',()=>{
   const tiny=binaryCube(0.5);
-  assert.throws(()=>STL.prepare(tiny,{filename:'tiny.stl',units:'mm'}),/No se puede laminar sin confirmacion de escala.*Geometria STL/);
+  assert.throws(()=>STL.prepare(tiny,{filename:'tiny.stl',units:'mm'}),/No se puede laminar de forma desatendida.*Geometria STL/);
 });
 test('ASCII STL is converted to mm without changing other STL syntax',()=>{
   const result=STL.prepare(asciiCube(.05),{filename:'solid.stl',units:'m'});
@@ -74,7 +74,7 @@ test('adapter rejects ambiguous tiny STL before even trying MCP or GUI load',asy
     modelBase64:binaryCube(.05).toString('base64')};
   const env={ORCA_MCP_COMMAND:process.execPath,ORCA_MCP_ARGS_JSON:'[]',
     ORCA_MCP_CONFIG_FILE:path.join(os.tmpdir(),'missing-orca-preflight-'+process.pid+'.json')};
-  await assert.rejects(Adapter.slice(input,env),/Escala sin confirmar.*Geometria STL/);
+  await assert.rejects(Adapter.slice(input,env),/No se puede laminar de forma desatendida.*Geometria STL/);
 });
 
 test('error remoto incluye medidas y los tamaños alternativos sin inventar unidad',()=>{
@@ -88,4 +88,39 @@ test('error remoto incluye medidas y los tamaños alternativos sin inventar unid
     assert.deepEqual(e.details.selectedUnits,'mm');
     return true;
   });
+});
+
+test('flat 102 x 101 x 1.34 mm closed model with inconsistent winding is repaired with no scale',()=>{
+  const source=binaryCube(1);
+  const buff=Buffer.from(source);
+  // Build thin prism using existing vertices, flip alternate triangles
+  for(let i=0;i<12;i++)for(let j=0;j<3;j++)for(let k=0;k<3;k++){
+    const off=84+50*i+12+j*12+k*4;
+    const v=buff.readFloatLE(off);
+    buff.writeFloatLE(v*[102,101,1.34][k],off);
+  }
+  for(let i=0;i<12;i+=2){
+    for(let k=0;k<3;k++){
+      const a=84+50*i+12+12+k*4,b=84+50*i+12+24+k*4;
+      const val=buff.readFloatLE(a);
+      buff.writeFloatLE(buff.readFloatLE(b),a);
+      buff.writeFloatLE(val,b);
+    }
+  }
+  // Swap the two vertices of every second triangle; all coordinates stay unchanged.
+  const pre=STL.parse(buff);
+  assert.ok(pre.meshVolume<8,'winding cancellation should simulate false tiny-volume alarm');
+  const result=STL.prepare(buff,{filename:'flat-piece.stl',units:'mm'});
+  assert.equal(result.units,'mm');
+  assert.equal(result.factor,1);
+  assert.equal(result.changed,false);
+  assert.equal(result.orientationRepaired,true);
+  assert.ok(result.inspectedMeshVolume>10000);
+  assert.deepEqual(result.dimensions.map(Math.round),[102,101,1]);
+});
+test('open thin STL is blocked with a useful topology diagnostic instead of a GUI modal',()=>{
+  const src=binaryCube(0.1);
+  const fewer=Buffer.from(src.subarray(0,src.length-50));
+  fewer.writeUInt32LE(11,80);
+  assert.throws(()=>STL.prepare(fewer,{filename:'broken.stl',units:'mm'}),/malla abierta|umbral/);
 });
