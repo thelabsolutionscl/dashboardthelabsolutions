@@ -18,9 +18,12 @@ function createOrcaJobs(sliceFn){
   }
   function publicJob(job){
     if(!job)return null;
-    const {id,state,createdAt,finishedAt,filename,bytes,seconds,grams,error,warnings}=job;
+    const {id,state,createdAt,finishedAt,filename,bytes,seconds,grams,error,warnings,activePresets,gcodeCheck,technicalAnalysis}=job;
     return{ok:true,jobId:id,state,createdAt,finishedAt,
-      filename,bytes,seconds,grams,error,warnings:state==='done'?warnings:undefined};
+      filename,bytes,seconds,grams,error,warnings:state==='done'?warnings:undefined,
+      activePresets:state==='done'?activePresets:undefined,
+      gcodeCheck:state==='done'?gcodeCheck:undefined,
+      technicalAnalysis:state==='done'?technicalAnalysis:undefined};
   }
   function start(input){
     prune();
@@ -33,7 +36,8 @@ function createOrcaJobs(sliceFn){
     jobs.clear();
     const id=crypto.randomBytes(24).toString('hex');
     const job={id,state:'running',createdAt:Date.now(),finishedAt:0,
-      filename:'',bytes:0,seconds:null,grams:null,error:'',gcode:null,warnings:[]};
+      filename:'',bytes:0,seconds:null,grams:null,error:'',gcode:null,warnings:[],
+      activePresets:null,gcodeCheck:null,technicalAnalysis:null,facts:null};
     jobs.set(id,job);
     Promise.resolve().then(()=>sliceFn(input)).then(result=>{
       if(!result?.ok||typeof result.gcodeBase64!=='string')throw Error('El servidor MCP no entrego un G-code.');
@@ -45,6 +49,12 @@ function createOrcaJobs(sliceFn){
       job.bytes=binary.length;
       job.seconds=result.seconds??null;
       job.grams=result.grams??null;
+      job.activePresets=result.activePresets||null;
+      job.gcodeCheck=result.gcodeCheck||null;
+      job.technicalAnalysis=result.technicalAnalysis||null;
+      job.facts={activePresets:job.activePresets,gcodeCheck:job.gcodeCheck,
+        technicalAnalysis:job.technicalAnalysis,machineModel:result.machineModel,material:result.material,
+        seconds:job.seconds,grams:job.grams};
       job.warnings=Array.isArray(result.warnings)?result.warnings.slice(0,10).map(x=>String(x).slice(0,200)):[];
     }).catch(e=>{
       job.state='error';
