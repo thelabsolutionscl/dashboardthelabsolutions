@@ -1,0 +1,47 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path');
+const dirty=process.argv.includes('dirty');
+let printer='Creality K1 (0.4 nozzle)',filament='Generic PETG',buf='';
+function reply(name,args){
+ if(name==='get_status')return {presets:{printer,filament,print:'0.20 Standard'},
+   modified:{printer:[],filament:dirty?['temp']:[],print:[]}};
+ if(name==='list_objects')return {objects:[]};
+ if(name==='list_presets')return {
+   printer:[{name:'Creality K1 (0.4 nozzle)'},{name:'Creality K2 0.2 nozzle'},
+     {name:'Creality K2 0.4 nozzle'}],
+   filament:[{name:'Generic PLA'}],print:[{name:'0.20 Standard'}]};
+ if(name==='select_preset'){
+   if(args.type==='printer')printer=args.name;
+   if(args.type==='filament')filament=args.name;
+   return {ok:true};
+ }
+ if(name==='load_model'){if(!fs.existsSync(args.path))throw Error('missing stl');return{loaded:true};}
+ if(name==='slice_and_wait')return {state:'done',stats:{estimated_time_seconds:720,filament_used_g:11},warnings:[]};
+ if(name==='save_gcode'){
+   const dest=path.join(process.env.PRINT_OUTCOMES_DIR,'gcode','out.gcode');
+   fs.mkdirSync(path.dirname(dest),{recursive:true});
+   fs.writeFileSync(dest,'; printer_settings_id = '+printer+'\nG1 X1 Y1 F1200\n');
+   return{path:dest};
+ }
+ if(name==='get_config')return{config:{}};
+ if(name==='check_profile_physics')return{verdict:'ok',pass:[],warn:[],fail:[]};
+ if(name==='describe_plate')return{objects:[]};
+ if(name==='get_slice_breakdown')return{};
+ return{};
+}
+process.stdin.setEncoding('utf8');
+process.stdin.on('data',chunk=>{buf+=chunk;let i;
+ while((i=buf.indexOf('\n'))>=0){
+ const line=buf.slice(0,i);buf=buf.slice(i+1);
+ let req;try{req=JSON.parse(line);}catch(_){continue;}
+ if(!req.id)continue;
+ let value={};
+ if(req.method==='initialize')value={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'mock',version:'0.1'}};
+ else if(req.method==='tools/list')value={tools:[
+ 'get_status','list_objects','list_presets','select_preset','load_model','slice_and_wait',
+ 'save_gcode','get_config','check_profile_physics','describe_plate','get_slice_breakdown'
+ ].map(name=>({name,inputSchema:{type:'object',properties:{}}}))};
+ else if(req.method==='tools/call')value={structuredContent:reply(req.params.name,req.params.arguments||{})};
+ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:value})+'\n');
+ }
+});

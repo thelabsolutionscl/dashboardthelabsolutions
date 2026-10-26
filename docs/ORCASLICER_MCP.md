@@ -94,3 +94,18 @@ La clave se almacena **fuera de Git** en un archivo privado con permisos 600, `~
 ```
 
 El proceso acepta como alternativa `ORCA_AI_API_KEY` y `ORCA_AI_MODEL` en el entorno local del iMac. El valor nunca debe registrarse en logs, subirse al repositorio, enviarse por chat o incluirse en capturas. Reiniciar/reconsultar `Comprobar MCP` tras guardarlo; el servidor lee este archivo en cada consulta.
+
+## Selección automática de impresora y filamento (26/10/2026)
+
+El botón **Laminar con OrcaSlicer** puede recibir `autoSelect:true` y `printerPresetName` (opcional, exacto). El Farm Controller ejecuta la selección del perfil **dentro de la misma sesión MCP en que carga y lamina el STL**. No depende de un cambio manual separado.
+
+1. Comprueba que OrcaSlicer no esté laminando y que la placa esté realmente vacía. No elimina modelos existentes.
+2. Consulta los presets instalados con `list_presets(type='printer', include_system=True)`.
+3. Si el perfil activo ya corresponde al modelo y no hay preferencia explícita, lo conserva. Si está mal, selecciona el **único** perfil compatible; si hay varios diámetros de boquilla o variantes de máquina, pide elegir una vez el perfil exacto en el desplegable. El navegador recuerda esa elección **por ID de impresora**, pero el servidor siempre la valida de nuevo.
+4. Si el filamento no coincide, busca el único perfil instalado del material seleccionado. Si hay varios perfiles de igual material con diferentes fabricantes, no adivina: hay que elegir el correcto en OrcaSlicer. Nunca equipara PLA/PLA+ ni TPU/TPU-95A.
+5. Antes de **cada** `select_preset`, rechaza si hay modificaciones de OrcaSlicer sin guardar (ya que `select_preset` las descarta en todas las categorías). Selecciona primero impresora, luego filamento y, solo si se indicó un nombre exacto, proceso; revalida los tres.
+6. Verifica que el G-code declara el modelo esperado. No inicia impresoras ni manda archivos a las máquinas.
+
+Si el proyecto está modificado, el cambio automático no se realiza. Hay que guardar o revisar esos ajustes en OrcaSlicer. No hay promesa de precisión mecánica sin comprobar el diámetro real de boquilla y el filamento físico.
+
+**IA:** se ofrece una casilla opcional `Analizar automáticamente después de laminar`. Por defecto está apagada. Al activarla se solicita consentimiento para enviar solo métricas técnicas anonimizadas a la API configurada, nunca STL/G-code; no aplica automáticamente recomendaciones al slicer ni imprime. Requiere clave privada en el iMac.
