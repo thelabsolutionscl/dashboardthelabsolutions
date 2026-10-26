@@ -217,3 +217,27 @@ No mergear hasta cumplir al menos:
 - una sola impresión corta exitosa desde la cola durable;
 - `GET /restart` devuelve 405;
 - rollback probado al menos una vez.
+
+
+## Modo de contingencia en macOS cuando launchctl no admite el LaunchAgent
+
+Si el instalador devuelve \`Bootstrap failed: 5\`, comprobar primero el error en
+\`~/Library/Application Support/TheLabFarm/farm-controller.err\` y los listeners de
+\`8347\` (controller) y \`8348\` (bridge interno). Evitar procesos duplicados.
+
+- En un LaunchAgent válido se configura \`FARM_RESTART_MANAGED=1\`. Solo en este modo un
+  \`POST /update\` con nuevos commits termina el padre y confía su reinicio a launchd.
+- Sin un supervisor, \`POST /update\` con cambios deja vivo el proceso anterior y
+  responde \`manualRestartRequired: true\`; el operador decide cuándo reiniciar.
+  Si \`git pull\` no trajo nuevos commits, no se fuerza reinicio.
+- El bridge hijo ya no envía \`SIGTERM\` al padre si no hay supervisor.
+- El modo directo de contingencia del instalador exporta \`BRIDGE_UPDATE=0\` y
+  \`FARM_RESTART_MANAGED=0\` para evitar interrupciones automáticas. No equivale a
+  un arranque persistente: después de cerrar sesión/reiniciar macOS será necesario
+  corregir el LaunchAgent.
+
+Cuando queda solo \`printer-bridge/server.js\` escuchando en \`8348\` sin Farm Controller
+en \`8347\`, puede tratarse de un bridge huérfano. Antes de iniciar el controller,
+verificar el comando exacto del proceso con \`ps\`, que no haya trabajos activos, y
+detener únicamente ese bridge identificado; jamás terminar procesos por patrón amplio
+ni matar el túnel Cloudflare sin necesidad.
