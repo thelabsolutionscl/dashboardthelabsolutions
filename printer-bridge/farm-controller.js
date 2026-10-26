@@ -38,6 +38,9 @@ const DISCOVERY_PREFIX = process.env.FARM_LAN_PREFIX || '192.168.100.';
 const DISCOVERY_INTERVAL_MS = Math.max(60_000, Number(process.env.FARM_DISCOVERY_INTERVAL_MS || 10 * 60_000));
 const MAX_BODY = 64 * 1024 * 1024;
 const UPDATE_ENABLED = process.env.BRIDGE_UPDATE !== '0';
+// Only a verified persistent supervisor is permitted to auto-restart the controller.
+// Bare nohup and installer fallback have no restart guarantee.
+const RESTART_MANAGED = process.env.FARM_RESTART_MANAGED === '1';
 const AUDIT_API_VERSION = 3;
 const REPO_DIR = process.env.BRIDGE_REPO_DIR || path.resolve(ROOT, '..');
 function repoRevision(){
@@ -734,14 +737,21 @@ function probeLegacyAuth(timeoutMs=1200) {
     req.end();
   });
 }
+let shuttingDown = false;
+let legacyRestartTimer = null;
 function startLegacy() {
-  if (legacy) return;
+  if (shuttingDown || legacy) return;
   const env = { ...process.env, BRIDGE_PORT: String(LEGACY_PORT), BRIDGE_TOKEN: INTERNAL_TOKEN, BRIDGE_ALLOW_ORIGIN: 'http://127.0.0.1' };
   legacy = spawn(process.execPath, [path.join(ROOT, 'server.js')], { cwd: ROOT, env, stdio: ['ignore', 'inherit', 'inherit'] });
   legacy.on('exit', (code, signal) => {
-    console.error(`[farm] legacy bridge salió code=${code} signal=${signal || ''}; reiniciando en 2s`);
     legacy = null;
-    setTimeout(startLegacy, 2000).unref();
+    if (shuttingDown) return;
+    console.error(`[farm] legacy bridge salió code=${code} signal=${signal || ''}; reiniciando en 2s`);
+    legacyRestartTimer = setTimeout(() => {
+      legacyRestartTimer = null;
+      startLegacy();
+    }, 2000);
+    legacyRestartTimer.unref?.();
   });
 }
 
@@ -749,13 +759,15 @@ let _controllerUpdating=false;
 function updateFarmController(){
   if(_controllerUpdating)return Promise.resolve({ok:false,error:'actualización ya en curso'});
   _controllerUpdating=true;
+  const before = repoRevision();
   return new Promise(resolve=>{
     const finish=value=>{if(!value?.ok)_controllerUpdating=false;resolve(value);};
     const run=git=>execFile(git,['-C',REPO_DIR,'pull','--ff-only','origin','main'],{timeout:90000},(err,stdout,stderr)=>{
       if(err&&err.code==='ENOENT'&&git==='git')return run('/usr/bin/git');
       const out=String(stdout||'').trim(),errOut=String(stderr||'').trim();
       if(err)return finish({ok:false,error:errOut||out||err.message});
-      finish({ok:true,out});
+      const after = repoRevision();
+      finish({ok:true,out,changed:before!==after});
     });
     run('git');
   });
@@ -1123,10 +1135,14 @@ const server = http.createServer(async (req, res) => {
     const role=requireRole(req,res,'admin');if(!role)return;
     if(!UPDATE_ENABLED)return json(res,200,{ok:false,error:'actualización desactivada (BRIDGE_UPDATE=0)'},{'X-Farm-Role':role});
     const result=await updateFarmController();
-    json(res,200,{...result,restarting:!!result.ok,scope:'farm-controller'},{'X-Farm-Role':role});
-    if(result.ok){
-      console.log('[farm] actualizado vía /update — reiniciando controller completo.');
+    const restarting=!!result.ok && result.changed && RESTART_MANAGED;
+    json(res,200,{...result,restarting,manualRestartRequired:!!result.ok && result.changed && !RESTART_MANAGED,
+      scope:'farm-controller'},{'X-Farm-Role':role});
+    if(restarting){
+      console.log('[farm] código actualizado y supervisor activo; reiniciando controller completo.');
       setTimeout(shutdown,500).unref?.();
+    }else if(result.ok && result.changed){
+      console.warn('[farm] actualización descargada; NO se cerrará controller sin supervisor. Reinicio manual pendiente.');
     }
     return;
   }
@@ -1422,6 +1438,9 @@ function start(){
   });
 }
 function shutdown() {
+  if(shuttingDown)return;
+  shuttingDown=true;
+  if(legacyRestartTimer){clearTimeout(legacyRestartTimer);legacyRestartTimer=null;}
   try { if (legacy) legacy.kill('SIGTERM'); } catch (_) {}
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
