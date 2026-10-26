@@ -210,3 +210,65 @@ complejas: debe verificarse en OrcaSlicer. Los ajustes temporales pueden dejar
 el proyecto marcado como modificado; antes de cambiar a otra impresora, el
 operador debe conservar o descartar esos cambios de forma explícita. Nunca
 descartar automáticamente proyectos editados.
+
+
+## Perfil «Mejor acabado» y visor visual combinado
+
+El flujo de Máquinas ahora incluye **dos botones de inspección** junto al
+laminado OrcaSlicer:
+
+1. **Ver modelo 3D**: abre el laminador nativo existente del dashboard
+   (`js/slicer3d.js`) con el STL/3MF seleccionado para rotarlo y revisarlo antes
+   de laminar. No genera G-code ni envía nada a la granja.
+2. **Ver capas reales (Orca)**: disponible solo tras terminar el trabajo y
+   verificar el perfil declarado en G-code. Descarga temporalmente el G-code
+   de OrcaSlicer, lo interpreta **en el visor de capas del laminador nativo**
+   y muestra recorridos por capa o una vista 3D. **No vuelve a laminar** el STL
+   ni reemplaza el resultado por el del motor del navegador. Reutiliza el
+   módulo existente. No inicia ni sube trabajos a ninguna impresora.
+
+El visor nativo muestra por un lado la geometría fuente, que puede ser
+centrada/orientada de manera diferente, y por otro las trayectorias **reales**
+de OrcaSlicer. La vista de trayectorias interpreta los comentarios de roles
+`;TYPE:` de Orca, cambios de E/Z y G0/G1; arcos G2/G3 tienen
+representación aproximada. Revisar visualmente el resultado y sus dimensiones
+antes de usar G-code en una impresora. Si el STL tiene unidades en metros o
+pulgadas, convertirlo primero a mm o abrir un 3MF con unidad declarada;
+el visor local no debe mostrar una escala distinta a la utilizada en Orca.
+
+### Parámetros conservadores para «Mejor acabado» (boquilla de 0,4 mm)
+
+El asesor pre-laminado ya no usa solo el caudal volumétrico como criterio de
+velocidad. También aplica estos **máximos de partida**, sin elevar ningún
+valor más lento del perfil original:
+
+| Función | Tope mm/s |
+| --- | ---: |
+| Pared exterior | 60 |
+| Pared interior | 110 |
+| Relleno disperso | 140 |
+| Relleno sólido interno | 100 |
+| Superficie superior | 45 |
+| Primera capa | 30 |
+| Relleno de espacios | 65 |
+| Puentes | 45 |
+
+Para boquillas más pequeñas los límites bajan; para «Mayor resistencia»
+hay otros máximos y «Menor tiempo» depende de la capacidad de caudal. Cada
+función se compara contra el **menor** límite entre velocidad por acabado y
+caudal con margen 15 %. Se presenta el plan **ANTES** de aplicarlo y el usuario
+debe aprobarlo. El MCP vuelve a comprobar la física y **lee de vuelta** cada
+valor escrito en OrcaSlicer; aborta si uno no se ha aplicado realmente.
+El hash de aprobación incluye el archivo original y las unidades seleccionadas
+para evitar reutilizar la aprobación con un modelo diferente.
+
+Estas velocidades son puntos de partida prudentes, **no valores perfectos ni
+calibrados físicamente**. La calidad depende también del material concreto,
+temperatura, flujo, retracción, aceleraciones, refrigeración, orientación y
+soportes. El visor ayuda a inspeccionar geometría y trayectorias, pero **no**
+garantiza integridad mecánica. Los consejos de IA opcionales siguen siendo
+separados, explícitos y sin aplicar parámetros directamente.
+
+No se elimina el laminador nativo, ni se modifica OrcaSlicer.app. El motor
+recomendado para G-code de producción continúa siendo OrcaSlicer MCP con
+presets reales y comprobación de compatibilidad.

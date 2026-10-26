@@ -4092,6 +4092,62 @@ async function download(){
   }catch(e){notice('Error al descargar G-code: '+e.message,true);}
   finally{clearTimeout(timer);}
 }
+async function orcaGcodeText(id){
+  const tokenValue=token();
+  if(!tokenValue)throw Error('Se necesita el emparejamiento del Farm Controller para visualizar G-code.');
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+  try{
+    const response=await fetch(base()+'/farm/orca/jobs/'+encodeURIComponent(id)+'/download',{
+      method:'GET',headers:{'X-Bridge-Token':tokenValue},cache:'no-store',signal:controller.signal
+    });
+    if(!response.ok){
+      const body=await response.json().catch(()=>({}));
+      throw Error(body.error||'No se pudo obtener G-code ('+response.status+')');
+    }
+    const blob=await response.blob();
+    if(!blob.size||blob.size>32*1024*1024)throw Error('G-code vacio o demasiado grande.');
+    return await blob.text();
+  }finally{clearTimeout(timer);}
+}
+function visualEngine(){
+  if(typeof SL3D==='undefined'||typeof SL3D.inspectOrcaModel!=='function')
+    throw Error('El slicer visual nativo no esta cargado. Actualiza el dashboard.');
+  return SL3D;
+}
+function visualFile(){
+  const file=$('tlsOrcaMcpFile')?.files?.[0];
+  if(!file||!/\\.(stl|3mf)$/i.test(file.name))throw Error('Selecciona antes un STL o 3MF.');
+  const units=$('tlsOrcaMcpStlUnits')?.value||'auto';
+  if(/\.stl$/i.test(file.name)&&!['auto','mm'].includes(units))
+    throw Error('Este visor usa las coordenadas originales del STL. Para escalas en metros o pulgadas, convierte primero el STL a mm, o usa 3MF con unidades declaradas.');
+  return file;
+}
+async function inspectNative(){
+  const btn=$('tlsOrcaMcpViewModel');
+  if(btn)btn.disabled=true;
+  try{
+    const engine=visualEngine(),file=visualFile(),machine=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value);
+    await engine.inspectOrcaModel(file,{model:machine?.modelo||'',material:$('tlsOrcaMcpMaterial')?.value||'PLA'});
+    notice('Modelo abierto en el laminador visual existente. Esta vista NO genera G-code.');
+  }catch(e){notice('Visor: '+e.message,true);}
+  finally{if(btn)btn.disabled=false;}
+}
+async function inspectOrcaLayers(){
+  const btn=$('tlsOrcaMcpViewGcode');
+  if(btn)btn.disabled=true;
+  try{
+    if(!latest?.jobId)throw Error('Primero completa un laminado OrcaSlicer verificado.');
+    const engine=visualEngine(),file=visualFile();
+    const machine=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value);
+    if(!machine||String(machine.id)!==latest.machineId||machine.modelo!==latest.machineModel||
+       $('tlsOrcaMcpMaterial')?.value!==latest.material)
+      throw Error('Cambiaste la impresora fisica o el material despues de laminar. Vuelve a analizar la pieza.');
+    const gcode=await orcaGcodeText(latest.jobId);
+    const result=await engine.reviewOrca(file,gcode,{model:machine.modelo,material:$('tlsOrcaMcpMaterial')?.value||'PLA'});
+    notice('Vista del G-code REAL de OrcaSlicer abierta en el laminador visual: '+result.layers+' capas. No se ha iniciado ninguna impresion.');
+  }catch(e){notice('No se pudo abrir la vista por capas: '+e.message,true);}
+  finally{if(btn)btn.disabled=false;}
+}
 function sleepOrca(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 async function pollOrcaJob(id){
   const deadline=Date.now()+210000;
@@ -4164,7 +4220,9 @@ async function slice(){
     if(!started.jobId)throw new Error('Farm Controller no devolvio identificador de laminado.');
     notice('Trabajo aceptado por el taller. Laminando en OrcaSlicer; puedes consultar su avance sin reenviar el STL…');
     const data=await pollOrcaJob(started.jobId);
-    latest=data;if(dl)dl.disabled=false;
+    latest={...data,jobId:started.jobId,machineId:String(machine.id),machineModel:machine.modelo,material:parameters.material};
+    if(dl)dl.disabled=false;
+    const view=$('tlsOrcaMcpViewGcode');if(view)view.disabled=!data.gcodeCheck?.confirmed;
     const scale=data.unitPreflight;
     if(scale?.orientationRepaired)notice('Se corrigio orientacion de '+scale.orientationFlippedFaces+
       ' caras del STL temporal sin cambiar sus dimensiones. Verifica la geometria en el G-code.');
@@ -4219,6 +4277,8 @@ function mount(){
     '<button id="tlsOrcaMcpCheck" class="btn btn-ghost btn-sm" type="button">Comprobar MCP</button>',
     '<button id="tlsOrcaMcpSlice" class="btn btn-primary btn-sm" type="button" disabled>Analizar figura y laminar</button>',
     '<button id="tlsOrcaMcpDownload" class="btn btn-ghost btn-sm" type="button" disabled>Descargar G-code otra vez</button>',
+    '<button id="tlsOrcaMcpViewModel" class="btn btn-ghost btn-sm" type="button">Ver modelo 3D</button>',
+    '<button id="tlsOrcaMcpViewGcode" class="btn btn-ghost btn-sm" type="button" disabled>Ver capas reales (Orca)</button>',
     '</div><p id="tlsOrcaMcpActive" style="font-size:12px;margin-top:10px;color:var(--text2)">Perfil activo: comprobando OrcaSlicer…</p>',
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpPreset" aria-label="Perfil de impresora real en OrcaSlicer" class="field-input" style="max-width:385px;flex:1"><option value="">Perfiles reales de OrcaSlicer…</option></select>',
@@ -4237,6 +4297,9 @@ function mount(){
   host.insertBefore(panel,host.firstChild);
   populate();
   $('tlsOrcaMcpFile').addEventListener('change',()=>{
+    latest=null;
+    const dl=$('tlsOrcaMcpDownload'),viewer=$('tlsOrcaMcpViewGcode');
+    if(dl)dl.disabled=true;if(viewer)viewer.disabled=true;
     const ext=$('tlsOrcaMcpFile')?.files?.[0]?.name||'';
     const unitSelect=$('tlsOrcaMcpStlUnits');
     if(unitSelect){unitSelect.disabled=/\.3mf$/i.test(ext);if(unitSelect.disabled)unitSelect.value='auto';}
@@ -4244,7 +4307,19 @@ function mount(){
   $('tlsOrcaMcpCheck').addEventListener('click',status);
   $('tlsOrcaMcpSlice').addEventListener('click',slice);
   $('tlsOrcaMcpDownload').addEventListener('click',()=>{void download();});
-  $('tlsOrcaMcpPrinter').addEventListener('change',()=>{void status();void loadOrcaPresets();});
+  $('tlsOrcaMcpViewModel').addEventListener('click',()=>{void inspectNative();});
+  $('tlsOrcaMcpViewGcode').addEventListener('click',()=>{void inspectOrcaLayers();});
+  $('tlsOrcaMcpPrinter').addEventListener('change',()=>{
+    latest=null;
+    const view=$('tlsOrcaMcpViewGcode'),dl=$('tlsOrcaMcpDownload');
+    if(view)view.disabled=true;if(dl)dl.disabled=true;
+    void status();void loadOrcaPresets();
+  });
+  $('tlsOrcaMcpMaterial').addEventListener('change',()=>{
+    latest=null;
+    const view=$('tlsOrcaMcpViewGcode'),dl=$('tlsOrcaMcpDownload');
+    if(view)view.disabled=true;if(dl)dl.disabled=true;
+  });
   $('tlsOrcaMcpActivate').addEventListener('click',()=>{void activateOrcaPrinter();});
   $('tlsOrcaMcpPreset').addEventListener('change',()=>{
     const id=$('tlsOrcaMcpPrinter')?.value,value=$('tlsOrcaMcpPreset')?.value;

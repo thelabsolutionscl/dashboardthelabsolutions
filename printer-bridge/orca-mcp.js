@@ -244,7 +244,8 @@ function approvalHash(request,active,plan){
   return crypto.createHash('sha256').update(JSON.stringify({
     model:request.model,material:request.material,goal:request.goal||'calidad',
     activePrinter:active.printer,activeFilament:active.filament,activeProcess:active.process,
-    changes:plan.changes,limit:plan.limit
+    fileSha256:crypto.createHash('sha256').update(String(request.modelBase64||'')).digest('hex'),
+    units:request.stlUnits||'auto',changes:plan.changes,limit:plan.limit
   })).digest('hex');
 }
 async function preflight(request,env=process.env){
@@ -301,6 +302,13 @@ async function applyPreslicePhysics(client,tools,request){
     const outcome=await invoke(client,'set_config',{changes:report.plan.changes});
     if(outcome.errors&&(Array.isArray(outcome.errors)?outcome.errors.length:Object.keys(outcome.errors).length))
       throw Error('OrcaSlicer rechazo uno de los parametros propuestos.');
+    const verified=await invoke(client,'get_config',{keys:Object.keys(report.plan.changes)});
+    if(!verified?.config)throw Error('OrcaSlicer no confirmo los parametros aplicados.');
+    for(const [key,wanted] of Object.entries(report.plan.changes)){
+      const actual=Number(String(verified.config[key]??'').split(',')[0]);
+      if(!Number.isFinite(actual)||Math.abs(actual-Number(wanted))>0.001)
+        throw Error('OrcaSlicer no aplico '+key+' ('+String(wanted).slice(0,30)+'). No se laminara con parametros no verificados.');
+    }
   }else if(report.originalPhysics.verdict==='blocked'){
     throw Error('No se inicio el laminado: parametros fisicos bloqueados. Ejecuta el analisis previo y acepta la optimizacion segura.');
   }

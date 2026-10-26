@@ -11,6 +11,33 @@ const SPEED_WIDTHS=Object.freeze({
   gap_infill_speed:'line_width',bridge_speed:'line_width'
 });
 const MIN_TEMP=Object.freeze({PLA:[195,1.2],PETG:[220,1.4],ABS:[225,1.4],ASA:[225,1.4]});
+// Quality caps are conservative starting points for 0.4mm FDM machines,
+// NOT tested material profiles or physical guarantees. Never raise speed.
+// Material-specific physics checks remain an independent hard gate.
+const QUALITY_BASE=Object.freeze({
+  outer_wall_speed:60,
+  inner_wall_speed:110,
+  sparse_infill_speed:140,
+  internal_solid_infill_speed:100,
+  top_surface_speed:45,
+  initial_layer_speed:30,
+  gap_infill_speed:65,
+  bridge_speed:45
+});
+const STRENGTH_BASE=Object.freeze({
+  outer_wall_speed:80,inner_wall_speed:130,
+  sparse_infill_speed:150,internal_solid_infill_speed:115,
+  top_surface_speed:65,initial_layer_speed:30,
+  gap_infill_speed:75,bridge_speed:40
+});
+function speedCaps(goal,nozzle){
+  const base=goal==='calidad'?QUALITY_BASE:goal==='resistencia'?STRENGTH_BASE:null;
+  if(!base)return null;
+  // Smaller nozzles benefit from lower speeds; larger ones never lift the
+  // quality cap because material/cooling/calibration still matter.
+  const factor=Math.max(.4,Math.min(1,nozzle/.4));
+  return Object.fromEntries(Object.entries(base).map(([k,v])=>[k,Math.max(10,Math.floor(v*factor/5)*5)]));
+}
 function num(x){
   if(x==null||x==='')return null;
   const s=String(x).split(',')[0].trim();
@@ -42,6 +69,7 @@ function suggest(config,goal='calidad'){
     changes:{},details:[],limit:rawLimit};
   const safeLimit=Math.floor(rawLimit*.85*100)/100;
   const widthFallback=mm(c,'line_width',nozzle);
+  const caps=speedCaps(goal,nozzle);
   const changes={},details=[];
   const layers=goalLayer(goal,nozzle,layer);
   if(layers && Math.abs(layers.to-layers.from)>.001){
@@ -51,26 +79,33 @@ function suggest(config,goal='calidad'){
   const effectiveLayer=num(changes.layer_height)||layer;
   for(const [key,widthKey] of Object.entries(SPEED_WIDTHS)){
     const speed=num(c[key]),width=mm(c,widthKey,nozzle)||widthFallback;
-    if(!(speed>0&&width>effectiveLayer*.22))continue;
-    const section=(width-effectiveLayer*(1-Math.PI/4))*effectiveLayer;
-    if(!(section>0))continue;
-    const demand=section*speed;
-    if(demand>safeLimit){
-      // 5 mm/s increments, downwards only.
-      const candidate=Math.floor(safeLimit/section/5)*5;
-      if(candidate<5)return{ok:false,reason:'Caudal insuficiente incluso a 5 mm/s para la geometria de extrusión.',
-        changes:{},details:[],limit:rawLimit};
-      const to=Math.min(speed,candidate);
-      if(to<speed){
-        changes[key]=String(to);
-        details.push({key,from:speed,to,flowBefore:+demand.toFixed(2),
-          flowAfter:+(to*section).toFixed(2),reason:'Caudal <= 85% del limite seguro'});
+    if(!(speed>0))continue;
+    const qualityCap=caps?.[key]??Infinity;
+    // Always enforce quality caps even if Orca omits width of a feature.
+    let to=Math.min(speed,qualityCap),demand=null,after=null;
+    if(width>effectiveLayer*.22){
+      const section=(width-effectiveLayer*(1-Math.PI/4))*effectiveLayer;
+      if(section>0){
+        demand=section*speed;
+        const physicsSpeed=Math.floor(safeLimit/section/5)*5;
+        if(physicsSpeed<5)return{ok:false,reason:'Caudal insuficiente incluso a 5 mm/s para la geometria de extrusión.',
+          changes:{},details:[],limit:rawLimit};
+        to=Math.min(to,physicsSpeed);
+        after=section*to;
       }
+    }
+    if(to<speed){
+      changes[key]=String(to);
+      details.push({key,from:speed,to,flowBefore:demand==null?null:+demand.toFixed(2),
+        flowAfter:after==null?null:+after.toFixed(2),
+        reason:(to<=qualityCap && Number.isFinite(qualityCap)?'Velocidad conservadora para '+goal:'Límite de caudal con margen del 15%')+
+          (demand!=null?' y caudal verificado':' (caudal pendiente de validación MCP)')});
     }
   }
   return{ok:true,changes,details,limit:rawLimit,safetyFlow:safeLimit,filamentType,
     nozzle,layerBefore:layer,layerAfter:effectiveLayer,
-    basis:'Caudal calculado, margen 15%, geometria basica y preferencia de calidad. No constituye calibracion fisica ni IA.'};
+    qualityCaps:caps,
+    basis:'Topes de velocidad de acabado/resistencia + caudal calculado con margen 15%. Son valores iniciales no calibrados, no una garantia de calidad ni IA.'};
 }
 function summarizeGeometry(parsed){
   if(!parsed?.dimensions)return null;
@@ -82,4 +117,4 @@ function summarizeGeometry(parsed){
     note:thin?'Pieza de geometria delgada: confirmar orientacion, adhesion y altura minima de paredes.':
       'Revisar soportes, voladizos y orientacion visualmente antes de imprimir.'};
 }
-module.exports={suggest,summarizeGeometry,num};
+module.exports={suggest,summarizeGeometry,speedCaps,num};
