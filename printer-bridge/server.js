@@ -939,6 +939,8 @@ function psField(pid,field){
   });
 }
 async function maybeRestartStaleFarmParent(){
+  // Child must never kill a manually started parent: there is no launchd to restart it.
+  if(process.env.FARM_RESTART_MANAGED!=='1')return false;
   const ppid=Number(process.ppid||0);if(ppid<=1)return false;
   try{
     const command=await psField(ppid,'command');
