@@ -109,3 +109,31 @@ El botón **Laminar con OrcaSlicer** puede recibir `autoSelect:true` y `printerP
 Si el proyecto está modificado, el cambio automático no se realiza. Hay que guardar o revisar esos ajustes en OrcaSlicer. No hay promesa de precisión mecánica sin comprobar el diámetro real de boquilla y el filamento físico.
 
 **IA:** se ofrece una casilla opcional `Analizar automáticamente después de laminar`. Por defecto está apagada. Al activarla se solicita consentimiento para enviar solo métricas técnicas anonimizadas a la API configurada, nunca STL/G-code; no aplica automáticamente recomendaciones al slicer ni imprime. Requiere clave privada en el iMac.
+
+## Evitar «Object too small» al trabajar a distancia
+
+OrcaSlicer puede mostrar una ventana modal al importar un STL con malla diminuta:
+puede estar en metros o pulgadas, pero el estándar STL no declara unidades.
+Esa ventana bloquea el laminado remoto hasta que alguien la resuelve en el iMac.
+
+**Antes de abrir STL en OrcaSlicer**, el preflight analiza las caras triangulares
+de los archivos ASCII o binarios y verifica el tamaño. El archivo original nunca
+se modifica: las conversiones ocurren en un directorio temporal de laminado.
+
+El control **Unidades STL** ofrece cuatro opciones: Auto seguro (rechaza archivos
+que podrían abrir la ventana), Milímetros (mantiene la escala), Metros (multiplica
+las coordenadas temporales por 1000), o Pulgadas (multiplica por 25,4).
+Si incluso tras la conversión el archivo sigue demasiado pequeño o resulta
+exageradamente grande, se rechaza **antes** de llamar a la API del slicer.
+Al terminar, se muestran el factor aplicado y dimensiones para revisar.
+
+**No inferir unidades solo por geometría.** Un STL puede representar una pieza
+genuinamente diminuta en milímetros. La corrección no pulsa automáticamente
+«Yes» y no cambia las dimensiones basándose en conjeturas. La elección se hace
+remotamente desde el dashboard, sin intervención física en el taller.
+
+Una ventana modal que ya estaba abierta en OrcaSlicer no desaparece por esta
+corrección: se debe cerrar una vez por acceso remoto al escritorio o presencial.
+Otros avisos de proyectos 3MF o modelos importados pueden requerir protecciones
+separadas; esta protección cubre específicamente los STL diminutos.
+
