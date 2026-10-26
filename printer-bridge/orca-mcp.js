@@ -177,7 +177,17 @@ async function liveSlice(client,request,input,workspace){
   const finalProfiles=verifyProfiles(await invoke(client,'get_status'),request);
   const check=Guard.verifyGcode(gcode.toString('utf8'),request.model,finalProfiles.printer);
   if(!check.confirmed)throw Error('G-code sin metadatos de impresora verificables. Para evitar mezclar K1 y K2 no se entregara; revisa el perfil de OrcaSlicer.');
-  const technicalAnalysis={physics:null,geometry:null,breakdown:null};
+  const technicalAnalysis={physics:null,geometry:null,breakdown:null,settings:null};
+  try{
+    const cfg=await invoke(client,'get_config',{keys:[
+      'layer_height','initial_layer_print_height','wall_loops','top_shell_layers',
+      'bottom_shell_layers','sparse_infill_density','sparse_infill_pattern',
+      'enable_support','support_type','brim_type','brim_width',
+      'outer_wall_speed','inner_wall_speed','nozzle_temperature',
+      'hot_plate_temp','filament_max_volumetric_speed','nozzle_diameter'
+    ]});
+    technicalAnalysis.settings=cfg.config||null;
+  }catch(_){technicalAnalysis.settings=null;}
   for(const [name,key] of [['check_profile_physics','physics'],['describe_plate','geometry'],['get_slice_breakdown','breakdown']]){
     if(!name.startsWith('get_')&& !name.startsWith('describe_')&&name!=='check_profile_physics')continue;
     try{
@@ -246,7 +256,7 @@ async function selectPrinter(request,env=process.env){
   if(slicing)throw Error('No se puede modificar el perfil durante un laminado');
   const config=settings(env);
   return await withTools(config,15000,async(tools,client)=>{
-    if(!tools.some(t=>t.name==='select_preset'||t.name==='list_presets'))
+    if(!['select_preset','list_presets'].every(name=>tools.some(t=>t.name===name)))
       throw Error('MCP sin gestion de presets');
     const state=await invoke(client,'get_status');
     if(state.slicing||state.is_slicing)throw Error('OrcaSlicer esta laminando');
