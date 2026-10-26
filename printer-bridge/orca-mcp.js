@@ -7,6 +7,7 @@ const os=require('node:os');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
 const Guard=require('./orca-profile-guard.js');
+const Auto=require('./orca-auto-profiles.js');
 const MAX_MODEL=12*1024*1024;
 const MAX_GCODE=32*1024*1024;
 const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
@@ -155,12 +156,65 @@ function verifyProfiles(state,request){
   if(state.slicing||state.is_slicing)throw Error('OrcaSlicer ya esta laminando');
   return{printer,filament,print};
 }
-async function liveSlice(client,request,input,workspace){
-  const state=await invoke(client,'get_status');
-  const profiles=verifyProfiles(state,request);
-  const objects=await invoke(client,'list_objects');
-  if(Array.isArray(objects.objects)&&objects.objects.length)
-    throw Error('La placa de OrcaSlicer ya contiene modelos. Guardalos o limpiala antes de continuar.');
+async function autoPrepareProfiles(tools,client,request){
+  if(!['get_status','list_presets','select_preset','list_objects'].every(name=>tools.some(t=>t.name===name)))
+    throw Error('Este MCP no permite seleccion automatica segura de perfiles. Actualiza OrcaSlicer MCP.');
+  let current=await invoke(client,'get_status');
+  if(current.slicing||current.is_slicing)throw Error('OrcaSlicer esta laminando');
+  const occupied=await invoke(client,'list_objects');
+  if(!Array.isArray(occupied.objects))throw Error('OrcaSlicer no confirma si la placa esta vacia.');
+  if(occupied.objects.length)throw Error('La placa contiene '+occupied.objects.length+' modelo(s). Guardalos y vacia la placa antes de laminar desde el dashboard.');
+
+  const original=Guard.activeProfiles(current);
+  const printerList=await invoke(client,'list_presets',{type:'printer',include_system:true});
+  const plannedPrinter=Auto.choosePrinter(current,request.model,printerList,request.printerPresetName||'');
+  // Preflight material before mutating the user's active project where possible.
+  const initialFilament=Auto.sameMaterial(original.filament,request.material);
+  if(!initialFilament){
+    const filamentList=await invoke(client,'list_presets',{type:'filament',include_system:true});
+    Auto.chooseFilament(current,request.material,filamentList,request.filamentPresetName||'');
+  }
+  if(request.profile){
+    const processList=await invoke(client,'list_presets',{type:'print',include_system:true});
+    const available=Auto.presetNames(processList,'print');
+    if(!available.includes(request.profile))throw Error('No existe el perfil de proceso '+request.profile+' en OrcaSlicer.');
+  }
+  const changes=[];
+  async function select(type,name){
+    if(Guard.hasDirtyChanges(current))throw Error('No se cambio ningun perfil: hay modificaciones sin guardar en OrcaSlicer. Guardalas o descartalas manualmente antes de laminar.');
+    await invoke(client,'select_preset',{type,name});
+    current=await invoke(client,'get_status');
+    if(current.slicing||current.is_slicing)throw Error('OrcaSlicer empezo a laminar durante el cambio de perfil');
+    const final=Guard.activeProfiles(current);
+    const actual=type==='printer'?final.printer:type==='filament'?final.filament:final.process;
+    if(actual!==name)throw Error('OrcaSlicer no confirmo la seleccion de '+type+' "'+name+'".');
+    changes.push({type,name});
+  }
+  if(plannedPrinter.change)await select('printer',plannedPrinter.chosen);
+  // Printer switch may have changed filament/process as a side effect. Re-read.
+  if(!Auto.sameMaterial(Guard.activeProfiles(current).filament,request.material) || request.filamentPresetName){
+    const filaments=await invoke(client,'list_presets',{type:'filament',include_system:true});
+    const choice=Auto.chooseFilament(current,request.material,filaments,request.filamentPresetName||'');
+    if(choice.change)await select('filament',choice.chosen);
+  }
+  if(request.profile && Guard.activeProfiles(current).process!==request.profile)
+    await select('print',request.profile);
+  verifyProfiles(current,request);
+  if(Guard.activeProfiles(current).printer!==plannedPrinter.chosen)
+    throw Error('OrcaSlicer cambio el perfil de impresora inesperadamente. No se laminara.');
+  return changes;
+}
+async function liveSlice(client,request,input,workspace,tools){
+  let changes=[];
+  if(request.autoSelect===true){
+    changes=await autoPrepareProfiles(tools,client,request);
+  }else{
+    const state=await invoke(client,'get_status');
+    verifyProfiles(state,request);
+    const objects=await invoke(client,'list_objects');
+    if(!Array.isArray(objects.objects)||objects.objects.length)
+      throw Error('La placa de OrcaSlicer no esta confirmada vacia. Guardala y limpiala antes de continuar.');
+  }
   await invoke(client,'load_model',{path:input});
   // 3MF can carry project presets: verify again after importing, not only before it.
   verifyProfiles(await invoke(client,'get_status'),request);
@@ -203,7 +257,7 @@ async function liveSlice(client,request,input,workspace){
     gcodeBase64:gcode.toString('base64'),bytes:gcode.length,
     seconds:safe(metric.estimated_time_seconds??metric.seconds,10000000),
     grams:safe(metric.filament_used_g??metric.grams,100000),
-    activePresets:finalProfiles,machineModel:request.model,material:request.material,
+    activePresets:finalProfiles,profileChanges:changes,machineModel:request.model,material:request.material,
     gcodeCheck:{confirmed:check.confirmed,metadata:check.metadata,expected:request.model},
     technicalAnalysis,warnings:result.warnings||[]};
 }
@@ -322,6 +376,10 @@ async function slice(request,env=process.env){
   if(!VALID_MATERIALS.has(request.material))throw new Error('Material no compatible');
   if(request.profile!=null&&(typeof request.profile!=='string'||request.profile.length>120))
     throw new Error('Perfil demasiado largo');
+  if(request.printerPresetName!=null&&(typeof request.printerPresetName!=='string'||request.printerPresetName.length>180))
+    throw new Error('Nombre de perfil de impresora demasiado largo');
+  if(request.filamentPresetName!=null&&(typeof request.filamentPresetName!=='string'||request.filamentPresetName.length>180))
+    throw new Error('Nombre de perfil de filamento demasiado largo');
   if(typeof request.modelBase64!=='string'||request.modelBase64.length>Math.ceil(MAX_MODEL*4/3)+16)
     throw new Error('Modelo vacio o demasiado grande (maximo 12 MB)');
   const model=Buffer.from(request.modelBase64,'base64');
@@ -331,7 +389,8 @@ async function slice(request,env=process.env){
     const input=path.join(workspace,name),output=path.join(workspace,'laminado.gcode');
     await fsp.writeFile(input,model,{mode:0o600});
     return await withTools(config,180000,async(tools,client)=>{
-      if(isLiveOrca(tools))return await liveSlice(client,request,input,workspace);
+      if(isLiveOrca(tools))return await liveSlice(client,request,input,workspace,tools);
+      if(request.autoSelect===true)throw Error('El MCP conectado no admite seleccion automatica segura de perfiles.');
       const tool=selectTool(tools,config.preferredTool);
       if(!tool)throw new Error('El MCP no expone herramienta de laminado. Revisa ORCA_MCP_SLICE_TOOL');
       const args=argumentsForTool(tool,request,input,output);
@@ -352,4 +411,4 @@ async function slice(request,env=process.env){
   }finally{await fsp.rm(workspace,{recursive:true,force:true});}
   }finally{slicing=false;}
 }
-module.exports={status,slice,presets,selectPrinter,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
+module.exports={status,slice,presets,selectPrinter,autoPrepareProfiles,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
