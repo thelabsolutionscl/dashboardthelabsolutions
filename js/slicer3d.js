@@ -2711,24 +2711,30 @@ self.onmessage=function(ev){
     const sld=el('slPreviewSlider');sld.max=S.gcodeLayers.length-1;sld.value=S.gcodeLayers.length-1;
     _drawGcodeLayer(S.gcodeLayers.length-1);
   }
+  async function inspectOrcaModel(file,{model='',material=''}={}){
+    if(!file||!/\.(?:stl|3mf)$/i.test(file.name))throw Error('Selecciona un archivo STL/3MF.');
+    if(typeof switchTab==='function')switchTab('maquinas');
+    if(window.MachineOps?.showView)window.MachineOps.showView('laminado');
+    const viewer=document.getElementById('maquinaSlicerView');
+    if(!viewer)throw Error('No se encontro el visor 3D nativo.');
+    viewer.style.display='block';
+    const printer=el('slPrinter');if(printer&&SPECS[model])printer.value=model;
+    const mat=el('slMaterial');if(mat&&MATS[material])mat.value=material;
+    S.tris=null;S.stats=null;S.gcode='';
+    await loadFile(file);
+    if(!S.tris||!S.stats)throw Error('No se pudo visualizar el archivo.');
+    viewer.scrollIntoView({behavior:'smooth',block:'start'});
+    return{triangles:Math.round(S.tris.length/9),name:S.name};
+  }
   // Visual-only integration for the *actual* OrcaSlicer G-code. Reuses the
   // native 3D slicer canvas + by-layer path renderer, never slices a second time
   // or exposes this external G-code to the native print/upload controls.
   async function reviewOrca(file,gcode,{model='',material=''}={}){
-    if(!file||!/\.(?:stl|3mf)$/i.test(file.name))throw Error('Selecciona un archivo STL/3MF.');
     if(typeof gcode!=='string'||!gcode||gcode.length>32*1024*1024)
       throw Error('G-code remoto no disponible o demasiado grande.');
-    if(!document.getElementById('maquinaSlicerView'))throw Error('No se encontro el laminador visual del dashboard.');
-    if(typeof switchTab==='function')switchTab('maquinas');
-    if(window.MachineOps?.showView)window.MachineOps.showView('laminado');
-    const viewer=document.getElementById('maquinaSlicerView');
-    viewer.style.display='block';
-    const printer=el('slPrinter');if(printer&&SPECS[model])printer.value=model;
-    const mat=el('slMaterial');if(mat&&MATS[material])mat.value=material;
-    // Load the *source geometry* for 3D preview. It is not the Orca plate
-    // position; the paths rendered below come exclusively from Orca's G-code.
-    await loadFile(file);
-    if(!S.tris||!S.stats)throw Error('No se pudo cargar el modelo en el visor.');
+    // Load the *source geometry* for 3D preview. Orca paths below are
+    // viewed separately and are never re-sliced by the native engine.
+    await inspectOrcaModel(file,{model,material});
     S.gcode='';S.params=null;S.est=null;
     const box=el('slResult');if(!box)throw Error('No se encontro el panel de vista previa.');
     box.replaceChildren();box.style.display='block';
@@ -3065,5 +3071,5 @@ self.onmessage=function(ev){
       gcv.addEventListener('pointerup',()=>{gd=null;gcv.style.cursor='grab';});
     }
   });
-  return{loadFile,loadFiles,reviewOrca,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,updObjSetting,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel,toggleGcode3D};
+  return{loadFile,loadFiles,inspectOrcaModel,reviewOrca,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,updObjSetting,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel,toggleGcode3D};
 })();
