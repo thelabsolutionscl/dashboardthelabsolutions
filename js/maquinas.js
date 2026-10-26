@@ -4139,7 +4139,9 @@ async function inspectOrcaLayers(){
     if(!latest?.jobId)throw Error('Primero completa un laminado OrcaSlicer verificado.');
     const engine=visualEngine(),file=visualFile();
     const machine=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value);
-    if(machine?.modelo!==latest.machineModel)throw Error('Cambiaste de impresora despues de laminar. Vuelve a analizar la pieza.');
+    if(!machine||String(machine.id)!==latest.machineId||machine.modelo!==latest.machineModel||
+       $('tlsOrcaMcpMaterial')?.value!==latest.material)
+      throw Error('Cambiaste la impresora fisica o el material despues de laminar. Vuelve a analizar la pieza.');
     const gcode=await orcaGcodeText(latest.jobId);
     const result=await engine.reviewOrca(file,gcode,{model:machine.modelo,material:$('tlsOrcaMcpMaterial')?.value||'PLA'});
     notice('Vista del G-code REAL de OrcaSlicer abierta en el laminador visual: '+result.layers+' capas. No se ha iniciado ninguna impresion.');
@@ -4218,7 +4220,7 @@ async function slice(){
     if(!started.jobId)throw new Error('Farm Controller no devolvio identificador de laminado.');
     notice('Trabajo aceptado por el taller. Laminando en OrcaSlicer; puedes consultar su avance sin reenviar el STL…');
     const data=await pollOrcaJob(started.jobId);
-    latest={...data,jobId:started.jobId,machineModel:machine.modelo};
+    latest={...data,jobId:started.jobId,machineId:String(machine.id),machineModel:machine.modelo,material:parameters.material};
     if(dl)dl.disabled=false;
     const view=$('tlsOrcaMcpViewGcode');if(view)view.disabled=!data.gcodeCheck?.confirmed;
     const scale=data.unitPreflight;
@@ -4307,7 +4309,17 @@ function mount(){
   $('tlsOrcaMcpDownload').addEventListener('click',()=>{void download();});
   $('tlsOrcaMcpViewModel').addEventListener('click',()=>{void inspectNative();});
   $('tlsOrcaMcpViewGcode').addEventListener('click',()=>{void inspectOrcaLayers();});
-  $('tlsOrcaMcpPrinter').addEventListener('change',()=>{void status();void loadOrcaPresets();});
+  $('tlsOrcaMcpPrinter').addEventListener('change',()=>{
+    latest=null;
+    const view=$('tlsOrcaMcpViewGcode'),dl=$('tlsOrcaMcpDownload');
+    if(view)view.disabled=true;if(dl)dl.disabled=true;
+    void status();void loadOrcaPresets();
+  });
+  $('tlsOrcaMcpMaterial').addEventListener('change',()=>{
+    latest=null;
+    const view=$('tlsOrcaMcpViewGcode'),dl=$('tlsOrcaMcpDownload');
+    if(view)view.disabled=true;if(dl)dl.disabled=true;
+  });
   $('tlsOrcaMcpActivate').addEventListener('click',()=>{void activateOrcaPrinter();});
   $('tlsOrcaMcpPreset').addEventListener('change',()=>{
     const id=$('tlsOrcaMcpPrinter')?.value,value=$('tlsOrcaMcpPreset')?.value;
