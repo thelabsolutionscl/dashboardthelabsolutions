@@ -2616,18 +2616,19 @@ self.onmessage=function(ev){
     if(sug){const precio=_precioSug(tot,m);sug.innerHTML=tot>0?`<b style="color:var(--accent);font-size:14px">${_money(precio)}</b> <span style="color:var(--text3);font-size:9px">+ IVA = ${_money(precio*1.19)}</span>`:'—';}
   }
   // ── Vista previa del G-code por capas ───────────────────────
-  function _parseGcodeLayers(){
+  function _parseGcodeLayers(source=S.gcode){
     const layers=[];let cur=null,x=0,y=0,z=0,le=0,abs=true,feat=0; // feat: 0 modelo,1 soporte,2 puente,3 adhesión
     const ensure=(nz)=>{if(!cur||Math.abs(nz-cur.z)>0.001){cur={z:nz,segs:[],travels:[]};layers.push(cur);}return cur;};
-    for(const raw of S.gcode.split('\n')){
+    for(const raw of source.split('\n')){
       const c=raw.trim();if(!c)continue;
       if(c[0]===';'){
-        if(/pared exterior/i.test(c))feat=0;
-        else if(/pared interior/i.test(c))feat=1;
-        else if(/relleno|lightning|gap-fill|adaptativo/i.test(c))feat=2;
-        else if(/superficie/i.test(c))feat=3;
-        else if(/soporte/i.test(c))feat=4;
-        else if(/puente/i.test(c))feat=5;
+        // Compatible with both native TLS and OrcaSlicer ;TYPE/;FEATURE tags.
+        if(/pared exterior|(?:type|feature)\s*:\s*(?:outer wall|external perimeter|outer perimeter)/i.test(c))feat=0;
+        else if(/pared interior|(?:type|feature)\s*:\s*(?:inner wall|inner perimeter|internal perimeter)/i.test(c))feat=1;
+        else if(/relleno|lightning|gap-fill|adaptativo|(?:type|feature)\s*:\s*(?:sparse infill|internal infill|solid infill|gap infill)/i.test(c))feat=2;
+        else if(/superficie|(?:type|feature)\s*:\s*(?:top surface|bottom surface|top solid infill)/i.test(c))feat=3;
+        else if(/soporte|(?:type|feature)\s*:\s*support/i.test(c))feat=4;
+        else if(/puente|(?:type|feature)\s*:\s*bridge/i.test(c))feat=5;
         else if(/skirt|brim|raft/i.test(c))feat=6;
         else if(/=== Capa/.test(c))feat=1;
         continue;
@@ -2695,9 +2696,10 @@ self.onmessage=function(ev){
     const info=el('slPreviewInfo');if(info)info.textContent=`3D · capas 1–${idx+1}/${layers.length} · Z=${zmax.toFixed(2)}mm${stride>1?' · vista simplificada':''} · arrastra para rotar`;
   }
   function toggleGcode3D(on){S.gcode3D=on;_drawGcodeLayer(S.previewIdx||0);}
-  function preview(){
-    if(!S.gcode){toast('Genera primero el G-code','error');return;}
-    S.gcodeLayers=_parseGcodeLayers();
+  function preview(externalGcode){
+    const source=typeof externalGcode==='string'?externalGcode:S.gcode;
+    if(!source){toast('Genera primero el G-code','error');return;}
+    S.gcodeLayers=_parseGcodeLayers(source);
     if(!S.gcodeLayers.length){toast('Sin capas para previsualizar','error');return;}
     let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
     for(const L of S.gcodeLayers)for(const s of L.segs){
@@ -2708,6 +2710,75 @@ self.onmessage=function(ev){
     el('slPreviewWrap').style.display='block';
     const sld=el('slPreviewSlider');sld.max=S.gcodeLayers.length-1;sld.value=S.gcodeLayers.length-1;
     _drawGcodeLayer(S.gcodeLayers.length-1);
+  }
+  // Visual-only integration for the *actual* OrcaSlicer G-code. Reuses the
+  // native 3D slicer canvas + by-layer path renderer, never slices a second time
+  // or exposes this external G-code to the native print/upload controls.
+  async function reviewOrca(file,gcode,{model='',material=''}={}){
+    if(!file||!/\.(?:stl|3mf)$/i.test(file.name))throw Error('Selecciona un archivo STL/3MF.');
+    if(typeof gcode!=='string'||!gcode||gcode.length>32*1024*1024)
+      throw Error('G-code remoto no disponible o demasiado grande.');
+    if(!document.getElementById('maquinaSlicerView'))throw Error('No se encontro el laminador visual del dashboard.');
+    if(typeof switchTab==='function')switchTab('maquinas');
+    if(window.MachineOps?.showView)window.MachineOps.showView('laminado');
+    const viewer=document.getElementById('maquinaSlicerView');
+    viewer.style.display='block';
+    const printer=el('slPrinter');if(printer&&SPECS[model])printer.value=model;
+    const mat=el('slMaterial');if(mat&&MATS[material])mat.value=material;
+    // Load the *source geometry* for 3D preview. It is not the Orca plate
+    // position; the paths rendered below come exclusively from Orca's G-code.
+    await loadFile(file);
+    if(!S.tris||!S.stats)throw Error('No se pudo cargar el modelo en el visor.');
+    S.gcode='';S.params=null;S.est=null;
+    const box=el('slResult');if(!box)throw Error('No se encontro el panel de vista previa.');
+    box.replaceChildren();box.style.display='block';
+    const heading=document.createElement('div');
+    heading.textContent='Vista del G-code REAL de OrcaSlicer · solo lectura';
+    heading.style.cssText='font-weight:700;font-size:13px;margin-bottom:8px;color:var(--accent)';
+    box.append(heading);
+    const note=document.createElement('p');
+    note.textContent='Modelo 3D (arriba): visor del laminador nativo. Trayectorias (abajo): G-code generado en OrcaSlicer, sin relaminar. La ubicación de la pieza en cama puede diferir. No se envía a ninguna impresora.';
+    note.style.cssText='font-size:11px;color:var(--text2);line-height:1.55;margin:0 0 8px';
+    box.append(note);
+    const wrap=document.createElement('div');wrap.id='slPreviewWrap';
+    const row=document.createElement('div');row.style.cssText='display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0';
+    const slider=document.createElement('input');slider.type='range';slider.id='slPreviewSlider';
+    slider.min='0';slider.value='0';slider.style.cssText='min-width:170px;flex:1';
+    slider.addEventListener('input',e=>previewSlide(e.target.value));
+    const text=document.createElement('span');text.id='slPreviewInfo';
+    text.style.cssText='font-size:11px;color:var(--text2)';
+    const three=document.createElement('label');three.style.cssText='font-size:11px;display:flex;gap:5px;align-items:center';
+    const check=document.createElement('input');check.type='checkbox';
+    check.addEventListener('change',()=>toggleGcode3D(check.checked));
+    three.append(check,document.createTextNode('Vista trayectorias 3D'));
+    const travels=document.createElement('label');travels.style.cssText=three.style.cssText;
+    const tCheck=document.createElement('input');tCheck.type='checkbox';
+    tCheck.addEventListener('change',()=>toggleTravel(tCheck.checked));
+    travels.append(tCheck,document.createTextNode('Mostrar viajes'));
+    row.append(slider,three,travels,text);wrap.append(row);
+    const canvas=document.createElement('canvas');canvas.id='slGcodeCanvas';canvas.height=360;
+    canvas.style.cssText='width:100%;height:360px;display:block;background:#101418;border:1px solid var(--border);border-radius:9px;touch-action:none;cursor:grab';
+    wrap.append(canvas);box.append(wrap);
+    S.gcode3D=false;S.showTravel=false;S.gcodeRot={a:.6,b:-1};
+    const valid=_parseGcodeLayers(gcode).some(layer=>layer.segs?.length);
+    if(!valid){box.replaceChildren();throw Error('El G-code de OrcaSlicer no contiene trayectorias de extrusión interpretables; se conserva el archivo para revisión manual.');}
+    // Move the parser output into native drawing path without ever setting S.gcode.
+    preview(gcode);
+    let moving=null;
+    canvas.addEventListener('pointerdown',e=>{
+      if(!S.gcode3D)return;
+      moving={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove',e=>{
+      if(!moving)return;
+      S.gcodeRot.a+=(e.clientX-moving.x)*.01;
+      S.gcodeRot.b+=(e.clientY-moving.y)*.01;
+      moving={x:e.clientX,y:e.clientY};_drawGcode3D(S.previewIdx||0);
+    });
+    canvas.addEventListener('pointerup',()=>{moving=null;});
+    canvas.addEventListener('pointercancel',()=>{moving=null;});
+    viewer.scrollIntoView({behavior:'smooth',block:'start'});
+    return{layers:S.gcodeLayers.length,segments:S.gcodeLayers.reduce((n,l)=>n+l.segs.length,0)};
   }
   function previewSlide(v){_drawGcodeLayer(+v);}
   function toggleTravel(on){S.showTravel=on;_drawGcodeLayer(S.previewIdx||0);}
@@ -2994,5 +3065,5 @@ self.onmessage=function(ev){
       gcv.addEventListener('pointerup',()=>{gd=null;gcv.style.cursor='grab';});
     }
   });
-  return{loadFile,loadFiles,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,updObjSetting,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel,toggleGcode3D};
+  return{loadFile,loadFiles,reviewOrca,addObject,autoOrient,toggleLayFlat,toggleSupportPreview,analizarIA,usarPerfilBase,generarGcode,descargar,enviar,encolar,onPrinterChange,costRecalc,preview,previewSlide,calibrar,enviarCal,slicerToCot,enviarATodas,toggleAdvanced,addModifier,removeModifier,updModifier,addSupRegion,removeSupRegion,updSupRegion,updObjSetting,gcodePreset,saveMachineGcode,saveProfile,loadProfile,deleteProfile,toggleTravel,toggleGcode3D};
 })();
