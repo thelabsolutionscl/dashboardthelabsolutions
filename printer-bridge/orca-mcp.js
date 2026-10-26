@@ -8,6 +8,7 @@ const path=require('node:path');
 const {spawn}=require('node:child_process');
 const Guard=require('./orca-profile-guard.js');
 const Auto=require('./orca-auto-profiles.js');
+const StlPreflight=require('./orca-stl-preflight.js');
 const MAX_MODEL=12*1024*1024;
 const MAX_GCODE=32*1024*1024;
 const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
@@ -386,12 +387,20 @@ async function slice(request,env=process.env){
     throw new Error('Modelo vacio o demasiado grande (maximo 12 MB)');
   const model=Buffer.from(request.modelBase64,'base64');
   if(!model.length||model.length>MAX_MODEL)throw new Error('Modelo vacio o demasiado grande');
+  // Before touching OrcaSlicer GUI: stop files which would open the
+  // blocking 'Object too small' unit-selection modal on the workshop iMac.
+  const prepared=StlPreflight.prepare(model,{filename:name,units:request.stlUnits||'auto'});
   const workspace=await fsp.mkdtemp(path.join(os.tmpdir(),'tls-orca-'));
   try{
     const input=path.join(workspace,name),output=path.join(workspace,'laminado.gcode');
-    await fsp.writeFile(input,model,{mode:0o600});
+    await fsp.writeFile(input,prepared.buffer,{mode:0o600});
     return await withTools(config,180000,async(tools,client)=>{
-      if(isLiveOrca(tools))return await liveSlice(client,request,input,workspace,tools);
+      if(isLiveOrca(tools)){
+        const result=await liveSlice(client,request,input,workspace,tools);
+        result.unitPreflight={units:prepared.units,changed:prepared.changed,
+          factor:prepared.factor||1,dimensions:prepared.dimensions||null};
+        return result;
+      }
       if(request.autoSelect===true)throw Error('El MCP conectado no admite seleccion automatica segura de perfiles.');
       const tool=selectTool(tools,config.preferredTool);
       if(!tool)throw new Error('El MCP no expone herramienta de laminado. Revisa ORCA_MCP_SLICE_TOOL');
