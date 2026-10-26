@@ -76,3 +76,45 @@ test('unsafe unoptimized profile blocked before slice and no G-code is returned'
    modelBase64:model(),stlUnits:'mm',autoSelect:false,autoTune:false};
  await assert.rejects(MCP.slice(input,mock(true)),/antes|parametros fisicos bloqueados/i);
 });
+
+
+test('mejor acabado aplica topes reales ademas del caudal, para boquilla 0.4 y PLA',()=>{
+ const cfg={...config,layer_height:'0.20',outer_wall_speed:'250',
+   inner_wall_speed:'300',sparse_infill_speed:'270',
+   internal_solid_infill_speed:'250',top_surface_speed:'180',
+   gap_infill_speed:'250',initial_layer_speed:'70',bridge_speed:'110'};
+ const a=A.suggest(cfg,'calidad');
+ assert.equal(a.ok,true);
+ assert.equal(a.changes.outer_wall_speed,'60');
+ assert.equal(a.changes.inner_wall_speed,'110');
+ assert.equal(a.changes.sparse_infill_speed,'140');
+ assert.equal(a.changes.internal_solid_infill_speed,'100');
+ assert.equal(a.changes.top_surface_speed,'45');
+ assert.equal(a.changes.initial_layer_speed,'30');
+ assert.equal(a.changes.gap_infill_speed,'65');
+ assert.equal(a.changes.bridge_speed,'45');
+ assert.equal(a.changes.layer_height,'0.16');
+ assert.equal(a.changes.nozzle_temperature,undefined);
+ assert.equal(a.changes.filament_max_volumetric_speed,undefined);
+});
+test('menor tiempo no aplica topes de acabado y sigue protegido por caudal',()=>{
+ const fast=A.suggest(config,'rapidez');
+ const quality=A.suggest(config,'calidad');
+ assert.equal(fast.ok,true);
+ assert.ok(Number(quality.changes.inner_wall_speed)<Number(fast.changes.inner_wall_speed));
+ assert.equal(fast.qualityCaps,null);
+});
+test('nunca eleva velocidades originalmente mas lentas ni cambia diametro de boquilla',()=>{
+ const slow={...config,outer_wall_speed:'28',inner_wall_speed:'62',
+  top_surface_speed:'24',sparse_infill_speed:'100'};
+ const a=A.suggest(slow,'calidad');
+ assert.equal(a.changes.outer_wall_speed,undefined);
+ assert.equal(a.changes.inner_wall_speed,undefined);
+ assert.equal(a.changes.top_surface_speed,undefined);
+ assert.equal(a.changes.nozzle_diameter,undefined);
+});
+test('boquillas menores reducen los topes de calidad en vez de aumentarlos',()=>{
+ const cap04=A.speedCaps('calidad',.4),cap02=A.speedCaps('calidad',.2);
+ assert.ok(cap02.outer_wall_speed<cap04.outer_wall_speed);
+ assert.ok(cap02.inner_wall_speed<cap04.inner_wall_speed);
+});
