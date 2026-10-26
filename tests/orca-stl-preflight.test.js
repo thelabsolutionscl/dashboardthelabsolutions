@@ -101,13 +101,13 @@ test('flat 102 x 101 x 1.34 mm closed model with inconsistent winding is repaire
   }
   for(let i=0;i<12;i+=2){
     for(let k=0;k<3;k++){
-      const a=84+50*i+12+4+k*4,b=84+50*i+12+8+k*4;
+      const a=84+50*i+12+12+k*4,b=84+50*i+12+24+k*4;
       const val=buff.readFloatLE(a);
       buff.writeFloatLE(buff.readFloatLE(b),a);
       buff.writeFloatLE(val,b);
     }
   }
-  // Above swapped bytes across coordinate offsets, so check geometry for winding repairs.
+  // Swap the two vertices of every second triangle; all coordinates stay unchanged.
   const pre=STL.parse(buff);
   assert.ok(pre.meshVolume<8,'winding cancellation should simulate false tiny-volume alarm');
   const result=STL.prepare(buff,{filename:'flat-piece.stl',units:'mm'});
@@ -119,7 +119,7 @@ test('flat 102 x 101 x 1.34 mm closed model with inconsistent winding is repaire
   assert.deepEqual(result.dimensions.map(Math.round),[102,101,1]);
 });
 test('open thin STL is blocked with a useful topology diagnostic instead of a GUI modal',()=>{
-  const src=binaryCube(10);
+  const src=binaryCube(0.1);
   const fewer=Buffer.from(src.subarray(0,src.length-50));
   fewer.writeUInt32LE(11,80);
   assert.throws(()=>STL.prepare(fewer,{filename:'broken.stl',units:'mm'}),/malla abierta|umbral/);
