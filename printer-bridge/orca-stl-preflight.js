@@ -2,6 +2,7 @@
 // STL has no standard unit metadata. Never send tiny ambiguous geometry to a
 // GUI load_model call, because OrcaSlicer can show a blocking scale dialog.
 const UNIT_FACTORS=Object.freeze({mm:1,m:1000,in:25.4});
+const Mesh=require('./orca-stl-mesh.js');
 const MAX_FACETS=500000;
 const SMALL_VOLUME=8; // OrcaSlicer Model.cpp looks_like_imperial_units() threshold, mm^3
 function bad(message,details=null){
@@ -101,22 +102,49 @@ function prepare(data,{filename,units='auto'}={}){
   if(!['auto','mm','m','in'].includes(units))throw bad('Unidades no admitidas. Escoge Auto, mm, metros o pulgadas.');
   const observed=parse(data);
   const originalSize=observed.dimensions.map(n=>+n.toFixed(4));
-  const small=observed.meshVolume<SMALL_VOLUME||!Number.isFinite(observed.meshVolume);
+  const factor=units==='auto'?1:UNIT_FACTORS[units];
+  let selected=factor===1?observed:parse(data,factor);
   const details={dimensions:originalSize,meshVolume:+observed.meshVolume.toFixed(5),
     options:['mm','m','in'],reason:'STL sin unidades declaradas'};
-  if(units==='auto'&&small)
-    throw bad('Escala sin confirmar. '+scaleDiagnosis(observed)+ ' Selecciona las unidades reales desde el dashboard; no se abrio OrcaSlicer.',details);
-  const factor=units==='auto'?1:UNIT_FACTORS[units];
-  const selected=factor===1?observed:parse(data,factor);
+  let windingFixed=false,windingFlippedFaces=0,topology=null;
+  const bbox=selected.dimensions;
+  let reliableVolume=selected.meshVolume;
+  // OrcaSlicer's 8 mm³ heuristic is not a minimum printable *dimension*.
+  // A 102×101×1.34mm plate is not automatically "meters". A closed model
+  // with flipped triangles can have a near-zero signed STL volume.
+  if(reliableVolume<SMALL_VOLUME && Math.max(...bbox)>=2){
+    const repaired=Mesh.fixWinding(selected.buffer);
+    if(repaired.ok){
+      reliableVolume=repaired.volume;
+      if(reliableVolume>=SMALL_VOLUME && repaired.flippedFaces>0){
+        selected={...parse(repaired.buffer),buffer:repaired.buffer};
+        windingFixed=true;windingFlippedFaces=repaired.flippedFaces;
+      }else if(reliableVolume>=SMALL_VOLUME){
+        // Face normals in STL can be wrong even if vertex winding is fine.
+        // The repaired binary file recalculates normals in OrcaSlicer.
+        selected={...parse(repaired.buffer),buffer:repaired.buffer};
+        windingFixed=true;
+      }
+    }else topology=repaired;
+  }
+  if(reliableVolume<SMALL_VOLUME){
+    const context=topology?.reason?' Diagnostico de malla: '+topology.reason+
+      (Number.isInteger(topology.openEdges)?' ('+topology.openEdges+' aristas abiertas)':'')+'.':'';
+    throw bad('No se puede laminar de forma desatendida. '+scaleDiagnosis(observed,units,factor)+
+      context+' El volumen de la malla no supera el umbral usado por OrcaSlicer para mostrar un dialogo. Repara/cierra la malla o confirma unidades reales en la web; no se abrio OrcaSlicer.',
+      {...details,selectedUnits:units,resultingDimensions:bbox.map(n=>+n.toFixed(4)),
+        topology:topology?.reason||null,openEdges:topology?.openEdges||0});
+  }
   const maxDimension=Math.max(...selected.dimensions);
-  if(!Number.isFinite(selected.meshVolume)||selected.meshVolume<SMALL_VOLUME ||
-      maxDimension<2||maxDimension>800||
+  if(maxDimension<2||maxDimension>800||
       selected.dimensions.some(n=>!Number.isFinite(n)))
-    throw bad('No se puede laminar sin confirmacion de escala. '+scaleDiagnosis(observed,units,factor)+' Verifica el tamano o repara la malla antes de importar.',{
-      ...details,selectedUnits:units,resultingDimensions:selected.dimensions.map(n=>+n.toFixed(4))
-    });
+    throw bad('Las dimensiones convertidas quedan fuera de un rango seguro. '+
+      scaleDiagnosis(observed,units,factor)+' Verifica el tamaño antes de imprimir.',
+      {...details,selectedUnits:units,resultingDimensions:selected.dimensions.map(n=>+n.toFixed(4))});
   if(selected.buffer.length>12*1024*1024)throw bad('STL escalado excede el limite de 12 MB.');
   return{buffer:selected.buffer,units:units==='auto'?'mm':units,changed:factor!==1,
-    factor,dimensions:selected.dimensions.map(n=>+n.toFixed(3)),originalDimensions:originalSize};
+    factor,dimensions:selected.dimensions.map(n=>+n.toFixed(3)),originalDimensions:originalSize,
+    orientationRepaired:windingFixed,orientationFlippedFaces:windingFlippedFaces,
+    inspectedMeshVolume:+reliableVolume.toFixed(5)};
 }
 module.exports={prepare,parse,bad,UNIT_FACTORS,SMALL_VOLUME};
