@@ -77,6 +77,25 @@ function parse(data,transform=1){
   }
   return parseAscii(data,transform);
 }
+function formatNumber(n){
+  if(!Number.isFinite(n))return '?';
+  return Math.abs(n)>=10?n.toFixed(1):Math.abs(n)>=1?n.toFixed(2):n.toPrecision(3);
+}
+function dimensionText(dim){return dim.map(formatNumber).join(' x ');}
+function scaleDiagnosis(observed,unit='auto',factor=1){
+  const original=dimensionText(observed.dimensions);
+  const physical=dimensionText(observed.dimensions.map(n=>n*factor));
+  const alternatives=[
+    'si eran metros: '+dimensionText(observed.dimensions.map(n=>n*1000))+' mm',
+    'si eran pulgadas: '+dimensionText(observed.dimensions.map(n=>n*25.4))+' mm'
+  ];
+  const volume=observed.meshVolume;
+  const volumeWarn=volume<0.0000000001&&Math.max(...observed.dimensions)>2
+    ?' Volumen casi cero: la malla podria estar abierta o tener caras invertidas.'
+    :'';
+  return 'Geometria STL: '+original+' unidades; '+(unit==='auto'?'escala original':unit)+
+    ' => '+physical+' mm. '+alternatives.join('; ')+'.'+volumeWarn;
+}
 function prepare(data,{filename,units='auto'}={}){
   if(!/\.stl$/i.test(String(filename||'')))return{buffer:data,units:'native',changed:false};
   if(!['auto','mm','m','in'].includes(units))throw bad('Unidades no admitidas. Escoge Auto, mm, metros o pulgadas.');
@@ -86,14 +105,14 @@ function prepare(data,{filename,units='auto'}={}){
   const details={dimensions:originalSize,meshVolume:+observed.meshVolume.toFixed(5),
     options:['mm','m','in'],reason:'STL sin unidades declaradas'};
   if(units==='auto'&&small)
-    throw bad('El STL es demasiado pequeno y OrcaSlicer pediria elegir entre metros, pulgadas o milimetros. Selecciona las unidades reales en el dashboard y vuelve a laminar; no se abrio el STL en el iMac.',details);
+    throw bad('Escala sin confirmar. '+scaleDiagnosis(observed)+ ' Selecciona las unidades reales desde el dashboard; no se abrio OrcaSlicer.',details);
   const factor=units==='auto'?1:UNIT_FACTORS[units];
   const selected=factor===1?observed:parse(data,factor);
   const maxDimension=Math.max(...selected.dimensions);
   if(!Number.isFinite(selected.meshVolume)||selected.meshVolume<SMALL_VOLUME ||
       maxDimension<2||maxDimension>800||
       selected.dimensions.some(n=>!Number.isFinite(n)))
-    throw bad('Las dimensiones resultantes siguen siendo demasiado pequenas, demasiado grandes o invalidas; se bloqueo la carga para evitar un dialogo en OrcaSlicer. Revisa la escala y exporta de nuevo.',{
+    throw bad('No se puede laminar sin confirmacion de escala. '+scaleDiagnosis(observed,units,factor)+' Verifica el tamano o repara la malla antes de importar.',{
       ...details,selectedUnits:units,resultingDimensions:selected.dimensions.map(n=>+n.toFixed(4))
     });
   if(selected.buffer.length>12*1024*1024)throw bad('STL escalado excede el limite de 12 MB.');

@@ -38,7 +38,7 @@ test('normal 10 mm binary STL imports untouched and can be sliced unattended',()
 });
 test('tiny meters STL cannot open a modal; selected meters scales to mm',()=>{
   const original=binaryCube(0.05);
-  assert.throws(()=>STL.prepare(original,{filename:'tiny.stl',units:'auto'}),/demasiado pequeno/);
+  assert.throws(()=>STL.prepare(original,{filename:'tiny.stl',units:'auto'}),/Escala sin confirmar.*Geometria STL/);
   const result=STL.prepare(original,{filename:'tiny.stl',units:'m'});
   assert.equal(result.factor,1000);
   assert.equal(Math.round(result.dimensions[0]),50);
@@ -53,7 +53,7 @@ test('inch units convert to 25.4 mm without GUI dialog',()=>{
 });
 test('sub-millimeter parts fail closed, even if explicitly marked mm',()=>{
   const tiny=binaryCube(0.5);
-  assert.throws(()=>STL.prepare(tiny,{filename:'tiny.stl',units:'mm'}),/dimensiones resultantes/);
+  assert.throws(()=>STL.prepare(tiny,{filename:'tiny.stl',units:'mm'}),/No se puede laminar sin confirmacion de escala.*Geometria STL/);
 });
 test('ASCII STL is converted to mm without changing other STL syntax',()=>{
   const result=STL.prepare(asciiCube(.05),{filename:'solid.stl',units:'m'});
@@ -74,5 +74,18 @@ test('adapter rejects ambiguous tiny STL before even trying MCP or GUI load',asy
     modelBase64:binaryCube(.05).toString('base64')};
   const env={ORCA_MCP_COMMAND:process.execPath,ORCA_MCP_ARGS_JSON:'[]',
     ORCA_MCP_CONFIG_FILE:path.join(os.tmpdir(),'missing-orca-preflight-'+process.pid+'.json')};
-  await assert.rejects(Adapter.slice(input,env),/demasiado pequeno/);
+  await assert.rejects(Adapter.slice(input,env),/Escala sin confirmar.*Geometria STL/);
+});
+
+test('error remoto incluye medidas y los tamaños alternativos sin inventar unidad',()=>{
+  const tiny=binaryCube(0.05);
+  assert.throws(()=>STL.prepare(tiny,{filename:'tambor.stl',units:'mm'}),e=>{
+    assert.match(e.message,/Geometria STL/);
+    assert.match(e.message,/si eran metros:/);
+    assert.match(e.message,/si eran pulgadas:/);
+    assert.match(e.message,/=> 0\.0500 x 0\.0500 x 0\.0500 mm/);
+    assert.ok(!e.message.includes('automáticamente convertido'));
+    assert.deepEqual(e.details.selectedUnits,'mm');
+    return true;
+  });
 });
