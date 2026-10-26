@@ -4123,6 +4123,7 @@ async function slice(){
       machineNumber:/^[1-9]\d{0,2}$/.test(String(machine.numG||machine.num||''))?Number(machine.numG||machine.num):undefined,
       autoSelect:true,printerPresetName:chosenPreset,
       goal:$('tlsOrcaMcpGoal').value,
+      aiBefore:aiEnabled&&autoAIEnabled(),
       stlUnits:$('tlsOrcaMcpStlUnits')?.value||'auto',
       modelBase64:await fileBase64(file)
     };
@@ -4143,7 +4144,9 @@ async function slice(){
         (x.flowBefore!=null?' ('+x.flowBefore+' → '+x.flowAfter+' mm³/s)':'')),
       ...(analysis.physics?.fail||[]).map(x=>'Bloqueo original: '+x.detail),
       ...(analysis.proposedPhysics?.warn||[]).map(x=>'Advertencia: '+x.detail),
-      'La temperatura y el limite del filamento NO se incrementan automáticamente.'
+      'La temperatura y el limite del filamento NO se incrementan automáticamente.',
+      ...(analysis.ai?.advice?['','CONSEJOS DE IA (no aplicados):',analysis.ai.advice]:[]),
+      ...(analysis.ai?.error?['IA: '+analysis.ai.error]:[])
     ];
     if(preview)preview.textContent=lines.join('\n');
     if(!analysis.ready){
@@ -4190,7 +4193,8 @@ async function slice(){
       (scale?.orientationRepaired?' · caras STL corregidas sin cambio de escala':'')+
       '. Confirma las medidas antes de imprimir.');
     await download();
-    if(aiEnabled && autoAIEnabled())await requestOrcaAI(true);
+    // El consejo opcional de IA ya se solicito ANTES del laminado,
+    // con consentimiento; evitar una segunda llamada facturable.
   }catch(e){
     const unitHint=/demasiado pequeno|unidades reales|modelo demasiado peque|dimensiones resultantes/i.test(e.message)?
       ' Selecciona "metros" o "pulgadas" en Unidades STL solo si ese es el origen real del archivo; esta decision se hace aqui, NO en el iMac.':'';
@@ -4225,8 +4229,8 @@ function mount(){
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpGoal" class="field-input" aria-label="Objetivo del analisis" style="max-width:210px"><option value="calidad">Mejor acabado</option><option value="resistencia">Mayor resistencia</option><option value="rapidez">Menor tiempo</option></select>',
     '<button id="tlsOrcaMcpAI" class="btn btn-ghost btn-sm" type="button" disabled>Analizar pieza con IA</button>',
-    '<label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="tlsOrcaMcpAutoAI"> Analizar automaticamente despues de laminar (requiere API IA)</label>',
-    '</div><p style="font-size:11px;color:var(--text3)">Análisis de IA opcional: envía únicamente el resumen técnico al proveedor configurado, nunca STL, G-code ni contraseñas. No aplica ajustes automáticamente.</p>',
+    '<label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="tlsOrcaMcpAutoAI"> Consultar IA ANTES de laminar (requiere API)</label>',
+    '</div><p style="font-size:11px;color:var(--text3)">El análisis físico previo es local y obligatorio. La consulta opcional a IA usa solo dimensiones, datos técnicos y ajustes propuestos (sin enviar STL, 3MF ni G-code). La IA aporta consejos; solo los ajustes físicos simulados y aprobados se aplican.</p>',
     '<pre id="tlsOrcaMcpAIResult" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<p id="tlsOrcaMcpMessage" aria-live="polite" style="font-size:12px;margin-top:8px;color:var(--text2)">Abre el panel y comprueba la conexion con el Farm Controller.</p></div></details>'
   ].join('');
@@ -4249,7 +4253,7 @@ function mount(){
   const aiAuto=$('tlsOrcaMcpAutoAI');if(aiAuto){
     aiAuto.checked=autoAIEnabled();
     aiAuto.addEventListener('change',()=>{
-      if(aiAuto.checked&&!confirm('Activar analisis automatico con IA para futuros laminados? Se enviaran solo metricas tecnicas anonimizadas al proveedor de IA; nunca archivos STL, G-code ni secretos. Puede generar cargos de API.')){
+      if(aiAuto.checked&&!confirm('¿Consultar IA ANTES de futuros laminados? Enviaras solamente medidas y estadisticas tecnicas anonimizadas al proveedor externo; NUNCA el STL, 3MF, G-code ni secretos. La API puede generar cargos. La IA no aplicara ajustes automaticamente.')){
         aiAuto.checked=false;
       }
       try{localStorage.setItem('tlsOrcaAutoAI',aiAuto.checked?'yes':'no');}catch(_){}
