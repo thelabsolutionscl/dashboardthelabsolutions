@@ -6,6 +6,7 @@ const fsp=fs.promises;
 const os=require('node:os');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
+const Guard=require('./orca-profile-guard.js');
 const MAX_MODEL=12*1024*1024;
 const MAX_GCODE=32*1024*1024;
 const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
@@ -173,6 +174,18 @@ async function liveSlice(client,request,input,workspace){
   const stat=await fsp.stat(location);
   if(!stat.isFile()||stat.size<=0||stat.size>MAX_GCODE)throw Error('G-code vacio o excede 32 MB');
   const gcode=await fsp.readFile(location);
+  const finalProfiles=verifyProfiles(await invoke(client,'get_status'),request);
+  const check=Guard.verifyGcode(gcode.toString('utf8'),request.model,finalProfiles.printer);
+  if(!check.confirmed)throw Error('G-code sin metadatos de impresora verificables. Para evitar mezclar K1 y K2 no se entregara; revisa el perfil de OrcaSlicer.');
+  const technicalAnalysis={physics:null,geometry:null,breakdown:null};
+  for(const [name,key] of [['check_profile_physics','physics'],['describe_plate','geometry'],['get_slice_breakdown','breakdown']]){
+    if(!name.startsWith('get_')&& !name.startsWith('describe_')&&name!=='check_profile_physics')continue;
+    try{
+      const report=await invoke(client,name);
+      const trimmed=JSON.stringify(report);
+      technicalAnalysis[key]=trimmed.length>6500?{summary:trimmed.slice(0,6500),truncated:true}:report;
+    }catch(e){technicalAnalysis[key]={unavailable:true};}
+  }
   const metric=result.stats||{};
   const safe=(v,max)=>v!=null&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0&&Number(v)<=max?Number(v):null;
   return{ok:true,tool:'load_model / slice_and_wait / save_gcode',
@@ -180,7 +193,9 @@ async function liveSlice(client,request,input,workspace){
     gcodeBase64:gcode.toString('base64'),bytes:gcode.length,
     seconds:safe(metric.estimated_time_seconds??metric.seconds,10000000),
     grams:safe(metric.filament_used_g??metric.grams,100000),
-    activePresets:profiles,warnings:result.warnings||[]};
+    activePresets:finalProfiles,machineModel:request.model,material:request.material,
+    gcodeCheck:{confirmed:check.confirmed,metadata:check.metadata,expected:request.model},
+    technicalAnalysis,warnings:result.warnings||[]};
 }
 
 async function status(env=process.env){
@@ -189,10 +204,12 @@ async function status(env=process.env){
   try{
     return await withTools(config,10000,async(tools,client)=>{
       const live=isLiveOrca(tools);
-      let problem='',plateObjects=null;
+      let problem='',plateObjects=null,activePresets=null,dirtyChanges=null;
       if(live){
         try{
-          await invoke(client,'get_status');
+          const state=await invoke(client,'get_status');
+          activePresets=Guard.activeProfiles(state);
+          dirtyChanges=Guard.hasDirtyChanges(state);
           if(tools.some(t=>t.name==='list_objects')){
             const plate=await invoke(client,'list_objects');
             if(Array.isArray(plate.objects))plateObjects=plate.objects.length;
@@ -200,11 +217,51 @@ async function status(env=process.env){
         }catch(e){problem=e.message;}
       }
       const tool=live?{name:'OrcaSlicer Remote API'}:selectTool(tools,config.preferredTool);
-      return{ok:true,available:!!tool&&!problem,tool:tool?.name||null,plateObjects,mode:live?'live':'legacy',
+      return{ok:true,available:!!tool&&!problem,tool:tool?.name||null,plateObjects,activePresets,dirtyChanges,mode:live?'live':'legacy',
         tools:tools.map(t=>t.name).filter(n=>/slice|orca|lamin|gcode|profile/i.test(n)).slice(0,25),
         reason:problem||(tool?'':'MCP conectado, pero no se encontro una herramienta de laminado. Configura ORCA_MCP_SLICE_TOOL.')};
     });
   }catch(e){return{ok:true,available:false,reason:e.message.slice(0,300),tools:[]};}
+}
+async function presets(env=process.env){
+  const config=settings(env);
+  return await withTools(config,15000,async(tools,client)=>{
+    if(!isLiveOrca(tools)||!tools.some(t=>t.name==='list_presets'))throw Error('OrcaSlicer no expone list_presets.');
+    const [status,list]=await Promise.all([
+      invoke(client,'get_status'),
+      invoke(client,'list_presets',{type:'printer',include_system:true})
+    ]);
+    const choices=(Array.isArray(list.printer)?list.printer:[])
+      .filter(x=>x&&typeof x.name==='string'&&Guard.family(x.name))
+      .map(x=>({name:x.name,model:Guard.family(x.name),selected:!!x.selected,system:!!x.system}))
+      .slice(0,200);
+    return{ok:true,activePresets:Guard.activeProfiles(status),
+      dirtyChanges:Guard.hasDirtyChanges(status),presets:choices};
+  });
+}
+async function selectPrinter(request,env=process.env){
+  const model=String(request?.model||''),name=String(request?.presetName||'');
+  if(!VALID_MODELS.has(model)||name.length>180||Guard.family(name)!==model)
+    throw Error('Perfil de impresora no corresponde al modelo solicitado');
+  if(slicing)throw Error('No se puede modificar el perfil durante un laminado');
+  const config=settings(env);
+  return await withTools(config,15000,async(tools,client)=>{
+    if(!tools.some(t=>t.name==='select_preset'||t.name==='list_presets'))
+      throw Error('MCP sin gestion de presets');
+    const state=await invoke(client,'get_status');
+    if(state.slicing||state.is_slicing)throw Error('OrcaSlicer esta laminando');
+    const active=Guard.activeProfiles(state);
+    if(active.printer===name)return{ok:true,activePresets:active,changed:false};
+    if(Guard.hasDirtyChanges(state))throw Error('OrcaSlicer tiene cambios sin guardar. Guardalos o descartalos manualmente antes de cambiar de impresora.');
+    const list=await invoke(client,'list_presets',{type:'printer',include_system:true});
+    if(!Array.isArray(list.printer)||!list.printer.some(p=>p.name===name))
+      throw Error('Perfil no encontrado en OrcaSlicer');
+    await invoke(client,'select_preset',{type:'printer',name});
+    const final=Guard.activeProfiles(await invoke(client,'get_status'));
+    if(final.printer!==name||final.printerModel!==model)throw Error('OrcaSlicer no confirmo el cambio al perfil solicitado');
+    return{ok:true,activePresets:final,changed:true,
+      warning:'Comprueba el filamento y el perfil de proceso; OrcaSlicer puede ajustarlos al cambiar de impresora.'};
+  });
 }
 function argumentsForTool(tool,request,input,output){
   const properties=tool.inputSchema?.properties||{};
@@ -285,4 +342,4 @@ async function slice(request,env=process.env){
   }finally{await fsp.rm(workspace,{recursive:true,force:true});}
   }finally{slicing=false;}
 }
-module.exports={status,slice,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
+module.exports={status,slice,presets,selectPrinter,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
