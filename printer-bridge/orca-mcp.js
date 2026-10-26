@@ -11,6 +11,7 @@ const Guard=require('./orca-profile-guard.js');
 const Auto=require('./orca-auto-profiles.js');
 const StlPreflight=require('./orca-stl-preflight.js');
 const Advisor=require('./orca-preslice-advisor.js');
+const Geometry3MF=require('./orca-3mf-geometry.js');
 const MAX_MODEL=12*1024*1024;
 const MAX_GCODE=32*1024*1024;
 const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
@@ -257,7 +258,8 @@ async function preflight(request,env=process.env){
   const source=Buffer.from(request.modelBase64,'base64');
   if(!source.length||source.length>MAX_MODEL)throw Error('Archivo STL/3MF vacio o muy grande');
   const prepared=StlPreflight.prepare(source,{filename,units:request.stlUnits||'auto'});
-  const geometry=/\.stl$/i.test(filename)?Advisor.summarizeGeometry(StlPreflight.parse(prepared.buffer)):null;
+  const geometry=/\.stl$/i.test(filename)?Advisor.summarizeGeometry(StlPreflight.parse(prepared.buffer)):
+    Geometry3MF.describe(prepared.buffer);
   return await withTools(settingsForOrca,20000,async(tools,client)=>{
     if(!['get_config','check_profile_physics','get_status'].every(x=>tools.some(t=>t.name===x)))
       throw Error('OrcaSlicer MCP no tiene los controles de analisis fisico previos al laminado');
