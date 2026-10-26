@@ -88,6 +88,8 @@ start_direct_fallback() {
     export BRIDGE_ALLOW_ORIGIN="https://dashboard.thelab.solutions"
     export FARM_DATA_DIR="$DATA"
     export BRIDGE_REPO_DIR="$REPO"
+    export FARM_RESTART_MANAGED=0
+    export BRIDGE_UPDATE=0
     nohup "$NODE"       -r "$HERE/farm-production-preload.js"       -r "$HERE/farm-drift-preload.js"       -r "$HERE/farm-health-preload.js"       "$HERE/farm-controller.js"       >>"$DATA/farm-controller.log" 2>>"$DATA/farm-controller.err" </dev/null &
     echo $! >"$FALLBACK_PID"
   )
