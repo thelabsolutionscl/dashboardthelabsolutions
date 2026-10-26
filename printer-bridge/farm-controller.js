@@ -1158,6 +1158,15 @@ const server = http.createServer(async (req, res) => {
     const result=await OrcaMCP.status();
     return json(res,200,{...result,aiEnabled:OrcaAI.available()});
   }
+  if(p==='/farm/orca/preflight'){
+    if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'operator');if(!role)return;
+    try{
+      const raw=await readBody(req,17*1024*1024);
+      const body=JSON.parse(raw.toString('utf8')||'{}');
+      return json(res,200,await OrcaMCP.preflight(body));
+    }catch(e){return json(res,409,{ok:false,error:String(e?.message||'Analisis previo fallido').slice(0,450)});}
+  }
   if(p==='/farm/orca/presets'){
     if(req.method!=='GET'){res.setHeader('Allow','GET');return json(res,405,{ok:false,error:'method not allowed'});}
     const role=requireRole(req,res,'viewer');if(!role)return;
