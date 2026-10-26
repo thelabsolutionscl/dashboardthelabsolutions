@@ -3,6 +3,8 @@
 function family(value){
   const s=String(value||'');
   if(/\bK2\s*Plus\b/i.test(s))return 'K2 Plus';
+  if(/\bK2\s*(?:Pro|Max)\b/i.test(s))return null;
+  if(/\bK1\s*(?:Max|SE)\b/i.test(s))return null;
   if(/\bK2\b/i.test(s))return 'K2';
   if(/\bK1\b/i.test(s))return 'K1';
   if(/Ender[-\s]?5\s*Max\b/i.test(s))return 'Ender-5 Max';
