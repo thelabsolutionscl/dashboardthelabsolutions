@@ -165,3 +165,48 @@ G-code debe inspeccionarse antes de imprimir. Si una malla abierta debe
 repararse, hay que exportarla como sólido cerrado o procesarla con una
 herramienta de reparación explícita; nunca añadir material a ciegas.
 
+
+
+## Análisis antes del laminado, parámetros aprobados y bloqueo físico (PR #509)
+
+El flujo **Máquinas → Analizar figura y laminar** ejecuta primero `POST
+/farm/orca/preflight`, autenticado como operador. El servidor inspecciona
+dimensiones de STL previamente validado o la geometría aproximada/unidades
+de un 3MF (no aplica transformaciones avanzadas), lee los ajustes actuales
+de OrcaSlicer y pide `check_profile_physics` con los cambios simulados.
+**No lamina, no escribe presets ni envía trabajos a impresoras.**
+
+El análisis muestra boquilla/filamento/perfil, medidas que se pudieron extraer,
+veredicto físico actual y propuesto, y cambios de velocidad / capa. Al calcular
+velocidades se usa el límite inferior entre caudal máximo del filamento y
+capacidad térmica estimada por MCP, con margen conservador de 15 %. Solo reduce
+velocidades que exceden ese margen; **no aumenta temperaturas, caudales ni
+cambia el diámetro físico de la boquilla**. El objetivo de calidad puede bajar
+altura de capa siempre dentro del rango físico de la boquilla.
+
+Para continuar, el operador debe confirmar. El botón adjunta un hash SHA256
+del plan aprobado ligado a impresora, filamento, proceso y objetivo; si cambian
+los presets o parámetros entre preflight y laminado, el servidor rechaza e
+invita a repetir el análisis. Solo entonces `set_config` escribe cambios
+**temporales en el proyecto**, sin guardar o sobrescribir presets. La nueva
+configuración se verifica otra vez con `check_profile_physics` antes de
+`slice_and_wait`. Si sigue `blocked`, **no se lamina**. Una última
+comprobación física después de laminar impide entregar G-code inseguro.
+
+**IA opcional:** si el usuario activa «Consultar IA ANTES de laminar» y
+`orca-ai.json` contiene una API key privada válida, el servidor realiza
+una consulta a OpenAI Responses API con **solo datos técnicos numéricos
+anonimizados** (dimensiones, material genérico, velocidades propuestas,
+veredictos). No adjunta STL/3MF/G-code ni rutas, nombres de clientes o
+contraseñas. La IA devuelve consejos adicionales en texto y nunca aplica
+directamente ajustes de hardware. Sin clave API, funciona el asesor físico
+determinista pero **no se anuncia como IA**. Las llamadas pueden tener costo.
+
+**Limitaciones:** no existe perfil «perfecto» sin pruebas físicas. Las
+dimensiones y aspecto de la geometría no demuestran soportes, orientación,
+resistencia, humedad del filamento ni calidad de superficie. La evaluación
+geométrica 3MF no representa con precisión componentes o transformaciones
+complejas: debe verificarse en OrcaSlicer. Los ajustes temporales pueden dejar
+el proyecto marcado como modificado; antes de cambiar a otra impresora, el
+operador debe conservar o descartar esos cambios de forma explícita. Nunca
+descartar automáticamente proyectos editados.

@@ -4111,21 +4111,56 @@ async function slice(){
     notice('Selecciona un STL o 3MF de hasta 12 MB.',true);return;
   }
   if(!machine||!MODEL_TYPES.has(machine.modelo)){notice('Selecciona una impresora compatible.',true);return;}
-  if(!confirm('Laminar para '+(machine.nombre||machine.modelo)+'? OrcaSlicer seleccionara los perfiles compatibles cuando sea necesario. No se iniciara ninguna impresion.'))return;
   busy=true;latest=null;
   const btn=$('tlsOrcaMcpSlice'),dl=$('tlsOrcaMcpDownload');
   if(btn)btn.disabled=true;if(dl)dl.disabled=true;
   try{
-    notice('Comprobando y seleccionando automaticamente los perfiles de '+machine.modelo+' y el filamento…');
+    notice('Analizando geometría, material y limites fisicos ANTES de laminar…');
     const chosenPreset=$('tlsOrcaMcpPreset')?.value||savedPrinter(machine.id);
-    const started=await request('/farm/orca/jobs',{
+    const parameters={
       filename:file.name,model:machine.modelo,material:$('tlsOrcaMcpMaterial').value,
       profile:$('tlsOrcaMcpProfile').value.trim(),
       machineNumber:/^[1-9]\d{0,2}$/.test(String(machine.numG||machine.num||''))?Number(machine.numG||machine.num):undefined,
       autoSelect:true,printerPresetName:chosenPreset,
+      goal:$('tlsOrcaMcpGoal').value,
+      aiBefore:aiEnabled&&autoAIEnabled(),
       stlUnits:$('tlsOrcaMcpStlUnits')?.value||'auto',
       modelBase64:await fileBase64(file)
-    });
+    };
+    const analysis=await request('/farm/orca/preflight',parameters);
+    const recommendations=analysis.details||[];
+    const preview=$('tlsOrcaMcpPreview');
+    const dimensions=analysis.geometry?.dimensions||analysis.prepared?.dimensions;
+    const geom=dimensions?'Dimensiones: '+dimensions.join(' x ')+' mm'+
+      (analysis.geometry?.thin?' (geometria delgada)':''):'3MF: revisar orientación y soportes en la vista previa';
+    const lines=[
+      'ANÁLISIS ANTES DEL LAMINADO',
+      geom,'Impresora: '+(analysis.activePresets?.printer||'perfil desconocido'),
+      'Material: '+(analysis.activePresets?.filament||'desconocido'),
+      'Fisica original: '+(analysis.physics?.verdict||'no comprobada'),
+      'Fisica con ajustes propuestos: '+(analysis.proposedPhysics?.verdict||'no comprobada'),
+      'Limite de caudal: '+(analysis.limit!=null?analysis.limit+' mm³/s':'no disponible'),
+      ...recommendations.map(x=>'• '+x.key+': '+x.from+' → '+x.to+
+        (x.flowBefore!=null?' ('+x.flowBefore+' → '+x.flowAfter+' mm³/s)':'')),
+      ...(analysis.physics?.fail||[]).map(x=>'Bloqueo original: '+x.detail),
+      ...(analysis.proposedPhysics?.warn||[]).map(x=>'Advertencia: '+x.detail),
+      'La temperatura y el limite del filamento NO se incrementan automáticamente.',
+      ...(analysis.ai?.advice?['','CONSEJOS DE IA (no aplicados):',analysis.ai.advice]:[]),
+      ...(analysis.ai?.error?['IA: '+analysis.ai.error]:[])
+    ];
+    if(preview)preview.textContent=lines.join('\n');
+    if(!analysis.ready){
+      notice('Análisis previo bloqueado: '+(analysis.reason||'La configuración sigue siendo incompatible.')+
+        ' Revisa el informe antes de volver a intentar.',true);
+      return;
+    }
+    if(!analysis.approvalHash)throw Error('El preflight no devolvio un identificador verificable del plan.');
+    const msg='ANÁLISIS PREVIO COMPLETADO.\n'+geom+
+      '\n'+recommendations.map(x=>x.key+': '+x.from+' → '+x.to).join('\n')+
+      '\n\n¿Aplicar '+recommendations.length+' ajustes validados y laminar? Nunca se enviará a imprimir.';
+    if(!confirm(msg)){notice('Analisis completado. El laminado NO se inicio.');return;}
+    notice('Aplicando solamente ajustes validados y realizando laminado seguro…');
+    const started=await request('/farm/orca/jobs',{...parameters,autoTune:true,approvalHash:analysis.approvalHash});
     if(!started.jobId)throw new Error('Farm Controller no devolvio identificador de laminado.');
     notice('Trabajo aceptado por el taller. Laminando en OrcaSlicer; puedes consultar su avance sin reenviar el STL…');
     const data=await pollOrcaJob(started.jobId);
@@ -4158,7 +4193,8 @@ async function slice(){
       (scale?.orientationRepaired?' · caras STL corregidas sin cambio de escala':'')+
       '. Confirma las medidas antes de imprimir.');
     await download();
-    if(aiEnabled && autoAIEnabled())await requestOrcaAI(true);
+    // El consejo opcional de IA ya se solicito ANTES del laminado,
+    // con consentimiento; evitar una segunda llamada facturable.
   }catch(e){
     const unitHint=/demasiado pequeno|unidades reales|modelo demasiado peque|dimensiones resultantes/i.test(e.message)?
       ' Selecciona "metros" o "pulgadas" en Unidades STL solo si ese es el origen real del archivo; esta decision se hace aqui, NO en el iMac.':'';
@@ -4181,19 +4217,20 @@ function mount(){
     '<label style="flex:1;min-width:155px;font-size:12px">Unidades STL<select id="tlsOrcaMcpStlUnits" class="field-input" style="width:100%"><option value="auto">Auto seguro (verificar)</option><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option><option value="in">Pulgadas (in)</option></select></label>',
     '</div><p style="font-size:11px;color:var(--text3);margin-top:6px">STL no declara unidades: si es demasiado pequeño, el servidor bloqueará el archivo ANTES de importarlo en OrcaSlicer. Selecciona las unidades reales desde aquí para convertirlo sin diálogos en el iMac. Para 3MF se usan las unidades incluidas en el archivo.</p><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">',
     '<button id="tlsOrcaMcpCheck" class="btn btn-ghost btn-sm" type="button">Comprobar MCP</button>',
-    '<button id="tlsOrcaMcpSlice" class="btn btn-primary btn-sm" type="button" disabled>Laminar con OrcaSlicer</button>',
+    '<button id="tlsOrcaMcpSlice" class="btn btn-primary btn-sm" type="button" disabled>Analizar figura y laminar</button>',
     '<button id="tlsOrcaMcpDownload" class="btn btn-ghost btn-sm" type="button" disabled>Descargar G-code otra vez</button>',
     '</div><p id="tlsOrcaMcpActive" style="font-size:12px;margin-top:10px;color:var(--text2)">Perfil activo: comprobando OrcaSlicer…</p>',
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpPreset" aria-label="Perfil de impresora real en OrcaSlicer" class="field-input" style="max-width:385px;flex:1"><option value="">Perfiles reales de OrcaSlicer…</option></select>',
     '<button id="tlsOrcaMcpActivate" class="btn btn-ghost btn-sm" type="button">Activar ahora (opcional)</button>',
-    '</div><p style="font-size:11px;color:var(--text3)">Elige el perfil exacto de boquilla una vez por impresora si hay varios. Se recordará en este navegador para futuros laminados. El cambio automático ocurre al pulsar Laminar y se bloquea si hay cambios sin guardar.</p>',
+    '</div><p style="font-size:11px;color:var(--text3)">La revisión previa comprueba geometría STL, temperatura, caudal, velocidades y diámetro de boquilla. Muestra los ajustes ANTES de laminar. Requiere tu confirmación y no inicia impresiones.</p>',
+    '<pre id="tlsOrcaMcpPreview" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<pre id="tlsOrcaMcpTechnical" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpGoal" class="field-input" aria-label="Objetivo del analisis" style="max-width:210px"><option value="calidad">Mejor acabado</option><option value="resistencia">Mayor resistencia</option><option value="rapidez">Menor tiempo</option></select>',
     '<button id="tlsOrcaMcpAI" class="btn btn-ghost btn-sm" type="button" disabled>Analizar pieza con IA</button>',
-    '<label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="tlsOrcaMcpAutoAI"> Analizar automaticamente despues de laminar (requiere API IA)</label>',
-    '</div><p style="font-size:11px;color:var(--text3)">Análisis de IA opcional: envía únicamente el resumen técnico al proveedor configurado, nunca STL, G-code ni contraseñas. No aplica ajustes automáticamente.</p>',
+    '<label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="tlsOrcaMcpAutoAI"> Consultar IA ANTES de laminar (requiere API)</label>',
+    '</div><p style="font-size:11px;color:var(--text3)">El análisis físico previo es local y obligatorio. La consulta opcional a IA usa solo dimensiones, datos técnicos y ajustes propuestos (sin enviar STL, 3MF ni G-code). La IA aporta consejos; solo los ajustes físicos simulados y aprobados se aplican.</p>',
     '<pre id="tlsOrcaMcpAIResult" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<p id="tlsOrcaMcpMessage" aria-live="polite" style="font-size:12px;margin-top:8px;color:var(--text2)">Abre el panel y comprueba la conexion con el Farm Controller.</p></div></details>'
   ].join('');
@@ -4216,7 +4253,7 @@ function mount(){
   const aiAuto=$('tlsOrcaMcpAutoAI');if(aiAuto){
     aiAuto.checked=autoAIEnabled();
     aiAuto.addEventListener('change',()=>{
-      if(aiAuto.checked&&!confirm('Activar analisis automatico con IA para futuros laminados? Se enviaran solo metricas tecnicas anonimizadas al proveedor de IA; nunca archivos STL, G-code ni secretos. Puede generar cargos de API.')){
+      if(aiAuto.checked&&!confirm('¿Consultar IA ANTES de futuros laminados? Enviaras solamente medidas y estadisticas tecnicas anonimizadas al proveedor externo; NUNCA el STL, 3MF, G-code ni secretos. La API puede generar cargos. La IA no aplicara ajustes automaticamente.')){
         aiAuto.checked=false;
       }
       try{localStorage.setItem('tlsOrcaAutoAI',aiAuto.checked?'yes':'no');}catch(_){}

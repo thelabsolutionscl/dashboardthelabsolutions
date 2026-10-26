@@ -6,9 +6,12 @@ const fsp=fs.promises;
 const os=require('node:os');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
+const crypto=require('node:crypto');
 const Guard=require('./orca-profile-guard.js');
 const Auto=require('./orca-auto-profiles.js');
 const StlPreflight=require('./orca-stl-preflight.js');
+const Advisor=require('./orca-preslice-advisor.js');
+const Geometry3MF=require('./orca-3mf-geometry.js');
 const MAX_MODEL=12*1024*1024;
 const MAX_GCODE=32*1024*1024;
 const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
@@ -205,6 +208,107 @@ async function autoPrepareProfiles(tools,client,request){
     throw Error('OrcaSlicer cambio el perfil de impresora inesperadamente. No se laminara.');
   return changes;
 }
+
+const PREFLIGHT_KEYS=[
+  'layer_height','nozzle_diameter','line_width',
+  'outer_wall_speed','inner_wall_speed','sparse_infill_speed',
+  'internal_solid_infill_speed','top_surface_speed','initial_layer_speed',
+  'gap_infill_speed','bridge_speed',
+  'outer_wall_line_width','inner_wall_line_width','sparse_infill_line_width',
+  'internal_solid_infill_line_width','top_surface_line_width',
+  'initial_layer_line_width',
+  'filament_max_volumetric_speed','filament_type','nozzle_temperature',
+  'initial_layer_print_height','nozzle_temperature_initial_layer',
+  'fan_min_speed','fan_max_speed','slow_down_layer_time',
+  'retraction_length','use_firmware_retraction'
+];
+function validatePhysics(report){
+  if(!report||!['ok','warnings','blocked'].includes(report.verdict)||
+      !Array.isArray(report.fail)||!Array.isArray(report.warn))
+    throw Error('El control fisico MCP no devolvio una evaluacion valida. Se cancela el laminado.');
+  return report;
+}
+async function readPhysicalPlan(client,request){
+  const cfg=await invoke(client,'get_config',{keys:PREFLIGHT_KEYS});
+  if(!cfg?.config||typeof cfg.config!=='object')throw Error('OrcaSlicer no entrego la configuracion tecnica.');
+  const current=validatePhysics(await invoke(client,'check_profile_physics'));
+  const plan=Advisor.suggest(cfg.config,request.goal||'calidad');
+  if(!plan.ok)throw Error('Analisis fisico previo: '+plan.reason);
+  let proposed=current;
+  if(Object.keys(plan.changes).length){
+    proposed=validatePhysics(await invoke(client,'check_profile_physics',{changes:plan.changes}));
+  }
+  return{originalPhysics:current,proposedPhysics:proposed,plan};
+}
+function approvalHash(request,active,plan){
+  return crypto.createHash('sha256').update(JSON.stringify({
+    model:request.model,material:request.material,goal:request.goal||'calidad',
+    activePrinter:active.printer,activeFilament:active.filament,activeProcess:active.process,
+    changes:plan.changes,limit:plan.limit
+  })).digest('hex');
+}
+async function preflight(request,env=process.env){
+  const settingsForOrca=settings(env);
+  if(!settingsForOrca.command)throw Error('OrcaSlicer MCP no configurado');
+  const filename=cleanName(request.filename||'modelo.stl');
+  if(!/\.(stl|3mf)$/i.test(filename)||!VALID_MODELS.has(request.model)||
+      !VALID_MATERIALS.has(request.material))throw Error('Modelo, material o formato incompatible');
+  if(typeof request.modelBase64!=='string'||request.modelBase64.length>Math.ceil(MAX_MODEL*4/3)+16)
+    throw Error('Archivo STL/3MF vacio o muy grande');
+  const source=Buffer.from(request.modelBase64,'base64');
+  if(!source.length||source.length>MAX_MODEL)throw Error('Archivo STL/3MF vacio o muy grande');
+  const prepared=StlPreflight.prepare(source,{filename,units:request.stlUnits||'auto'});
+  const geometry=/\.stl$/i.test(filename)?Advisor.summarizeGeometry(StlPreflight.parse(prepared.buffer)):
+    Geometry3MF.describe(prepared.buffer);
+  return await withTools(settingsForOrca,20000,async(tools,client)=>{
+    if(!['get_config','check_profile_physics','get_status'].every(x=>tools.some(t=>t.name===x)))
+      throw Error('OrcaSlicer MCP no tiene los controles de analisis fisico previos al laminado');
+    const status=await invoke(client,'get_status');
+    if(status.slicing||status.is_slicing)throw Error('OrcaSlicer esta laminando. No se puede analizar otro modelo.');
+    const active=Guard.activeProfiles(status);
+    const samePrinter=active.printerModel===request.model;
+    const sameMaterial=Auto.sameMaterial(active.filament,request.material);
+    if(!samePrinter||!sameMaterial)
+      return{ok:true,geometry,prepared:{dimensions:prepared.dimensions||null,units:prepared.units},
+        activePresets:active,ready:false,reason:'Para recomendaciones exactas debes activar primero el perfil de '+request.model+
+        ' y el filamento '+request.material+' en OrcaSlicer. Se preservaron los ajustes existentes.',
+        physics:null,proposedPhysics:null,changes:{},details:[]};
+    const report=await readPhysicalPlan(client,request);
+    const plannedBlocks=report.proposedPhysics.verdict==='blocked';
+    return{ok:true,geometry,prepared:{dimensions:prepared.dimensions||null,units:prepared.units},
+      activePresets:active,ready:!plannedBlocks,reason:plannedBlocks?
+        'Los ajustes propuestos no superan todas las comprobaciones fisicas. No se puede laminar automaticamente.':'',
+      physics:report.originalPhysics,proposedPhysics:report.proposedPhysics,
+      changes:report.plan.changes,details:report.plan.details,
+      safeFlow:report.plan.safetyFlow,limit:report.plan.limit,basis:report.plan.basis,
+      approvalHash:approvalHash(request,active,report.plan)};
+  });
+}
+async function applyPreslicePhysics(client,tools,request){
+  if(!['check_profile_physics','get_config'].every(x=>tools.some(t=>t.name===x)))
+    throw Error('Falta check_profile_physics; prohibido laminar sin preflight fisico');
+  const report=await readPhysicalPlan(client,request);
+  if(request.autoTune===true &&
+      (!/^[a-f0-9]{64}$/.test(String(request.approvalHash||'')) ||
+       request.approvalHash!==approvalHash(request,Guard.activeProfiles(await invoke(client,'get_status')),report.plan)))
+    throw Error('La configuracion cambio desde el analisis previo. Repite Analizar antes de laminar.');
+  if(request.autoTune===true && Object.keys(report.plan.changes).length){
+    if(!tools.some(t=>t.name==='set_config'))
+      throw Error('MCP no permite aplicar ajustes. No se laminara.');
+    if(report.proposedPhysics.verdict==='blocked')
+      throw Error('Ajustes seguros insuficientes: '+report.proposedPhysics.fail.map(x=>x.detail).join('; ').slice(0,350));
+    // User approved exact bounded plan; validate before write and verify after.
+    const outcome=await invoke(client,'set_config',{changes:report.plan.changes});
+    if(outcome.errors&&(Array.isArray(outcome.errors)?outcome.errors.length:Object.keys(outcome.errors).length))
+      throw Error('OrcaSlicer rechazo uno de los parametros propuestos.');
+  }else if(report.originalPhysics.verdict==='blocked'){
+    throw Error('No se inicio el laminado: parametros fisicos bloqueados. Ejecuta el analisis previo y acepta la optimizacion segura.');
+  }
+  const after=validatePhysics(await invoke(client,'check_profile_physics'));
+  if(after.verdict==='blocked')
+    throw Error('Se bloqueo el laminado ANTES del slicer: '+after.fail.map(x=>x.detail).join('; ').slice(0,350));
+  return{before:report.originalPhysics,after,proposed:report.plan,applied:request.autoTune===true?report.plan.details:[]};
+}
 async function liveSlice(client,request,input,workspace,tools){
   let changes=[];
   if(request.autoSelect===true){
@@ -219,6 +323,7 @@ async function liveSlice(client,request,input,workspace,tools){
   await invoke(client,'load_model',{path:input});
   // 3MF can carry project presets: verify again after importing, not only before it.
   verifyProfiles(await invoke(client,'get_status'),request);
+  const preSlice=await applyPreslicePhysics(client,tools,request);
   const result=await invoke(client,'slice_and_wait',{timeout:150});
   if(result.state!=='done')throw Error('Laminado no completado: '+String(result.message||result.state||'desconocido').slice(0,200));
   const saved=await invoke(client,'save_gcode',{filename:'laminado.gcode'});
@@ -230,9 +335,12 @@ async function liveSlice(client,request,input,workspace,tools){
   if(!stat.isFile()||stat.size<=0||stat.size>MAX_GCODE)throw Error('G-code vacio o excede 32 MB');
   const gcode=await fsp.readFile(location);
   const finalProfiles=verifyProfiles(await invoke(client,'get_status'),request);
+  const afterSlice=validatePhysics(await invoke(client,'check_profile_physics'));
+  if(afterSlice.verdict==='blocked')
+    throw Error('G-code BLOQUEADO por control fisico: '+afterSlice.fail.map(x=>x.detail).join('; ').slice(0,350));
   const check=Guard.verifyGcode(gcode.toString('utf8'),request.model,finalProfiles.printer);
   if(!check.confirmed)throw Error('G-code sin metadatos de impresora verificables. Para evitar mezclar K1 y K2 no se entregara; revisa el perfil de OrcaSlicer.');
-  const technicalAnalysis={physics:null,geometry:null,breakdown:null,settings:null};
+  const technicalAnalysis={physics:afterSlice,geometry:null,breakdown:null,settings:null,preSlice};
   try{
     const cfg=await invoke(client,'get_config',{keys:[
       'layer_height','initial_layer_print_height','wall_loops','top_shell_layers',
@@ -243,7 +351,7 @@ async function liveSlice(client,request,input,workspace,tools){
     ]});
     technicalAnalysis.settings=cfg.config||null;
   }catch(_){technicalAnalysis.settings=null;}
-  for(const [name,key] of [['check_profile_physics','physics'],['describe_plate','geometry'],['get_slice_breakdown','breakdown']]){
+  for(const [name,key] of [['describe_plate','geometry'],['get_slice_breakdown','breakdown']]){
     if(!name.startsWith('get_')&& !name.startsWith('describe_')&&name!=='check_profile_physics')continue;
     try{
       const report=await invoke(client,name);
@@ -425,4 +533,4 @@ async function slice(request,env=process.env){
   }finally{await fsp.rm(workspace,{recursive:true,force:true});}
   }finally{slicing=false;}
 }
-module.exports={status,slice,presets,selectPrinter,autoPrepareProfiles,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
+module.exports={status,slice,preflight,presets,selectPrinter,autoPrepareProfiles,settings,argumentsForTool,selectTool,MAX_MODEL,MAX_GCODE};
