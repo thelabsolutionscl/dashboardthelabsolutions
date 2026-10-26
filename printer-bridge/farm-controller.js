@@ -1164,7 +1164,15 @@ const server = http.createServer(async (req, res) => {
     try{
       const raw=await readBody(req,17*1024*1024);
       const body=JSON.parse(raw.toString('utf8')||'{}');
-      return json(res,200,await OrcaMCP.preflight(body));
+      const report=await OrcaMCP.preflight(body);
+      if(body.aiBefore===true && report.ready){
+        if(!OrcaAI.available())return json(res,200,{...report,ai:{error:'IA no configurada en iMac. El analisis fisico determinista si esta disponible.'}});
+        try{
+          const ai=await OrcaAI.adviseBefore(report,body.goal||'calidad',body.model,body.material);
+          return json(res,200,{...report,ai});
+        }catch(error){return json(res,200,{...report,ai:{error:String(error.message||'IA no disponible').slice(0,180)}});}
+      }
+      return json(res,200,report);
     }catch(e){return json(res,409,{ok:false,error:String(e?.message||'Analisis previo fallido').slice(0,450)});}
   }
   if(p==='/farm/orca/presets'){
