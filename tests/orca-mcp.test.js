@@ -5,6 +5,14 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const adapter=require('../printer-bridge/orca-mcp.js');
+function validSTLBase64(){
+  const vertices=[[0,0,0],[10,0,0],[0,10,0],[0,0,10]];
+  const faces=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
+  return Buffer.from('solid test\n'+faces.map(face=>
+    'facet normal 0 0 0\n outer loop\n'+face.map(i=>' vertex '+vertices[i].join(' ')).join('\n')+
+    '\n endloop\nendfacet\n').join('')+'endsolid test\n').toString('base64');
+}
+
 
 const fixture=path.join(os.tmpdir(),'tls-test-orca-mcp-'+process.pid+'.js');
 const fake=[
@@ -41,7 +49,7 @@ test('descubre herramienta de laminado mediante protocolo MCP',async()=>{
 test('lamina STL en temporal y entrega G-code sin tocar impresoras',async()=>{
   const data=await adapter.slice({
     filename:'pieza.stl',model:'K2',material:'PETG',profile:'',
-    modelBase64:Buffer.from('solid pieza\nendsolid pieza').toString('base64')
+    modelBase64:validSTLBase64()
   },config());
   assert.equal(data.ok,true);
   assert.equal(data.tool,'slice_model');
@@ -106,7 +114,7 @@ test('MCP real se detecta y valida get_status',async()=>{
 test('MCP real carga el STL, lamina usando perfiles activos y guarda G-code temporal',async()=>{
   const result=await adapter.slice({
     filename:'prueba.stl',model:'K1',material:'TPU',profile:'',
-    modelBase64:Buffer.from('solid\nendsolid').toString('base64')
+    modelBase64:validSTLBase64()
   },liveConfig());
   assert.equal(result.ok,true);
   assert.equal(result.seconds,450);
@@ -116,7 +124,7 @@ test('MCP real carga el STL, lamina usando perfiles activos y guarda G-code temp
 });
 test('rechaza material o máquina distintos sin cambiar presets',async()=>{
   const base={filename:'pieza.stl',model:'K1',material:'PLA',
-    modelBase64:Buffer.from('stl').toString('base64')};
+    modelBase64:validSTLBase64()};
   await assert.rejects(adapter.slice(base,liveConfig()),/Filamento activo/);
   await assert.rejects(adapter.slice({...base,model:'K2',material:'TPU'},liveConfig()),/Perfil de impresora activo/);
 });

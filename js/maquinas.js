@@ -4123,12 +4123,16 @@ async function slice(){
       profile:$('tlsOrcaMcpProfile').value.trim(),
       machineNumber:/^[1-9]\d{0,2}$/.test(String(machine.numG||machine.num||''))?Number(machine.numG||machine.num):undefined,
       autoSelect:true,printerPresetName:chosenPreset,
+      stlUnits:$('tlsOrcaMcpStlUnits')?.value||'auto',
       modelBase64:await fileBase64(file)
     });
     if(!started.jobId)throw new Error('Farm Controller no devolvio identificador de laminado.');
     notice('Trabajo aceptado por el taller. Laminando en OrcaSlicer; puedes consultar su avance sin reenviar el STL…');
     const data=await pollOrcaJob(started.jobId);
     latest=data;if(dl)dl.disabled=false;
+    const scale=data.unitPreflight;
+    if(scale?.changed)notice('STL convertido a milimetros (factor '+scale.factor+'). Dimensiones: '+
+      (scale.dimensions||[]).map(x=>x.toFixed(1)).join(' × ')+' mm. Verificando resultado…');
     const applied=(data.profileChanges||[]).map(c=>c.type+': '+c.name).join(' · ');
     if(applied)notice('Perfiles seleccionados automaticamente: '+applied+'. Verificando G-code…');
     const aiButton=$('tlsOrcaMcpAI');if(aiButton)aiButton.disabled=!aiEnabled;
@@ -4147,10 +4151,16 @@ async function slice(){
     const stats=[data.bytes?Math.round(data.bytes/1024)+' KB':'',
       data.seconds!=null?Math.round(data.seconds/60)+' min estimados':'',
       data.grams!=null?data.grams.toFixed(1)+' g':''].filter(Boolean).join(' · ');
-    notice('OrcaSlicer termino el laminado — '+data.filename+(stats?' · '+stats:'')+'. Descarga el G-code y revisalo antes de usarlo.');
+    notice('OrcaSlicer termino el laminado — '+data.filename+(stats?' · '+stats:'')+
+      (scale?.changed?' · STL convertido a mm ×'+scale.factor:'')+
+      '. Confirma las medidas antes de imprimir.');
     await download();
     if(aiEnabled && autoAIEnabled())await requestOrcaAI(true);
-  }catch(e){notice('No se pudo completar el laminado: '+e.message,true);}
+  }catch(e){
+    const unitHint=/demasiado pequeno|unidades reales|modelo demasiado peque|dimensiones resultantes/i.test(e.message)?
+      ' Selecciona "metros" o "pulgadas" en Unidades STL solo si ese es el origen real del archivo; esta decision se hace aqui, NO en el iMac.':'';
+    notice('No se pudo completar el laminado: '+e.message+unitHint,true);
+  }
   finally{busy=false;if(btn)btn.disabled=false;}
 }
 function mount(){
@@ -4165,7 +4175,8 @@ function mount(){
     '<label style="flex:2;min-width:180px;font-size:12px">Impresora<select id="tlsOrcaMcpPrinter" class="field-input" style="width:100%"></select></label>',
     '<label style="flex:1;min-width:110px;font-size:12px">Material<select id="tlsOrcaMcpMaterial" class="field-input" style="width:100%"><option>PLA</option><option>PLA+</option><option>PETG</option><option>TPU</option><option>TPU-95A</option><option>ABS</option><option>ASA</option><option>PA</option><option>PC</option></select></label>',
     '<label style="flex:2;min-width:155px;font-size:12px">Perfil de proceso (opcional)<input id="tlsOrcaMcpProfile" class="field-input" maxlength="120" placeholder="Nombre exacto en OrcaSlicer" style="width:100%"></label>',
-    '</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">',
+    '<label style="flex:1;min-width:155px;font-size:12px">Unidades STL<select id="tlsOrcaMcpStlUnits" class="field-input" style="width:100%"><option value="auto">Auto seguro (verificar)</option><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option><option value="in">Pulgadas (in)</option></select></label>',
+    '</div><p style="font-size:11px;color:var(--text3);margin-top:6px">STL no declara unidades: si es demasiado pequeño, el servidor bloqueará el archivo ANTES de importarlo en OrcaSlicer. Selecciona las unidades reales desde aquí para convertirlo sin diálogos en el iMac. Para 3MF se usan las unidades incluidas en el archivo.</p><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">',
     '<button id="tlsOrcaMcpCheck" class="btn btn-ghost btn-sm" type="button">Comprobar MCP</button>',
     '<button id="tlsOrcaMcpSlice" class="btn btn-primary btn-sm" type="button" disabled>Laminar con OrcaSlicer</button>',
     '<button id="tlsOrcaMcpDownload" class="btn btn-ghost btn-sm" type="button" disabled>Descargar G-code otra vez</button>',
@@ -4185,6 +4196,11 @@ function mount(){
   ].join('');
   host.insertBefore(panel,host.firstChild);
   populate();
+  $('tlsOrcaMcpFile').addEventListener('change',()=>{
+    const ext=$('tlsOrcaMcpFile')?.files?.[0]?.name||'';
+    const unitSelect=$('tlsOrcaMcpStlUnits');
+    if(unitSelect){unitSelect.disabled=/\.3mf$/i.test(ext);if(unitSelect.disabled)unitSelect.value='auto';}
+  });
   $('tlsOrcaMcpCheck').addEventListener('click',status);
   $('tlsOrcaMcpSlice').addEventListener('click',slice);
   $('tlsOrcaMcpDownload').addEventListener('click',()=>{void download();});

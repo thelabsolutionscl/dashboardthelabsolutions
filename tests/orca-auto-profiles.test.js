@@ -5,6 +5,14 @@ const os=require('node:os');
 const path=require('node:path');
 const Auto=require('../printer-bridge/orca-auto-profiles.js');
 const MCP=require('../printer-bridge/orca-mcp.js');
+function validSTLBase64(){
+  const v=[[0,0,0],[10,0,0],[0,10,0],[0,0,10]];
+  const faces=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
+  return Buffer.from('solid test\n'+faces.map(face=>
+    'facet normal 0 0 0\n outer loop\n'+face.map(i=>' vertex '+v[i].join(' ')).join('\n')+
+    '\n endloop\nendfacet\n').join('')+'endsolid test\n').toString('base64');
+}
+
 
 test('PLA vs PLA+ and TPU vs TPU-95A do not cross-match',()=>{
   assert.equal(Auto.sameMaterial('Generic PLA Silk','PLA'),true);
@@ -45,7 +53,7 @@ function cfg(dirty=false){
     ORCA_MCP_CONFIG_FILE:path.join(os.tmpdir(),'nonexistent-auto-orca-'+process.pid+'.json')};
 }
 const input={filename:'demo.stl',model:'K2',material:'PLA',profile:'',
-  autoSelect:true,modelBase64:Buffer.from('solid test\nendsolid test').toString('base64')};
+  autoSelect:true,modelBase64:validSTLBase64()};
 test('automatically switches printer and filament in same MCP session, slices validated K2',async()=>{
   const r=await MCP.slice({...input,printerPresetName:'Creality K2 0.4 nozzle'},cfg());
   assert.equal(r.ok,true);
