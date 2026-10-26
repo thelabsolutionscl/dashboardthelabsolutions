@@ -6,7 +6,10 @@ La integración permite laminar STL o 3MF usando un servidor MCP (stdio) en el e
 
 - Navegador / MÁQUINAS → Cloudflare Tunnel → Farm Controller (puerto 8347).
 - GET /farm/orca/status: requiere viewer; inicializa el MCP y consulta tools/list.
-- POST /farm/orca/slice: requiere operator; recibe modelo, material, perfil opcional y STL/3MF base64, con máximo de 12 MB.
+- POST /farm/orca/jobs: requiere operator; recibe modelo, material, perfil opcional y STL/3MF base64 (máximo 12 MB). Responde de inmediato con un identificador, sin esperar el laminado.
+- GET /farm/orca/jobs/:id: requiere operator, permite consultar el estado `running` / `done` / `error`.
+- GET /farm/orca/jobs/:id/download: requiere operator y entrega directamente el archivo G-code binario; el dashboard nunca necesita recibirlo en JSON base64.
+- POST /farm/orca/slice: ruta de compatibilidad anterior. Se recomienda utilizar los trabajos asíncronos.
 - Farm Controller lanza el MCP local mediante stdio/JSON-RPC. El MCP recibe rutas de entrada/salida en un directorio temporal privado y devuelve G-code (máximo 32 MB) y estadísticas, si están disponibles.
 - El panel NO llama Moonraker ni print/start. Para imprimir hay que importar el G-code en la gestión existente de trabajos planificados.
 
@@ -48,8 +51,8 @@ Para un MCP distinto del MaxEllis/orcaslicer-mcp se conserva la modalidad de una
 ## Comprobar en el dashboard
 
 1. Abrir MÁQUINAS → OrcaSlicer MCP — Laminado real.
-2. Pulsar Comprobar MCP. Debe aparecer el nombre de herramienta de laminado detectada.
-3. Elegir una impresora, material, perfil compatible (opcional) y STL de prueba.
+2. Pulsar Comprobar MCP. Debe aparecer el nombre de herramienta de laminado detectada. Si la placa ya tiene modelos, guardarlos y limpiarla manualmente en OrcaSlicer; no se eliminan objetos automáticamente.
+3. Elegir una impresora, material, perfil compatible (opcional) y STL de prueba. Los presets seleccionados en OrcaSlicer deben coincidir.
 4. Pulsar Laminar con OrcaSlicer y confirmar. El dashboard descargará el G-code.
 5. Revisar G-code, dimensiones, tiempo, perfiles y compatibilidad antes de cargarlo en Trabajos planificados.
 
@@ -60,7 +63,7 @@ Si MCP responde pero no hay herramienta de laminado, se debe añadir una herrami
 - Solo viewer lee estado; operator/admin pueden laminar.
 - El navegador no expone herramientas MCP arbitrarias ni comandos de terminal.
 - Se admiten modelos de hasta 12 MB, G-code de hasta 32 MB y 180 segundos por sesión.
-- Se borran los archivos temporales al finalizar.
+- Se borran los archivos temporales al finalizar. Los G-code de trabajos completados permanecen solo en memoria y caducan a los 10 minutos; al crear otro trabajo se descarta la descarga anterior.
 - La configuración es local del host y puede ejecutar procesos: mantener orca-mcp.json privado.
 - No se implementan asignaciones CFS multimaterial ni verificación independiente del G-code físico.
 - La impresión nunca arranca por llamar /farm/orca/slice.
@@ -69,4 +72,4 @@ Si MCP responde pero no hay herramienta de laminado, se debe añadir una herrami
 
     node --test tests/orca-mcp.test.js
 
-El test utiliza un servidor MCP stdio simulado para verificar descubrimiento de herramientas, laminado, validaciones y permisos.
+Los tests utilizan un servidor MCP stdio simulado para verificar descubrimiento de herramientas, laminado, validaciones y permisos. Adicionalmente, `node --test tests/orca-jobs.test.js` verifica el ciclo de vida asíncrono, la caducidad, límites y errores.

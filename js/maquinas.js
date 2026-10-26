@@ -4029,10 +4029,12 @@ async function status(){
   notice('Comprobando servidor MCP…');
   try{
     const data=await request('/farm/orca/status');
-    notice(data.available?'OrcaSlicer MCP disponible — '+data.tool:
-      (data.reason||'MCP no disponible'),!data.available);
-    const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=!data.available;
-    return data.available;
+    const occupied=data.available&&Number(data.plateObjects)>0;
+    notice(occupied?'OrcaSlicer conectado, pero la placa contiene '+data.plateObjects+' modelo(s). Guarda tu proyecto y limpia la placa en OrcaSlicer antes de laminar desde el dashboard.':
+      data.available?'OrcaSlicer MCP disponible — '+data.tool:
+      (data.reason||'MCP no disponible'),!data.available||occupied);
+    const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=!data.available||occupied;
+    return data.available&&!occupied;
   }catch(e){
     notice(e.message,true);const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=true;return false;
   }finally{if(check)check.disabled=false;}
@@ -4044,17 +4046,38 @@ function fileBase64(file){
     return btoa(chunks.join(''));
   });
 }
-function download(){
-  if(!latest?.gcodeBase64)return;
-  const binary=atob(latest.gcodeBase64),pieces=[];
-  for(let i=0;i<binary.length;i+=32768){
-    const chunk=binary.slice(i,i+32768),arr=new Uint8Array(chunk.length);
-    for(let j=0;j<chunk.length;j++)arr[j]=chunk.charCodeAt(j);
-    pieces.push(arr);
+async function download(){
+  if(!latest?.jobId)return;
+  const route='/farm/orca/jobs/'+encodeURIComponent(latest.jobId)+'/download';
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
+  try{
+    const response=await fetch(base()+route,{
+      method:'GET',headers:{'X-Bridge-Token':token()},
+      cache:'no-store',signal:controller.signal
+    });
+    if(!response.ok){
+      const error=await response.json().catch(()=>({}));
+      throw new Error(error.error||'Farm Controller HTTP '+response.status);
+    }
+    const blob=await response.blob();
+    if(!blob.size||blob.size>32*1024*1024)throw new Error('G-code vacio o demasiado grande');
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=latest.filename||'orca.gcode';document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
+  }catch(e){notice('Error al descargar G-code: '+e.message,true);}
+  finally{clearTimeout(timer);}
+}
+function sleepOrca(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+async function pollOrcaJob(id){
+  const deadline=Date.now()+210000;
+  while(Date.now()<deadline){
+    const data=await request('/farm/orca/jobs/'+encodeURIComponent(id));
+    if(data.state==='done')return data;
+    if(data.state==='error')throw new Error(data.error||'Error de laminado en el servidor');
+    if(data.state!=='running')throw new Error('Estado inesperado del trabajo: '+data.state);
+    await sleepOrca(2500);
   }
-  const blob=new Blob(pieces,{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download=latest.filename||'orca.gcode';document.body.append(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  throw new Error('Laminado sigue pendiente. No lo vuelvas a enviar; comprueba OrcaSlicer en el iMac.');
 }
 async function slice(){
   if(busy)return;
@@ -4068,20 +4091,22 @@ async function slice(){
   const btn=$('tlsOrcaMcpSlice'),dl=$('tlsOrcaMcpDownload');
   if(btn)btn.disabled=true;if(dl)dl.disabled=true;
   try{
-    notice('Enviando modelo al MCP del taller y laminando…');
-    const data=await request('/farm/orca/slice',{
+    notice('Enviando modelo al MCP del taller…');
+    const started=await request('/farm/orca/jobs',{
       filename:file.name,model:machine.modelo,material:$('tlsOrcaMcpMaterial').value,
       profile:$('tlsOrcaMcpProfile').value.trim(),
       modelBase64:await fileBase64(file)
     });
-    if(!data.gcodeBase64)throw new Error('El servidor no devolvio G-code.');
+    if(!started.jobId)throw new Error('Farm Controller no devolvio identificador de laminado.');
+    notice('Trabajo aceptado por el taller. Laminando en OrcaSlicer; puedes consultar su avance sin reenviar el STL…');
+    const data=await pollOrcaJob(started.jobId);
     latest=data;if(dl)dl.disabled=false;
     const stats=[data.bytes?Math.round(data.bytes/1024)+' KB':'',
       data.seconds!=null?Math.round(data.seconds/60)+' min estimados':'',
       data.grams!=null?data.grams.toFixed(1)+' g':''].filter(Boolean).join(' · ');
-    notice('OrcaSlicer termino el laminado — '+data.filename+(stats?' · '+stats:'')+'. Descarga el G-code y cargalo en Trabajos planificados.');
-    download();
-  }catch(e){notice('No se pudo laminar: '+e.message,true);}
+    notice('OrcaSlicer termino el laminado — '+data.filename+(stats?' · '+stats:'')+'. Descarga el G-code y revisalo antes de usarlo.');
+    await download();
+  }catch(e){notice('No se pudo completar el laminado: '+e.message,true);}
   finally{busy=false;if(btn)btn.disabled=false;}
 }
 function mount(){
@@ -4106,7 +4131,7 @@ function mount(){
   populate();
   $('tlsOrcaMcpCheck').addEventListener('click',status);
   $('tlsOrcaMcpSlice').addEventListener('click',slice);
-  $('tlsOrcaMcpDownload').addEventListener('click',download);
+  $('tlsOrcaMcpDownload').addEventListener('click',()=>{void download();});
   panel.querySelector('details').addEventListener('toggle',e=>{if(e.target.open){populate();status();}});
   return true;
 }

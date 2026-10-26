@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const { spawn, execFile, execFileSync } = require('child_process');
 const SafetyPolicy = require('../js/machineops-unattended-safety.js');
 const OrcaMCP = require('./orca-mcp.js');
+const OrcaJobs = require('./orca-jobs.js').createOrcaJobs(OrcaMCP.slice);
 
 const ROOT = __dirname;
 const DATA_DIR = process.env.FARM_DATA_DIR || path.join(ROOT, 'data');
@@ -1139,6 +1140,38 @@ const server = http.createServer(async (req, res) => {
     const role=requireRole(req,res,'viewer');if(!role)return;
     const result=await OrcaMCP.status();
     return json(res,200,result);
+  }
+  // Flujo asíncrono: Cloudflare nunca tiene que mantener abierto un POST
+  // durante el laminado. Solo operator/admin pueden consultar o descargar.
+  if(p==='/farm/orca/jobs'){
+    if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'operator');if(!role)return;
+    try{
+      const raw=await readBody(req,17*1024*1024);
+      const body=JSON.parse(raw.toString('utf8')||'{}');
+      const started=OrcaJobs.start(body);
+      return json(res,202,started);
+    }catch(e){
+      return json(res,e.statusCode||400,{ok:false,error:String(e?.message||'Solicitud invalida').slice(0,320)});
+    }
+  }
+  const orcaJob=p.match(/^\/farm\/orca\/jobs\/([a-f0-9]{48})(\/download)?$/);
+  if(orcaJob){
+    if(req.method!=='GET'){res.setHeader('Allow','GET');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'operator');if(!role)return;
+    const job=OrcaJobs.get(orcaJob[1]);
+    if(!job)return json(res,404,{ok:false,error:'Trabajo no encontrado o caducado'});
+    if(!orcaJob[2])return json(res,200,OrcaJobs.publicJob(job));
+    if(job.state!=='done'||!job.gcode)return json(res,409,{ok:false,error:'El G-code aun no esta disponible'});
+    const headers={
+      'Content-Type':'application/octet-stream',
+      'Content-Length':job.gcode.length,
+      'Content-Disposition':'attachment; filename="'+job.filename+'"',
+      'X-Content-Type-Options':'nosniff',
+      'Cache-Control':'no-store'
+    };
+    res.writeHead(200,headers);
+    return res.end(job.gcode);
   }
   if(p==='/farm/orca/slice'){
     if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
