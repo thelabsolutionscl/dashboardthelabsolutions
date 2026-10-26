@@ -4035,7 +4035,10 @@ async function status(){
     const machine=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value);
     const selectedModel=machine?.modelo||'';
     const active=data.activePresets||{};
-    const mismatch=!!selectedModel&&!!active.printerModel&&active.printerModel!==selectedModel;
+    const physical=String(machine?.numG||machine?.num||'').trim();
+    const activeNo=(active.printer||'').match(/(?:^|[\s(_-])(?:No\.?|Nº|N°|#)\s*(\d{1,3})(?=$|[\s)._-])/i);
+    const wrongUnit=!!physical&&!!activeNo&&Number(activeNo[1])!==Number(physical);
+    const mismatch=wrongUnit||!!selectedModel&&!!active.printerModel&&active.printerModel!==selectedModel;
     const unknown=!!selectedModel&&!active.printerModel;
     const occupied=data.available&&Number(data.plateObjects)>0;
     aiEnabled=!!data.aiEnabled;
@@ -4118,6 +4121,7 @@ async function slice(){
     const started=await request('/farm/orca/jobs',{
       filename:file.name,model:machine.modelo,material:$('tlsOrcaMcpMaterial').value,
       profile:$('tlsOrcaMcpProfile').value.trim(),
+      machineNumber:/^[1-9]\d{0,2}$/.test(String(machine.numG||machine.num||''))?Number(machine.numG||machine.num):undefined,
       autoSelect:true,printerPresetName:chosenPreset,
       modelBase64:await fileBase64(file)
     });
