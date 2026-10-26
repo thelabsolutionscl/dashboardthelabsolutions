@@ -3983,6 +3983,9 @@ function clearForm(type){
 if(typeof window==='undefined'||window.TLSOrcaMCP)return;
 const PANEL_ID='tlsOrcaMcpPanel',MODEL_TYPES=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
 let latest=null,busy=false,aiEnabled=false;
+function savedPrinter(id){try{return localStorage.getItem('tlsOrcaPrinterPreset:'+id)||'';}catch(_){return '';}}
+function rememberPrinter(id,preset){try{if(id&&preset)localStorage.setItem('tlsOrcaPrinterPreset:'+id,preset);}catch(_){}}
+function autoAIEnabled(){try{return localStorage.getItem('tlsOrcaAutoAI')==='yes';}catch(_){return false;}}
 function $(id){return document.getElementById(id);}
 function notice(message,error){
   const el=$('tlsOrcaMcpMessage');if(!el)return;
@@ -4038,18 +4041,22 @@ async function status(){
     aiEnabled=!!data.aiEnabled;
     const aiBtn=$('tlsOrcaMcpAI');
     if(aiBtn)aiBtn.disabled=!aiEnabled||!latest;
+    const autoCheck=$('tlsOrcaMcpAutoAI');if(autoCheck)autoCheck.disabled=!aiEnabled;
     const activeInfo=$('tlsOrcaMcpActive');
     if(activeInfo)activeInfo.textContent='Perfil real en OrcaSlicer: '+(active.printer||'sin identificar')+
       ' | Filamento: '+(active.filament||'sin identificar')+
       ' | Proceso: '+(active.process||'sin identificar');
+    const selectedPreference=$('tlsOrcaMcpPreset')?.value||savedPrinter(machine?.id);
     notice(!data.available?(data.reason||'MCP no disponible'):
-      mismatch||unknown?'BLOQUEADO: elegiste '+selectedModel+' pero OrcaSlicer utiliza '+(active.printer||'perfil desconocido')+
-        '. Activa abajo el perfil correcto o cambialo manualmente en el iMac.':
-      occupied?'OrcaSlicer contiene '+data.plateObjects+' modelo(s). Guarda el proyecto y limpia la placa antes del proximo laminado.':
-      'OrcaSlicer conectado con '+active.printer+'. El G-code se verificara contra la impresora elegida.',
-      !data.available||occupied||mismatch||unknown);
-    const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=!data.available||occupied||mismatch||unknown;
-    return data.available&&!occupied&&!mismatch&&!unknown;
+      occupied?'OrcaSlicer contiene '+data.plateObjects+' modelo(s). Guarda el proyecto y limpia la placa antes de laminar.':
+      mismatch||unknown?'OrcaSlicer esta en '+(active.printer||'perfil no identificado')+
+        '. Al pulsar LAMINAR elegiremos automaticamente '+selectedModel+
+        ' y el material, sin borrar cambios no guardados.'+
+        (!selectedPreference?' Si hay varios tamanos de boquilla, elige abajo el perfil exacto una sola vez.':''):
+      'OrcaSlicer preparado: '+active.printer+'. Los presets y el G-code se comprobaran al laminar.',
+      !data.available||occupied);
+    const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=!data.available||occupied||busy;
+    return data.available&&!occupied;
   }catch(e){
     notice(e.message,true);const submit=$('tlsOrcaMcpSlice');if(submit)submit.disabled=true;return false;
   }finally{if(check)check.disabled=false;}
@@ -4101,21 +4108,25 @@ async function slice(){
     notice('Selecciona un STL o 3MF de hasta 12 MB.',true);return;
   }
   if(!machine||!MODEL_TYPES.has(machine.modelo)){notice('Selecciona una impresora compatible.',true);return;}
-  if(!confirm('Laminar con OrcaSlicer para '+(machine.nombre||machine.modelo)+'? Se generara un G-code, sin iniciar impresion.'))return;
+  if(!confirm('Laminar para '+(machine.nombre||machine.modelo)+'? OrcaSlicer seleccionara los perfiles compatibles cuando sea necesario. No se iniciara ninguna impresion.'))return;
   busy=true;latest=null;
   const btn=$('tlsOrcaMcpSlice'),dl=$('tlsOrcaMcpDownload');
   if(btn)btn.disabled=true;if(dl)dl.disabled=true;
   try{
-    notice('Enviando modelo al MCP del taller…');
+    notice('Comprobando y seleccionando automaticamente los perfiles de '+machine.modelo+' y el filamento…');
+    const chosenPreset=$('tlsOrcaMcpPreset')?.value||savedPrinter(machine.id);
     const started=await request('/farm/orca/jobs',{
       filename:file.name,model:machine.modelo,material:$('tlsOrcaMcpMaterial').value,
       profile:$('tlsOrcaMcpProfile').value.trim(),
+      autoSelect:true,printerPresetName:chosenPreset,
       modelBase64:await fileBase64(file)
     });
     if(!started.jobId)throw new Error('Farm Controller no devolvio identificador de laminado.');
     notice('Trabajo aceptado por el taller. Laminando en OrcaSlicer; puedes consultar su avance sin reenviar el STL…');
     const data=await pollOrcaJob(started.jobId);
     latest=data;if(dl)dl.disabled=false;
+    const applied=(data.profileChanges||[]).map(c=>c.type+': '+c.name).join(' · ');
+    if(applied)notice('Perfiles seleccionados automaticamente: '+applied+'. Verificando G-code…');
     const aiButton=$('tlsOrcaMcpAI');if(aiButton)aiButton.disabled=!aiEnabled;
     const technical=$('tlsOrcaMcpTechnical');
     if(technical){
@@ -4134,6 +4145,7 @@ async function slice(){
       data.grams!=null?data.grams.toFixed(1)+' g':''].filter(Boolean).join(' · ');
     notice('OrcaSlicer termino el laminado — '+data.filename+(stats?' · '+stats:'')+'. Descarga el G-code y revisalo antes de usarlo.');
     await download();
+    if(aiEnabled && autoAIEnabled())await requestOrcaAI(true);
   }catch(e){notice('No se pudo completar el laminado: '+e.message,true);}
   finally{busy=false;if(btn)btn.disabled=false;}
 }
@@ -4143,7 +4155,7 @@ function mount(){
   panel.style.cssText='padding:14px 16px;margin-bottom:16px';
   panel.innerHTML=[
     '<details><summary style="cursor:pointer;font-weight:700">🧩 OrcaSlicer MCP — Laminado real <span style="font-weight:400;font-size:12px;color:var(--text3)">· desde el taller</span></summary>',
-    '<div style="padding-top:12px"><p style="font-size:12px;color:var(--text2)">Usa los perfiles que esten activos en OrcaSlicer en el equipo del taller. No cambia presets, no mueve ejes ni inicia impresiones. Si hay modificaciones sin guardar, se conservan.</p>',
+    '<div style="padding-top:12px"><p style="font-size:12px;color:var(--text2)">Al laminar, cambia automaticamente al perfil compatible de impresora y material. Si hay boquillas o filamentos ambiguos, pide elegir el perfil correcto. Nunca borra cambios sin guardar, mueve ejes ni inicia impresiones.</p>',
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">',
     '<label style="flex:2;min-width:180px;font-size:12px">Archivo STL/3MF<input id="tlsOrcaMcpFile" type="file" accept=".stl,.3mf" class="field-input" style="width:100%"></label>',
     '<label style="flex:2;min-width:180px;font-size:12px">Impresora<select id="tlsOrcaMcpPrinter" class="field-input" style="width:100%"></select></label>',
@@ -4156,12 +4168,13 @@ function mount(){
     '</div><p id="tlsOrcaMcpActive" style="font-size:12px;margin-top:10px;color:var(--text2)">Perfil activo: comprobando OrcaSlicer…</p>',
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpPreset" aria-label="Perfil de impresora real en OrcaSlicer" class="field-input" style="max-width:385px;flex:1"><option value="">Perfiles reales de OrcaSlicer…</option></select>',
-    '<button id="tlsOrcaMcpActivate" class="btn btn-ghost btn-sm" type="button">Activar perfil en OrcaSlicer</button>',
-    '</div><p style="font-size:11px;color:var(--text3)">Activar un perfil puede descartar cambios no guardados en OrcaSlicer. El servidor bloqueará el cambio si detecta modificaciones pendientes.</p>',
+    '<button id="tlsOrcaMcpActivate" class="btn btn-ghost btn-sm" type="button">Activar ahora (opcional)</button>',
+    '</div><p style="font-size:11px;color:var(--text3)">Elige el perfil exacto de boquilla una vez por impresora si hay varios. Se recordará en este navegador para futuros laminados. El cambio automático ocurre al pulsar Laminar y se bloquea si hay cambios sin guardar.</p>',
     '<pre id="tlsOrcaMcpTechnical" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpGoal" class="field-input" aria-label="Objetivo del analisis" style="max-width:210px"><option value="calidad">Mejor acabado</option><option value="resistencia">Mayor resistencia</option><option value="rapidez">Menor tiempo</option></select>',
     '<button id="tlsOrcaMcpAI" class="btn btn-ghost btn-sm" type="button" disabled>Analizar pieza con IA</button>',
+    '<label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="tlsOrcaMcpAutoAI"> Analizar automaticamente despues de laminar (requiere API IA)</label>',
     '</div><p style="font-size:11px;color:var(--text3)">Análisis de IA opcional: envía únicamente el resumen técnico al proveedor configurado, nunca STL, G-code ni contraseñas. No aplica ajustes automáticamente.</p>',
     '<pre id="tlsOrcaMcpAIResult" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<p id="tlsOrcaMcpMessage" aria-live="polite" style="font-size:12px;margin-top:8px;color:var(--text2)">Abre el panel y comprueba la conexion con el Farm Controller.</p></div></details>'
@@ -4173,6 +4186,19 @@ function mount(){
   $('tlsOrcaMcpDownload').addEventListener('click',()=>{void download();});
   $('tlsOrcaMcpPrinter').addEventListener('change',()=>{void status();void loadOrcaPresets();});
   $('tlsOrcaMcpActivate').addEventListener('click',()=>{void activateOrcaPrinter();});
+  $('tlsOrcaMcpPreset').addEventListener('change',()=>{
+    const id=$('tlsOrcaMcpPrinter')?.value,value=$('tlsOrcaMcpPreset')?.value;
+    if(id&&value)rememberPrinter(id,value);
+  });
+  const aiAuto=$('tlsOrcaMcpAutoAI');if(aiAuto){
+    aiAuto.checked=autoAIEnabled();
+    aiAuto.addEventListener('change',()=>{
+      if(aiAuto.checked&&!confirm('Activar analisis automatico con IA para futuros laminados? Se enviaran solo metricas tecnicas anonimizadas al proveedor de IA; nunca archivos STL, G-code ni secretos. Puede generar cargos de API.')){
+        aiAuto.checked=false;
+      }
+      try{localStorage.setItem('tlsOrcaAutoAI',aiAuto.checked?'yes':'no');}catch(_){}
+    });
+  }
   $('tlsOrcaMcpAI').addEventListener('click',()=>{void requestOrcaAI();});
   panel.querySelector('details').addEventListener('toggle',e=>{if(e.target.open){populate();void status();void loadOrcaPresets();}});
   return true;
@@ -4185,7 +4211,9 @@ async function loadOrcaPresets(){
   const intro=document.createElement('option');intro.value='';intro.textContent='Escoge perfil exacto de OrcaSlicer';sel.append(intro);
   try{
     const data=await request('/farm/orca/presets');
-    const target=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value)?.modelo;
+    const machine=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value);
+    const target=machine?.modelo;
+    const preferred=savedPrinter(machine?.id);
     for(const p of data.presets||[]){
       if(p.model!==target)continue;
       const option=document.createElement('option');
@@ -4193,6 +4221,9 @@ async function loadOrcaPresets(){
       sel.append(option);
     }
     if(sel.options.length===1)intro.textContent='No hay perfiles de '+target+' en OrcaSlicer';
+    else if(preferred && [...sel.options].some(o=>o.value===preferred))sel.value=preferred;
+    else if(sel.options.length===2)sel.selectedIndex=1;
+    else intro.textContent='Varios perfiles: escoge una sola vez la boquilla correcta';
   }catch(e){intro.textContent='No se pudo consultar los perfiles: '+e.message.slice(0,90);}
 }
 async function activateOrcaPrinter(){
@@ -4202,14 +4233,15 @@ async function activateOrcaPrinter(){
   const btn=$('tlsOrcaMcpActivate');if(btn)btn.disabled=true;
   try{
     const result=await request('/farm/orca/printer',{model,presetName:selected});
-    notice('OrcaSlicer activo: '+(result.activePresets?.printer||selected)+'. Comprueba el FILAMENTO y el proceso antes de laminar.');
+    rememberPrinter($('tlsOrcaMcpPrinter')?.value,selected);
+    notice('OrcaSlicer activo: '+(result.activePresets?.printer||selected)+'. Lo recordare para los proximos laminados desde este navegador.');
     await status();await loadOrcaPresets();
   }catch(e){notice('No se cambio la impresora: '+e.message,true);}
   finally{if(btn)btn.disabled=false;}
 }
-async function requestOrcaAI(){
+async function requestOrcaAI(automatic=false){
   if(!latest?.jobId||!aiEnabled){notice('La IA necesita un G-code verificado y una clave privada configurada en el iMac.',true);return;}
-  if(!confirm('¿Enviar solo estadisticas del laminado y diagnostico tecnico al proveedor de IA? No se enviara el archivo STL ni el G-code.'))return;
+  if(!automatic && !confirm('¿Enviar solo estadisticas del laminado y diagnostico tecnico al proveedor de IA? No se enviara el archivo STL ni el G-code.'))return;
   const btn=$('tlsOrcaMcpAI'),panel=$('tlsOrcaMcpAIResult');if(btn)btn.disabled=true;
   if(panel)panel.textContent='Analizando el laminado con IA…';
   try{
