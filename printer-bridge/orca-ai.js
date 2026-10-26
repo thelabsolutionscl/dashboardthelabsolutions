@@ -85,4 +85,45 @@ async function advise(result,goal,env=process.env){
     return{model,advice:msg.slice(0,3800),applied:false,privacy:'solo metricas anonimizadas; no STL ni G-code'};
   }finally{clearTimeout(timer);}
 }
-module.exports={available,advise,minimalFacts,config};
+function safePreviewFacts(report,goal,modelName,material){
+  const round=n=>Number.isFinite(Number(n))?Number(Number(n).toFixed(3)):null;
+  const geometry=report.geometry||{};
+  const allowed=new Set(['layer_height','outer_wall_speed','inner_wall_speed','sparse_infill_speed',
+    'internal_solid_infill_speed','top_surface_speed','initial_layer_speed',
+    'gap_infill_speed','bridge_speed']);
+  const proposals=(report.details||[]).filter(d=>allowed.has(d.key))
+    .slice(0,12).map(d=>({setting:d.key,from:round(d.from),to:round(d.to)}));
+  const dims=Array.isArray(geometry.dimensions)?geometry.dimensions.slice(0,3).map(round):null;
+  return{printerModel:String(modelName||'').slice(0,25),
+    filament:String(material||'').slice(0,25),goal,
+    geometry:{dimensionsMm:dims,thin:!!geometry.thin,facets:round(geometry.facets)},
+    originalPhysics:report.physics?.verdict||'unknown',
+    proposedPhysics:report.proposedPhysics?.verdict||'unknown',
+    safeFlowMm3s:round(report.safeFlow),maxFlowMm3s:round(report.limit),
+    proposedChanges:proposals};
+}
+async function adviseBefore(report,goal,modelName,material,env=process.env){
+  const {key,model}=config(env);
+  if(!key)throw Error('IA no configurada. Falta clave privada local.');
+  const facts=safePreviewFacts(report,goal,modelName,material);
+  if(!['calidad','resistencia','rapidez'].includes(goal))throw Error('Objetivo invalido');
+  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),25000);
+  try{
+    const r=await fetch('https://api.openai.com/v1/responses',{
+      method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model,store:false,max_output_tokens:750,
+        instructions:'Eres asesor de impresión 3D FDM. Da una recomendación breve, en español de Chile, de hasta 5 puntos, exclusivamente basada en los datos técnicos resumidos. No se adjunta la malla y NO has visto las superficies reales: NO afirmes conocer los voladizos, texturas, tensiones o soportes necesarios. Nunca prometas parámetros perfectos. No recomiendes superar el caudal seguro, elevar temperaturas ni límites del filamento como atajo. No inventes dimensiones, marcas ni medidas ausentes. Prioriza la física comprobada. Tus consejos NO se aplican automáticamente.',
+        input:'Datos numéricos anónimos de ANÁLISIS ANTES DE LAMINAR: '+JSON.stringify(facts)
+      }),signal:ctl.signal
+    });
+    const obj=await r.json().catch(()=>({}));
+    if(!r.ok)throw Error('IA HTTP '+r.status+': '+String(obj.error?.message||'consulta fallida').slice(0,100));
+    const advice=(obj.output||[]).flatMap(v=>v.content||[]).filter(v=>v.type==='output_text')
+      .map(v=>v.text).join('\n').trim();
+    if(!advice)throw Error('La IA no devolvio recomendaciones');
+    return{model,advice:advice.slice(0,3500),applied:false,
+      privacy:'solo estadisticas tecnicas anonimizadas; nunca STL, 3MF, G-code, rutas o secretos'};
+  }finally{clearTimeout(t);}
+}
+module.exports={available,advise,adviseBefore,safePreviewFacts,minimalFacts,config};
