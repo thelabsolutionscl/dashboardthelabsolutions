@@ -167,7 +167,7 @@ async function autoPrepareProfiles(tools,client,request){
 
   const original=Guard.activeProfiles(current);
   const printerList=await invoke(client,'list_presets',{type:'printer',include_system:true});
-  const plannedPrinter=Auto.choosePrinter(current,request.model,printerList,request.printerPresetName||'');
+  const plannedPrinter=Auto.choosePrinter(current,request.model,printerList,request.printerPresetName||'',request.machineNumber??'');
   // Preflight material before mutating the user's active project where possible.
   const initialFilament=Auto.sameMaterial(original.filament,request.material);
   if(!initialFilament){
@@ -376,6 +376,8 @@ async function slice(request,env=process.env){
   if(!VALID_MATERIALS.has(request.material))throw new Error('Material no compatible');
   if(request.profile!=null&&(typeof request.profile!=='string'||request.profile.length>120))
     throw new Error('Perfil demasiado largo');
+  if(request.machineNumber!=null && !/^(?:[1-9]\d{0,2})$/.test(String(request.machineNumber)))
+    throw new Error('Numero de impresora fisica invalido');
   if(request.printerPresetName!=null&&(typeof request.printerPresetName!=='string'||request.printerPresetName.length>180))
     throw new Error('Nombre de perfil de impresora demasiado largo');
   if(request.filamentPresetName!=null&&(typeof request.filamentPresetName!=='string'||request.filamentPresetName.length>180))
