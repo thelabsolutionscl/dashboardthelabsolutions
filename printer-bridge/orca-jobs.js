@@ -19,7 +19,7 @@ function createOrcaJobs(sliceFn){
   function publicJob(job){
     if(!job)return null;
     const {id,state,createdAt,finishedAt,filename,bytes,seconds,grams,error,warnings}=job;
-    return{ok:state!=='error',jobId:id,state,createdAt,finishedAt,
+    return{ok:true,jobId:id,state,createdAt,finishedAt,
       filename,bytes,seconds,grams,error,warnings:state==='done'?warnings:undefined};
   }
   function start(input){
