@@ -398,7 +398,10 @@ async function slice(request,env=process.env){
       if(isLiveOrca(tools)){
         const result=await liveSlice(client,request,input,workspace,tools);
         result.unitPreflight={units:prepared.units,changed:prepared.changed,
-          factor:prepared.factor||1,dimensions:prepared.dimensions||null};
+          factor:prepared.factor||1,dimensions:prepared.dimensions||null,
+          orientationRepaired:!!prepared.orientationRepaired,
+          orientationFlippedFaces:prepared.orientationFlippedFaces||0,
+          inspectedMeshVolume:prepared.inspectedMeshVolume??null};
         return result;
       }
       if(request.autoSelect===true)throw Error('El MCP conectado no admite seleccion automatica segura de perfiles.');
