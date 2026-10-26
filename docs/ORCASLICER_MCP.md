@@ -73,3 +73,24 @@ Si MCP responde pero no hay herramienta de laminado, se debe añadir una herrami
     node --test tests/orca-mcp.test.js
 
 Los tests utilizan un servidor MCP stdio simulado para verificar descubrimiento de herramientas, laminado, validaciones y permisos. Adicionalmente, `node --test tests/orca-jobs.test.js` verifica el ciclo de vida asíncrono, la caducidad, límites y errores.
+
+## Validación de perfiles K1 frente a K2 y asesoría opcional con IA
+
+- El selector de **Máquinas** se refiere al modelo físico de destino (K1, K2, K2 Plus, etc.). No garantiza por sí solo que OrcaSlicer haya cambiado su preset. La pantalla ahora muestra el perfil **realmente activo** en OrcaSlicer.
+- En la pantalla se pueden consultar presets de impresora mediante `GET /farm/orca/presets`. El botón **Activar perfil en OrcaSlicer** llama a `POST /farm/orca/printer` con el nombre exacto elegido y pide confirmación antes de realizar el cambio. Si OrcaSlicer señala modificaciones sin guardar, se rechaza la operación; nunca se descartan silenciosamente. Después del cambio hay que revisar filamento y proceso.
+- Al laminar, se verifica el perfil antes de cargar el STL, después de importarlo y después de laminar. El G-code se examina buscando metadatos `printer_settings_id` / `printer_model` / `machine_model`, etc. Se rechaza si indican otra familia de máquina o faltan metadatos verificables. Esto no sustituye comprobar start G-code, boquilla, firmware, CFS, volumen de impresión ni compatibilidad real antes de imprimir.
+- La telemetría técnica de un resultado incluye controles físicos (cuando `check_profile_physics` está disponible), geometría (`describe_plate`), tiempos/consumo por función (`get_slice_breakdown`) y una selección de parámetros leídos (`get_config`). Todas estas herramientas son **solo lectura**.
+- El **análisis con IA** es un botón opcional, separado del laminado. Necesita una clave **API** de OpenAI con facturación habilitada; una suscripción ChatGPT Plus no incluye automáticamente créditos de API. No instala ni usa Ollama. No se llama al proveedor sin una acción explícita del operador.
+- El resumen que sale del iMac contiene **solo métricas numéricas, parámetros técnicos autorizados, modelo genérico de impresora y material**; nunca el STL, el G-code, tokens, nombres del archivo ni direcciones de la red.
+- La IA entrega recomendaciones explicadas según el objetivo `calidad`, `resistencia` o `rapidez`. **No cambia configuraciones ni inicia impresiones**, ni promete ajustes perfectos. La validación final sigue correspondiendo al operador y a pruebas de impresión.
+
+La clave se almacena **fuera de Git** en un archivo privado con permisos 600, `~/Library/Application Support/TheLabFarm/orca-ai.json`:
+
+```json
+{
+  "apiKey": "INTRODUCIR_EN_EL_IMAC_SIN_COMPARTIR_CON_OTRAS_PERSONAS",
+  "model": "gpt-5-mini"
+}
+```
+
+El proceso acepta como alternativa `ORCA_AI_API_KEY` y `ORCA_AI_MODEL` en el entorno local del iMac. El valor nunca debe registrarse en logs, subirse al repositorio, enviarse por chat o incluirse en capturas. Reiniciar/reconsultar `Comprobar MCP` tras guardarlo; el servidor lee este archivo en cada consulta.

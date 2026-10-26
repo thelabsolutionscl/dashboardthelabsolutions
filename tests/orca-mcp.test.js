@@ -88,7 +88,7 @@ const liveMock=[
   "if(name==='list_objects')payload={objects:[]};",
   "if(name==='load_model'){if(!fs.existsSync(req.params.arguments.path))payload={error:'missing model'};else payload={loaded:true};}",
   "if(name==='slice_and_wait')payload={state:'done',stats:{estimated_time_seconds:450,filament_used_g:17.25},warnings:[]};",
-  "if(name==='save_gcode'){const dest=path.join(process.env.PRINT_OUTCOMES_DIR,'gcode');fs.mkdirSync(dest,{recursive:true});const file=path.join(dest,'laminado.gcode');fs.writeFileSync(file,'; OrcaSlicer G-code\\nG1 X10 Y20 F1000\\n');payload={path:file};}",
+  "if(name==='save_gcode'){const dest=path.join(process.env.PRINT_OUTCOMES_DIR,'gcode');fs.mkdirSync(dest,{recursive:true});const file=path.join(dest,'laminado.gcode');fs.writeFileSync(file,'; OrcaSlicer G-code\\nG1 X10 Y20 F1000\\n; printer_settings_id = Creality K1 (0.4 nozzle) - Copiar\\n');payload={path:file};}",
   "value={structuredContent:payload};}",
   "process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:value})+'\\n');}});"
 ].join('\n');
@@ -129,4 +129,36 @@ test('configuracion local del token pasa al proceso sin mostrar secretos',()=>{
     assert.equal(cfg.childEnv.ORCA_API_TOKEN,'hidden-secret');
     assert.equal(JSON.stringify({...cfg,childEnv:null}).includes('hidden-secret'),false);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('rechaza G-code cuyo perfil real no coincide con la impresora elegida',()=>{
+  const guard=require('../printer-bridge/orca-profile-guard.js');
+  assert.equal(guard.family('Creality K1 (0.4 nozzle)'),'K1');
+  assert.equal(guard.family('Creality K2'),'K2');
+  assert.equal(guard.family('Creality K2 Plus'),'K2 Plus');
+  const bad='; printer_settings_id = Creality K2 0.4\nG1 X5 Y5\n';
+  assert.throws(()=>guard.verifyGcode(bad,'K1','Creality K1 0.4'),/G-code NO seguro/);
+  const good='; printer_settings_id = Creality K1 (0.4 nozzle)\nG1 X5 Y5\n';
+  assert.equal(guard.verifyGcode(good,'K1','Creality K1 0.4').confirmed,true);
+  assert.equal(guard.verifyGcode('G1 X5 Y5','K1','Creality K1 0.4').confirmed,false);
+});
+test('cambiar perfil exige cambios sin guardar ausentes',()=>{
+  const guard=require('../printer-bridge/orca-profile-guard.js');
+  assert.equal(guard.hasDirtyChanges({modified:{print:['wall_loops']}}),true);
+  assert.equal(guard.hasDirtyChanges({modified:{print:[],filament:[],printer:[]}}),false);
+  assert.equal(guard.hasDirtyChanges({}),true);
+});
+test('analisis IA opt-in nunca envia STL, G-code ni tokens como hechos',()=>{
+  const ai=require('../printer-bridge/orca-ai.js');
+  const subset=ai.minimalFacts({
+    machineModel:'K1',material:'PLA',seconds:100,grams:3,
+    modelBase64:'SENSITIVE_STL',gcodeBase64:'SENSITIVE_GCODE',token:'SENSITIVE_TOKEN',
+    activePresets:{printer:'Creality K1'},gcodeCheck:{confirmed:true,expected:'K1'},
+    technicalAnalysis:{physics:{verdict:'ok'}}
+  });
+  const dump=JSON.stringify(subset);
+  assert.equal(dump.includes('SENSITIVE_STL'),false);
+  assert.equal(dump.includes('SENSITIVE_GCODE'),false);
+  assert.equal(dump.includes('SENSITIVE_TOKEN'),false);
+  assert.equal(subset.machineModel,'K1');
 });

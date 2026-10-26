@@ -18,6 +18,7 @@ const { spawn, execFile, execFileSync } = require('child_process');
 const SafetyPolicy = require('../js/machineops-unattended-safety.js');
 const OrcaMCP = require('./orca-mcp.js');
 const OrcaJobs = require('./orca-jobs.js').createOrcaJobs(OrcaMCP.slice);
+const OrcaAI=require('./orca-ai.js');
 
 const ROOT = __dirname;
 const DATA_DIR = process.env.FARM_DATA_DIR || path.join(ROOT, 'data');
@@ -1139,7 +1140,39 @@ const server = http.createServer(async (req, res) => {
     if(req.method!=='GET'){res.setHeader('Allow','GET');return json(res,405,{ok:false,error:'method not allowed'});}
     const role=requireRole(req,res,'viewer');if(!role)return;
     const result=await OrcaMCP.status();
-    return json(res,200,result);
+    return json(res,200,{...result,aiEnabled:OrcaAI.available()});
+  }
+  if(p==='/farm/orca/presets'){
+    if(req.method!=='GET'){res.setHeader('Allow','GET');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'viewer');if(!role)return;
+    try{return json(res,200,await OrcaMCP.presets());}
+    catch(e){return json(res,502,{ok:false,error:String(e.message).slice(0,300)});}
+  }
+  if(p==='/farm/orca/printer'){
+    if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'operator');if(!role)return;
+    try{
+      const raw=await readBody(req,2048);
+      const input=JSON.parse(raw.toString('utf8')||'{}');
+      return json(res,200,await OrcaMCP.selectPrinter(input));
+    }catch(e){return json(res,409,{ok:false,error:String(e.message).slice(0,300)});}
+  }
+  const analyzeJob=p.match(/^\/farm\/orca\/jobs\/([a-f0-9]{48})\/analyze$/);
+  if(analyzeJob){
+    if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
+    const role=requireRole(req,res,'operator');if(!role)return;
+    const job=OrcaJobs.get(analyzeJob[1]);
+    if(!job||job.state!=='done'||!job.facts)return json(res,404,{ok:false,error:'Trabajo terminado no disponible'});
+    if(job.aiInProgress)return json(res,409,{ok:false,error:'Ya se esta analizando este trabajo'});
+    try{
+      const raw=await readBody(req,1024);
+      const input=JSON.parse(raw.toString('utf8')||'{}');
+      job.aiInProgress=true;
+      try{
+        const response=await OrcaAI.advise(job.facts,String(input.goal||''));
+        return json(res,200,{ok:true,...response});
+      }finally{job.aiInProgress=false;}
+    }catch(e){return json(res,503,{ok:false,error:String(e.message||'IA no disponible').slice(0,320)});}
   }
   // Flujo asíncrono: Cloudflare nunca tiene que mantener abierto un POST
   // durante el laminado. Solo operator/admin pueden consultar o descargar.
