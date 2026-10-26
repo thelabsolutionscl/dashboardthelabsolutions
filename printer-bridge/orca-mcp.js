@@ -6,6 +6,7 @@ const fsp=fs.promises;
 const os=require('node:os');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
+const crypto=require('node:crypto');
 const Guard=require('./orca-profile-guard.js');
 const Auto=require('./orca-auto-profiles.js');
 const StlPreflight=require('./orca-stl-preflight.js');
@@ -238,6 +239,13 @@ async function readPhysicalPlan(client,request){
   }
   return{originalPhysics:current,proposedPhysics:proposed,plan};
 }
+function approvalHash(request,active,plan){
+  return crypto.createHash('sha256').update(JSON.stringify({
+    model:request.model,material:request.material,goal:request.goal||'calidad',
+    activePrinter:active.printer,activeFilament:active.filament,activeProcess:active.process,
+    changes:plan.changes,limit:plan.limit
+  })).digest('hex');
+}
 async function preflight(request,env=process.env){
   const settingsForOrca=settings(env);
   if(!settingsForOrca.command)throw Error('OrcaSlicer MCP no configurado');
@@ -270,13 +278,18 @@ async function preflight(request,env=process.env){
         'Los ajustes propuestos no superan todas las comprobaciones fisicas. No se puede laminar automaticamente.':'',
       physics:report.originalPhysics,proposedPhysics:report.proposedPhysics,
       changes:report.plan.changes,details:report.plan.details,
-      safeFlow:report.plan.safetyFlow,limit:report.plan.limit,basis:report.plan.basis};
+      safeFlow:report.plan.safetyFlow,limit:report.plan.limit,basis:report.plan.basis,
+      approvalHash:approvalHash(request,active,report.plan)};
   });
 }
 async function applyPreslicePhysics(client,tools,request){
   if(!['check_profile_physics','get_config'].every(x=>tools.some(t=>t.name===x)))
     throw Error('Falta check_profile_physics; prohibido laminar sin preflight fisico');
   const report=await readPhysicalPlan(client,request);
+  if(request.autoTune===true &&
+      (!/^[a-f0-9]{64}$/.test(String(request.approvalHash||'')) ||
+       request.approvalHash!==approvalHash(request,Guard.activeProfiles(await invoke(client,'get_status')),report.plan)))
+    throw Error('La configuracion cambio desde el analisis previo. Repite Analizar antes de laminar.');
   if(request.autoTune===true && Object.keys(report.plan.changes).length){
     if(!tools.some(t=>t.name==='set_config'))
       throw Error('MCP no permite aplicar ajustes. No se laminara.');
