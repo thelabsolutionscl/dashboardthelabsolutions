@@ -15,6 +15,7 @@ test('manual Farm Controller does not terminate on /update, including no-op upda
   assert.match(ctrl,/manualRestartRequired:!!result\.ok && result\.changed && !RESTART_MANAGED/);
   assert.match(ctrl,/if\(restarting\)\{[\s\S]{0,250}setTimeout\(shutdown,500\)/);
   assert.match(ctrl,/finish\(\{ok:true,out,changed:before!==after\}\)/);
+  assert.match(ctrl,/const finish=value=>\{_controllerUpdating=false;resolve\(value\);\};/);
 });
 
 test('child may request stale parent restart only with persistent supervisor',()=>{
