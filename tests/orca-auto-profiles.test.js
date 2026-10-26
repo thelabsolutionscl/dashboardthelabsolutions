@@ -24,6 +24,15 @@ test('does not silently guess a nozzle when printer has several presets',()=>{
   assert.deepEqual(Auto.choosePrinter({...snapshot,presets:{...snapshot.presets,printer:'Creality K2 0.4 nozzle'}},'K2',printers),
     {chosen:'Creality K2 0.4 nozzle',change:false});
 });
+test('does not reuse K1 No2 when physical machine K1 #1 was requested',()=>{
+  const current={...snapshot,presets:{...snapshot.presets,printer:'Creality K1 No2 (0.4 nozzle)'}};
+  const list={printer:[
+    {name:'Creality K1 No2 (0.4 nozzle)'},{name:'Creality K1 No1 (0.4 nozzle)'}
+  ]};
+  assert.equal(Auto.machineNo('Creality K1 No2 (0.4 nozzle)'),'2');
+  assert.equal(Auto.choosePrinter(current,'K1',list,'',1).chosen,'Creality K1 No1 (0.4 nozzle)');
+  assert.throws(()=>Auto.choosePrinter(current,'K1',{printer:[list.printer[0]]},'',1),/perfiles de otras maquinas/);
+});
 test('filament ambiguity is blocked until operator has identified the spool',()=>{
   const incompatible={...snapshot,presets:{...snapshot.presets,filament:'Generic PETG'}};
   assert.throws(()=>Auto.chooseFilament(incompatible,'PLA',{filament:[{name:'Generic PLA'},{name:'Generic PLA Silk'}]}),/Hay 2 perfiles/);
