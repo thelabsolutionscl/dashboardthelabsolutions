@@ -24,7 +24,7 @@ test('Orca panel can inspect model before slicing and real G-code layers only af
  assert.match(sub,/tlsOrcaMcpViewModel/);
  assert.match(sub,/tlsOrcaMcpViewGcode/);
  assert.match(sub,/engine\.reviewOrca\(file,gcode/);
- assert.match(sub,/latest=\{\.\.\.data,jobId:started\.jobId,machineModel:machine\.modelo\}/);
+ assert.match(sub,/latest=\{\.\.\.data,jobId:started\.jobId,machineId:String\(machine\.id\),machineModel:machine\.modelo/);
  assert.match(sub,/if\(view\)view\.disabled=!data\.gcodeCheck\?\.confirmed/);
  assert.match(sub,/preview|vista/i);
  const f=sub.slice(sub.indexOf('async function inspectOrcaLayers('),sub.indexOf('function sleepOrca'));
