@@ -761,7 +761,7 @@ function updateFarmController(){
   _controllerUpdating=true;
   const before = repoRevision();
   return new Promise(resolve=>{
-    const finish=value=>{if(!value?.ok)_controllerUpdating=false;resolve(value);};
+    const finish=value=>{_controllerUpdating=false;resolve(value);};
     const run=git=>execFile(git,['-C',REPO_DIR,'pull','--ff-only','origin','main'],{timeout:90000},(err,stdout,stderr)=>{
       if(err&&err.code==='ENOENT'&&git==='git')return run('/usr/bin/git');
       const out=String(stdout||'').trim(),errOut=String(stderr||'').trim();
