@@ -189,10 +189,18 @@ async function status(env=process.env){
   try{
     return await withTools(config,10000,async(tools,client)=>{
       const live=isLiveOrca(tools);
-      let problem='';
-      if(live){try{await invoke(client,'get_status');}catch(e){problem=e.message;}}
+      let problem='',plateObjects=null;
+      if(live){
+        try{
+          await invoke(client,'get_status');
+          if(tools.some(t=>t.name==='list_objects')){
+            const plate=await invoke(client,'list_objects');
+            if(Array.isArray(plate.objects))plateObjects=plate.objects.length;
+          }
+        }catch(e){problem=e.message;}
+      }
       const tool=live?{name:'OrcaSlicer Remote API'}:selectTool(tools,config.preferredTool);
-      return{ok:true,available:!!tool&&!problem,tool:tool?.name||null,mode:live?'live':'legacy',
+      return{ok:true,available:!!tool&&!problem,tool:tool?.name||null,plateObjects,mode:live?'live':'legacy',
         tools:tools.map(t=>t.name).filter(n=>/slice|orca|lamin|gcode|profile/i.test(n)).slice(0,25),
         reason:problem||(tool?'':'MCP conectado, pero no se encontro una herramienta de laminado. Configura ORCA_MCP_SLICE_TOOL.')};
     });
