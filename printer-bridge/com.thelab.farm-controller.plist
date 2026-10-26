@@ -19,6 +19,7 @@
   <dict>
     <key>BRIDGE_ALLOW_ORIGIN</key><string>https://dashboard.thelab.solutions</string>
     <key>FARM_DATA_DIR</key><string>__DATA__</string>
+    <key>FARM_RESTART_MANAGED</key><string>1</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
