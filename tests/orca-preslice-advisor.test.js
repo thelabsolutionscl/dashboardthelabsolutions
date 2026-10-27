@@ -118,3 +118,25 @@ test('boquillas menores reducen los topes de calidad en vez de aumentarlos',()=>
  assert.ok(cap02.outer_wall_speed<cap04.outer_wall_speed);
  assert.ok(cap02.inner_wall_speed<cap04.inner_wall_speed);
 });
+
+test('preflight auto-selects the requested material before physical analysis',async()=>{
+ const result=await MCP.preflight({
+  filename:'10mm.stl',model:'K1',material:'PLA',goal:'calidad',
+  autoSelect:true,modelBase64:model(),stlUnits:'mm'
+ },mock(true));
+ assert.equal(result.ready,true);
+ assert.match(result.activePresets.printer,/K1/);
+ assert.match(result.activePresets.filament,/PLA/);
+ assert.equal(result.physics.verdict,'blocked');
+ assert.match(result.approvalHash,/^[a-f0-9]{64}$/);
+});
+
+test('preflight does not discard dirty OrcaSlicer presets when automatic selection is needed',async()=>{
+ await assert.rejects(
+  MCP.preflight({
+   filename:'10mm.stl',model:'K1',material:'PLA',goal:'calidad',
+   autoSelect:true,modelBase64:model(),stlUnits:'mm'
+  },{...mock(true),ORCA_MCP_ARGS_JSON:JSON.stringify([fixture,'fast','dirty'])}),
+  /sin guardar/i
+ );
+});
