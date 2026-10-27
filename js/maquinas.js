@@ -4274,9 +4274,9 @@ async function slice(){
 function mount(){
   const host=document.querySelector('[data-maq-view="laminado"]');if(!host||$(PANEL_ID))return false;
   const panel=document.createElement('div');panel.id=PANEL_ID;panel.className='card';
-  panel.style.cssText='padding:18px;margin-bottom:16px;border-radius:16px';
+  panel.style.cssText='padding:12px 16px;margin:0 0 12px;border-radius:12px';
   panel.innerHTML=[
-    '<section class="tls-orca-workspace" aria-label="Laminador visual del taller"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px"><span aria-hidden="true" style="font-size:42px;line-height:1">🖨️</span><div><h2 style="font-size:23px;font-weight:800;margin:0">Taller · Laminador visual</h2><p style="margin:4px 0 0;color:var(--text2);font-size:13px">1. Archivo · 2. Impresora · 3. Laminar · 4. Ver capas</p></div></div>',
+    '<details class="tls-orca-workspace" aria-label="OrcaSlicer real del taller"><summary style="cursor:pointer;display:flex;align-items:center;gap:12px;list-style:none;padding:4px 0;font-weight:700"><span aria-hidden="true" style="font-size:25px">🔗</span><span>Conectar con OrcaSlicer real <small style="display:block;font-size:12px;color:var(--text2);font-weight:400">Opcional: laminar con los perfiles del iMac y revisar el G-code en el visor de abajo</small></span><span style="margin-left:auto;font-size:13px;color:var(--accent)">Configurar ▾</span></summary>',
     '<button id="tlsOrcaAdvancedToggle" type="button" class="btn btn-ghost btn-sm" style="margin-bottom:8px" aria-expanded="false">⚙️ Configuración experta</button><div style="padding-top:12px"><p style="font-size:13px;color:var(--text2)">1. Selecciona un STL/3MF (máximo 32 MB). 2. Elige la impresora. 3. Pulsa «Analizar y laminar». Después puedes ver las capas. Nada se imprime automáticamente.</p>',
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px">',
     '<label style="flex:2;min-width:180px;font-size:12px">Archivo STL/3MF<input id="tlsOrcaMcpFile" type="file" accept=".stl,.3mf" class="field-input" style="width:100%"></label>',
@@ -4305,7 +4305,7 @@ function mount(){
     '</div><p class="tls-orca-advanced" style="display:none;font-size:11px;color:var(--text3)">El análisis físico previo es local y obligatorio. La consulta opcional a IA usa solo dimensiones, datos técnicos y ajustes propuestos (sin enviar STL, 3MF ni G-code). La IA aporta consejos; solo los ajustes físicos simulados y aprobados se aplican.</p>',
     '<pre id="tlsOrcaMcpAIResult" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<p class="tls-orca-advanced" style="display:none;font-size:11px;color:var(--text3);margin-top:8px">Vista 3D: utiliza el visor nativo ya instalado. El laminado de producción sigue realizándose únicamente en OrcaSlicer (iMac). La visualización de trayectorias no puede corregir soportes ni garantiza la calidad física.</p>',
-    '<p id="tlsOrcaMcpMessage" role="status" aria-live="polite" style="font-size:13px;margin-top:12px;color:var(--text2)">Comprueba la conexión con OrcaSlicer para comenzar.</p></div></section>'
+    '<p id="tlsOrcaMcpMessage" role="status" aria-live="polite" style="font-size:13px;margin-top:12px;color:var(--text2)">Conexión pendiente de comprobar.</p></div></details>'
   ].join('');
   host.insertBefore(panel,host.firstChild);
   populate();
@@ -4357,7 +4357,7 @@ function mount(){
     });
   }
   // El espacio Taller permanece visible: se consulta el estado al ingresar, sin desplegables ocultos.
-  void status();void loadOrcaPresets();
+  panel.querySelector('details.tls-orca-workspace').addEventListener('toggle',event=>{if(event.target.open){void status();void loadOrcaPresets();}});
   return true;
 }
 
