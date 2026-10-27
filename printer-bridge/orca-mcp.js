@@ -12,7 +12,7 @@ const Auto=require('./orca-auto-profiles.js');
 const StlPreflight=require('./orca-stl-preflight.js');
 const Advisor=require('./orca-preslice-advisor.js');
 const Geometry3MF=require('./orca-3mf-geometry.js');
-const MAX_MODEL=12*1024*1024;
+const MAX_MODEL=32*1024*1024;
 const MAX_GCODE=32*1024*1024;
 const VALID_MODELS=new Set(['K1','K2','K2 Plus','Ender-5 Max','Giga']);
 const VALID_MATERIALS=new Set(['PLA','PLA+','PETG','TPU','TPU-95A','ABS','ASA','PA','PC']);
@@ -501,7 +501,7 @@ async function slice(request,env=process.env){
   if(request.filamentPresetName!=null&&(typeof request.filamentPresetName!=='string'||request.filamentPresetName.length>180))
     throw new Error('Nombre de perfil de filamento demasiado largo');
   if(typeof request.modelBase64!=='string'||request.modelBase64.length>Math.ceil(MAX_MODEL*4/3)+16)
-    throw new Error('Modelo vacio o demasiado grande (maximo 12 MB)');
+    throw new Error('Modelo vacio o demasiado grande (maximo 32 MB)');
   const model=Buffer.from(request.modelBase64,'base64');
   if(!model.length||model.length>MAX_MODEL)throw new Error('Modelo vacio o demasiado grande');
   // Before touching OrcaSlicer GUI: stop files which would open the
