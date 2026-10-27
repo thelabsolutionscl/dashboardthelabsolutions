@@ -5,7 +5,9 @@ dashboard o su cámara deja de verse. Escrito el 2026-08-12 después de resolver
 los cuatro casos de esta página en máquinas reales.
 
 Para cambiar la **versión de firmware** de una K1, ver
-[FIRMWARE_K1.md](FIRMWARE_K1.md).
+[FIRMWARE_K1.md](FIRMWARE_K1.md). Para cambiar la **interfaz de la pantalla
+táctil** por una con los colores TLS, ver
+[PANTALLA_HELIXSCREEN.md](PANTALLA_HELIXSCREEN.md).
 
 ---
 
