@@ -4163,8 +4163,8 @@ async function pollOrcaJob(id){
 async function slice(){
   if(busy)return;
   const file=$('tlsOrcaMcpFile')?.files?.[0],machine=machines().find(m=>String(m.id)===$('tlsOrcaMcpPrinter')?.value);
-  if(!file||!/\.((stl)|(3mf))$/i.test(file.name)||file.size>12*1024*1024||!file.size){
-    notice('Selecciona un STL o 3MF de hasta 12 MB.',true);return;
+  if(!file||!/\.((stl)|(3mf))$/i.test(file.name)||file.size>32*1024*1024||!file.size){
+    notice('Selecciona un STL o 3MF de hasta 32 MB.',true);return;
   }
   if(!machine||!MODEL_TYPES.has(machine.modelo)){notice('Selecciona una impresora compatible.',true);return;}
   busy=true;latest=null;
@@ -4276,35 +4276,35 @@ function mount(){
   const panel=document.createElement('div');panel.id=PANEL_ID;panel.className='card';
   panel.style.cssText='padding:22px;margin-bottom:20px;border-radius:18px';
   panel.innerHTML=[
-    '<section class="tls-orca-workspace" aria-label="Laminador visual del taller"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px"><span aria-hidden="true" style="font-size:42px;line-height:1">🖨️</span><div><h2 style="font-size:23px;font-weight:800;margin:0">Taller · Laminador visual</h2><p style="margin:4px 0 0;color:var(--text2);font-size:13px">OrcaSlicer conectado · preparar, visualizar y revisar antes de imprimir</p></div></div>',
-    '<div style="padding-top:12px"><p style="font-size:13px;color:var(--text2)">1. Elige archivo e impresora. 2. Abre el modelo en el visor. 3. Analiza y lamina en OrcaSlicer. 4. Revisa las capas reales. No se inicia la impresión automáticamente.</p>',
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">',
+    '<section class="tls-orca-workspace" aria-label="Laminador visual del taller"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px"><span aria-hidden="true" style="font-size:42px;line-height:1">🖨️</span><div><h2 style="font-size:23px;font-weight:800;margin:0">Taller · Laminador visual</h2><p style="margin:4px 0 0;color:var(--text2);font-size:13px">Carga tu archivo, elige calidad y revisa el resultado</p></div></div>',
+    '<button id="tlsOrcaAdvancedToggle" type="button" class="btn btn-ghost btn-sm" style="margin-bottom:8px" aria-expanded="false">⚙️ Opciones avanzadas</button><div style="padding-top:12px"><p style="font-size:13px;color:var(--text2)">1. Selecciona un STL/3MF (máximo 32 MB). 2. Elige la impresora. 3. Pulsa «Analizar y laminar». Después puedes ver las capas. Nada se imprime automáticamente.</p>',
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px">',
     '<label style="flex:2;min-width:180px;font-size:12px">Archivo STL/3MF<input id="tlsOrcaMcpFile" type="file" accept=".stl,.3mf" class="field-input" style="width:100%"></label>',
     '<label style="flex:2;min-width:180px;font-size:12px">Impresora<select id="tlsOrcaMcpPrinter" class="field-input" style="width:100%"></select></label>',
     '<label style="flex:1;min-width:110px;font-size:12px">Material<select id="tlsOrcaMcpMaterial" class="field-input" style="width:100%"><option>PLA</option><option>PLA+</option><option>PETG</option><option>TPU</option><option>TPU-95A</option><option>ABS</option><option>ASA</option><option>PA</option><option>PC</option></select></label>',
-    '<label style="flex:2;min-width:155px;font-size:12px">Perfil de proceso (opcional)<input id="tlsOrcaMcpProfile" class="field-input" maxlength="120" placeholder="Nombre exacto en OrcaSlicer" style="width:100%"></label>',
-    '<label style="flex:1;min-width:155px;font-size:12px">Unidades STL<select id="tlsOrcaMcpStlUnits" class="field-input" style="width:100%"><option value="auto">Auto seguro (verificar)</option><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option><option value="in">Pulgadas (in)</option></select></label>',
+    '<label class="tls-orca-advanced" style="display:none;flex:2;min-width:155px;font-size:12px">Perfil de proceso (opcional)<input id="tlsOrcaMcpProfile" class="field-input" maxlength="120" placeholder="Nombre exacto en OrcaSlicer" style="width:100%"></label>',
+    '<label class="tls-orca-advanced" style="display:none;flex:1;min-width:155px;font-size:12px">Unidades STL<select id="tlsOrcaMcpStlUnits" class="field-input" style="width:100%"><option value="auto">Auto seguro (verificar)</option><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option><option value="in">Pulgadas (in)</option></select></label>',
     '</div><p style="font-size:11px;color:var(--text3);margin-top:6px">STL no declara unidades: si es demasiado pequeño, el servidor bloqueará el archivo ANTES de importarlo en OrcaSlicer. Selecciona las unidades reales desde aquí para convertirlo sin diálogos en el iMac. Para 3MF se usan las unidades incluidas en el archivo.</p><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">',
-    '<button id="tlsOrcaMcpCheck" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button"><span aria-hidden="true" style="font-size:32px;line-height:1.1">🔌</span><span>Comprobar conexión</span></button>',
+    '<button id="tlsOrcaMcpCheck" style="display:none;min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm tls-orca-advanced" type="button"><span aria-hidden="true" style="font-size:32px;line-height:1.1">🔌</span><span>Comprobar conexión</span></button>',
     '<button id="tlsOrcaMcpSlice" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-primary btn-sm" type="button" disabled><span aria-hidden="true" style="font-size:32px;line-height:1.1">⚙️</span><span>Analizar y laminar</span></button>',
     '<button id="tlsOrcaMcpDownload" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button" disabled><span aria-hidden="true" style="font-size:32px;line-height:1.1">⬇️</span><span>Descargar G-code</span></button>',
     '<button id="tlsOrcaMcpViewModel" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button"><span aria-hidden="true" style="font-size:32px;line-height:1.1">🧊</span><span>Ver modelo 3D</span></button>',
     '<button id="tlsOrcaMcpViewGcode" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button" disabled><span aria-hidden="true" style="font-size:32px;line-height:1.1">🧱</span><span>Ver capas reales</span></button>',
     '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" id="tlsOrcaMcpAutoPreview" checked> Abrir visor de capas al terminar</label>',
     '</div><p id="tlsOrcaMcpActive" style="font-size:12px;margin-top:10px;color:var(--text2)">Perfil activo: comprobando OrcaSlicer…</p>',
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
+    '<div class="tls-orca-advanced" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpPreset" aria-label="Perfil de impresora real en OrcaSlicer" class="field-input" style="max-width:385px;flex:1"><option value="">Perfiles reales de OrcaSlicer…</option></select>',
     '<button id="tlsOrcaMcpActivate" class="btn btn-ghost btn-sm" type="button">Activar ahora (opcional)</button>',
     '</div><p style="font-size:11px;color:var(--text3)">La revisión previa comprueba geometría STL, temperatura, caudal, velocidades y diámetro de boquilla. Muestra los ajustes ANTES de laminar. Requiere tu confirmación y no inicia impresiones.</p>',
-    '<pre id="tlsOrcaMcpPreview" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
-    '<pre id="tlsOrcaMcpTechnical" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
+    '<details class="tls-orca-technical"><summary style="cursor:pointer;font-weight:600;padding:10px 0">🔍 Ver detalles del análisis</summary><pre id="tlsOrcaMcpPreview" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
+    '<pre id="tlsOrcaMcpTechnical" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre></details>',
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
     '<select id="tlsOrcaMcpGoal" class="field-input" aria-label="Objetivo del analisis" style="max-width:210px"><option value="calidad">Mejor acabado</option><option value="resistencia">Mayor resistencia</option><option value="rapidez">Menor tiempo</option></select>',
     '<button id="tlsOrcaMcpAI" class="btn btn-ghost btn-sm" type="button" disabled>Analizar pieza con IA</button>',
     '<label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="tlsOrcaMcpAutoAI"> Consultar IA ANTES de laminar (requiere API)</label>',
     '</div><p style="font-size:11px;color:var(--text3)">El análisis físico previo es local y obligatorio. La consulta opcional a IA usa solo dimensiones, datos técnicos y ajustes propuestos (sin enviar STL, 3MF ni G-code). La IA aporta consejos; solo los ajustes físicos simulados y aprobados se aplican.</p>',
     '<pre id="tlsOrcaMcpAIResult" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
-    '<p style="font-size:11px;color:var(--text3);margin-top:8px">Vista 3D: utiliza el visor nativo ya instalado. El laminado de producción sigue realizándose únicamente en OrcaSlicer (iMac). La visualización de trayectorias no puede corregir soportes ni garantiza la calidad física.</p>',
+    '<p class="tls-orca-advanced" style="display:none;font-size:11px;color:var(--text3);margin-top:8px">Vista 3D: utiliza el visor nativo ya instalado. El laminado de producción sigue realizándose únicamente en OrcaSlicer (iMac). La visualización de trayectorias no puede corregir soportes ni garantiza la calidad física.</p>',
     '<p id="tlsOrcaMcpMessage" role="status" aria-live="polite" style="font-size:13px;margin-top:12px;color:var(--text2)">Comprueba la conexión con OrcaSlicer para comenzar.</p></div></section>'
   ].join('');
   host.insertBefore(panel,host.firstChild);
@@ -4317,6 +4317,7 @@ function mount(){
     const unitSelect=$('tlsOrcaMcpStlUnits');
     if(unitSelect){unitSelect.disabled=/\.3mf$/i.test(ext);if(unitSelect.disabled)unitSelect.value='auto';}
   });
+  $('tlsOrcaAdvancedToggle').addEventListener('click',()=>{const open=$('tlsOrcaAdvancedToggle').getAttribute('aria-expanded')!=='true';$('tlsOrcaAdvancedToggle').setAttribute('aria-expanded',String(open));$('tlsOrcaAdvancedToggle').textContent=open?'⚙️ Ocultar opciones avanzadas':'⚙️ Opciones avanzadas';panel.querySelectorAll('.tls-orca-advanced').forEach(el=>{el.style.display=open?'':'none';});});
   $('tlsOrcaMcpCheck').addEventListener('click',status);
   $('tlsOrcaMcpSlice').addEventListener('click',slice);
   $('tlsOrcaMcpDownload').addEventListener('click',()=>{void download();});
