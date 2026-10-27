@@ -141,7 +141,7 @@ function prepare(data,{filename,units='auto'}={}){
     throw bad('Las dimensiones convertidas quedan fuera de un rango seguro. '+
       scaleDiagnosis(observed,units,factor)+' Verifica el tamaño antes de imprimir.',
       {...details,selectedUnits:units,resultingDimensions:selected.dimensions.map(n=>+n.toFixed(4))});
-  if(selected.buffer.length>12*1024*1024)throw bad('STL escalado excede el limite de 12 MB.');
+  if(selected.buffer.length>32*1024*1024)throw bad('STL escalado excede el limite de 32 MB.');
   return{buffer:selected.buffer,units:units==='auto'?'mm':units,changed:factor!==1,
     factor,dimensions:selected.dimensions.map(n=>+n.toFixed(3)),originalDimensions:originalSize,
     orientationRepaired:windingFixed,orientationFlippedFaces:windingFlippedFaces,
