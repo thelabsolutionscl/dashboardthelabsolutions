@@ -4274,10 +4274,10 @@ async function slice(){
 function mount(){
   const host=$('tab-maquinas');if(!host||$(PANEL_ID))return false;
   const panel=document.createElement('div');panel.id=PANEL_ID;panel.className='card';
-  panel.style.cssText='padding:14px 16px;margin-bottom:16px';
+  panel.style.cssText='padding:22px;margin-bottom:20px;border-radius:18px';
   panel.innerHTML=[
-    '<details><summary style="cursor:pointer;font-weight:700">🧩 OrcaSlicer MCP — Laminado real <span style="font-weight:400;font-size:12px;color:var(--text3)">· desde el taller</span></summary>',
-    '<div style="padding-top:12px"><p style="font-size:12px;color:var(--text2)">Un solo flujo: analiza geometría y límites de velocidad para calidad, permite ver el modelo 3D en el slicer instalado y lamina con OrcaSlicer. Después se visualizan las capas REALES sin relaminar ni iniciar impresión. Nunca borra proyectos sin guardar.</p>',
+    '<section class="tls-orca-workspace" aria-label="Laminador visual del taller"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px"><span aria-hidden="true" style="font-size:42px;line-height:1">🖨️</span><div><h2 style="font-size:23px;font-weight:800;margin:0">Taller · Laminador visual</h2><p style="margin:4px 0 0;color:var(--text2);font-size:13px">OrcaSlicer conectado · preparar, visualizar y revisar antes de imprimir</p></div></div>',
+    '<div style="padding-top:12px"><p style="font-size:13px;color:var(--text2)">1. Elige archivo e impresora. 2. Abre el modelo en el visor. 3. Analiza y lamina en OrcaSlicer. 4. Revisa las capas reales. No se inicia la impresión automáticamente.</p>',
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">',
     '<label style="flex:2;min-width:180px;font-size:12px">Archivo STL/3MF<input id="tlsOrcaMcpFile" type="file" accept=".stl,.3mf" class="field-input" style="width:100%"></label>',
     '<label style="flex:2;min-width:180px;font-size:12px">Impresora<select id="tlsOrcaMcpPrinter" class="field-input" style="width:100%"></select></label>',
@@ -4285,11 +4285,11 @@ function mount(){
     '<label style="flex:2;min-width:155px;font-size:12px">Perfil de proceso (opcional)<input id="tlsOrcaMcpProfile" class="field-input" maxlength="120" placeholder="Nombre exacto en OrcaSlicer" style="width:100%"></label>',
     '<label style="flex:1;min-width:155px;font-size:12px">Unidades STL<select id="tlsOrcaMcpStlUnits" class="field-input" style="width:100%"><option value="auto">Auto seguro (verificar)</option><option value="mm">Milímetros (mm)</option><option value="m">Metros (m)</option><option value="in">Pulgadas (in)</option></select></label>',
     '</div><p style="font-size:11px;color:var(--text3);margin-top:6px">STL no declara unidades: si es demasiado pequeño, el servidor bloqueará el archivo ANTES de importarlo en OrcaSlicer. Selecciona las unidades reales desde aquí para convertirlo sin diálogos en el iMac. Para 3MF se usan las unidades incluidas en el archivo.</p><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">',
-    '<button id="tlsOrcaMcpCheck" class="btn btn-ghost btn-sm" type="button">Comprobar MCP</button>',
-    '<button id="tlsOrcaMcpSlice" class="btn btn-primary btn-sm" type="button" disabled>Analizar figura y laminar</button>',
-    '<button id="tlsOrcaMcpDownload" class="btn btn-ghost btn-sm" type="button" disabled>Descargar G-code otra vez</button>',
-    '<button id="tlsOrcaMcpViewModel" class="btn btn-ghost btn-sm" type="button">Ver modelo 3D</button>',
-    '<button id="tlsOrcaMcpViewGcode" class="btn btn-ghost btn-sm" type="button" disabled>Ver capas reales (Orca)</button>',
+    '<button id="tlsOrcaMcpCheck" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button"><span aria-hidden="true" style="font-size:32px;line-height:1.1">🔌</span><span>Comprobar conexión</span></button>',
+    '<button id="tlsOrcaMcpSlice" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-primary btn-sm" type="button" disabled><span aria-hidden="true" style="font-size:32px;line-height:1.1">⚙️</span><span>Analizar y laminar</span></button>',
+    '<button id="tlsOrcaMcpDownload" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button" disabled><span aria-hidden="true" style="font-size:32px;line-height:1.1">⬇️</span><span>Descargar G-code</span></button>',
+    '<button id="tlsOrcaMcpViewModel" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button"><span aria-hidden="true" style="font-size:32px;line-height:1.1">🧊</span><span>Ver modelo 3D</span></button>',
+    '<button id="tlsOrcaMcpViewGcode" style="min-height:90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:14px;font-weight:700;border-radius:14px" class="btn btn-ghost btn-sm" type="button" disabled><span aria-hidden="true" style="font-size:32px;line-height:1.1">🧱</span><span>Ver capas reales</span></button>',
     '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" id="tlsOrcaMcpAutoPreview" checked> Abrir visor de capas al terminar</label>',
     '</div><p id="tlsOrcaMcpActive" style="font-size:12px;margin-top:10px;color:var(--text2)">Perfil activo: comprobando OrcaSlicer…</p>',
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">',
@@ -4305,7 +4305,7 @@ function mount(){
     '</div><p style="font-size:11px;color:var(--text3)">El análisis físico previo es local y obligatorio. La consulta opcional a IA usa solo dimensiones, datos técnicos y ajustes propuestos (sin enviar STL, 3MF ni G-code). La IA aporta consejos; solo los ajustes físicos simulados y aprobados se aplican.</p>',
     '<pre id="tlsOrcaMcpAIResult" aria-live="polite" style="white-space:pre-wrap;font:12px/1.5 inherit;color:var(--text2);margin-top:8px"></pre>',
     '<p style="font-size:11px;color:var(--text3);margin-top:8px">Vista 3D: utiliza el visor nativo ya instalado. El laminado de producción sigue realizándose únicamente en OrcaSlicer (iMac). La visualización de trayectorias no puede corregir soportes ni garantiza la calidad física.</p>',
-    '<p id="tlsOrcaMcpMessage" aria-live="polite" style="font-size:12px;margin-top:8px;color:var(--text2)">Abre el panel y comprueba la conexion con el Farm Controller.</p></div></details>'
+    '<p id="tlsOrcaMcpMessage" role="status" aria-live="polite" style="font-size:13px;margin-top:12px;color:var(--text2)">Comprueba la conexión con OrcaSlicer para comenzar.</p></div></section>'
   ].join('');
   host.insertBefore(panel,host.firstChild);
   populate();
@@ -4355,7 +4355,8 @@ function mount(){
       try{localStorage.setItem('tlsOrcaAutoVisual',autoPreview.checked?'yes':'no');}catch(_){}
     });
   }
-  panel.querySelector('details').addEventListener('toggle',e=>{if(e.target.open){populate();void status();void loadOrcaPresets();}});
+  // El espacio Taller permanece visible: se consulta el estado al ingresar, sin desplegables ocultos.
+  void status();void loadOrcaPresets();
   return true;
 }
 

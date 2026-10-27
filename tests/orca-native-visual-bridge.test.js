@@ -32,8 +32,8 @@ test('Orca panel can inspect model before slicing and real G-code layers only af
 });
 test('visual integration keeps native slicer and Orca engine separate',()=>{
  assert.match(native,/return\{loadFile,loadFiles,inspectOrcaModel,reviewOrca/);
- assert.match(dashboard,/Analizar figura y laminar/);
- assert.match(dashboard,/OrcaSlicer MCP — Laminado real/);
+ assert.match(dashboard,/Analizar y laminar/);
+ assert.match(dashboard,/Taller · Laminador visual/);
 });
 test('quality caps are separate from flow ceiling, and Orca read-backs every modified speed',()=>{
  assert.match(advisor,/const QUALITY_BASE=Object.freeze/);
