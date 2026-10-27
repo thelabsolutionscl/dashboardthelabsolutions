@@ -1162,7 +1162,7 @@ const server = http.createServer(async (req, res) => {
     if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
     const role=requireRole(req,res,'operator');if(!role)return;
     try{
-      const raw=await readBody(req,17*1024*1024);
+      const raw=await readBody(req,46*1024*1024);
       const body=JSON.parse(raw.toString('utf8')||'{}');
       const report=await OrcaMCP.preflight(body);
       if(body.aiBefore===true && report.ready){
@@ -1213,7 +1213,7 @@ const server = http.createServer(async (req, res) => {
     if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
     const role=requireRole(req,res,'operator');if(!role)return;
     try{
-      const raw=await readBody(req,17*1024*1024);
+      const raw=await readBody(req,46*1024*1024);
       const body=JSON.parse(raw.toString('utf8')||'{}');
       const started=OrcaJobs.start(body);
       return json(res,202,started);
@@ -1243,7 +1243,7 @@ const server = http.createServer(async (req, res) => {
     if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{ok:false,error:'method not allowed'});}
     const role=requireRole(req,res,'operator');if(!role)return;
     try{
-      const raw=await readBody(req,17*1024*1024);
+      const raw=await readBody(req,46*1024*1024);
       const body=JSON.parse(raw.toString('utf8')||'{}');
       const result=await OrcaMCP.slice(body);
       return json(res,200,result);
