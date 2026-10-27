@@ -261,9 +261,10 @@ async function preflight(request,env=process.env){
   const prepared=StlPreflight.prepare(source,{filename,units:request.stlUnits||'auto'});
   const geometry=/\.stl$/i.test(filename)?Advisor.summarizeGeometry(StlPreflight.parse(prepared.buffer)):
     Geometry3MF.describe(prepared.buffer);
-  return await withTools(settingsForOrca,20000,async(tools,client)=>{
+  return await withTools(settingsForOrca,60000,async(tools,client)=>{
     if(!['get_config','check_profile_physics','get_status'].every(x=>tools.some(t=>t.name===x)))
       throw Error('OrcaSlicer MCP no tiene los controles de analisis fisico previos al laminado');
+    if(request.autoSelect===true)await autoPrepareProfiles(tools,client,request);
     const status=await invoke(client,'get_status');
     if(status.slicing||status.is_slicing)throw Error('OrcaSlicer esta laminando. No se puede analizar otro modelo.');
     const active=Guard.activeProfiles(status);
@@ -406,7 +407,7 @@ async function status(env=process.env){
 }
 async function presets(env=process.env){
   const config=settings(env);
-  return await withTools(config,15000,async(tools,client)=>{
+  return await withTools(config,45000,async(tools,client)=>{
     if(!isLiveOrca(tools)||!tools.some(t=>t.name==='list_presets'))throw Error('OrcaSlicer no expone list_presets.');
     const [status,list]=await Promise.all([
       invoke(client,'get_status'),

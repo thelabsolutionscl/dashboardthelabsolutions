@@ -3996,7 +3996,7 @@ function token(){return typeof getPrinterTunnelToken==='function'?getPrinterTunn
 async function request(route,body){
   const url=base(),auth=token();
   if(!url||!auth)throw new Error('Empareja primero el dashboard con el Farm Controller del taller.');
-  const controller=new AbortController(),t=setTimeout(()=>controller.abort(),body?195000:12500);
+  const controller=new AbortController(),t=setTimeout(()=>controller.abort(),body?195000:(route==='/farm/orca/presets'?55000:12500));
   try{
     const response=await fetch(url+route,{
       method:body?'POST':'GET',
