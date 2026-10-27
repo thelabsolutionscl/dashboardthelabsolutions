@@ -71,7 +71,7 @@ test('las rutas MCP requieren roles y nunca invocan print/start',()=>{
   assert.match(routes,/requireRole\(req,res,'operator'\)/);
   assert.doesNotMatch(routes,/print\/start|enqueue\(/);
   const front=fs.readFileSync(path.join(__dirname,'../js/maquinas.js'),'utf8');
-  assert.match(front,/OrcaSlicer MCP — Laminado real/);
+  assert.match(front,/Taller · Laminador visual/);
   assert.match(front,/\/farm\/orca\/jobs/);
   assert.match(farm,/\/farm\/orca\/jobs/);
   assert.doesNotMatch(front.slice(front.indexOf('// ── OrcaSlicer por MCP:')),/_queueStartNext|print\/start/);
