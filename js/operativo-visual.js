@@ -639,6 +639,8 @@
     if(a==='quote-status'){
       const sep=arg.indexOf('::'),id=sep>=0?arg.slice(0,sep):'',estado=sep>=0?arg.slice(sep+2):'';
       if(!id||!estado||typeof updateCotizacionEstado!=='function')return;
+      // Rechazar abre el selector de motivo: el drawer modal lo dejaría inerte debajo.
+      if(estado==='Rechazada')$('opDrawer')?.close();
       await updateCotizacionEstado(id,estado);
       openRecord('quote',id);
       return;

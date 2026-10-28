@@ -268,3 +268,198 @@ test('ventas históricas conciliadas no vuelven a crear pedidos',()=>{
   const tray=extractFunction('_cotAprobadasSinPedido');
   assert.match(tray,/Venta histórica conciliada/);
 });
+
+// ── Motivo de rechazo y fecha de aprobación ─────────────────────────────
+// Se ejecuta updateCotizacionEstado real con DOM y Airtable simulados para
+// fijar el PATCH exacto que llega a Airtable.
+const AIRTABLE_MOTIVOS_RECHAZO = [
+  'Precio muy alto', 'Plazo muy largo', 'Eleigió competencia',
+  'Proyecto cancelado', 'Sin respuesta', 'Otro'
+];
+
+function extractDeclaration(pattern, name) {
+  const match = JS.match(pattern);
+  assert.ok(match, `Debe existir ${name}`);
+  return match[0];
+}
+
+function montarFlujoEstado({ fields = {}, notasRemotas = '', lecturaFalla = false } = {}) {
+  const elementos = {};
+  const el = (id) => elementos[id] || (elementos[id] = {
+    id, value: '', textContent: '', style: { display: '' }, _html: '',
+    set innerHTML(v) { this._html = v; this.value = ''; },
+    get innerHTML() { return this._html; },
+    focus() {}
+  });
+  el('motivoRechazoModal').style.display = 'none';
+  const calls = { writes: [], reads: [], toasts: [], confirms: [], pedidos: [], etapas: [] };
+  const state = { cotizacionesById: { recCot0000000001: { id: 'recCot0000000001', fields: {
+    'N° Cotización': '261028', 'Cliente': ['recCli0000000001'], 'Estado cotización': 'Enviada', ...fields
+  } } } };
+  const mocks = {
+    document: { getElementById: el },
+    state,
+    toast: (msg, type) => calls.toasts.push({ msg, type }),
+    confirm: (msg) => { calls.confirms.push(msg); return true; },
+    airtableWrite: async (table, method, id, payload) => { calls.writes.push({ table, method, id, fields: payload }); return { id, fields: payload }; },
+    _airtableConfig: () => ({ base: 'https://proxy.test/v0', headers: {} }),
+    airtableHttp: async (url) => {
+      calls.reads.push({ url, afterWrites: calls.writes.length });
+      if (lecturaFalla) return { ok: false, status: 503, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ id: 'recCot0000000001', fields: notasRemotas ? { 'Notas cotización': notasRemotas } : {} }) };
+    },
+    BASE_ID: 'appTest00000000000',
+    hoyCL: () => '2026-10-28',
+    resolveClienteName: () => 'Cliente de prueba',
+    escapeHtml: (s) => String(s),
+    setTimeout: (fn) => fn(),
+    _advanceEtapaCliente: async (...args) => { calls.etapas.push(args); },
+    crearPedidoDesdeCotizacion: async (id) => { calls.pedidos.push({ id, afterWrites: calls.writes.length }); return true; },
+    _driveConnected: () => false,
+    ensureCotFolder: async () => {},
+    loadAllDataSilent: async () => {},
+    renderCotizaciones: () => {},
+    renderOverview: () => {}
+  };
+  const code = [
+    extractDeclaration(/const MOTIVOS_RECHAZO_COT=\[[\s\S]*?\n\];/, 'MOTIVOS_RECHAZO_COT'),
+    extractDeclaration(/let _motivoRechazoResolve=null;/, '_motivoRechazoResolve'),
+    ...['pedirMotivoRechazo', 'onMotivoRechazoChange', 'closeMotivoRechazoModal', 'confirmarMotivoRechazo',
+      '_notasConMotivoRechazo', '_notasCotizacionActuales', 'updateCotizacionEstado'].map(extractFunction),
+    'return { MOTIVOS_RECHAZO_COT, updateCotizacionEstado, confirmarMotivoRechazo, closeMotivoRechazoModal };'
+  ].join('\n');
+  const api = new Function(...Object.keys(mocks), code)(...Object.values(mocks));
+  return { api, calls, el, id: 'recCot0000000001' };
+}
+
+test('el selector usa exactamente las opciones del singleSelect Motivo rechazo', () => {
+  const { api } = montarFlujoEstado();
+  assert.deepEqual(api.MOTIVOS_RECHAZO_COT.map(o => o.value), AIRTABLE_MOTIVOS_RECHAZO,
+    'Un valor distinto al de Airtable crearía una opción nueva por typecast');
+  const competencia = api.MOTIVOS_RECHAZO_COT.find(o => o.value === 'Eleigió competencia');
+  assert.equal(competencia.label, 'Eligió competencia', 'La etiqueta visible debe ir corregida');
+});
+
+test('el modal de motivo de rechazo existe una vez, con el estilo de los modales y handlers reales', () => {
+  assert.equal(count(/id=["']motivoRechazoModal["']/g, HTML), 1);
+  const start = HTML.indexOf('id="motivoRechazoModal"');
+  const modal = HTML.slice(start, HTML.indexOf('<!-- MODALES CLIENTE -->', start));
+  assert.match(HTML.slice(start - 60, start + 60), /class="modal-overlay"/);
+  assert.match(modal, /class="modal-backdrop"/);
+  assert.match(modal, /class="modal-card"/);
+  assert.match(modal, /class="modal-title"/);
+  assert.match(modal, /id="motivoRechazoSelect"/);
+  assert.match(modal, /id="motivoRechazoOtro"/);
+  const handlers = [...modal.matchAll(/\son(?:click|change)="([A-Za-z_$][\w$]*)\(/g)].map(m => m[1]);
+  assert.ok(handlers.length >= 3, 'Debe tener handlers de cancelar, cambiar y confirmar');
+  const missing = handlers.filter(name => !hasDefinition(name));
+  assert.deepEqual(missing, [], `Handlers sin definición: ${missing.join(', ')}`);
+});
+
+test('rechazar exige elegir un motivo y cancelar no escribe nada', async () => {
+  const { api, calls, el, id } = montarFlujoEstado();
+  const flujo = api.updateCotizacionEstado(id, 'Rechazada');
+  assert.equal(el('motivoRechazoModal').style.display, 'flex', 'Rechazar debe abrir el selector');
+  assert.deepEqual(calls.confirms, [], 'El selector reemplaza al confirm()');
+  api.confirmarMotivoRechazo();
+  assert.equal(el('motivoRechazoModal').style.display, 'flex', 'Sin motivo el modal sigue abierto');
+  assert.ok(calls.toasts.some(t => t.type === 'error' && /motivo/i.test(t.msg)));
+  api.closeMotivoRechazoModal();
+  await flujo;
+  assert.equal(el('motivoRechazoModal').style.display, 'none');
+  assert.deepEqual(calls.writes, [], 'Cancelar no debe cambiar el estado en Airtable');
+});
+
+test('rechazar envía estado y motivo en el mismo PATCH', async () => {
+  const { api, calls, el, id } = montarFlujoEstado();
+  const flujo = api.updateCotizacionEstado(id, 'Rechazada');
+  el('motivoRechazoSelect').value = 'Eleigió competencia';
+  api.confirmarMotivoRechazo();
+  await flujo;
+  assert.equal(calls.writes.length, 1, 'Debe ser un único PATCH');
+  assert.deepEqual(calls.writes[0], {
+    table: 'Cotizaciones', method: 'PATCH', id,
+    fields: { 'Estado cotización': 'Rechazada', 'Motivo rechazo': 'Eleigió competencia' }
+  });
+  assert.deepEqual(calls.pedidos, [], 'Rechazar no crea pedidos');
+  assert.deepEqual(calls.reads, [], 'Sin «Otro» no hace falta releer las notas');
+});
+
+test('con «Otro» el detalle es obligatorio y se agrega a Notas cotización sin pisar lo anterior', async () => {
+  const { api, calls, el, id } = montarFlujoEstado({
+    fields: { 'Notas cotización': 'copia local vieja' },
+    notasRemotas: 'Cliente pidió factura exenta.'
+  });
+  const flujo = api.updateCotizacionEstado(id, 'Rechazada');
+  el('motivoRechazoSelect').value = 'Otro';
+  api.confirmarMotivoRechazo();
+  assert.equal(el('motivoRechazoModal').style.display, 'flex', '«Otro» sin texto no debe cerrar el modal');
+  el('motivoRechazoOtro').value = '  Lo van a imprimir ellos mismos  ';
+  api.confirmarMotivoRechazo();
+  await flujo;
+  assert.equal(calls.reads.length, 1, 'Debe releer las notas en Airtable antes de anexar');
+  assert.equal(calls.reads[0].afterWrites, 0, 'La relectura debe ocurrir antes del PATCH');
+  assert.match(calls.reads[0].url, /\/Cotizaciones\/recCot0000000001$/);
+  assert.deepEqual(calls.writes[0].fields, {
+    'Estado cotización': 'Rechazada',
+    'Motivo rechazo': 'Otro',
+    'Notas cotización': 'Cliente pidió factura exenta.\n\n[28-10-2026] Motivo rechazo (Otro): Lo van a imprimir ellos mismos'
+  });
+});
+
+test('si no se pueden releer las notas, no se rechaza a ciegas', async () => {
+  const { api, calls, el, id } = montarFlujoEstado({ lecturaFalla: true });
+  const flujo = api.updateCotizacionEstado(id, 'Rechazada');
+  el('motivoRechazoSelect').value = 'Otro';
+  el('motivoRechazoOtro').value = 'Detalle';
+  api.confirmarMotivoRechazo();
+  await flujo;
+  assert.deepEqual(calls.writes, [], 'Sin las notas actuales el PATCH podría pisarlas');
+  assert.ok(calls.toasts.some(t => t.type === 'error'));
+});
+
+test('aprobar guarda la fecha de aprobación de hoy en Chile y mantiene el flujo del pedido', async () => {
+  const { api, calls, id } = montarFlujoEstado();
+  await api.updateCotizacionEstado(id, 'Aprobada');
+  assert.equal(calls.confirms.length, 1, 'Aprobar sigue pidiendo confirmación');
+  assert.deepEqual(calls.writes[0].fields, { 'Estado cotización': 'Aprobada', 'Fecha aprobación': '2026-10-28' });
+  assert.equal(calls.etapas.length, 1, 'Debe seguir avanzando la etapa del cliente');
+  assert.equal(calls.pedidos.length, 1, 'Debe seguir creando el pedido');
+  assert.equal(calls.pedidos[0].afterWrites, 1, 'El pedido se crea después de guardar la aprobación');
+  assert.match(extractFunction('updateCotizacionEstado'), /\['Fecha aprobación'\]=hoyCL\(\)/,
+    'La fecha debe salir de hoyCL() (America/Santiago, AAAA-MM-DD)');
+});
+
+test('aprobar una venta histórica conciliada guarda la fecha pero no crea pedido', async () => {
+  const { api, calls, id } = montarFlujoEstado({ fields: { 'Venta histórica conciliada': true } });
+  await api.updateCotizacionEstado(id, 'Aprobada');
+  assert.equal(calls.writes[0].fields['Fecha aprobación'], '2026-10-28');
+  assert.deepEqual(calls.pedidos, []);
+});
+
+test('otros estados no llevan motivo ni fecha de aprobación', async () => {
+  const { api, calls, id } = montarFlujoEstado();
+  await api.updateCotizacionEstado(id, 'Enviada');
+  assert.deepEqual(calls.writes[0].fields, { 'Estado cotización': 'Enviada' });
+});
+
+test('el análisis de pérdidas clasifica cada motivo del selector', () => {
+  const perdidaCat = new Function(
+    `${extractDeclaration(/const _PERDIDA_CATS=\[[\s\S]*?\n\];/, '_PERDIDA_CATS')}\n${extractFunction('_perdidaCat')}\nreturn _perdidaCat;`
+  )();
+  for (const motivo of AIRTABLE_MOTIVOS_RECHAZO)
+    assert.notEqual(perdidaCat(motivo), 'Sin motivo', `${motivo} debe contar como motivo registrado`);
+  assert.equal(perdidaCat('Precio muy alto'), 'Precio');
+  assert.equal(perdidaCat('Plazo muy largo'), 'Plazo / tiempo');
+  assert.equal(perdidaCat('Eleigió competencia'), 'Se fue a la competencia');
+  assert.equal(perdidaCat('Proyecto cancelado'), 'Ya no lo necesita');
+});
+
+test('rechazar desde Operativo cierra el drawer modal antes de abrir el selector', () => {
+  const op = fs.readFileSync(path.join(JS_DIR, 'operativo-visual.js'), 'utf8');
+  const branch = op.slice(op.indexOf("if(a==='quote-status')"), op.indexOf("if(a==='quote-linked-order')"));
+  const close = branch.search(/estado===['"]Rechazada['"]\)\$\(['"]opDrawer['"]\)\?\.close\(\)/);
+  const update = branch.indexOf('await updateCotizacionEstado(id,estado)');
+  assert.ok(close >= 0, 'Un <dialog> abierto con showModal() deja inerte el selector');
+  assert.ok(update > close, 'El drawer debe cerrarse antes de pedir el motivo');
+});
