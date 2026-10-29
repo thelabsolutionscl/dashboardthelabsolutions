@@ -27,6 +27,7 @@
  *   GET|POST /webhooks/linkedin/official (LinkedIn Lead Sync oficial — challenge + X-LI-Signature)
  *   GET|POST|DELETE /linkedin/subscriptions (admin Lead Sync — clave LINKEDIN_ADMIN_KEY)
  *   POST /webhooks/social       (Instagram/Facebook/TikTok comentarios+DMs vía Make — clave SOCIAL_WEBHOOK_KEY)
+ *   POST /webhooks/social/metrics, /publish/due, /publish/reserve, /publish (métricas y publicación vía Make — misma clave)
  *   POST /notify/printer        (farm-controller — impresión con error/finalizada → WhatsApp; clave WA_NOTIFY_KEY)
  *   POST /notify/test           (prueba de WhatsApp a nicanor/gustavo; clave WA_NOTIFY_KEY)
  *   GET|POST /whatsapp/webhook  (Meta Cloud API — verificación y mensajes entrantes; firma WA_APP_SECRET)
@@ -176,6 +177,9 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/webhooks/social/metrics") {
         return await handleSocialMetrics(request, env, cors);
+      }
+      if (request.method === "POST" && url.pathname === "/webhooks/social/publish/due") {
+        return await handleSocialPublishDue(request, env, cors);
       }
       if (request.method === "POST" && url.pathname === "/webhooks/social/publish/reserve") {
         return await handleSocialPublishReserve(request, env, cors);
@@ -2496,7 +2500,68 @@ async function handleSocialPublishReserve(request,env,cors){
   const gate=await stub.fetch("https://social-guard.internal/publish-reserve",{method:"POST",
     headers:{"Content-Type":"application/json"},body:JSON.stringify({postId,idempotencyKey:idem})});
   const out=await gate.json().catch(()=>({}));
+  // A lo más una vez: si el conector cae entre publicar y confirmar, el post queda
+  // "Publicando" y la cola no lo vuelve a entregar cuando venza el lease.
+  if(gate.ok&&out?.reserved&&!out?.replayed)
+    await airtableUpdateTolerant(env,"Social_Posts",postId,{"Estado transporte":"Publicando"});
   return json(out,gate.status,cors);
+}
+/* Cola de publicación para el conector (Make): posts aprobados cuya hora llegó.
+ * Make no lee Airtable; pide esta lista y luego sigue reserve → publicar → confirmar.
+ * Un post que la red no aceptaría (sin media, formato, caption largo, hora vencida)
+ * queda en "Estado transporte = Error" para que se vea en el dashboard y no se
+ * reintente en cada ciclo. "Publicando" (reservado sin confirmar) tampoco se
+ * reentrega. Volver a aprobarlo desde el dashboard lo devuelve a la cola. */
+const SOCIAL_PUBLISH_MAX_DELAY_MS=48*60*60*1000;
+function socialPublishCandidate(post,nowMs){
+  const f=post?.fields||{};
+  let approval;try{approval=JSON.parse(String(f["Aprobación editorial"]||""));}catch(_){}
+  // Sin aprobación humana vigente no se toca: la reserva tampoco lo aceptaría.
+  if(f.Estado!=="Programado"||approval?.status!=="approved"||String(f["Idempotency key"]||"")!=="social-post/"+post.id)
+    return {skip:true};
+  if(f["External Post ID"]||/^(Error|Publicando)$/.test(String(f["Estado transporte"]||"")))return {skip:true};
+  const at=Date.parse(String(f["Fecha programada"]||""));
+  if(!Number.isFinite(at)||at>nowMs)return {skip:true};
+  if(nowMs-at>SOCIAL_PUBLISH_MAX_DELAY_MS)
+    return {error:"La hora programada venció hace más de 48 h y no se publicó. Reagéndalo para publicarlo."};
+  const media=String(f["Media URL"]||"").trim();
+  if(!media)return {error:"Instagram necesita una imagen JPG o un video MP4/MOV en Media URL."};
+  let ext="";
+  try{const u=new URL(media);if(u.protocol!=="https:")throw new Error("http");ext=((u.pathname.match(/\.([a-z0-9]+)$/i)||[])[1]||"").toLowerCase();}
+  catch(_){return {error:"Media URL debe ser un enlace HTTPS público."};}
+  if(/^(png|webp|gif|heic|heif|avif|bmp|tiff?)$/.test(ext))
+    return {error:"Instagram solo acepta fotos JPG (o video MP4/MOV). Convierte la imagen a JPG."};
+  const kind=/^(mp4|mov)$/.test(ext)?"reel":"photo";
+  const caption=[String(f.Copy||"").trim(),String(f.Hashtags||"").trim()].filter(Boolean).join("\n\n");
+  if(caption.length>2200)return {error:`El texto tiene ${caption.length} caracteres; Instagram admite 2200.`};
+  const tags=(caption.match(/#[^\s#]+/g)||[]).length;
+  if(tags>30)return {error:`El texto tiene ${tags} hashtags; Instagram admite 30.`};
+  return {post:{post_record_id:post.id,idempotency_key:"social-post/"+post.id,media_url:media,media_kind:kind,
+    caption,scheduled_at:new Date(at).toISOString()}};
+}
+async function handleSocialPublishDue(request,env,cors){
+  if(!(await socialAuth(request,env)))return json({ok:false,error:"No autorizado"},401,cors);
+  if(!env.AIRTABLE_TOKEN||!env.AIRTABLE_BASE_ID)return json({ok:false,error:"Airtable no configurado"},503,cors);
+  const b=(await readJson(request))||{};
+  const red=normalizeSocial({red:b.red||"instagram"}).red;
+  if(red!=="Instagram")return json({ok:false,error:"Por ahora solo se publica en Instagram"},422,cors);
+  const limit=Math.min(5,Math.max(1,Number(b.limit)||3));
+  const q=new URLSearchParams({pageSize:"50",
+    filterByFormula:`AND({Red}='${socialEsc(red)}',{Estado}='Programado',{External Post ID}='',NOT({Estado transporte}='Error'),NOT({Estado transporte}='Publicando'))`,
+    "sort[0][field]":"Fecha programada","sort[0][direction]":"asc"});
+  const r=await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Social_Posts")}?${q}`,{
+    headers:{Authorization:"Bearer "+env.AIRTABLE_TOKEN}});
+  if(!r.ok)return json({ok:false,error:await airtableErr(r)},503,cors);
+  const now=Date.now(),posts=[],rejected=[];
+  for(const rec of (await r.json())?.records||[]){
+    const c=socialPublishCandidate(rec,now);
+    if(c.post&&posts.length<limit)posts.push(c.post);
+    else if(c.error){
+      await airtableUpdateTolerant(env,"Social_Posts",rec.id,{"Estado transporte":"Error","Error publicación":c.error});
+      rejected.push({post_record_id:rec.id,error:c.error});
+    }
+  }
+  return json({ok:true,red,posts,rejected},200,cors);
 }
 async function handleSocialPublish(request,env,cors){
   if(!(await socialAuth(request,env)))return json({ok:false,error:"No autorizado"},401,cors);
@@ -2529,7 +2594,8 @@ async function handleSocialPublish(request,env,cors){
   const commitGate=await stub.fetch("https://social-guard.internal/publish-commit",{method:"POST",
     headers:{"Content-Type":"application/json"},body:JSON.stringify({postId,idempotencyKey:idem,externalId,permalink,publishedAt})});
   if(!commitGate.ok)return json({ok:false,error:"Publicación no estaba reservada o ya cerrada"},409,cors);
-  await airtableUpdateTolerant(env,"Social_Posts",postId,{Estado:"Publicado","Fecha publicación":publishedAt,
+  // Instagram entrega "2026-10-29T01:00:00+0000"; Airtable espera ISO con dos puntos en el offset.
+  await airtableUpdateTolerant(env,"Social_Posts",postId,{Estado:"Publicado","Fecha publicación":new Date(publishedAt).toISOString(),
     "External Post ID":externalId,Permalink:permalink,"Estado transporte":"Confirmado",
     "Intentos publicación":attempts,"Error publicación":""});
   await socialHeartbeat(env,"social-publish","Social Publish","Publicación confirmada "+externalId);
