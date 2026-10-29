@@ -1722,13 +1722,16 @@ async function redesAutoSchedule(){
 
 // ── Modo automático: panel de estado + piloto automático de contenido ──
 let _redesBusyAuto=false;
-// ¿Qué está fluyendo solo? Se deriva de la frescura de los datos (últimos 7 días).
+// ¿Qué está fluyendo solo? Se deriva del último heartbeat de cada integración en Automations.
+// Cada una tiene su propia ventana según cómo corre en Make: la escucha solo late cuando
+// entra un comentario, las métricas una vez al día (08:47) y la publicación cada pocos minutos.
+const _REDES_HEARTBEAT_MAX={'social-listen':7*24*3600*1000,'social-metrics':36*3600*1000,'social-publish':30*60*1000};
 function _redesAutoStatus(){
-  const rows=state.socialAutomations||[],now=Date.now(),MAX=30*60*1000;
+  const rows=state.socialAutomations||[],now=Date.now();
   const alive=id=>{
     const r=rows.find(x=>String(x.fields?.ID||'')===id),f=r?.fields||{};
     const t=Date.parse(f.UltimaEjecucion||f['Ultima Ejecucion']||'')||0;
-    return !!r&&/activ|trabaj/i.test(String(f.Estado||''))&&t>0&&(now-t)<=MAX;
+    return !!r&&/activ|trabaj/i.test(String(f.Estado||''))&&t>0&&(now-t)<=_REDES_HEARTBEAT_MAX[id];
   };
   return {listen:alive('social-listen'),metrics:alive('social-metrics'),publish:alive('social-publish')};
 }

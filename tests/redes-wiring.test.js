@@ -278,6 +278,24 @@ test('el panel automático usa heartbeats de Automations', () => {
   assert.doesNotMatch(status,/socialPosts|socialInteractions|socialMetrics/);
 });
 
+test('cada heartbeat social usa la ventana de su frecuencia real', () => {
+  const max=REDES.match(/const _REDES_HEARTBEAT_MAX=\{[^\n]*\};/);
+  assert.ok(max,'falta _REDES_HEARTBEAT_MAX');
+  const status=fn('_redesAutoStatus');
+  const H=3600*1000,now=Date.now();
+  const row=(id,agoMs)=>({fields:{ID:id,Estado:'Activo',UltimaEjecucion:new Date(now-agoMs).toISOString()}});
+  const run=rows=>new Function('state',`${max[0]}\n${status}\nreturn _redesAutoStatus();`)({socialAutomations:rows});
+  // Métricas diarias: siguen activas 20 h después; caen tras 36 h sin snapshot.
+  assert.equal(run([row('social-metrics',20*H)]).metrics,true);
+  assert.equal(run([row('social-metrics',40*H)]).metrics,false);
+  // Escucha: depende de que entren comentarios; se tolera una semana sin eventos.
+  assert.equal(run([row('social-listen',3*24*H)]).listen,true);
+  assert.equal(run([row('social-listen',8*24*H)]).listen,false);
+  // Publicación corre cada pocos minutos: 30 min sin heartbeat ya es una caída.
+  assert.equal(run([row('social-publish',10*60*1000)]).publish,true);
+  assert.equal(run([row('social-publish',2*H)]).publish,false);
+});
+
 test('piloto y auto-programación pasan por revisión editorial', () => {
   const fill=fn('_redesFillGapsCore'),auto=fn('redesAutoSchedule');
   assert.match(fill,/En revisión/);
