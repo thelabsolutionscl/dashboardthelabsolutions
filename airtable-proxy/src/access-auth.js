@@ -269,6 +269,7 @@ function accessAllows(identity,method,path){
   if(path==='/tts/elevenlabs')return ['sales','operator','finance','admin'].includes(identity.role)&&method==='POST';
   if(path==='/newsletter/send')return method==='POST'&&admin;
   if(path==='/social/lead')return method==='POST'&&(admin||identity.email==='marketing@thelab.solutions');
+  if(path==='/social/media')return method==='POST'&&(admin||identity.email==='marketing@thelab.solutions');
   if(path==='/office/snapshot')return method==='GET'&&['viewer','sales','operator','finance','admin'].includes(identity.role);
   if(path==='/office/execution')return method==='POST'&&['sales','operator','finance','admin'].includes(identity.role);
   if(path==='/office/incidents')return ['operator','admin'].includes(identity.role)&&['GET','POST','PATCH'].includes(method);

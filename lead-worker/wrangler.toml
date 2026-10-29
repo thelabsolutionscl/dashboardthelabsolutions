@@ -83,6 +83,8 @@ WA_GRAPH_VERSION = "v25.0"
 # ── KV opcional para rate-limiting ─────────────────────────────────────
 # Crear con:  npx wrangler kv namespace create LEADS_RL
 # y luego descomentar y pegar el id:
+# También guarda las imágenes de Redes (social-media:<id>.jpg) que sube
+# airtable-proxy (binding AI_BUDGET, mismo namespace) y se sirven en /media/.
 [[kv_namespaces]]
 binding = "RL"
 id = "c148848321344f60939fa71a51d050c6"

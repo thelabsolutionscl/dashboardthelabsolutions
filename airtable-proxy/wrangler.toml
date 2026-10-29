@@ -44,8 +44,12 @@ compatibility_date = "2024-09-01"
 ANTHROPIC_DAILY_BUDGET_USD = "0.50"
 # Tope conservador por solicitud para impedir una generación accidental enorme.
 ANTHROPIC_REQUEST_BUDGET_USD = "0.10"
+# Imágenes de Redes ("Subir imagen"): se guardan en el KV AI_BUDGET con prefijo
+# social-media: y las sirve sin sesión thelab-leads-worker en /media/<id>.jpg.
+SOCIAL_MEDIA_PUBLIC_BASE = "https://thelab-leads-worker.wast3dspa.workers.dev"
 
 # Reutiliza el KV ya disponible en esta cuenta Cloudflare para el control de costo.
+# Es el mismo namespace que RL en lead-worker; también guarda social-media:<id>.jpg.
 [[kv_namespaces]]
 binding = "AI_BUDGET"
 id = "c148848321344f60939fa71a51d050c6"

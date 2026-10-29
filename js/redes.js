@@ -363,8 +363,8 @@ function redesConnectGuide(){
       <div class="redes-gtip">Los <b>DMs</b> no entran por esta vía: respóndelos desde la app de Instagram.</div>`)}
     ${step(2,'Métricas → analítica (diario, 08:47)',`
       Alcance, interacciones, clics al perfil y seguidores nuevos del día anterior. Alimentan las <b>Métricas</b>, la tendencia y el <b>mejor momento para publicar</b>.`)}
-    ${step(3,'Publicación automática (cada 15 min)',`
-      Pon una imagen <b>JPG</b> o un video <b>MP4/MOV</b> en <code>Media URL</code> (enlace HTTPS público, no Google Drive) y pulsa <b>📅 Programar</b>. Al llegar la hora, Make lo publica y la tarjeta pasa a <b>Publicado</b> con su enlace.
+    ${step(3,'Publicación automática (cada 45 min, 1 post por vez)',`
+      En <b>✏ Editar</b> pulsa <b>📤 Subir imagen</b> (la convierte sola a JPG en el formato de Instagram) o pega en <code>Media URL</code> un enlace HTTPS público a un JPG o video MP4/MOV (no Google Drive). Luego pulsa <b>📅 Programar</b>. Al llegar la hora, Make lo publica y la tarjeta pasa a <b>Publicado</b> con su enlace.
       <div class="redes-gtip">Si algo falla, la tarjeta muestra el motivo: corrígelo y pulsa <b>📅 Reagendar</b>. Un post cuya hora venció hace más de 48 h no se publica solo.</div>`)}
     <p class="redes-gfoot">🔁 Meta pide renovar la conexión cada ~60 días (Make → Connections → Reauthorize). LinkedIn, TikTok y Facebook siguen en modo asistido: genera, pulsa <b>Copiar copy</b> y publica a mano.</p>`;
   const m=document.getElementById('redesGuideModal'); if(m) m.style.display='flex';
@@ -1839,9 +1839,65 @@ function redesOpenEdit(id){
   const fe=document.getElementById('redesEditFecha');
   if(fe){ if(f['Fecha programada']){const d=new Date(f['Fecha programada']);fe.value=`${d.getFullYear()}-${_redesPad(d.getMonth()+1)}-${_redesPad(d.getDate())}T${_redesPad(d.getHours())}:${_redesPad(d.getMinutes())}`;} else fe.value=''; }
   redesHashPopulate(f['Red']||'Instagram');
+  const st=document.getElementById('redesUploadStatus'); if(st) st.textContent='Se convierte a JPG en el formato que acepta Instagram.';
   document.getElementById('redesEditModal').style.display='flex';
 }
 function redesCloseEdit(){ _redesEditId=null; const m=document.getElementById('redesEditModal'); if(m) m.style.display='none'; }
+
+// ── Subir imagen desde el editor → JPG dentro de los límites de Instagram → enlace público ──
+// Instagram solo publica JPG de hasta 1440 px de ancho y proporción entre 4:5 y 1.91:1.
+// Se convierte en el navegador sin recortar: si la proporción no cabe se agregan bandas
+// blancas. El proxy exige la sesión Access y lo guarda; el Worker lo sirve en /media/.
+const _REDES_IG_RATIO_MIN=0.8,_REDES_IG_RATIO_MAX=1.91,_REDES_IG_MAX_W=1440,_REDES_IG_MAX_BYTES=8*1024*1024;
+function _redesFitIg(w,h){
+  const s=Math.min(1,_REDES_IG_MAX_W/Math.max(w,h*_REDES_IG_RATIO_MIN));
+  const dw=Math.max(1,Math.round(w*s)),dh=Math.max(1,Math.round(h*s));
+  let cw=dw,ch=dh;
+  if(cw/ch<_REDES_IG_RATIO_MIN)cw=Math.ceil(ch*_REDES_IG_RATIO_MIN);
+  if(cw/ch>_REDES_IG_RATIO_MAX)ch=Math.ceil(cw/_REDES_IG_RATIO_MAX);
+  return {cw,ch,dw,dh,dx:Math.floor((cw-dw)/2),dy:Math.floor((ch-dh)/2),padded:cw!==dw||ch!==dh};
+}
+function _redesLoadImg(file){
+  return new Promise((ok,ko)=>{const u=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(u);ok(img);};
+    img.onerror=()=>{URL.revokeObjectURL(u);ko(new Error('no se pudo leer la imagen (prueba con JPG o PNG)'));};
+    img.src=u;});
+}
+async function _redesToIgJpeg(file){
+  const img=await _redesLoadImg(file),f=_redesFitIg(img.naturalWidth,img.naturalHeight);
+  const c=document.createElement('canvas');c.width=f.cw;c.height=f.ch;
+  const g=c.getContext('2d');g.fillStyle='#ffffff';g.fillRect(0,0,f.cw,f.ch);
+  g.imageSmoothingQuality='high';g.drawImage(img,f.dx,f.dy,f.dw,f.dh);
+  let blob=null;
+  for(const q of [0.9,0.8,0.7]){blob=await new Promise(r=>c.toBlob(r,'image/jpeg',q));if(blob&&blob.size<=_REDES_IG_MAX_BYTES)break;}
+  if(!blob||blob.size>_REDES_IG_MAX_BYTES)throw new Error('no se pudo dejar la imagen bajo 8 MB');
+  return {blob,...f};
+}
+function redesUploadMediaPick(){
+  if(_redesDemo){toast('En modo demo no se suben imágenes','info');return;}
+  document.getElementById('redesUploadFile')?.click();
+}
+async function redesUploadMedia(input){
+  const file=input?.files?.[0]; if(input) input.value=''; if(!file) return;
+  if(!/^image\//.test(file.type||'')){toast('Elige un archivo de imagen','error');return;}
+  if(file.size>40*1024*1024){toast('La imagen pesa más de 40 MB','error');return;}
+  const cfg=typeof _proxyCfg==='function'?_proxyCfg():null;
+  if(!cfg?.url||!cfg?.key){toast('Proxy seguro no configurado','error');return;}
+  const btn=document.getElementById('redesUploadBtn'),st=document.getElementById('redesUploadStatus');
+  if(btn) btn.disabled=true; if(st) st.textContent='Convirtiendo a JPG…';
+  try{
+    const j=await _redesToIgJpeg(file);
+    if(st) st.textContent='Subiendo…';
+    const r=await fetch(cfg.url.replace(/\/$/,'')+'/social/media',{method:'POST',credentials:'include',redirect:'error',
+      headers:{'X-App-Key':cfg.key,'Content-Type':'image/jpeg'},body:j.blob});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!/^https:\/\//.test(String(d.url||'')))throw new Error(d.error||('HTTP '+r.status));
+    const inp=document.getElementById('redesEditMedia'); if(inp) inp.value=d.url;
+    if(st) st.textContent=`✓ JPG ${j.cw}×${j.ch}${j.padded?' con bordes blancos para el formato de Instagram':''}. Pulsa Guardar.`;
+    toast('Imagen subida ✓ — pulsa Guardar para dejarla en el post','success');
+  }catch(e){if(st) st.textContent='No se pudo subir la imagen.'; toast('No se pudo subir: '+e.message,'error');}
+  finally{if(btn) btn.disabled=false;}
+}
 async function redesSaveEdit(){
   if(!_redesEditId)return;
   const p=(state.socialPosts||[]).find(x=>x.id===_redesEditId);if(!p)return;

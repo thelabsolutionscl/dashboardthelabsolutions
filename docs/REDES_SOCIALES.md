@@ -448,7 +448,7 @@ puerta de escritura (`/webhooks/social*`), así que guard, idempotencia y heartb
 | Webhook `Instagram @thelab.solutions — Comentarios` | `2996538` | Tipo `instagram-business`, evento `comments`. |
 | Escenario `The Lab — Instagram · Comentarios → Worker` | `6818998` | Instantáneo. Descarta comentarios de la propia cuenta (respuestas nuestras). `POST /webhooks/social`. |
 | Escenario `The Lab — Instagram · Métricas diarias → Worker` | `6819061` | Diario 08:47 America/Santiago. `POST /webhooks/social/metrics` con la fecha de ayer. |
-| Escenario `The Lab — Instagram · Publicación automática (Worker)` | `6819526` | Cada 15 min. Pide la cola al Worker y publica foto (JPG) o reel (MP4/MOV). Ver §10.4. |
+| Escenario `The Lab — Instagram · Publicación automática (Worker)` | `6819526` | Cada 45 min, máximo 1 post por ciclo. Pide la cola al Worker y publica foto (JPG) o reel (MP4/MOV). Ver §10.4. |
 
 Ambos escenarios envían `X-Social-Webhook-Key`, que debe coincidir con el secreto
 `SOCIAL_WEBHOOK_KEY` del Worker `thelab-leads-worker` (Cloudflare → Settings → Variables and Secrets).
@@ -488,7 +488,7 @@ Meta agrupa los días en hora del Pacífico, así que el día guardado puede dif
 1. **Aprobar** (dashboard): `📅 Programar` exige `Media URL` para Instagram y deja `Estado = Programado`,
    `Aprobación editorial.status = approved`, `Idempotency key = social-post/<recordId>` y
    `Estado transporte = Pendiente`.
-2. **Cola** (`POST /webhooks/social/publish/due`, cada 15 min desde Make): el Worker devuelve hasta 3 posts
+2. **Cola** (`POST /webhooks/social/publish/due`, cada 45 min desde Make con `limit: 1`): el Worker devuelve hasta 1 post
    aprobados cuya hora llegó, con `caption = Copy + Hashtags` y `media_kind` (`photo` | `reel` según la
    extensión). Lo que Instagram rechazaría (sin media, PNG/WebP, caption > 2200, > 30 hashtags, o hora
    vencida hace > 48 h) queda en `Estado transporte = Error` con el motivo en `Error publicación`, y la
@@ -505,3 +505,19 @@ reagendar. Es preferible un post a confirmar a mano que uno publicado dos veces.
 
 Requisitos de la imagen (Meta): JPG, máx. 8 MB, proporción entre 4:5 y 1.91:1, URL pública HTTPS (Google
 Drive no sirve). Video: MP4/MOV H.264/HEVC, 3 s a 15 min.
+
+### 10.5 Subir imagen desde el editor
+
+`✏ Editar → 📤 Subir imagen` resuelve el enlace público sin servicios externos:
+
+1. El navegador convierte la imagen a **JPG** (calidad 0.9, baja a 0.8/0.7 si supera 8 MB), máx. 1440 px de
+   ancho, y si la proporción no cabe entre 4:5 y 1.91:1 agrega **bandas blancas** (no recorta).
+2. `POST /social/media` en **airtable-proxy**: exige sesión Cloudflare Access con rol `admin` o
+   `marketing@thelab.solutions` (igual que `/social/lead`), `Content-Type: image/jpeg`, ≤ 8 MB y firma JPEG
+   `FF D8 FF`. Guarda `social-media:<uuid>.jpg` en el KV `AI_BUDGET` por 180 días.
+3. `GET /media/<uuid>.jpg` en **thelab-leads-worker** (mismo KV, binding `RL`) la sirve sin sesión como
+   `image/jpeg` con `nosniff`, porque Instagram la descarga desde sus servidores. Solo responde a UUIDs
+   válidos; cualquier otra ruta da 404 sin consultar el KV.
+
+La URL resultante queda en `Media URL`; hay que pulsar **Guardar**. Las imágenes son públicas para quien
+tenga el enlace (igual que al publicarse en Instagram): no subir material confidencial.
