@@ -1,5 +1,365 @@
 {
   "schema": 1,
-  "provider": "Corfo — detección previa a revisión humana",
-  "candidates": []
+  "provider": "Corfo, ProChile y Start-Up Chile — detección previa a revisión humana",
+  "candidates": [
+    {
+      "source": "https://startupchile.org/postula/build/",
+      "program": "Start-Up Chile — Build, Ignite y Growth (vigilar noviembre 2026)",
+      "markers": [
+        "convocatoria! west east keyboard_backspace ¿QUÉ ES BUILD? Build es un programa de pre-aceleración de 4 meses par"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.cl/sites/cpp/inf/sumate-a-innovar",
+      "program": "Corfo — Súmate a Innovar",
+      "markers": [
+        "26/05/2026",
+        "15/07/2026",
+        "31/08/2026",
+        "19/05/2026",
+        "07/07/2026",
+        "08/06/2026",
+        "06/07/2026",
+        "03/08/2026",
+        "30/04/2026",
+        "01/07/2026",
+        "01/10/2026",
+        "06/05/2026",
+        "19/06/2026",
+        "25/08/2026",
+        "06/03/2026",
+        "07/05/2026",
+        "14/08/2026",
+        "21/10/2025",
+        "20/01/2026",
+        "23/03/2026"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/capital-humano-para-la-innovacion-2025/",
+      "program": "Corfo — Capital Humano para la Innovación 2025–2026",
+      "markers": [
+        "18/11/2025",
+        "28/05/2026",
+        "04/12/2025",
+        "05/05/2026",
+        "25/05/2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Cerradas Apertura: 18/11/2025 17:00 hrs Cierre: 28/05/2026 17:00 hrs Disponible en los siguientes te",
+        "Apertura: 18/11/2025 17:00 hrs Cierre: 28/05/2026 17:00 hrs Disponible en los siguientes territorios Todo Chil",
+        "Postulaciones Cerradas Apertura: 18/11/2025 17:00 hrs Cierre: 28/05/2026 17:00 hrs Disponible en los siguientes territorios"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/consolida-y-expande-innovacion-2026/",
+      "program": "Corfo — Consolida y Expande Innovación 2026",
+      "markers": [
+        "05/05/2026",
+        "18/06/2026",
+        "12/05/2026",
+        "19/05/2026",
+        "09/06/2026",
+        "19/06/2026",
+        "10/09/2026",
+        "05/11/2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Cerradas Apertura: 05/05/2026 17:00 hrs Cierre: 18/06/2026 17:00 hrs Disponible en los siguientes te",
+        "Apertura: 05/05/2026 17:00 hrs Cierre: 18/06/2026 17:00 hrs Disponible en los siguientes territorios Todo Chil",
+        "Postulaciones Cerradas Apertura: 05/05/2026 17:00 hrs Cierre: 18/06/2026 17:00 hrs Disponible en los siguientes territorios"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea_valida_eureka/",
+      "program": "Corfo — Crea y Valida Eureka (I+D internacional)",
+      "markers": [
+        "25/06/2026",
+        "08/09/2026",
+        "4 de junio de 2026",
+        "23 de julio de 2026",
+        "29 de julio de 2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Permanentes Disponible en los siguientes territorios Todo Chile ¿Qué es? Es un apoyo que cofinancia"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/",
+      "program": "Corfo — Crea y Valida 2026",
+      "markers": [
+        "19/05/2026",
+        "04/08/2026",
+        "09 de junio de 2026",
+        "04 de agosto de 2026",
+        "20-05-2026",
+        "10-06-2026",
+        "30-06-2026",
+        "09/06/2026",
+        "27/11/2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Cerradas Apertura: 19/05/2026 17:00 hrs Cierre: 04/08/2026 17:00 hrs Disponible en los siguientes te",
+        "convocatoria considera las siguientes dos Fases consecutivas, cuya descripción y requisitos particulares están co",
+        "postulaciones de proyectos. Te invitamos a participar en las siguientes instancias de orientación: 20-05-2026: Cha",
+        "Apertura: 19/05/2026 17:00 hrs Cierre: 04/08/2026 17:00 hrs Disponible en los siguientes territorios Todo Chil",
+        "Postulaciones Cerradas Apertura: 19/05/2026 17:00 hrs Cierre: 04/08/2026 17:00 hrs Disponible en los siguientes territorios"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/desarrolla-inversion-productiva-region-metropolitana-foco-descarbonizacion-2026/",
+      "program": "Corfo — Desarrolla Inversión Productiva RM: Descarbonización 2026",
+      "markers": [
+        "18/02/2026",
+        "15/05/2026",
+        "30/07/2026",
+        "06/08/2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Cerradas Apertura: 18/02/2026 15:00 hrs Cierre: 15/05/2026 15:00 hrs Disponible en los siguientes te",
+        "convocatoria se focalizará territorialmente en la Región Metropolitana de Santiago, debiendo ejecutarse los proye",
+        "Apertura: 18/02/2026 15:00 hrs Cierre: 15/05/2026 15:00 hrs Disponible en los siguientes territorios Metropoli",
+        "Postulaciones Cerradas Apertura: 18/02/2026 15:00 hrs Cierre: 15/05/2026 15:00 hrs Disponible en los siguientes territorios"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/gestion-de-innovacion-en-pymes-2026/",
+      "program": "Corfo — Gestión de Innovación en Pymes 2026",
+      "markers": [
+        "19/05/2026",
+        "15/07/2026",
+        "26/05/2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Cerradas Apertura: 19/05/2026 17:00 hrs Cierre: 15/07/2026 17:00 hrs Disponible en los siguientes te",
+        "Apertura: 19/05/2026 17:00 hrs Cierre: 15/07/2026 17:00 hrs Disponible en los siguientes territorios Todo Chil",
+        "Postulaciones Cerradas Apertura: 19/05/2026 17:00 hrs Cierre: 15/07/2026 17:00 hrs Disponible en los siguientes territorios"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/innova_alta_tecnologia_eureka/",
+      "program": "Corfo — Innova Alta Tecnología / Eureka (alianza I+D internacional)",
+      "markers": [
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones permanentes Disponible en los siguientes territorios Todo Chile ¿Qué es? Apoyamos innovaciones inten",
+        "postulaciones se realiza a través de la plataforma https://cluster-projects.eurestools.eu . Fase Nacional: Aquella",
+        "postulaciones en este llamado. ¿Quiénes pueden postular? Podrán postular como beneficiarios personas jurídicas con"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/red-proveedores-region-metropolitana-etapa-desarrollo-2026/",
+      "program": "Corfo — Red Proveedores RM 2026 (vía empresa demandante)",
+      "markers": [
+        "18/02/2026",
+        "09/09/2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Cerradas Apertura: 18/02/2026 15:00 hrs Cierre: 09/09/2026 15:00 hrs Disponible en los siguientes te",
+        "convocatoria se focalizará territorialmente en la Región Metropolitana de Santiago, debiendo ejecutarse los proye",
+        "Apertura: 18/02/2026 15:00 hrs Cierre: 09/09/2026 15:00 hrs Disponible en los siguientes territorios Metropoli",
+        "Postulaciones Cerradas Apertura: 18/02/2026 15:00 hrs Cierre: 09/09/2026 15:00 hrs Disponible en los siguientes territorios"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/convocatoria/start-up-chile-build-11-2025/",
+      "program": "Start-Up Chile — BIG 11 Build (histórico 2025)",
+      "markers": [
+        "05/11/2025",
+        "28/11/2025",
+        "03/12/2025",
+        "21/01/2026",
+        "22/01/2026",
+        "23/01/2026",
+        "30/04/2026",
+        "15/05/2026",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Cerradas Apertura: 05/11/2025 13:00 hrs Cierre: 28/11/2025 13:00 hrs Disponible en los siguientes te",
+        "convocatoria. ¿Qué beneficio entrega? Corfo cofinanciará hasta el 90,00% del costo total del Proyecto, con un to",
+        "Apertura: 05/11/2025 13:00 hrs Cierre: 28/11/2025 13:00 hrs Disponible en los siguientes territorios Todo Chil",
+        "apertura de la respectiva convocatoria. ¿Qué beneficio entrega? Corfo cofinanciará hasta el 90,00% del costo",
+        "Postulaciones Cerradas Apertura: 05/11/2025 13:00 hrs Cierre: 28/11/2025 13:00 hrs Disponible en los siguientes territorios"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/focal/",
+      "program": "Corfo — FOCAL RM (próximos llamados compatibles)",
+      "markers": [
+        "03/08/2026",
+        "16/09/2026",
+        "12/05/2026",
+        "30/06/2026",
+        "07/05/2026",
+        "12/06/2026",
+        "29/08/2026",
+        "20/05/2026",
+        "10/06/2026",
+        "15/05/2026",
+        "29/05/2026",
+        "19/02/2026",
+        "26/05/2026",
+        "24/04/2026",
+        "25/05/2026",
+        "01/07/2026",
+        "18/02/2026",
+        "23/04/2026",
+        "04/02/2026",
+        "31/03/2026"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/innova-region/",
+      "program": "Corfo — Innova Región RM (próxima edición)",
+      "markers": [
+        "15/10/2026",
+        "21/10/2026",
+        "26/10/2026",
+        "10/09/2026",
+        "30/09/2026",
+        "16/11/2026",
+        "14/07/2026",
+        "13/08/2026",
+        "12/10/2026",
+        "01/06/2026",
+        "11/08/2026",
+        "11/06/2026",
+        "29/07/2026",
+        "27/05/2026",
+        "08/07/2026",
+        "21/08/2026",
+        "19/05/2026",
+        "07/07/2026",
+        "06/05/2026",
+        "22/06/2026"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/programa-absorcion-tecnologica-innovacion/",
+      "program": "Corfo — Absorción Tecnológica para la Innovación (PATI) 2025–2026",
+      "markers": [
+        "18/11/2025",
+        "15/07/2026",
+        "15/07/2025",
+        "Convocatorias Sala de Prensa Regiones Arica y Parinacota Tarapacá Antofagasta Atacama Coquimbo Valparaíso Metrop",
+        "Postulaciones Innovación Disponible en los siguientes territorios Todo Chile ¿Qué es? Buscamos contribuir a mejora",
+        "Convocatorias Nombre convocatoria Territorio Fecha Inicio Fecha Término Estado Postulación Comunicación de resul",
+        "Fecha Inicio Fecha Término Estado Postulación Comunicación de resultados Link Programa de Absorción Tecnológica p",
+        "Fecha Término Estado Postulación Comunicación de resultados Link Programa de Absorción Tecnológica para la Innovac"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/red-asociativa/",
+      "program": "Corfo — Red Asociativa (próximas convocatorias RM)",
+      "markers": [
+        "15/10/2026",
+        "29/10/2026",
+        "25/08/2026",
+        "21/09/2026",
+        "06/11/2026",
+        "13/08/2026",
+        "07/09/2026",
+        "02/07/2026",
+        "24/07/2026",
+        "23/06/2026",
+        "23/07/2026",
+        "20/08/2026",
+        "20/05/2026",
+        "22/07/2026",
+        "05/08/2026",
+        "25/05/2026",
+        "10/09/2026",
+        "08/05/2026",
+        "08/06/2026",
+        "07/05/2026"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-expande/",
+      "program": "Corfo — Semilla Expande (vigilar noviembre 2026)",
+      "markers": [
+        "14/05/2026",
+        "16/06/2026",
+        "10/08/2026",
+        "05/05/2026",
+        "11/06/2026",
+        "04/06/2026",
+        "28/07/2026",
+        "13/02/2026",
+        "16/03/2026",
+        "15/01/2026",
+        "24/02/2026",
+        "15/05/2026",
+        "20/05/2025",
+        "23/06/2025",
+        "11/08/2025",
+        "09/05/2025",
+        "12/06/2025",
+        "01/08/2025",
+        "10/04/2025",
+        "22/05/2025"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.corfo.gob.cl/sites/cpp/programa/semilla-inicia/",
+      "program": "Corfo — Semilla Inicia (vigilar noviembre 2026)",
+      "markers": [
+        "19/05/2026",
+        "23/06/2026",
+        "01/08/2026",
+        "11/05/2026",
+        "22/06/2026",
+        "21/09/2026",
+        "14/05/2026",
+        "04/06/2026",
+        "28/07/2026",
+        "04/05/2026",
+        "10/08/2026",
+        "30/04/2026",
+        "29/05/2026",
+        "30/09/2026",
+        "05/05/2026",
+        "26/05/2026",
+        "20/02/2026",
+        "24/04/2026",
+        "06/03/2026",
+        "10/04/2026"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    },
+    {
+      "source": "https://www.prochile.gob.cl/herramientas/concursos/",
+      "program": "ProChile — Servicios e Industrias Creativas 2027 (proyectos sectoriales)",
+      "markers": [
+        "23 de julio de 2026",
+        "20 de agosto de 2026",
+        "27 de octubre de 2026",
+        "03 de diciembre de 2026",
+        "Convocatorias de los procesos vigente de los Concursos, tambi&eacute;n encontrar&aacute;s el listado de producto",
+        "Convocatoria y el listado de Productos Admisibles del Concurso Silvoagropecuario 2027 se realizar&aacute; el 23 d",
+        "convocatoria, &uacute;nicamente se considerar&aacute;n las estrategias Sectorial y Empresarial. Bases Concurso S",
+        "Convocatoria Concurso Silvoagropecuario 2027 Convocatoria Concurso Silvoagropecuario 2027 Productos Admisibles Co",
+        "Convocatoria y el listado de Productos Admisibles de Servicios e Industrias Creativas 2027 se realizar&aacute; el",
+        "convocatoria, &uacute;nicamente se considerar&aacute;n las estrategias Sectorial. Bases Concurso Servicios e Ind",
+        "Convocatoria Concurso Servicios 2027 Convocatoria Concurso Servicios 2027 Modificaci&oacute;n Convocatoria Concur",
+        "Convocatoria Concurso Industrias Creativas 2027 Servicios Admisibles Concursos Servicios 2027 Productos y Servici",
+        "Convocatoria Concurso Silvoagropecuario 2026 Bases Concurso Silvoagropecuario 2026 Convocatoria Concurso Silvoagr",
+        "Convocatoria Concurso Industrias Creativas 2026 Modificaci&oacute;n Convocatoria Concurso Servicios 2026 Bases de",
+        "Convocatoria Concurso Industrias Creativas 2026 Convocatoria Concurso Servicios 2026 Productos y Servicios Admisi",
+        "Convocatoria Silvoagropecuario 2025 Convocatoria de Concurso Silvoagropecuario 2025 Productos Admisibles Concurso",
+        "Convocatoria Industrias Creativas 2025 (Extiende plazo) Convocatorias de Industrias Creativas 2025 Modificaci&oac",
+        "Convocatoria Servicios 2025 (Extiende plazo) Convocatorias de Servicios 2025 Servicios Admisibles Concurso Servic",
+        "Convocatoria Silvoagropecuario 2025 Bases Concurso Silvoagropecuario 2024 Convocatoria Silvoagropecuario 2024 Ser",
+        "Convocatorias Industrias Creativas 2024 Modificaci&oacute;n Convocatorias Servicios 2024 Bases Servicios e Indus"
+      ],
+      "review": "Corroborar cada fecha en ficha individual y bases; NO copiar automáticamente a calendario."
+    }
+  ]
 }
