@@ -217,6 +217,9 @@ function renderRedesPosts(){
       </div>
       <div class="op-post-excerpt">${escapeHtml(copy||'(sin copy)')}</div>
       ${f['Hashtags']?`<div style="font-size:11px;color:var(--accent);margin-top:5px">${escapeHtml(f['Hashtags'])}</div>`:''}
+      ${e==='Programado'&&f['Estado transporte']==='Publicando'?`<div style="font-size:11px;color:var(--text3);margin-top:6px">⏳ Publicando en ${escapeHtml(red)}… Si sigue así más de 30 min, revisa la red: si el post no aparece, pulsa 📅 Reagendar para reintentar.</div>`:''}
+      ${e==='Programado'&&f['Estado transporte']==='Error'?`<div class="redes-post-error" style="font-size:11px;color:var(--danger);margin-top:6px">⚠ No se publicó: ${escapeHtml(f['Error publicación']||'error del conector')} — corrígelo y pulsa 📅 Reagendar.</div>`:''}
+      ${e==='Publicado'&&safeHref(f['Permalink']||'')?`<a href="${safeHref(f['Permalink'])}" target="_blank" rel="noopener" style="font-size:11px;display:inline-block;margin-top:6px">Ver publicación ↗</a>`:''}
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${btns[0]||''}<details class="op-post-actions" ${document.getElementById('tab-redes')?.dataset.opView==='expert'?'open':''}><summary>Más acciones</summary><div>${btns.slice(1).join('')}</div></details></div>
       </div>
     </div>`;
@@ -269,6 +272,9 @@ async function redesSchedule(id,presetIso){
   if((media&&!/^https:\/\//i.test(media))||(link&&!/^https:\/\//i.test(link))){
     toast('Media URL y Link deben usar HTTPS antes de aprobar','error');return;
   }
+  if(p.fields['Red']==='Instagram'&&!media){
+    toast('Instagram necesita una imagen JPG o un video MP4 en Media URL antes de aprobar (✏ Editar)','error');return;
+  }
   _redesDateRed=p.fields['Red']||'';
   const iso=presetIso||await redesDatePicker('¿Cuándo publicar este post?',p.fields['Fecha programada']||null);
   if(!iso) return;
@@ -277,7 +283,7 @@ async function redesSchedule(id,presetIso){
   const fields={'Estado':'Programado','Fecha programada':iso,
     'Aprobación editorial':JSON.stringify(approval),
     'Idempotency key':p.fields['Idempotency key']||('social-post/'+id),
-    'Estado transporte':'Pendiente'};
+    'Estado transporte':'Pendiente','Error publicación':''};
   try{
     await _redesWrite('Social_Posts','PATCH',id,fields);Object.assign(p.fields,fields);
     toast('Aprobado y programado para '+_redesFmtFecha(iso)+' ✓','success');renderRedesKpis();redesApplyFilters();
@@ -346,25 +352,21 @@ function redesPreviewGen(){
 }
 function redesIgClose(){ const m=document.getElementById('redesIgPreviewModal'); if(m) m.style.display='none'; }
 
-// ── Guía in-app: conectar Instagram de verdad vía Make + Airtable ──
+// ── Guía in-app: cómo está conectado Instagram (Make → Worker → Airtable) ──
 function redesConnectGuide(){
   const body=document.getElementById('redesGuideBody');
   const step=(n,t,html)=>`<div class="redes-gstep"><div class="redes-gstep-h"><span class="n">${n}</span><b>${t}</b></div><div class="redes-gstep-b">${html}</div></div>`;
-  const tbl=rows=>`<table class="redes-gtable"><tr><th>Campo en Airtable</th><th>De dónde sale (Make)</th></tr>${rows.map(r=>`<tr><td><code>${r[0]}</code></td><td>${r[1]}</td></tr>`).join('')}</table>`;
   if(body) body.innerHTML=`
-    <p class="redes-gintro">Todo el módulo se alimenta de 3 tablas de Airtable: <code>Social_Posts</code>, <code>Social_Interactions</code> y <code>Social_Metrics</code>. Con <b>Make</b> (make.com) conectas Instagram a esas tablas. Necesitas una cuenta de Instagram <b>Business o Creator</b> vinculada a una <b>página de Facebook</b>, y conectar tu base de Airtable en Make.</p>
-    ${step(1,'Traer comentarios y DMs → bandeja',`
-      Crea un escenario en Make: <b>Instagram for Business → “Watch Comments / Mentions”</b> como disparador, y de salida <b>Airtable → “Create a Record”</b> en <code>Social_Interactions</code>.
-      ${tbl([['Red',"texto fijo: Instagram"],['Tipo',"Comentario o DM"],['Usuario',"username de quien escribe"],['Mensaje',"texto del comentario"],['Estado',"texto fijo: Pendiente"],['Fecha',"fecha del comentario"]])}
-      <div class="redes-gtip">Con eso las interacciones caen en la <b>Bandeja</b> y el COMMUNITY_AGENT sugiere respuesta y detecta leads.</div>`)}
-    ${step(2,'Traer métricas → analítica',`
-      Escenario <b>programado (1 vez al día)</b>: <b>Instagram → “Get Insights”</b> de tu cuenta/publicaciones → <b>Airtable “Create a Record”</b> en <code>Social_Metrics</code>.
-      ${tbl([['Red',"Instagram"],['Fecha',"día de la métrica"],['Alcance',"reach"],['Impresiones',"impressions"],['Engagement',"likes+comentarios+guardados"],['Clics',"clics al perfil/enlace"],['Seguidores nuevos',"follower_count"],['Leads',"0 (o los que atribuyas)"]])}
-      <div class="redes-gtip">Alimenta las <b>Métricas</b>, la tendencia de engagement y el <b>mejor momento para publicar</b>.</div>`)}
-    ${step(3,'Publicar automático (avanzado, opcional)',`
-      Escenario <b>cada 15 min</b>: <b>Airtable “Search Records”</b> en <code>Social_Posts</code> con <code>Estado = Programado</code> y <code>Fecha programada ≤ ahora</code> → <b>Instagram “Create a Post”</b> (usa <code>Media URL</code> + <code>Copy</code> + <code>Hashtags</code>) → <b>Airtable “Update Record”</b> poniendo <code>Estado = Publicado</code>.
-      <div class="redes-gtip">⚠ Publicar por API exige permisos de <i>Instagram Content Publishing</i> aprobados por Meta. Mientras tanto, usa el flujo <b>asistido</b>: genera, pulsa <b>👁 Preview</b> y <b>Copiar copy</b>, y publica a mano.</div>`)}
-    <p class="redes-gfoot">💡 ¿No tienes Make aún? Puedes trabajar 100% asistido desde hoy: genera contenido con IA, prográmalo en el calendario y publícalo manualmente. Cuando conectes Make, lo ya cargado sigue sirviendo.</p>`;
+    <p class="redes-gintro"><b>Instagram @thelab.solutions</b> está conectado con <b>Make</b>. Make habla con Instagram y le entrega todo al Worker de The Lab, que escribe en Airtable sin duplicados. Make nunca escribe Airtable directo. Detalle técnico en <code>docs/REDES_SOCIALES.md</code> §10.</p>
+    ${step(1,'Comentarios → bandeja (automático)',`
+      Cada comentario nuevo en un post de Instagram llega a la <b>Bandeja</b> en 1–2 minutos. El Worker marca quejas y leads; el COMMUNITY_AGENT sugiere la respuesta.
+      <div class="redes-gtip">Los <b>DMs</b> no entran por esta vía: respóndelos desde la app de Instagram.</div>`)}
+    ${step(2,'Métricas → analítica (diario, 08:47)',`
+      Alcance, interacciones, clics al perfil y seguidores nuevos del día anterior. Alimentan las <b>Métricas</b>, la tendencia y el <b>mejor momento para publicar</b>.`)}
+    ${step(3,'Publicación automática (cada 15 min)',`
+      Pon una imagen <b>JPG</b> o un video <b>MP4/MOV</b> en <code>Media URL</code> (enlace HTTPS público, no Google Drive) y pulsa <b>📅 Programar</b>. Al llegar la hora, Make lo publica y la tarjeta pasa a <b>Publicado</b> con su enlace.
+      <div class="redes-gtip">Si algo falla, la tarjeta muestra el motivo: corrígelo y pulsa <b>📅 Reagendar</b>. Un post cuya hora venció hace más de 48 h no se publica solo.</div>`)}
+    <p class="redes-gfoot">🔁 Meta pide renovar la conexión cada ~60 días (Make → Connections → Reauthorize). LinkedIn, TikTok y Facebook siguen en modo asistido: genera, pulsa <b>Copiar copy</b> y publica a mano.</p>`;
   const m=document.getElementById('redesGuideModal'); if(m) m.style.display='flex';
 }
 function redesGuideClose(){ const m=document.getElementById('redesGuideModal'); if(m) m.style.display='none'; }
@@ -1724,8 +1726,8 @@ async function redesAutoSchedule(){
 let _redesBusyAuto=false;
 // ¿Qué está fluyendo solo? Se deriva del último heartbeat de cada integración en Automations.
 // Cada una tiene su propia ventana según cómo corre en Make: la escucha solo late cuando
-// entra un comentario, las métricas una vez al día (08:47) y la publicación cada pocos minutos.
-const _REDES_HEARTBEAT_MAX={'social-listen':7*24*3600*1000,'social-metrics':36*3600*1000,'social-publish':30*60*1000};
+// entra un comentario, la publicación solo cuando publica o falla, y las métricas una vez al día (08:47).
+const _REDES_HEARTBEAT_MAX={'social-listen':7*24*3600*1000,'social-metrics':36*3600*1000,'social-publish':7*24*3600*1000};
 function _redesAutoStatus(){
   const rows=state.socialAutomations||[],now=Date.now();
   const alive=id=>{
@@ -1850,12 +1852,17 @@ async function redesSaveEdit(){
   if(estado==='Publicado'&&(!p.fields['External Post ID']||!/^https:\/\//i.test(String(p.fields['Permalink']||''))||!p.fields['Fecha publicación'])){
     toast('No puedes marcar Publicado sin evidencia devuelta por la plataforma','error');return;
   }
+  if(estado==='Programado'&&g('redesEditRed')==='Instagram'&&!media){
+    toast('Instagram necesita una imagen JPG o un video MP4 en Media URL para programarse','error');return;
+  }
   const fields={'Red':g('redesEditRed'),'Estado':estado,'Objetivo':g('redesEditObjetivo'),'Copy':g('redesEditCopy').slice(0,9000),'Hashtags':g('redesEditHashtags').slice(0,1000),'Media URL':media,'Link':link};
   const feRaw=g('redesEditFecha');if(feRaw){const d=new Date(feRaw);if(!isNaN(d.getTime()))fields['Fecha programada']=d.toISOString();}
   if(estado==='Programado'){
     const actor=(typeof AUTH!=='undefined'&&AUTH.getUser?AUTH.getUser()?.username:'')||'';
     fields['Aprobación editorial']=JSON.stringify({status:'approved',approvedAt:new Date().toISOString(),approvedBy:actor,zone:'America/Santiago'});
     fields['Idempotency key']=p.fields['Idempotency key']||('social-post/'+_redesEditId);
+    // Guardar un post programado lo devuelve a la cola de publicación aunque antes fallara.
+    fields['Estado transporte']='Pendiente';fields['Error publicación']='';
   }
   try{await _redesWrite('Social_Posts','PATCH',_redesEditId,fields);Object.assign(p.fields,fields);toast('Publicación guardada ✓','success');redesCloseEdit();renderRedesKpis();redesApplyFilters();renderRedesRecycle();}
   catch(e){toast('No se pudo guardar: '+e.message,'error');}

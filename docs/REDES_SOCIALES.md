@@ -448,6 +448,7 @@ puerta de escritura (`/webhooks/social*`), así que guard, idempotencia y heartb
 | Webhook `Instagram @thelab.solutions — Comentarios` | `2996538` | Tipo `instagram-business`, evento `comments`. |
 | Escenario `The Lab — Instagram · Comentarios → Worker` | `6818998` | Instantáneo. Descarta comentarios de la propia cuenta (respuestas nuestras). `POST /webhooks/social`. |
 | Escenario `The Lab — Instagram · Métricas diarias → Worker` | `6819061` | Diario 08:47 America/Santiago. `POST /webhooks/social/metrics` con la fecha de ayer. |
+| Escenario `The Lab — Instagram · Publicación automática (Worker)` | `6819526` | Cada 15 min. Pide la cola al Worker y publica foto (JPG) o reel (MP4/MOV). Ver §10.4. |
 
 Ambos escenarios envían `X-Social-Webhook-Key`, que debe coincidir con el secreto
 `SOCIAL_WEBHOOK_KEY` del Worker `thelab-leads-worker` (Cloudflare → Settings → Variables and Secrets).
@@ -475,7 +476,32 @@ Meta agrupa los días en hora del Pacífico, así que el día guardado puede dif
 ### 10.3 Límites conocidos
 
 - **DMs:** el módulo de Make no los lee. Solo entran comentarios (y menciones si se agrega ese evento).
-- **Publicación:** la conexión ya tiene `instagram_content_publish`, pero el escenario de reserva →
-  publicación → confirmación todavía no existe. Hasta entonces, publicar sigue siendo manual.
 - **Panel “Modo automático”:** cada heartbeat tiene su ventana (`_REDES_HEARTBEAT_MAX` en `js/redes.js`):
-  escucha 7 días (solo late cuando entra un comentario), métricas 36 h, publicación 30 min.
+  escucha 7 días (solo late cuando entra un comentario), métricas 36 h, publicación 7 días (solo late
+  cuando confirma o falla una publicación real).
+- **Airtable en Make:** la conexión `Airtable — The Lab Solutions` (`8627122`) devuelve *Authentication
+  required* (verificado 2026-10-28). Por eso ningún escenario social lee Airtable desde Make: todo pasa
+  por el Worker, que usa su propio `AIRTABLE_TOKEN`.
+
+### 10.4 Publicación automática
+
+1. **Aprobar** (dashboard): `📅 Programar` exige `Media URL` para Instagram y deja `Estado = Programado`,
+   `Aprobación editorial.status = approved`, `Idempotency key = social-post/<recordId>` y
+   `Estado transporte = Pendiente`.
+2. **Cola** (`POST /webhooks/social/publish/due`, cada 15 min desde Make): el Worker devuelve hasta 3 posts
+   aprobados cuya hora llegó, con `caption = Copy + Hashtags` y `media_kind` (`photo` | `reel` según la
+   extensión). Lo que Instagram rechazaría (sin media, PNG/WebP, caption > 2200, > 30 hashtags, o hora
+   vencida hace > 48 h) queda en `Estado transporte = Error` con el motivo en `Error publicación`, y la
+   tarjeta del dashboard lo muestra.
+3. **Reservar** (`/publish/reserve`): solo se publica si la reserva es nueva (`reserved && !replayed`).
+   El Worker marca `Estado transporte = Publicando`.
+4. **Publicar** en Instagram (*Create a photo post* o *Create a reel post*) y leer el permalink (*Get post*).
+5. **Confirmar** (`/publish`): `Estado = Publicado`, `External Post ID`, `Permalink`, `Fecha publicación`.
+   Si Instagram falla, el manejador de errores envía `error` → `Estado transporte = Error`.
+
+**A lo más una vez:** un post en `Publicando` no vuelve a la cola aunque venza el lease de 10 min. Si Make
+cae entre publicar y confirmar, el post queda en `Publicando` y la tarjeta pide revisar Instagram antes de
+reagendar. Es preferible un post a confirmar a mano que uno publicado dos veces.
+
+Requisitos de la imagen (Meta): JPG, máx. 8 MB, proporción entre 4:5 y 1.91:1, URL pública HTTPS (Google
+Drive no sirve). Video: MP4/MOV H.264/HEVC, 3 s a 15 min.

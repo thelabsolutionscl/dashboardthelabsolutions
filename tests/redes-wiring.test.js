@@ -291,9 +291,25 @@ test('cada heartbeat social usa la ventana de su frecuencia real', () => {
   // Escucha: depende de que entren comentarios; se tolera una semana sin eventos.
   assert.equal(run([row('social-listen',3*24*H)]).listen,true);
   assert.equal(run([row('social-listen',8*24*H)]).listen,false);
-  // Publicación corre cada pocos minutos: 30 min sin heartbeat ya es una caída.
-  assert.equal(run([row('social-publish',10*60*1000)]).publish,true);
-  assert.equal(run([row('social-publish',2*H)]).publish,false);
+  // Publicación: el Worker solo late al confirmar o fallar una publicación real.
+  assert.equal(run([row('social-publish',2*24*H)]).publish,true);
+  assert.equal(run([row('social-publish',8*24*H)]).publish,false);
+});
+
+test('Instagram no se aprueba sin media y el fallo de publicación se ve en la tarjeta', () => {
+  // fn() se corta en regex con "//"; aquí basta el texto hasta la siguiente función.
+  const upto=(name,next)=>{const i=REDES.indexOf(`function ${name}(`),j=REDES.indexOf(`function ${next}(`,i);assert.ok(i>=0&&j>i,name);return REDES.slice(i,j);};
+  const sched=upto('redesSchedule','redesCopyPost'),edit=upto('redesSaveEdit','redesDeletePost'),list=upto('renderRedesPosts','redesSetEstado');
+  for(const src of [sched,edit]){
+    assert.match(src,/Instagram/);
+    assert.match(src,/'Estado transporte'\]?\s*[:=]\s*'Pendiente'/);
+    assert.match(src,/'Error publicación'\]?\s*[:=]\s*''/);
+  }
+  assert.match(sched,/p\.fields\['Red'\]==='Instagram'&&!media/);
+  assert.match(edit,/estado==='Programado'&&g\('redesEditRed'\)==='Instagram'&&!media/);
+  assert.match(list,/f\['Estado transporte'\]==='Error'/);
+  assert.match(list,/escapeHtml\(f\['Error publicación'\]/);
+  assert.match(list,/safeHref\(f\['Permalink'\]/);
 });
 
 test('piloto y auto-programación pasan por revisión editorial', () => {
