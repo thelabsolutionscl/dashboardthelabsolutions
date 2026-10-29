@@ -16,6 +16,7 @@ on:
       - 'tests/redes.test.js'
       - 'tests/redes-wiring.test.js'
       - 'tests/social-idempotency.test.js'
+      - 'tests/social-media-upload.test.js'
       - 'tests/linkedin-leads.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/redes-audit.yml'
@@ -33,6 +34,7 @@ on:
       - 'tests/redes.test.js'
       - 'tests/redes-wiring.test.js'
       - 'tests/social-idempotency.test.js'
+      - 'tests/social-media-upload.test.js'
       - 'tests/linkedin-leads.test.js'
       - 'tests/smoke.test.js'
       - '.github/workflows/redes-audit.yml'
@@ -70,6 +72,9 @@ jobs:
 
       - name: Audit social idempotency and publishing guard
         run: node --test tests/social-idempotency.test.js
+
+      - name: Audit social media upload (proxy, public Worker, editor)
+        run: node --test tests/social-media-upload.test.js
 
       - name: Run social logic tests
         run: |

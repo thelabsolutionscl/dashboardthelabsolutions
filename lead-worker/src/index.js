@@ -132,6 +132,11 @@ export default {
         return await handlePedidoEstado(request, env);
       }
 
+      // Imágenes subidas desde el editor de Redes (las descarga Instagram al publicar).
+      if ((request.method === "GET" || request.method === "HEAD") && url.pathname.startsWith("/media/")) {
+        return await handleSocialMediaGet(request, env, url);
+      }
+
       if (request.method === "GET" && url.pathname === "/blog") {
         return await handleBlogList(request, env, cors);
       }
@@ -2505,6 +2510,20 @@ async function handleSocialPublishReserve(request,env,cors){
   if(gate.ok&&out?.reserved&&!out?.replayed)
     await airtableUpdateTolerant(env,"Social_Posts",postId,{"Estado transporte":"Publicando"});
   return json(out,gate.status,cors);
+}
+/* GET /media/<uuid>.jpg — imagen subida con "Subir imagen" en Redes. La guarda
+ * airtable-proxy (solo identidades Access con permiso social, solo JPEG) en el
+ * mismo KV que este Worker usa como RL. Se sirve sin sesión porque Instagram la
+ * descarga desde sus servidores; el ID aleatorio no se puede adivinar. */
+async function handleSocialMediaGet(request,env,url){
+  const m=url.pathname.match(/^\/media\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jpg$/);
+  if(!m||url.search)return new Response("Not found",{status:404});
+  if(!env.RL)return new Response("Unavailable",{status:503});
+  const body=await env.RL.get("social-media:"+m[1]+".jpg",{type:"arrayBuffer"});
+  if(!body)return new Response("Not found",{status:404});
+  return new Response(request.method==="HEAD"?null:body,{status:200,headers:{
+    "Content-Type":"image/jpeg","Content-Length":String(body.byteLength),
+    "Cache-Control":"public, max-age=31536000, immutable","X-Content-Type-Options":"nosniff"}});
 }
 /* Cola de publicación para el conector (Make): posts aprobados cuya hora llegó.
  * Make no lee Airtable; pide esta lista y luego sigue reserve → publicar → confirmar.

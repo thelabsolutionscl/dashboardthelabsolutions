@@ -5173,7 +5173,7 @@ export default {
     // depends on a credential shared with the public Pages bundle.
     const authPath=leadServiceRoute?'/service/lead/anthropic/v1/messages':
       url.pathname.startsWith('/v0/')||url.pathname.startsWith('/anthropic/')||
-      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/funds'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
+      url.pathname.startsWith('/openai/')||url.pathname.startsWith('/seo-')||url.pathname.startsWith('/sii/')||url.pathname.startsWith('/portal-admin/')||url.pathname==='/feedback/link'||url.pathname.startsWith('/printer/')||url.pathname.startsWith('/marketing/')||url.pathname.startsWith('/ads/')||url.pathname.startsWith('/linkedin/')||url.pathname==='/integrations/check'||url.pathname==='/shared/calendar'||url.pathname==='/shared/funds'||url.pathname==='/shared/agenda'||url.pathname==='/shared/mail'||url.pathname==='/mail/accounts'||url.pathname==='/mail/session'||url.pathname==='/mail/rpc'||url.pathname==='/shared/problems'||url.pathname==='/shared/machineops'||url.pathname==='/shared/simulation'||url.pathname==='/shared/finance'||url.pathname==='/shared/remunerations'||url.pathname==='/shared/remunerations/audit'||url.pathname.startsWith('/suppliers/')||url.pathname==='/visual-ai/rpc'||url.pathname==='/tts/elevenlabs'||url.pathname==='/newsletter/send'||url.pathname==='/social/lead'||url.pathname==='/social/media'||url.pathname.startsWith('/office/')||url.pathname==='/access/me'
         ?url.pathname:'/v0'+url.pathname;
     const authorized=await accessAuthorize(request,env,authPath);
     if(authorized.response){
@@ -5365,6 +5365,8 @@ export default {
         const row=await officePatch(env,'Incidencias_Operativas',id,fields);return json({ok:true,record:row},200,headers);}
       catch(_){return json({error:'Incident update failed'},503,headers);}
     }
+    if(url.pathname==='/social/media')
+      return await socialMediaUpload(request,env,url,authorized.identity,{...CORS,'Cache-Control':'private, no-store'});
     if(url.pathname==='/social/lead'){
       const headers={...CORS,'Cache-Control':'private, no-store'};
       if(url.search||request.method!=='POST')return json({error:'Method not allowed'},405,headers);
@@ -7108,6 +7110,38 @@ function json(data, status = 200, corsHeaders = cors('')) {
     status,
     headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
+}
+
+// ── Imágenes de Redes (botón "Subir imagen" del editor) ───────────────
+// El navegador ya las convierte a JPEG dentro de los límites de Instagram; aquí
+// solo se acepta un JPEG acotado de una identidad Access con permiso social.
+// Se guardan en el KV que este Worker comparte con thelab-leads-worker (mismo
+// namespace que AI_BUDGET/RL), que las sirve sin sesión en /media/<id>.jpg
+// porque Instagram las descarga desde sus servidores.
+const SOCIAL_MEDIA_MAX_BYTES = 8 * 1024 * 1024;
+const SOCIAL_MEDIA_TTL_S = 180 * 24 * 60 * 60;
+async function socialMediaUpload(request, env, url, identity, headers) {
+  if (url.search || request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, headers);
+  if (!identity || (identity.role !== 'admin' && identity.email !== 'marketing@thelab.solutions'))
+    return json({ error: 'Social media role denied' }, 403, headers);
+  if (!/^image\/jpeg(?:;|$)/i.test(String(request.headers.get('Content-Type') || '')))
+    return json({ error: 'Solo se aceptan imágenes JPEG' }, 415, headers);
+  if (Number(request.headers.get('Content-Length') || 0) > SOCIAL_MEDIA_MAX_BYTES)
+    return json({ error: 'La imagen supera 8 MB' }, 413, headers);
+  if (!env.AI_BUDGET) return json({ error: 'Almacenamiento de imágenes no disponible' }, 503, headers);
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.length > SOCIAL_MEDIA_MAX_BYTES) return json({ error: 'La imagen supera 8 MB' }, 413, headers);
+  // Firma JPEG (FF D8 FF): el Worker público la sirve como image/jpeg y nunca
+  // debe terminar alojando HTML u otro contenido bajo su dominio.
+  if (bytes.length < 128 || bytes[0] !== 0xFF || bytes[1] !== 0xD8 || bytes[2] !== 0xFF)
+    return json({ error: 'El archivo no es un JPEG válido' }, 422, headers);
+  const id = crypto.randomUUID();
+  await env.AI_BUDGET.put('social-media:' + id + '.jpg', bytes, {
+    expirationTtl: SOCIAL_MEDIA_TTL_S,
+    metadata: { by: identity.email, at: new Date().toISOString(), bytes: bytes.length },
+  });
+  const base = String(env.SOCIAL_MEDIA_PUBLIC_BASE || 'https://thelab-leads-worker.wast3dspa.workers.dev').replace(/\/$/, '');
+  return json({ ok: true, url: `${base}/media/${id}.jpg`, bytes: bytes.length }, 200, headers);
 }
 
 // ── Heartbeat hacia la tabla Automations ──────────────────────────────

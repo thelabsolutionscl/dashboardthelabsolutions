@@ -2736,7 +2736,12 @@
               <button class="btn btn-ghost btn-sm" onclick="redesHashtagSave()">💾 Guardar set</button>
             </div></div>
           <div class="field-group" style="grid-column:1/-1"><label class="field-label">Media URL (imagen/video)</label>
-            <input class="field-input" id="redesEditMedia" placeholder="https://…"></div>
+            <input class="field-input" id="redesEditMedia" placeholder="https://…">
+            <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-ghost btn-sm" id="redesUploadBtn" onclick="redesUploadMediaPick()">📤 Subir imagen</button>
+              <input type="file" id="redesUploadFile" accept="image/*" style="display:none" onchange="redesUploadMedia(this)">
+              <span id="redesUploadStatus" style="font-size:11px;color:var(--text3)">Se convierte a JPG en el formato que acepta Instagram.</span>
+            </div></div>
           <div class="field-group" style="grid-column:1/-1"><label class="field-label">Link destino (con UTM para atribuir clics)</label>
             <input class="field-input" id="redesEditLink" placeholder="https://thelab.solutions/…">
             <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">
