@@ -79,7 +79,10 @@ test('la cola de publicación solo entrega posts aprobados y vencidos, con la me
   assert.match(candidate(post({'Media URL':'https://cdn.thelab.solutions/neon.png'}),now).error,/JPG/);
   assert.match(candidate(post({'Media URL':'http://cdn.thelab.solutions/neon.jpg'}),now).error,/HTTPS/);
   assert.match(candidate(post({Copy:'x'.repeat(2190)}),now).error,/2200/);
-  assert.match(candidate(post({Hashtags:Array.from({length:31},(_,i)=>'#t'+i).join(' ')}),now).error,/hashtags; Instagram admite 30/);
+  assert.match(candidate(post({Hashtags:Array.from({length:6},(_,i)=>'#t'+i).join(' ')}),now).error,/6 hashtags; Instagram admite 5/);
+  // Los hashtags del Copy también cuentan: 3 en el texto + 3 en Hashtags = 6.
+  assert.match(candidate(post({Copy:'Neón #a #b #c',Hashtags:'#d #e #f'}),now).error,/6 hashtags; Instagram admite 5/);
+  assert.ok(candidate(post({Hashtags:Array.from({length:5},(_,i)=>'#t'+i).join(' ')}),now).post,'5 hashtags se publican');
 });
 
 test('la cola de publicación usa la clave social y no reintenta errores',()=>{

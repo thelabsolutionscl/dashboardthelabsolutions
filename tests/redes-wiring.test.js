@@ -394,3 +394,17 @@ test('el contenido IA guarda procedencia y aprobación editorial',()=>{
   assert.match(base,/approvedBy/);
   assert.match(REDES,/Aprobación editorial/);
 });
+
+test('Instagram no se aprueba ni se programa con más de 5 hashtags',()=>{
+  assert.match(REDES,/const _REDES_IG_MAX_TAGS=5;/);
+  const tagCount=new Function(`${REDES.match(/function _redesTagCount\([^)]*\)\{[^\n]*\}/)[0]}\nreturn _redesTagCount;`)();
+  assert.equal(tagCount('Neón #a #b','#c #d #e'),5);
+  assert.equal(tagCount('Sin hashtags',''),0);
+  assert.equal(tagCount('#a#b','#c'),3);
+  const schedule=REDES.slice(REDES.indexOf('async function redesSchedule('),REDES.indexOf('_redesDateRed=p.fields'));
+  assert.match(schedule,/_redesTagCount\(p\.fields\['Copy'\],p\.fields\['Hashtags'\]\)/);
+  const save=REDES.slice(REDES.indexOf('async function redesSaveEdit('),REDES.indexOf("const fields={'Red':g('redesEditRed')"));
+  assert.match(save,/estado==='Programado'&&tagsEdit>_REDES_IG_MAX_TAGS/);
+  assert.match(INDEX,/MÁXIMO 5 hashtags: Instagram no publica posts con más/);
+  assert.doesNotMatch(INDEX,/12–15 hashtags/);
+});

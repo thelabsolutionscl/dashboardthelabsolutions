@@ -265,6 +265,9 @@ function redesDateCancel(){
   document.getElementById('redesDateModal').style.display='none';
   const r=_redesDateResolve; _redesDateResolve=null; if(r) r(null);
 }
+// Instagram no publica posts con más de 5 hashtags: se cuentan en Copy + Hashtags, igual que la cola del Worker.
+const _REDES_IG_MAX_TAGS=5;
+function _redesTagCount(copy,hashtags){ return ((String(copy||'')+' '+String(hashtags||'')).match(/#[^\s#]+/g)||[]).length; }
 // Programa una publicación CON fecha/hora (sin fecha, Make no sabría cuándo publicar).
 async function redesSchedule(id,presetIso){
   const p=(state.socialPosts||[]).find(x=>x.id===id); if(!p) return;
@@ -274,6 +277,10 @@ async function redesSchedule(id,presetIso){
   }
   if(p.fields['Red']==='Instagram'&&!media){
     toast('Instagram necesita una imagen JPG o un video MP4 en Media URL antes de aprobar (✏ Editar)','error');return;
+  }
+  const tags=p.fields['Red']==='Instagram'?_redesTagCount(p.fields['Copy'],p.fields['Hashtags']):0;
+  if(tags>_REDES_IG_MAX_TAGS){
+    toast(`Este post tiene ${tags} hashtags e Instagram admite ${_REDES_IG_MAX_TAGS}. Deja ${_REDES_IG_MAX_TAGS} en ✏ Editar antes de aprobar`,'error');return;
   }
   _redesDateRed=p.fields['Red']||'';
   const iso=presetIso||await redesDatePicker('¿Cuándo publicar este post?',p.fields['Fecha programada']||null);
@@ -1910,6 +1917,10 @@ async function redesSaveEdit(){
   }
   if(estado==='Programado'&&g('redesEditRed')==='Instagram'&&!media){
     toast('Instagram necesita una imagen JPG o un video MP4 en Media URL para programarse','error');return;
+  }
+  const tagsEdit=g('redesEditRed')==='Instagram'?_redesTagCount(g('redesEditCopy'),g('redesEditHashtags')):0;
+  if(estado==='Programado'&&tagsEdit>_REDES_IG_MAX_TAGS){
+    toast(`Tiene ${tagsEdit} hashtags e Instagram admite ${_REDES_IG_MAX_TAGS}. Borra los que sobran para programarlo`,'error');return;
   }
   const fields={'Red':g('redesEditRed'),'Estado':estado,'Objetivo':g('redesEditObjetivo'),'Copy':g('redesEditCopy').slice(0,9000),'Hashtags':g('redesEditHashtags').slice(0,1000),'Media URL':media,'Link':link};
   const feRaw=g('redesEditFecha');if(feRaw){const d=new Date(feRaw);if(!isNaN(d.getTime()))fields['Fecha programada']=d.toISOString();}

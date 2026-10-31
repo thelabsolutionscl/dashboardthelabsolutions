@@ -490,7 +490,7 @@ Meta agrupa los días en hora del Pacífico, así que el día guardado puede dif
    `Estado transporte = Pendiente`.
 2. **Cola** (`POST /webhooks/social/publish/due`, cada 45 min desde Make con `limit: 1`): el Worker devuelve hasta 1 post
    aprobados cuya hora llegó, con `caption = Copy + Hashtags` y `media_kind` (`photo` | `reel` según la
-   extensión). Lo que Instagram rechazaría (sin media, PNG/WebP, caption > 2200, > 30 hashtags, o hora
+   extensión). Lo que Instagram rechazaría (sin media, PNG/WebP, caption > 2200, > 5 hashtags, o hora
    vencida hace > 48 h) queda en `Estado transporte = Error` con el motivo en `Error publicación`, y la
    tarjeta del dashboard lo muestra.
 3. **Reservar** (`/publish/reserve`): solo se publica si la reserva es nueva (`reserved && !replayed`).

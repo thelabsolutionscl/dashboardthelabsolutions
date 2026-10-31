@@ -2532,6 +2532,8 @@ async function handleSocialMediaGet(request,env,url){
  * reintente en cada ciclo. "Publicando" (reservado sin confirmar) tampoco se
  * reentrega. Volver a aprobarlo desde el dashboard lo devuelve a la cola. */
 const SOCIAL_PUBLISH_MAX_DELAY_MS=48*60*60*1000;
+// Instagram admite hasta 5 hashtags por publicación (caption y comentario juntos) desde dic-2025.
+const SOCIAL_IG_MAX_HASHTAGS=5;
 function socialPublishCandidate(post,nowMs){
   const f=post?.fields||{};
   let approval;try{approval=JSON.parse(String(f["Aprobación editorial"]||""));}catch(_){}
@@ -2554,7 +2556,7 @@ function socialPublishCandidate(post,nowMs){
   const caption=[String(f.Copy||"").trim(),String(f.Hashtags||"").trim()].filter(Boolean).join("\n\n");
   if(caption.length>2200)return {error:`El texto tiene ${caption.length} caracteres; Instagram admite 2200.`};
   const tags=(caption.match(/#[^\s#]+/g)||[]).length;
-  if(tags>30)return {error:`El texto tiene ${tags} hashtags; Instagram admite 30.`};
+  if(tags>SOCIAL_IG_MAX_HASHTAGS)return {error:`El texto tiene ${tags} hashtags; Instagram admite ${SOCIAL_IG_MAX_HASHTAGS}.`};
   return {post:{post_record_id:post.id,idempotency_key:"social-post/"+post.id,media_url:media,media_kind:kind,
     caption,scheduled_at:new Date(at).toISOString()}};
 }
