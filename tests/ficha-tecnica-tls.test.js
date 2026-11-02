@@ -90,6 +90,23 @@ test('la ficha es A4 vertical, con el pie y la tipografía de la plantilla', () 
     assert.ok(html.includes(`<i></i>${sec}</div>`), 'falta la sección ' + sec);
 });
 
+test('los tamaños son los calibrados contra el PDF de referencia, no los de la primera versión', () => {
+  // Medidos línea a línea con pdftotext -bbox sobre el PDF del Hospital Militar
+  // (WeasyPrint). Con los valores anteriores, esa misma ficha se montaba sobre
+  // el pie en las dos páginas.
+  const ft = cargar();
+  const css = ft.fichaTLSHtml([fichaHMN(ft)], {}).match(/<style>([\s\S]*?)<\/style>/)[1];
+  for (const regla of [
+    'h1{font-weight:900;font-size:19.5pt;line-height:1.16;',
+    '.simple p{font-size:9.8pt;line-height:1.56;margin-top:2.6mm}',
+    '.specs td{font-size:8.3pt;padding:1.9mm 0;',
+    '.comp p{font-size:7.6pt;color:#55595d;line-height:1.42;',
+    'font-size:8.7pt;line-height:1.42;margin-bottom:2.2mm}',
+    '.cuid li{position:relative;padding-left:5.6mm;font-size:8.6pt;line-height:1.5}',
+    '.h2 span{color:var(--cian);text-transform:uppercase}',
+  ]) assert.ok(css.includes(regla), 'falta ' + regla);
+});
+
 test('las fuentes Lato viajan con el dashboard', () => {
   for (const w of [400, 700, 900]) assert.ok(fs.statSync(path.join(RAIZ, 'assets', 'fonts', `Lato-${w}.woff2`)).size > 10000);
 });
