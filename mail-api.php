@@ -34,7 +34,7 @@ header('X-Frame-Options: DENY');
 
 // Marcador de versión: permite confirmar qué código está realmente desplegado
 // (abre la URL en el navegador y mira "build" en el JSON).
-define('MAIL_API_BUILD', '2026-10-07-mail-session-idempotency');
+define('MAIL_API_BUILD', '2026-11-04-mail-read-charset-safe');
 
 // ── Serialización JSON resiliente ─────────────────────────────────────
 // Un correo puede traer bytes que NO son UTF-8 válido (headers/cuerpo mal
@@ -243,14 +243,15 @@ function mail_parse_outgoing_attachments($raw) {
 
 function decode_str($str) {
     if (empty($str)) return '';
-    $parts  = imap_mime_header_decode($str);
+    $parts  = @imap_mime_header_decode((string)$str);
+    if (!is_array($parts)) return to_utf8((string)$str, 'UTF-8');
     $result = '';
     foreach ($parts as $p) {
-        $charset = strtoupper($p->charset ?? 'UTF-8');
-        $text    = $p->text;
-        if ($charset !== 'DEFAULT' && $charset !== 'UTF-8') {
-            $text = @mb_convert_encoding($text, 'UTF-8', $charset) ?: $text;
-        }
+        $charset = strtoupper(trim((string)($p->charset ?? 'DEFAULT')));
+        $text    = (string)($p->text ?? '');
+        // to_utf8() nunca lanza: un charset raro en un nombre de remitente/CC
+        // o de adjunto ya no tumba la lectura completa del mensaje.
+        if ($charset !== 'DEFAULT' && $charset !== '') $text = to_utf8($text, $charset);
         $result .= $text;
     }
     return $result;
@@ -261,6 +262,74 @@ function addr_str($addr) {
     $name  = decode_str($addr->personal ?? '');
     $email = ($addr->mailbox ?? '') . '@' . ($addr->host ?? '');
     return $name ? "$name <$email>" : $email;
+}
+
+// ── Conversión de charset a prueba de fallos ─────────────────────────
+// En PHP 8, mb_convert_encoding() LANZA ValueError cuando no reconoce el
+// charset de origen, y el @ NO lo silencia. Bastaba un correo declarado como
+// charset="x-unknown", "unknown-8bit", "iso-8859-8-i", "ks_c_5601-1987",
+// "3Dutf-8" (quoted-printable mal aplicado), "windows-1250", "macintosh"… para
+// que 'read' terminara en el manejador de excepciones → 500 «Error interno del
+// servidor de correo» y el mensaje no se pudiera abrir. Ahora normalizamos el
+// nombre, probamos mbstring sólo si lo soporta, luego iconv, y si nadie lo
+// reconoce devolvemos false para que el llamador use su respaldo.
+function mail_charset_normalize($charset) {
+    $cs = strtolower(trim((string)$charset, " \t\r\n\"'`;,"));
+    if (strlen($cs) > 2 && strncmp($cs, '3d', 2) === 0) $cs = trim(substr($cs, 2), " \"'"); // "=3D" de QP
+    if (($star = strpos($cs, '*')) !== false) $cs = substr($cs, 0, $star);                     // RFC 2231: utf-8*es
+    $cs = preg_replace('/[^a-z0-9._:\-]/', '', $cs);
+    if ($cs === '' || strlen($cs) > 40) return '';
+    static $alias = [
+        'utf8' => 'UTF-8', 'utf-8' => 'UTF-8', 'unicode-1-1-utf-8' => 'UTF-8', 'x-unicode20utf8' => 'UTF-8',
+        'utf7' => 'UTF-7', 'unicode-1-1-utf-7' => 'UTF-7', 'x-unicode20utf7' => 'UTF-7',
+        'us-ascii' => 'ASCII', 'ascii' => 'ASCII', 'ansi_x3.4-1968' => 'ASCII', 'iso646-us' => 'ASCII',
+        'latin1' => 'ISO-8859-1', 'latin-1' => 'ISO-8859-1', 'l1' => 'ISO-8859-1',
+        'iso-8859-8-i' => 'ISO-8859-8', 'iso-8859-8-e' => 'ISO-8859-8',
+        'iso-8859-6-i' => 'ISO-8859-6', 'iso-8859-6-e' => 'ISO-8859-6',
+        'ks_c_5601-1987' => 'UHC', 'ks_c_5601' => 'UHC', 'ksc5601' => 'UHC', 'ksc_5601' => 'UHC', 'x-windows-949' => 'UHC',
+        'x-mac-roman' => 'MACINTOSH', 'macroman' => 'MACINTOSH', 'mac' => 'MACINTOSH', 'x-mac' => 'MACINTOSH',
+        'ansi' => 'Windows-1252', 'x-ansi' => 'Windows-1252',
+        'shift-jis' => 'SJIS', 'x-sjis' => 'SJIS', 'x-euc-jp' => 'EUC-JP', 'x-gbk' => 'GBK', 'gb_2312-80' => 'GB18030',
+        // Etiquetas que NO nombran un charset: se tratan como "desconocido".
+        'x-unknown' => '', 'unknown' => '', 'unknown-8bit' => '', 'x-user-defined' => '', 'default' => '',
+        'none' => '', 'binary' => '', '7bit' => '', '8bit' => '', 'base64' => '', 'quoted-printable' => '',
+        'qprint' => '', 'uuencode' => '', 'html-entities' => '', 'html' => '', 'pass' => '', 'auto' => '',
+    ];
+    if (array_key_exists($cs, $alias)) return $alias[$cs];
+    if (preg_match('/^iso[-_ ]?8859[-_ ]?(\d{1,2})$/', $cs, $m)) return 'ISO-8859-' . $m[1];   // iso8859-15
+    if (preg_match('/^(?:windows|win|x-cp|cp)[-_ ]?(125\d)$/', $cs, $m)) return 'Windows-' . $m[1]; // cp1252, win-1250
+    return $cs;
+}
+
+function mail_mb_supports($charset) {
+    static $set = null;
+    if ($set === null) {
+        $set = [];
+        foreach (mb_list_encodings() as $e) {
+            $set[strtolower($e)] = true;
+            try { foreach ((mb_encoding_aliases($e) ?: []) as $a) $set[strtolower($a)] = true; } catch (\Throwable $ex) {}
+        }
+    }
+    return isset($set[strtolower((string)$charset)]);
+}
+
+// Convierte $s (bytes en $charset) a UTF-8. Nunca lanza: devuelve el texto
+// convertido o false si el charset no se pudo interpretar.
+function mail_convert_to_utf8($s, $charset) {
+    $s  = (string)$s;
+    $cs = mail_charset_normalize($charset);
+    if ($cs === '') return false;
+    $lc = strtolower($cs);
+    if ($lc === 'utf-8') return mb_check_encoding($s, 'UTF-8') ? $s : false;
+    if (mail_mb_supports($cs)) {
+        try { $c = @mb_convert_encoding($s, 'UTF-8', $cs); } catch (\Throwable $e) { $c = false; }
+        if (is_string($c) && ($c !== '' || $s === '') && mb_check_encoding($c, 'UTF-8')) return $c;
+    }
+    if (function_exists('iconv')) {
+        try { $c = @iconv($cs, 'UTF-8//IGNORE', $s); } catch (\Throwable $e) { $c = false; }
+        if (is_string($c) && ($c !== '' || $s === '') && mb_check_encoding($c, 'UTF-8')) return $c;
+    }
+    return false;
 }
 
 // Algunos correos traen la parte de texto/HTML comprimida (gzip o zlib/deflate)
@@ -292,14 +361,18 @@ function decode_transfer($raw, $encoding) {
 // Lleva unos bytes de texto a UTF-8 usando el charset declarado. Si el charset
 // dice UTF-8 (o ASCII) pero los bytes no son UTF-8 válido, recupera como
 // Windows-1252 (superset de Latin-1) para no mostrar acentos rotos («»).
+// Un charset desconocido o inválido ya no lanza: se cae al chequeo UTF-8 /
+// Windows-1252 de abajo (ver mail_convert_to_utf8).
 function to_utf8($s, $charset) {
-    $cs = strtoupper(trim($charset ?: 'UTF-8'));
-    if ($cs && $cs !== 'UTF-8' && $cs !== 'US-ASCII' && $cs !== 'ASCII') {
-        $c = @mb_convert_encoding($s, 'UTF-8', $cs);
+    $s  = (string)$s;
+    $cs = mail_charset_normalize($charset ?: 'UTF-8');
+    $lc = strtolower($cs);
+    if ($cs !== '' && $lc !== 'utf-8' && $lc !== 'ascii') {
+        $c = mail_convert_to_utf8($s, $cs);
         if ($c !== false && $c !== '') return $c;
     }
     if (!mb_check_encoding($s, 'UTF-8')) {
-        $c = @mb_convert_encoding($s, 'UTF-8', 'Windows-1252');
+        $c = mail_convert_to_utf8($s, 'Windows-1252');
         if ($c !== false && $c !== '') return $c;
     }
     return $s;
@@ -390,17 +463,25 @@ function parse_part($conn, $msgno, $structure, $partno, &$html, &$text, &$atts) 
     $subtype = strtolower($structure->subtype ?? '');
 
     if ($type === 0) { // text
-        $raw   = $partno === ''
-            ? imap_body($conn, $msgno, FT_PEEK)
-            : imap_fetchbody($conn, $msgno, $partno, FT_PEEK);
-        $bytes = decode_transfer($raw, $structure->encoding); // base64/qp + descompresión
-        // El binario se decide sobre los bytes crudos: si luego se convierte el
-        // charset, la basura pasaría a "UTF-8 válido" y se colaría al cuerpo.
-        if (looks_binary($bytes)) { /* parte "de texto" que en realidad es binaria: se omite */ }
-        else {
-            $decoded = repair_mojibake_utf8(to_utf8($bytes, get_charset($structure->parameters ?? [])));
-            if ($subtype === 'html') $html .= $decoded;
-            else                     $text .= $decoded;
+        // Cada parte se decodifica aislada: si una sola falla (charset roto,
+        // bytes imposibles), se omite ESA parte y el resto del correo se ve.
+        try {
+            $raw   = $partno === ''
+                ? imap_body($conn, $msgno, FT_PEEK)
+                : imap_fetchbody($conn, $msgno, $partno, FT_PEEK);
+            $bytes = decode_transfer($raw, $structure->encoding ?? 0); // base64/qp + descompresión
+            unset($raw);
+            // El binario se decide sobre los bytes crudos: si luego se convierte el
+            // charset, la basura pasaría a "UTF-8 válido" y se colaría al cuerpo.
+            if (looks_binary($bytes)) { /* parte "de texto" que en realidad es binaria: se omite */ }
+            else {
+                $decoded = repair_mojibake_utf8(to_utf8($bytes, get_charset($structure->parameters ?? [])));
+                unset($bytes);
+                if ($subtype === 'html') $html .= $decoded;
+                else                     $text .= $decoded;
+            }
+        } catch (\Throwable $e) {
+            error_log('[mail-api read] parte ' . ($partno === '' ? '1' : $partno) . ' omitida: ' . get_class($e) . ': ' . $e->getMessage());
         }
 
     } elseif ($type === 1) { // multipart
@@ -1006,18 +1087,25 @@ case 'read':
     $structure = imap_fetchstructure($conn, $msgno);
 
     $html = ''; $text = ''; $atts = [];
-    parse_part($conn, $msgno, $structure, '', $html, $text, $atts);
+    // Red de seguridad: si algo inesperado falla al armar el cuerpo, se devuelve
+    // lo que sí se pudo leer en vez de un 500 que deja el correo sin abrir.
+    try {
+        parse_part($conn, $msgno, $structure, '', $html, $text, $atts);
 
-    // If no html and no text, fetch raw body
-    if (!$html && !$text) {
-        $bytes = decode_transfer(imap_body($conn, $msgno), $structure->encoding ?? 0);
-        if (looks_binary($bytes)) {
-            $text = '(Este mensaje no tiene una parte de texto legible.)';
-        } else {
-            $decoded = repair_mojibake_utf8(to_utf8($bytes, get_charset($structure->parameters ?? [])));
-            if (strtolower($structure->subtype ?? '') === 'html') $html = $decoded;
-            else $text = $decoded;
+        // If no html and no text, fetch raw body
+        if (!$html && !$text) {
+            $bytes = decode_transfer(imap_body($conn, $msgno, FT_PEEK), $structure->encoding ?? 0);
+            if (looks_binary($bytes)) {
+                $text = '(Este mensaje no tiene una parte de texto legible.)';
+            } else {
+                $decoded = repair_mojibake_utf8(to_utf8($bytes, get_charset($structure->parameters ?? [])));
+                if (strtolower($structure->subtype ?? '') === 'html') $html = $decoded;
+                else $text = $decoded;
+            }
         }
+    } catch (\Throwable $e) {
+        error_log('[mail-api read] cuerpo incompleto uid ' . $uid . ': ' . get_class($e) . ': ' . $e->getMessage());
+        if (!$html && !$text) $text = '(No se pudo decodificar el contenido de este mensaje.)';
     }
 
     $to_list = [];

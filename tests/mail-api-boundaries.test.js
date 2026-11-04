@@ -103,6 +103,48 @@ test('attachment download validates part path and applies preflight plus decoded
   assert.match(att,/mb_substr\(trim\(\$fname\), 0, 200\)/);
 });
 
-test('build marker identifies October boundary hardening',()=>{
-  assert.match(php,/MAIL_API_BUILD', '2026-10-07-mail-session-idempotency'/);
+test('build marker identifies the charset-safe read deploy',()=>{
+  assert.match(php,/MAIL_API_BUILD', '2026-11-04-mail-read-charset-safe'/);
+});
+
+test('reading a message never 500s on an unknown or malformed charset',t=>{
+  // PHP 8: mb_convert_encoding() lanza ValueError con un charset desconocido y
+  // el @ no lo silencia. Ningún mb_convert_encoding del camino de lectura puede
+  // recibir el charset que declara el correo sin pasar por la versión segura.
+  const decoders=block('function decode_str(','function looks_binary(');
+  const risky=[...decoders.matchAll(/^.*mb_convert_encoding\([^)]*,\s*\$\w+\s*\).*$/gm)].map(m=>m[0]);
+  assert.ok(risky.length>0,'expected the guarded converter');
+  for(const line of risky)
+    assert.match(line,/try \{/,'mb_convert_encoding con charset variable debe ir dentro de try: '+line.trim());
+  assert.match(decoders,/catch \(\\Throwable \$e\)/);
+  assert.match(decoders,/iconv\(\$cs, 'UTF-8\/\/IGNORE'/);
+  const part=block('function parse_part(','// ── Envío SMTP');
+  assert.match(part,/try \{[\s\S]*?decode_transfer[\s\S]*?\} catch \(\\Throwable \$e\)/,
+    'una parte rota se omite sin tumbar el mensaje');
+  const read=block("case 'read':","case 'send':");
+  assert.match(read,/try \{\s*parse_part\(/);
+  assert.match(read,/catch \(\\Throwable \$e\)/);
+
+  const available=spawnSync('php',['-v'],{encoding:'utf8'});
+  if(available.error)return t.skip('PHP CLI not present');
+  const helpers=block('function decode_str(','function looks_binary(');
+  const script=helpers+`
+$latin = "Cotizaci\\xF3n";
+$cases = ['x-unknown','unknown-8bit','iso-8859-8-i','ks_c_5601-1987','3Dutf-8','"utf-8"','utf-8*es',
+          'windows-1250','windows-1257','macintosh','x-mac-roman','big5','_iso-2022-jp$esc','cp-850','', null];
+foreach ($cases as $cs) {
+    $out = to_utf8($latin, $cs);
+    if (!is_string($out) || !mb_check_encoding($out, 'UTF-8')) { echo "bad:" . var_export($cs, true); exit(20); }
+}
+if (to_utf8("Cotizaci\\xC3\\xB3n", 'x-unknown') !== 'Cotización') exit(21);
+if (to_utf8($latin, 'iso-8859-1') !== 'Cotización') exit(22);
+if (to_utf8($latin, 'win-1252') !== 'Cotización') exit(23);
+if (to_utf8("Cotizaci\\xF3n", 'iso8859-15') !== 'Cotización') exit(24);
+if (to_utf8("\\xE8au", 'windows-1250') !== 'čau') exit(25);
+if (mail_convert_to_utf8('abc', 'x-unknown') !== false) exit(26);
+if (mail_convert_to_utf8('abc', 'base64') !== false) exit(27);
+echo 'mail_charset_safe_ok';`;
+  const r=spawnSync('php',['-r',script],{encoding:'utf8',timeout:5000});
+  assert.equal(r.status,0,(r.stdout||'')+' '+(r.stderr||''));
+  assert.match(r.stdout,/mail_charset_safe_ok/);
 });
