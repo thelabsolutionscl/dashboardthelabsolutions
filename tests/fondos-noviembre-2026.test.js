@@ -15,13 +15,21 @@ const ids = [
 ];
 
 test('los cuatro fondos de noviembre se vigilan sin inventar aperturas, cierres ni correos',async()=>{
-  for(const id of ids){
+  // Corfo no ha publicado Semilla Inicia, Semilla Expande ni el nuevo Crea y Valida:
+  // la prensa puede anunciar fechas, pero quedan en `expected` y nunca en open/close.
+  for(const id of ids.slice(0,3)){
     const fund = catalog.funds.find(x=>x.id===id);
     assert.ok(fund,id);
     assert.equal(fund.open,null,id);
     assert.equal(fund.close,null,id);
     assert.match(fund.verified,/no hay|no confirma|ninguna nueva|NO confirma/i,id);
   }
+  // BIG 13 sí tiene ventana en la ficha oficial de Corfo Start-Up Chile.
+  const big = catalog.funds.find(x=>x.id===ids[3]);
+  assert.equal(big.open,'2026-11-03T00:00','hora de apertura desconocida se registra como 00:00');
+  assert.equal(big.close,'2026-11-24T13:00');
+  assert.match(big.source,/^https:\/\/www\.corfo\.gob\.cl\//);
+  assert.match(big.verified,/03\/11\/2026 al 24\/11\/2026/);
   const {dueNotifications} = await import('../lead-worker/src/fondos-notify.js');
   assert.equal(dueNotifications(catalog,new Date('2026-11-19T13:20:00.000Z')).length,0);
   assert.equal(new Set(catalog.funds.map(x=>x.id)).size,catalog.funds.length);
@@ -29,6 +37,40 @@ test('los cuatro fondos de noviembre se vigilan sin inventar aperturas, cierres 
   assert.equal(historical.open,'2025-11-05T13:00');
   assert.equal(historical.close,'2025-11-28T13:00');
   assert.equal(dueNotifications(catalog,new Date('2026-11-05T13:20:00.000Z')).length,0);
+  const closing=dueNotifications(catalog,new Date('2026-11-24T13:20:00.000Z'));
+  assert.deepEqual(closing.map(x=>[x.id,x.phase,x.time]),[[ids[3],'cierre','13:00']]);
+  assert.equal(dueNotifications(catalog,new Date('2026-11-17T13:20:00.000Z'),7).length,1,'recordatorio 7 días antes del cierre BIG 13');
+});
+
+test('fechas anunciadas por terceros no crean avisos ni se tratan como oficiales',async()=>{
+  const {dueNotifications} = await import('../lead-worker/src/fondos-notify.js');
+  const announced = catalog.funds.filter(x=>x.expected);
+  assert.deepEqual(announced.map(x=>x.id).sort(),[ids[1],ids[2]].sort());
+  for(const f of announced){
+    assert.equal(f.open,null,f.id);
+    assert.equal(f.close,null,f.id);
+    assert.match(f.expected.note,/Corfo aún no publica/,f.id);
+    assert.match(f.expected.checkedAt,/^\d{4}-\d{2}-\d{2}$/,f.id);
+  }
+  // Ni el día anunciado ni con recordatorio anticipado se envía correo.
+  for(const at of ['2026-11-10T13:20:00.000Z','2026-11-17T13:20:00.000Z','2027-01-28T13:20:00.000Z']){
+    for(const ahead of [0,1,3,7]){
+      assert.equal(dueNotifications(catalog,new Date(at),ahead).filter(x=>x.id!==ids[3]).length,0,at+' +'+ahead);
+    }
+  }
+});
+
+test('TLS (constituida dic. 2021) queda fuera de Semilla Expande y de Build/Ignite',()=>{
+  const expande = catalog.funds.find(x=>x.id===ids[1]);
+  assert.match(expande.fit,/no elegible/i);
+  assert.match(expande.fitReason,/36 meses/);
+  const big = catalog.funds.find(x=>x.id===ids[3]);
+  assert.match(big.fit,/baja/i);
+  assert.match(big.fitReason,/Build[\s\S]*Ignite[\s\S]*Growth/);
+  const creaValida = catalog.funds.find(x=>x.id===ids[2]);
+  assert.match(creaValida.fitReason,/más de 24 meses/);
+  for(const f of [expande,big,creaValida])
+    assert.doesNotMatch(JSON.stringify(f),/\d{1,2}\.\d{3}\.\d{3}-[\dkK]/,'sin RUT en el catálogo público');
 });
 
 test('toda elegibilidad Semilla, Crea y Valida y BIG se explica por instrumento',()=>{

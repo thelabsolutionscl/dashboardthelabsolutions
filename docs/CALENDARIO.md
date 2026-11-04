@@ -185,3 +185,30 @@ El servidor **nunca almacena** el texto del proyecto, respuestas del formulario,
 - 409: actualización concurrente, el navegador recoge revisión y reintenta la modificación **una vez**; 5xx/timeout no disparan reintentos que puedan duplicar mutaciones.
 - La creación automática del documento se realiza solo en un PUT legítimo al registro `FONDOS_TLS`; no modifica el registro `CALENDARIO`.
 - En ausencia de deploy de Workers (por token Cloudflare no configurado) el dashboard conserva el fallback local y lo muestra explícitamente.
+
+## Fondos TLS: revisión de noviembre 2026 y fechas anunciadas sin confirmar (4 nov 2026)
+
+### Elegibilidad de TLS según antecedentes legales
+Antecedentes revisados: certificado de anotaciones y estatuto actualizado del Registro de Empresas y Sociedades, más el e-RUT del SII. La sociedad se constituyó el **22/12/2021** y su e-RUT se emitió el 27/12/2021, así que tiene unos **59 meses** a noviembre de 2026. Tiene 2 accionistas con 50 % cada uno y su giro es impresión y servicios conexos. El catálogo público solo registra la antigüedad (mes y año), sin RUT, nombres ni domicilio.
+
+| Programa | Requisito que decide | TLS |
+| --- | --- | --- |
+| Semilla Expande | Menos de 36 meses y ventas de hasta $80 M en 12 meses | **No elegible** |
+| Semilla Inicia | Menos de 18 meses y sin ventas | **No elegible** |
+| Start-Up Chile BIG 13 Build / Ignite | Hasta 12 / 36 meses | **No elegible** |
+| Start-Up Chile BIG 13 Growth | 24 a 120 meses, ventas de 2.400 a 25.000 UF y startup de base tecnológica global | Antigüedad OK; **encaje bajo** salvo producto tecnológico propio |
+| Crea y Valida (nuevo llamado) | Al menos 24 meses, ventas en los últimos 24 meses y proyecto I+D | **Compatible como empresa**; depende del proyecto |
+
+### Fechas
+- **Start-Up Chile BIG 13:** la ficha de Corfo publica la ventana del 03/11/2026 al 24/11/2026, con resultados el 27/01/2027. La prensa indica cierre a las 13:00. Queda registrada en `open`/`close`, así que genera los avisos normales (7/3/1 días antes y el día del cierre).
+- **Crea y Valida y Semilla Expande:** agregadores y prensa anuncian 10/11/2026 13:00 → 28/01/2027 (Crea y Valida) y alrededor del 17/11/2026 (Semilla Expande), pero Corfo aún no publica las fichas. **No** se cargan en `open`/`close`.
+- Las páginas de corfo.gob.cl no eran accesibles desde el entorno de la revisión. Las fechas se tomaron de resultados de búsqueda sobre la ficha oficial y de prensa; confirmar en la plataforma antes de postular.
+
+### Campo `expected` (decisión de diseño)
+Nuevo objeto opcional `expected: {open, close, note, checkedAt}` para fechas difundidas por terceros. Reglas:
+- Solo se muestra si el programa **no** tiene `open`/`close` oficiales; si los tiene, `clean()` descarta `expected`.
+- La tarjeta, la ficha y la mesa de trabajo lo muestran como «anunciado, sin confirmar». El estado sigue siendo «Sin fecha oficial».
+- No crea eventos de calendario ni avisos: el Worker solo lee `open`, `close` y `milestones`.
+- Cuando el organismo publique la convocatoria, mover las fechas a `open`/`close` y borrar `expected`.
+
+Pruebas: `tests/fondos-noviembre-2026.test.js` y `tests/fondos-visual-tls.test.js`. Las pruebas del aviso «sin ventanas vigentes» usan un reloj fijo (15/12/2026) para no depender del día en que corre la suite.

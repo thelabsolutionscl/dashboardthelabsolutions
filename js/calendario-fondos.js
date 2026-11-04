@@ -37,6 +37,18 @@
     ?(f.funding.minCLP?'Rango: '+money(f.funding.minCLP)+' a '+money(f.funding.maxCLP)+'. ':'')+
       f.funding.detail+(f.funding.status==='reference'?' La próxima convocatoria puede cambiar el tope.':'')
     :'Sin monto verificable en la ficha de este llamado. Consultar bases oficiales.';
+  // Fechas difundidas por prensa o agregadores que el organismo aún no publica.
+  // Son solo informativas: no crean eventos, no cambian el estado de la
+  // convocatoria ni generan avisos (el Worker solo lee open/close/milestones).
+  const cleanExpected=e=>{
+    if(!e||typeof e!=='object')return null;
+    const begin=iso(e.open),end=iso(e.close);
+    if((!begin&&!end)||(begin&&end&&begin>end))return null;
+    return {open:begin?String(e.open):'',close:end?String(e.close):'',
+      note:String(e.note||'').slice(0,400),checkedAt:iso(e.checkedAt)};
+  };
+  const expectedText=x=>[x.open?'Abriría el '+pretty(x.open):'',x.close?'cerraría el '+pretty(x.close):'']
+    .filter(Boolean).join(' y ');
   const clean=f=>{
     if(!f||typeof f!=='object'||!/^[a-z0-9-]{3,90}$/.test(f.id||'')||typeof f.name!=='string'||!allowedUrl(f.source))return null;
     const begin=iso(f.open),end=iso(f.close);
@@ -48,6 +60,7 @@
       source:f.source,info:allowedUrl(f.info)?f.info:f.source,
       verified:String(f.verified||'').slice(0,550),requirements:String(f.requirements||'').slice(0,900),
       funding:validFunding(f),
+      expected:begin||end?null:cleanExpected(f.expected),
       milestones:(Array.isArray(f.milestones)?f.milestones:[]).slice(0,12).map(m=>{
         if(!m||typeof m!=='object'||!/^[a-z0-9-]{3,60}$/.test(String(m.id||''))||
           typeof m.name!=='string'||m.name.length<6||m.name.length>160||
@@ -369,6 +382,7 @@
       'GUÍA DE TRABAJO — GENERADA EN EL NAVEGADOR (NO IA)',
       'Fondo: '+f.name,
       'Situación: '+fundWindow(f).label+'. '+fundWindow(f).reason,
+      ...(f.expected?['Anunciado por terceros, sin confirmar: '+expectedText(f.expected)+'. '+f.expected.note]:[]),
       '',
       'PROYECTO PROPUESTO:',
       idea||'Aún no has descrito el proyecto de TLS.',
@@ -414,7 +428,7 @@
         textResult=offlinePlan(f,idea);
       }else{
         const system='Eres asesor de postulaciones de The Lab Solutions (fabricación digital, señalética, impresión 3D) en Chile. Usa SOLO los datos proporcionados, sin inventar bases, fechas, ventas, montos, requisitos cumplidos, ingresos ni elegibilidad. No digas que revisaste internet. Responde en español sencillo con 1) Resumen de proyecto, 2) Encaje potencial y límites, 3) Requisitos a comprobar en bases oficiales, 4) Texto borrador editable, 5) Lista concreta de antecedentes pendientes y próxima acción. No envíes postulación ni prometas financiamiento.';
-        const user='CONVOCATORIA DEL CATÁLOGO (NO VERIFICADA EN VIVO):\n'+f.name+'\nOrganismo: '+f.organizer+'\nVentana: '+(f.open||'Sin fecha')+' a '+(f.close||'Sin fecha')+'\nEncaje orientativo: '+f.fitReason+'\nRequisitos preliminares: '+f.requirements+'\n\nDESCRIPCIÓN DEL PROYECTO ESCRITA POR EL USUARIO:\n'+idea+'\n\nEl usuario debe validar todos los requisitos en la fuente oficial.';
+        const user='CONVOCATORIA DEL CATÁLOGO (NO VERIFICADA EN VIVO):\n'+f.name+'\nOrganismo: '+f.organizer+'\nVentana: '+(f.open||'Sin fecha')+' a '+(f.close||'Sin fecha')+(f.expected?'\nFechas anunciadas por terceros (NO confirmadas por el organismo): '+expectedText(f.expected):'')+'\nEncaje orientativo: '+f.fitReason+'\nRequisitos preliminares: '+f.requirements+'\n\nDESCRIPCIÓN DEL PROYECTO ESCRITA POR EL USUARIO:\n'+idea+'\n\nEl usuario debe validar todos los requisitos en la fuente oficial.';
         textResult=String(await window.callAgentClaude('CEO',system,user,{maxTokens:1200})||'').trim();
         if(!textResult)throw new Error('La IA no entregó texto.');
       }
@@ -447,6 +461,7 @@
       '<div class="fondos-workspace-heading"><div><div class="fondos-eyebrow">MI MESA DE TRABAJO · 3 PASOS</div><h3>'+esc(f.name)+'</h3><span class="fondos-workspace-agency">'+esc(f.organizer)+' · '+esc(f.region)+'</span></div>'+
         '<button type="button" class="fondos-outline-action" data-fondos-work-close>✕ Cerrar ficha</button></div>'+
       '<div class="fondos-workspace-window" data-tone="'+win.tone+'"><strong>'+esc(win.label)+'</strong><span>'+esc(win.reason)+'</span></div>'+
+      (f.expected?'<div class="fondos-workspace-window fondos-expected" data-tone="watch"><strong>Anunciado, sin confirmar: '+esc(expectedText(f.expected))+'</strong><span>'+esc(f.expected.note)+' No genera avisos hasta que el organismo publique la convocatoria.</span></div>':'')+
       (confirmedMilestones(f).length?'<div class="fondos-workspace-milestones"><strong>⚠ Etapas adicionales del organismo</strong>'+
         confirmedMilestones(f).map(m=>'<div><b>'+esc(m.name)+'</b> · '+esc(pretty(m.date))+
           ' · '+link(m.source,'Comprobar en organismo')+'</div>').join('')+'</div>':'')+
@@ -698,6 +713,8 @@
           '</div><div class="fondos-date fondos-date--close"><small>● Cierre</small><b>'+esc(pretty(f.close))+'</b>'+
             (iso(f.close)?'<button type="button" class="fondos-inline-jump" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="close">Ver en calendario ↗</button>':'')+
           '</div></div>':
+        f.expected?
+        '<div class="fondos-date-strip"><div class="fondos-date fondos-date--unknown fondos-date--expected"><small>Próximo llamado · anunciado, sin confirmar</small><b>'+esc(expectedText(f.expected))+'</b><span>Fechas por confirmar en fuente oficial</span></div></div>':
         '<div class="fondos-date-strip"><div class="fondos-date fondos-date--unknown"><small>Próximo llamado</small><b>Fechas por confirmar en fuente oficial</b></div></div>';
       const amount='<div class="fondos-funding" data-kind="'+(f.funding?f.funding.status:'unknown')+
         '" title="'+esc(fundingExplanation(f))+'" aria-label="Financiamiento: '+esc(fundingValue(f))+'">'+
@@ -801,6 +818,8 @@
           esc(m.name)+'</strong> · '+esc(pretty(m.date))+' · '+link(m.source,'Fuente oficial')+
           ' <button type="button" class="btn btn-ghost btn-sm" data-fondos-calendar="'+esc(f.id)+'" data-fondos-phase="milestone:'+esc(m.id)+'">Ver en calendario</button></li>').join('')+'</ul>':
           '<p>Sin hitos adicionales acreditados en esta ficha; revisar bases antes de postular.</p>')+'</div>'+
+      (f.expected?'<div class="fondos-detail-section fondos-expected"><h4>Fechas anunciadas, sin confirmar</h4><p><strong>'+esc(expectedText(f.expected))+'.</strong> '+esc(f.expected.note)+
+        (f.expected.checkedAt?' Revisado el '+esc(pretty(f.expected.checkedAt))+'.':'')+' No crea eventos ni avisos hasta que el organismo publique la convocatoria.</p></div>':'')+
       '<div class="fondos-detail-section"><h4>Lo que debes verificar antes de postular</h4><p>'+esc(f.requirements)+'</p></div>'+
       '<div class="fondos-detail-section"><h4>Respaldo y territorio</h4><p>'+esc(f.region)+'. '+esc(f.verified)+'</p></div>'+
       '<div class="fondos-detail-section"><h4>Información oficial</h4><p>'+link(f.source,'↗ Abrir fuente y bases del organismo')+'</p></div>'+
