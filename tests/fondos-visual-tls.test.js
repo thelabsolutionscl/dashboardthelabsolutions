@@ -72,7 +72,7 @@ test('cada tarjeta muestra monto en rojo arriba a la derecha, con alcance correc
   assert.match(next,/REFERENCIA ANTERIOR/);
   assert.match(next,/data-kind="reference"/);
   assert.match(next,/Hasta \$180\.000\.000/);
-  const unknown=card('startupchile-big-proximo-vigilar');
+  const unknown=card('corfo-sumate-innovar');
   assert.match(unknown,/data-kind="unknown"/);
   assert.match(unknown,/Por confirmar/);
   const range=card('sercotec-crece-sostenible-rm-2026');
@@ -130,7 +130,8 @@ test('filtros visuales y búsqueda actualizan tarjetas sin alterar fechas ni cat
   v.hooks['root:click']({target:{closest:selector=>selector==='[data-fondos-view]'?
     {dataset:{fondosView:'sin-fechas'}}:null}});
   assert.match(v.list.innerHTML,/aria-pressed="true">Sin fecha oficial/);
-  assert.ok(v.list.innerHTML.includes('data-fondos-card="startupchile-big-proximo-vigilar"'));
+  assert.ok(v.list.innerHTML.includes('data-fondos-card="corfo-semilla-expande-nueva-vigilar"'));
+  assert.ok(!v.list.innerHTML.includes('data-fondos-card="startupchile-big-proximo-vigilar"'),'BIG 13 ya tiene ventana oficial');
   assert.ok(!v.list.innerHTML.includes('data-fondos-card="corfo-crea-y-valida-2026"'));
   const c={dataset:{fondosCard:'corfo-semilla-inicia-nueva-vigilar'},hidden:false};
   v.cards.push(c);
@@ -340,8 +341,14 @@ test('sin IA ofrece una guía local explícita; error remoto no se disfraza de �
   assert.match(v.list.innerHTML,/Conexión no disponible/);
   assert.match(v.list.innerHTML,/Crear guía local sin IA/);
 });
+// Reloj fijo posterior a toda ventana registrada (BIG 13 cierra el 24/11/2026):
+// el aviso "sin ventanas" no debe depender del día en que corre la suite.
+const afterWindows=()=>class extends Date{
+  constructor(...args){super(...(args.length?args:['2026-12-15T15:00:00.000Z']));}
+  static now(){return new Date('2026-12-15T15:00:00.000Z').getTime();}
+};
 test('buscar conserva foco de input y paginación de ocho; histórico nunca se anuncia como abierto',async()=>{
-  const v=view();await v.api.load();
+  const v=view({Date:afterWindows()});await v.api.load();
   assert.match(v.list.innerHTML,/data-fondos-more/);
   assert.match(v.list.innerHTML,/No hay un fondo con apertura vigente o futura registrada/);
   assert.match(v.list.innerHTML,/Sin fecha oficial/);
@@ -398,7 +405,7 @@ test('auditoría: formulario no recibe preguntas ficticias al abrir mesa de trab
   assert.doesNotMatch(v.list.innerHTML,/PREGUNTAS COPIADAS POR EL USUARIO/);
 });
 test('auditoría: ranking deja fondos no elegibles detrás de seguimiento razonable',async()=>{
-  const v=view();await v.api.load();
+  const v=view({Date:afterWindows()});await v.api.load();
   const html=v.list.innerHTML;
   const viable=html.indexOf('data-fondos-card="corfo-crea-y-valida-proxima-vigilar"');
   const ineligible=html.indexOf('data-fondos-card="corfo-semilla-inicia-nueva-vigilar"');
@@ -463,4 +470,35 @@ test('seguimiento del equipo se comparte entre dos vistas y no persiste textos s
  two.api.openWorkspace(id);
  assert.match(two.list.innerHTML,/1 de 7/);
  assert.doesNotMatch(JSON.stringify(backend.data),/impresora|formulario textual|RUT|password/i);
+});
+
+test('fechas anunciadas sin confirmar se ven en tarjeta y ficha, pero no en el calendario',async()=>{
+  const onDay=()=>class extends Date{
+    constructor(...args){super(...(args.length?args:['2026-11-04T15:00:00.000Z']));}
+    static now(){return new Date('2026-11-04T15:00:00.000Z').getTime();}
+  };
+  const v=view({Date:onDay()});await v.api.load();
+  const html=v.list.innerHTML;
+  const card=id=>{const a=html.indexOf('data-fondos-card="'+id+'"');return html.slice(a,html.indexOf('</article>',a));};
+  const crea=card('corfo-crea-y-valida-proxima-vigilar');
+  assert.match(crea,/fondos-date--expected/);
+  assert.match(crea,/anunciado, sin confirmar/);
+  assert.match(crea,/Abriría el 10 nov 2026 · 13:00 h y cerraría el 28 ene 2027/);
+  assert.match(crea,/Sin fecha oficial/,'el estado sigue siendo sin fecha oficial');
+  assert.doesNotMatch(crea,/data-fondos-calendar=/);
+  assert.match(card('corfo-semilla-expande-nueva-vigilar'),/Abriría el 17 nov 2026/);
+  assert.ok(!v.api.eventList().some(e=>/crea-y-valida-proxima|semilla-expande-nueva/.test(e.id)),'sin eventos para fechas anunciadas');
+  // BIG 13 está dentro de su ventana oficial y encabeza la lista.
+  const big=card('startupchile-big-proximo-vigilar');
+  assert.match(big,/Dentro de ventana publicada/);
+  assert.match(big,/24 nov 2026 · 13:00 h/);
+  assert.match(html,/Hay 1 ventana\(s\) que requieren verificar vigencia/);
+  assert.ok(html.indexOf('data-fondos-card="startupchile-big-proximo-vigilar"')<html.indexOf('data-fondos-card="corfo-crea-y-valida-proxima-vigilar"'));
+  v.api.open('corfo-crea-y-valida-proxima-vigilar');
+  assert.match(v.detail.innerHTML,/Fechas anunciadas, sin confirmar/);
+  assert.match(v.detail.innerHTML,/No crea eventos ni avisos/);
+  // Un catálogo con fecha oficial ignora `expected` para no mostrar dos ventanas.
+  const both=v.api.clean({...catalog.funds.find(f=>f.id==='startupchile-big-proximo-vigilar'),expected:{open:'2026-12-01'}});
+  assert.equal(both.expected,null);
+  assert.equal(v.api.clean({...catalog.funds[0],open:null,close:null,expected:{open:'2027-02-01',close:'2027-01-01'}}).expected,null,'rango invertido se descarta');
 });
