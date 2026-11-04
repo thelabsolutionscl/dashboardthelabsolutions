@@ -1206,14 +1206,32 @@ function _printerWsHeartbeat(){
     }
   });
 }
+// Los navegadores congelan timers y sockets durante el reposo. Al regresar,
+// descartar los backoffs de lectura del ciclo anterior y renovar el ticket ANTES
+// de abrir sockets/consultar estado; nunca modificar trabajos ni impresoras.
+let _printerLastResumeAt=0,_printerResumePending=null;
 function _resumePrinterRealtime(){
   if(window._DEMO_MODE)return;
-  refreshPrinterTunnelSession(false).then(ok=>{if(ok){try{reconnectAllPrinterWs();_refreshSnapshotCams(true);}catch(_){}}}).catch(()=>{});
-  try{pollPrinters();}catch(e){}
-  try{connectAllPrinterWs();_printerWsHeartbeat();}catch(e){}
-  try{_refreshSnapshotCams(true);}catch(e){}
-  try{window.FarmHealth?.refresh?.(true);}catch(e){}
-  try{window.FarmRegistry?.sync?.(true);window.FarmQueue?.sync?.(true);window.FarmOperations?.sync?.(true);}catch(e){}
+  const now=Date.now();
+  // focus + visibilitychange suelen dispararse juntos. Evitar dos ráfagas.
+  if(_printerResumePending||now-_printerLastResumeAt<2500)return _printerResumePending;
+  _printerLastResumeAt=now;
+  _printerResumePending=(async()=>{
+    // La respuesta de /healthz previa al reposo puede haber quedado en caché.
+    _remoteBridgeHealth.at=0;_remoteBridgeHealth.ok=null;
+    for(const m of MAQUINAS){
+      _nextPollAt[m.id]=0;
+      _wsConnected[m.id]=false;
+      _wsLastMessage[m.id]=0;
+    }
+    try{await refreshPrinterTunnelSession(false);}catch(_){}
+    try{reconnectAllPrinterWs();_printerWsHeartbeat();}catch(_){}
+    try{await pollPrinters();}catch(_){}
+    try{_refreshSnapshotCams(true);}catch(_){}
+    try{window.FarmHealth?.refresh?.(true);}catch(_){}
+    try{window.FarmRegistry?.sync?.(true);window.FarmQueue?.sync?.(true);window.FarmOperations?.sync?.(true);}catch(_){}
+  })().finally(()=>{_printerResumePending=null;});
+  return _printerResumePending;
 }
 let _printerAccessRenewTimer=null;
 function ensurePrinterRealtimeService(){
