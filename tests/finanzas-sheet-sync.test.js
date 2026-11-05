@@ -36,3 +36,10 @@ test('frontend reuses existing Google Drive OAuth instead of committing service 
 test('sync never copies manual Sheets rows into the shared accounting document or invoices',()=>{
   assert.doesNotMatch(bridge,/_finSharedMutate|\/shared\/finance|airtableWrite|finFacturas/);
 });
+
+test('Google Sheets panel is readable against the dark dashboard theme',()=>{
+  assert.match(bridge,/#tls-sheet-caja\{[^}]*background:#11191c!important;color:#edf6f6!important/);
+  assert.match(bridge,/#tls-sheet-caja \[data-tls-refresh\]\{[^}]*background:#00c7c0!important;color:#082122!important/);
+  assert.match(bridge,/#tls-sheet-caja \.tls-sheet-field\{[^}]*background:#0c1518!important;color:#f5fafa!important/);
+  assert.match(finance,/js\/finanzas-sheet-sync\.js\?v=20261105-dark2/);
+});
