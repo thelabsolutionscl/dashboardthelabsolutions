@@ -12,6 +12,15 @@
   - `tls-legacy-2026-11-03-gasto`: 2026-11-03, gasto $10.380, COMIDA KAISER.
 - Los movimientos se muestran en la tabla original de Finanzas → Libro Diario, sin duplicar registros en `FINANZAS_V2`/Airtable.
 
+## Interfaz consistente con el dashboard
+
+- Barra compacta **Google Sheets** al inicio de **Finanzas → Libro Diario**, antes de KPIs y formulario, con colores y botones propios de The Lab.
+- Estado real **Sin conectar / Sincronizando / Conectado / Revisar conexión**, sin afirmar éxito hasta leer una pestaña MOVIMIENTOS válida.
+- Botón principal **Conectar Google Sheets** antes de autorizar y **Actualizar** luego de conectarse; enlace secundario **Abrir planilla**.
+- Información resumida de movimientos sincronizados y horario de la última lectura. La sincronización automática corre cada 30 segundos cuando la sección está abierta y la sesión OAuth sigue vigente.
+- Selector de destino compacto **Guardar movimiento en** dentro del formulario y acceso **Conectar Drive** desde allí cuando falta autorización.
+- Errores visibles y foco accesible; diseño adaptable a móvil. La lógica de almacenamiento, edición por ID, altas y bajas no se modificó en esta mejora visual.
+
 ## Uso del dashboard
 
 1. Entrar a Finanzas → Libro Diario y pulsar **Conectar / actualizar Google Sheets**.
