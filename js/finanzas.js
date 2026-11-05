@@ -1538,7 +1538,7 @@ async function ldGuardar(){
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   // Explicit destination: Sheet cash entries are never duplicated in FINANZAS_V2.
   if(window.TLSFinanceSheets?.isSelected?.()){
-    const ok=await window.TLSFinanceSheets.saveFromForm({fecha,tipo,descripcion,monto});
+    const ok=await window.TLSFinanceSheets.saveFromForm({fecha,tipo,categoria,descripcion,monto,metodo,referencia,contraparte});
     if(!ok)return;
     ldLimpiar();ldInit();toast('✓ Google Sheets actualizado desde Libro Diario','success');
     return;
@@ -1550,7 +1550,7 @@ async function ldGuardar(){
 }
 
 async function ldEliminar(id){
-  if(/^tls-sheet-2026-11-(0[1-9]|[12][0-9]|30)-(ingreso|gasto)$/.test(String(id))){
+  if(/^(tls-mov-[a-f0-9-]{36}|tls-legacy-2026-11-(0[1-9]|[12][0-9]|30)-(ingreso|gasto))$/.test(String(id))){
     if(!confirm('¿Eliminar este movimiento también de Google Sheets?'))return;
     const ok=await window.TLSFinanceSheets?.remove?.(id);
     if(ok)toast('✓ Registro eliminado de Google Sheets','success');
@@ -3602,7 +3602,7 @@ function _ivaSetOff(o){const el=document.getElementById('ivaMensualCard');if(el)
     if(document.getElementById('tls-finance-sheet-script'))return;
     const script=document.createElement('script');
     script.id='tls-finance-sheet-script';
-    script.src='js/finanzas-sheet-sync.js?v=20261105-unified';
+    script.src='js/finanzas-sheet-sync.js?v=20261105-transactions';
     script.defer=true;
     document.head.appendChild(script);
   }

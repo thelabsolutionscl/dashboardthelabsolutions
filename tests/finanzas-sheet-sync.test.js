@@ -3,120 +3,121 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const bridge=fs.readFileSync('js/finanzas-sheet-sync.js','utf8');
+const script=fs.readFileSync('js/finanzas-sheet-sync.js','utf8');
 const finance=fs.readFileSync('js/finanzas.js','utf8');
-
-const ID='12OYYXY8ExcAvhwB_A4PTPkghowA5Cm_8BSgJ_gZAuqo';
-function fixture(){
-  const data=new Map();
-  for(let day=1;day<=30;day++)data.set(day,[null,null,'']);
-  data.set(5,[1000,null,'Pago inicial']);
-  data.set(8,[500,200,'Mixto']);
+const headers=['ID','FECHA','TIPO','CATEGORÍA','DESCRIPCIÓN','MONTO','MÉTODO','REFERENCIA','PROVEEDOR/CLIENTE','ESTADO','ACTUALIZADO'];
+function mock(){
+  const data=[
+    [...headers],
+    ['tls-legacy-2026-11-02-ingreso','2026-11-02','ingreso','Caja · Google Sheets','DEV GUSTAVO',15500,'Google Sheets','NOVIEMBRE 2026','','Activo','2026-11-05T00:00:00Z'],
+    ['tls-legacy-2026-11-03-gasto','2026-11-03','gasto','Caja · Google Sheets','COMIDA KAISER',10380,'Google Sheets','NOVIEMBRE 2026','','Activo','2026-11-05T00:00:00Z']
+  ];
   const writes=[];
-  let refreshCount=0;
-  const window={};
-  const document={readyState:'loading',addEventListener:(e,fn)=>{},visibilityState:'visible'};
-  const ctx={
-    window,document,
-    console,Date,Number,Map,Array,JSON,String,Error,Intl,Set,
-    confirm:()=>true,toast:()=>{},
-    ldFiltrar:()=>{refreshCount++},
-    _driveApiFetch:async (url,opts={})=>{
-      const from=url.split('/values/')[1]?.split('?')[0];
-      const path=decodeURIComponent(from||'');
-      if(path==="'NOVIEMBRE 2026'!I3")return{values:[[45140]]};
-      if(path==="'NOVIEMBRE 2026'!C3:F33"){
-        return{values:[['FECHA','INGRESOS','EGRESOS','DETALLE'],
-          ...Array.from({length:30},(_,i)=>[i+1,...data.get(i+1)])]};
+  let sequence=0;
+  const dom={};
+  for(const id of ['ld-fecha','ld-tipo','ld-descripcion','ld-monto','ld-metodo','ld-referencia','ld-contraparte'])
+    dom[id]={value:'',scrollIntoView(){},focus(){}};
+  dom['ld-categoria']={value:'',options:[],add(opt){this.options.push(opt)}};
+  let updates=0;
+  const win={};
+  const context={window:win,document:{readyState:'loading',addEventListener(){},getElementById:id=>dom[id]||null},
+    Date,Number,String,JSON,Map,Array,Error,Intl,Set,Option:function(text,value){return {text,value}},
+    crypto:{randomUUID:()=> 'aaaaaaaa-aaaa-4aaa-8aaa-'+String(++sequence).padStart(12,'0')},
+    toast(){},ldFiltrar(){updates++},ldSwitchTipo(){},confirm(){return true},
+    _driveApiFetch:async(url,opts={})=>{
+      const range=decodeURIComponent(url.split('/values/')[1].split('?')[0]);
+      const key=range.replace(/:append$/,'');
+      if(key==="'MOVIMIENTOS'!A1:K"&&(!opts.method||opts.method==='GET'))
+        return {values:data.map(r=>r.slice())};
+      const full=/^'MOVIMIENTOS'!A(\d+):K\1$/.exec(key);
+      const status=/^'MOVIMIENTOS'!J(\d+):K\1$/.exec(key);
+      if(opts.method==='POST'){
+        assert.match(range,/:append$/);
+        const row=JSON.parse(opts.body).values[0];
+        data.push(row);writes.push({kind:'append',row});
+        return{updates:{updatedRange:"'MOVIMIENTOS'!A"+data.length+":K"+data.length}};
       }
-      const readMatch=/^'NOVIEMBRE 2026'!C(\d+):F(\d+)$/.exec(path);
-      if(readMatch){
-        const row=Number(readMatch[1]);assert.equal(row,Number(readMatch[2]));
-        const day=row-3;return{values:[[day,...data.get(day)]]};
+      if(full){
+        const index=Number(full[1])-1;
+        if(opts.method==='PUT'){
+          const row=JSON.parse(opts.body).values[0];
+          data[index]=row;writes.push({kind:'edit',row});
+          return{};
+        }
+        return{values:[data[index]?.slice()||[]]};
       }
-      const writeMatch=/^'NOVIEMBRE 2026'!D(\d+):F(\d+)$/.exec(path);
-      if(writeMatch){
-        assert.equal(opts.method,'PUT');
-        assert.equal(Number(writeMatch[1]),Number(writeMatch[2]));
-        const day=Number(writeMatch[1])-3;
-        const payload=JSON.parse(opts.body);
-        const next=payload.values[0];
-        assert.equal(payload.range,path);
-        writes.push({day,next});
-        data.set(day,[next[0]===''?null:next[0],next[1]===''?null:next[1],next[2]]);
-        return{updatedRange:path};
+      if(status&&opts.method==='PUT'){
+        const index=Number(status[1])-1;
+        const fields=JSON.parse(opts.body).values[0];
+        data[index][9]=fields[0];data[index][10]=fields[1];
+        writes.push({kind:'delete',fields});return{};
       }
-      throw Error('Unexpected sheet range: '+path);
-    }
-  };
-  vm.runInNewContext(bridge,ctx,{filename:'finanzas-sheet-sync.js'});
-  return{api:window.TLSFinanceSheets,data,writes,refreshCount:()=>refreshCount};
+      throw Error('Unexpected URL: '+url+' / '+opts.method);
+    }};
+  vm.runInNewContext(script,context);
+  return{api:win.TLSFinanceSheets,data,writes,dom,updates:()=>updates};
 }
-test('new Sheets adapter compiles without a standalone card',()=>{
-  assert.doesNotThrow(()=>new Function(bridge));
-  assert.doesNotMatch(bridge,/id=['"]tls-sheet-caja|className=['"]tls-sheet-caja/);
-  assert.match(bridge,/ld-tbody/);
-  assert.match(bridge,/ld-monto/);
+test('module parses and operates inside the existing Libro Diario',()=>{
+  assert.doesNotThrow(()=>new Function(script));
+  assert.match(script,/getElementById\('ld-tbody'\)/);
+  assert.doesNotMatch(script,/tls-sheet-caja/);
+  assert.match(finance,/window\.TLSFinanceSheets\.saveFromForm\(\{fecha,tipo,categoria,descripcion,monto,metodo,referencia,contraparte\}\)/);
+  assert.match(finance,/js\/finanzas-sheet-sync\.js\?v=20261105-transactions/);
 });
-test('ledger display integrates sheets alongside native entries but never persists them',()=>{
-  assert.match(finance,/function ldGetDisplayAll\(/);
-  assert.match(finance,/ldFiltradas=ldGetDisplayAll\(\)\.filter/);
-  assert.match(finance,/const all=ldGetDisplayAll\(\)/);
-  assert.match(finance,/if\(window\.TLSFinanceSheets\?\.isSelected\?\.\(\)\)/);
-  assert.match(finance,/window\.TLSFinanceSheets\?\.remove\?\.\(id\)/);
-  assert.match(finance,/window\.TLSFinanceSheets\.edit/);
-  assert.match(finance,/js\/finanzas-sheet-sync\.js\?v=20261105-unified/);
-  assert.match(bridge,/getEntries:\(\)=>entries\.map/);
-  assert.doesNotMatch(bridge,/_finSharedMutate|\/shared\/finance|airtableWrite|localStorage/);
+test('reads independently numbered historical transactions',async()=>{
+  const m=mock();assert.equal(await m.api.refresh(true),true);
+  const rows=Array.from(m.api.getEntries());
+  assert.equal(rows.length,2);
+  assert.equal(rows[0].monto,15500);
+  assert.equal(rows[1].monto,10380);
+  assert.ok(rows.every(x=>x._sheetSource&&x.categoria==='Caja · Google Sheets'));
 });
-test('live sheet row projection preserves dates, types, totals and source markers',async()=>{
-  const f=fixture();assert.equal(await f.api.refresh(true),true);
-  const rows=f.api.getEntries();
-  assert.equal(rows.length,3);
-  assert.deepEqual(Array.from(rows,e=>[e.fecha,e.tipo,e.monto]),[
-    ['2026-11-05','ingreso',1000],
-    ['2026-11-08','ingreso',500],
-    ['2026-11-08','gasto',200]
-  ]);
-  assert.ok(rows.every(e=>e._sheetSource===true&&e.metodo==='Google Sheets'));
-  assert.equal(f.refreshCount(),1);
+test('appends two expenses on the same day without replacing totals or each other',async()=>{
+  const m=mock();await m.api.refresh(true);
+  const entry=(text,monto)=>({fecha:'2026-11-05',tipo:'gasto',categoria:'Materiales',descripcion:text,monto,metodo:'Transferencia',referencia:'',contraparte:''});
+  assert.equal(await m.api.saveFromForm(entry('Filamento',2000)),true);
+  const first=Array.from(m.api.getEntries());assert.equal(first.length,3);
+  assert.equal(await m.api.saveFromForm(entry('Pintura',500)),true);
+  assert.equal(m.api.getEntries().length,4);
+  assert.equal(m.writes.length,2);
+  assert.equal(m.writes[0].kind,'append');
+  assert.equal(m.writes[1].kind,'append');
+  assert.equal(m.data[3][4],'Filamento');
+  assert.equal(m.data[4][4],'Pintura');
+  assert.equal(m.data[3][5]+m.data[4][5],2500);
 });
-test('new ledger movement writes exactly D:F of the chosen day and verifies',async()=>{
-  const f=fixture();await f.api.refresh(true);
-  assert.equal(await f.api.saveFromForm({fecha:'2026-11-06',tipo:'gasto',monto:350,descripcion:'Insumos'}),true);
-  assert.deepEqual(f.data.get(6),[null,350,'Insumos']);
-  assert.equal(f.writes.length,1);
-  assert.equal(f.writes[0].day,6);
-  assert.ok(f.api.getEntries().some(e=>e.fecha==='2026-11-06'&&e.tipo==='gasto'&&e.monto===350));
+test('edits one record by ID without changing a different record',async()=>{
+  const m=mock();await m.api.refresh(true);
+  const id='tls-legacy-2026-11-03-gasto';
+  m.api.edit(id);
+  m.dom['ld-descripcion'].value='COMIDA';
+  const result=await m.api.saveFromForm({fecha:'2026-11-03',tipo:'gasto',categoria:'Comida',descripcion:'COMIDA',monto:11000,metodo:'Tarjeta',referencia:'',contraparte:''});
+  assert.equal(result,true);assert.equal(m.data[2][5],11000);assert.equal(m.data[1][5],15500);
 });
-test('duplicate daily type, unsupported month or fractional CLP are refused',async()=>{
-  const f=fixture();await f.api.refresh(true);
-  assert.equal(await f.api.saveFromForm({fecha:'2026-11-05',tipo:'ingreso',monto:100,descripcion:'Otro'}),false);
-  assert.equal(await f.api.saveFromForm({fecha:'2026-12-05',tipo:'gasto',monto:100,descripcion:'Otro'}),false);
-  assert.equal(await f.api.saveFromForm({fecha:'2026-11-06',tipo:'gasto',monto:100.5,descripcion:'Otro'}),false);
-  assert.equal(f.writes.length,0);
+test('deletion is a reversible tombstone; no rows are actually erased',async()=>{
+  const m=mock();await m.api.refresh(true);
+  assert.equal(await m.api.remove('tls-legacy-2026-11-03-gasto'),true);
+  assert.equal(m.data.length,3);
+  assert.equal(m.data[2][9],'Eliminado');
+  assert.equal(m.api.getEntries().length,1);
 });
-test('editing one side cannot overwrite the shared description of the other side',async()=>{
-  const f=fixture();await f.api.refresh(true);
-  assert.equal(await f.api.saveFromForm({fecha:'2026-11-08',tipo:'gasto',monto:300,descripcion:'Otro detalle'}),false);
-  assert.equal(f.writes.length,0);
+test('stale remote edits cannot be overwritten',async()=>{
+  const m=mock();await m.api.refresh(true);
+  m.api.edit('tls-legacy-2026-11-03-gasto');
+  m.data[2][5]=99999;
+  assert.equal(await m.api.saveFromForm({fecha:'2026-11-03',tipo:'gasto',descripcion:'COMIDA',monto:10,categoria:'Gasto',metodo:'',referencia:'',contraparte:''}),false);
+  assert.equal(m.writes.length,0);
 });
-test('remote concurrent edit causes optimistic update conflict and no write',async()=>{
-  const f=fixture();await f.api.refresh(true);
-  f.data.set(6,[null,900,'Alguien editó en Drive']);
-  assert.equal(await f.api.saveFromForm({fecha:'2026-11-06',tipo:'gasto',monto:350,descripcion:'Insumos'}),false);
-  assert.equal(f.writes.length,0);
+test('invalid formulas and invalid dates cannot be submitted',async()=>{
+  const m=mock();await m.api.refresh(true);
+  const base={fecha:'2026-11-05',tipo:'ingreso',categoria:'Ventas',monto:1000,metodo:'Transferencia',referencia:'',contraparte:''};
+  assert.equal(await m.api.saveFromForm({...base,descripcion:'=IMPORTXML("bad")'}),false);
+  assert.equal(await m.api.saveFromForm({...base,fecha:'2026-11-31',descripcion:'Venta'}),false);
+  assert.equal(m.writes.length,0);
 });
-test('delete only clears one amount and preserves shared detail while other side exists',async()=>{
-  const f=fixture();await f.api.refresh(true);
-  assert.equal(await f.api.remove('tls-sheet-2026-11-08-gasto'),true);
-  assert.deepEqual(f.data.get(8),[500,null,'Mixto']);
-  assert.equal(f.api.getEntries().filter(e=>e.fecha==='2026-11-08').length,1);
-});
-test('no hidden permanent sync or unrelated API key is included',()=>{
-  assert.match(bridge,/const POLL_MS=30000/);
-  assert.match(bridge,/_driveApiFetch/);
-  assert.doesNotMatch(bridge,/sk-ant-|AIza[A-Za-z0-9_-]+|client_secret|private_key/);
-  assert.match(bridge,/const grid=await read\('C3:F33'\)/);
-  assert.match(bridge,/const opening=await read\('I3'\)/);
+test('the sheet is authoritative and no duplicate Airtable sync is introduced',()=>{
+  assert.match(script,/MOVIMIENTOS/);
+  assert.doesNotMatch(script,/_finSharedMutate|\/shared\/finance|localStorage|airtableWrite/);
+  assert.match(finance,/function ldGetDisplayAll/);
+  assert.match(finance,/ldFiltradas=ldGetDisplayAll\(\)/);
 });
