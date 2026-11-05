@@ -73,7 +73,7 @@ test('live sheet row projection preserves dates, types, totals and source marker
   const f=fixture();assert.equal(await f.api.refresh(true),true);
   const rows=f.api.getEntries();
   assert.equal(rows.length,3);
-  assert.deepEqual(rows.map(e=>[e.fecha,e.tipo,e.monto]),[
+  assert.deepEqual(Array.from(rows,e=>[e.fecha,e.tipo,e.monto]),[
     ['2026-11-05','ingreso',1000],
     ['2026-11-08','ingreso',500],
     ['2026-11-08','gasto',200]
