@@ -196,6 +196,19 @@ async function _fichaHTMLtoPdfBlob(htmlDoc){
   // por la derecha. (El escudo all:revert deja content-box, por eso se fija aquí.)
   root.style.cssText='width:794px;background:#fff;box-sizing:border-box;';
   root.innerHTML='<style>'+shield+_scopeCss(css,'#'+ROOT)+'</style>'+body;
+  // html2canvas deja en blanco los <svg> en línea (el dibujo de medidas de la
+  // ficha técnica): se pasan a <img> antes de rasterizar. Los íconos con <use>
+  // apuntan al sprite de la app y no sobreviven como imagen: esos no se tocan.
+  root.querySelectorAll('svg[viewBox]').forEach(svg=>{
+    if(svg.querySelector('use')) return;
+    // Sin ancho/alto propios la imagen queda de 300×150 y se dibuja ampliada.
+    const vb=String(svg.getAttribute('viewBox')).trim().split(/[\s,]+/).map(Number);
+    if(vb.length===4&&!svg.getAttribute('width')){svg.setAttribute('width',vb[2]);svg.setAttribute('height',vb[3]);}
+    const img=document.createElement('img');
+    img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    img.style.cssText='display:block;width:100%;height:auto';
+    svg.replaceWith(img);
+  });
   holder.appendChild(root);
   document.body.appendChild(holder);
   try{
@@ -206,12 +219,19 @@ async function _fichaHTMLtoPdfBlob(htmlDoc){
       imgs.forEach(img=>{if(img.complete) check();else{img.onload=check;img.onerror=check;}});
       setTimeout(r,4000);
     });
+    // Un documento de hojas A4 exactas (la ficha técnica) sobra en ~1 px por el
+    // redondeo de html2pdf y saldría con una hoja final en blanco: se quita solo
+    // si lo que pasa a esa hoja mide menos de 4 px.
+    const altoHoja=794*297/210,altoDoc=root.getBoundingClientRect().height;
     return await html2pdf().set({
       margin:0,
       image:{type:'jpeg',quality:0.93},
       html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,backgroundColor:'#ffffff'},
       jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-    }).from(root).outputPdf('blob');
+    }).from(root).toPdf().get('pdf').then(pdf=>{
+      const n=pdf.internal.getNumberOfPages();
+      if(n>1&&altoDoc-(n-1)*altoHoja<4) pdf.deletePage(n);
+    }).outputPdf('blob');
   }finally{document.body.removeChild(holder);}
 }
 
@@ -296,13 +316,13 @@ async function guardarFichaEnDrive(cotId){
         uploadedCount++;
       }
     }
-    // Vistas generadas
-    const vistaMap={imgFrontal:'frontal',imgIsometrica:'isometrica',imgAerea:'lateral'};
+    // Imágenes de la ficha: fotos, vistas (subidas o generadas), plano y detalle
     for(let i=0;i<_fpItems.length;i++){
-      for(const[campo,nombre]of Object.entries(vistaMap)){
-        if(_fpItems[i][campo]){
-          setDriveStatus('⬆️ Vista '+nombre+' muestra '+(i+1)+'...');
-          await _driveUpsertDataUrl(cotFolderId,'muestra_'+(i+1)+'_'+nombre+'.png',_fpItems[i][campo],'image/png');
+      const img=_fpItems[i].img||{};
+      for(const campo of FT_IMG_SLOTS){
+        if(img[campo]){
+          setDriveStatus('⬆️ Imagen '+campo+' producto '+(i+1)+'...');
+          await _driveUpsertDataUrl(cotFolderId,'muestra_'+(i+1)+'_'+campo+'.png',img[campo],'image/png');
           uploadedCount++;
         }
       }
