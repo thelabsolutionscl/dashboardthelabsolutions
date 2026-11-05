@@ -103,6 +103,12 @@
   }
   async function refresh(interactive=false){
     if(busy)return false;
+    // Never refresh an active form draft silently and then overwrite newer data.
+    if(editingId){
+      if(!interactive)return false;
+      if(!confirm('Hay una edición de Google Sheets en curso. ¿Descartarla y actualizar?'))return false;
+      if(typeof ldLimpiar==='function')ldLimpiar();
+    }
     if(!interactive&&!liveToken()){
       dropConnection('La sesión de Drive venció. Conecta Google Sheets para continuar.');
       return false;
@@ -112,7 +118,9 @@
     if(button)button.disabled=true;
     status('Leyendo Google Sheets…');
     try{
-      const [grid,opening]=await Promise.all([read('C3:F33'),read('I3')]);
+      // Request OAuth only once: parallel initial calls could replace the same GIS callback.
+      const grid=await read('C3:F33');
+      const opening=await read('I3');
       const rows=grid.values||[];
       if(!String(rows[0]?.[0]||'').trim().toUpperCase().includes('FECHA'))
         throw new Error('La cabecera de la planilla cambió. No se modificará ningún dato.');
