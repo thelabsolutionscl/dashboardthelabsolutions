@@ -204,27 +204,29 @@
     root.className='tls-sheet-caja';
     root.innerHTML=`
       <style>
-        #tls-sheet-caja{margin:26px 0;padding:18px;border:1px solid var(--border,#d9dce2);border-radius:14px;background:var(--card,#fff);color:var(--text,#232833)}
+        #tls-sheet-caja{margin:26px 0;padding:18px;border:1px solid #245356;border-radius:14px;background:#11191c!important;color:#edf6f6!important;color-scheme:dark}
         #tls-sheet-caja h3{margin:0 0 6px;font-size:18px}
-        #tls-sheet-caja .tls-sheet-intro{font-size:12px;opacity:.78;max-width:800px}
+        #tls-sheet-caja .tls-sheet-intro{font-size:12px;color:#c3d2d4;max-width:800px}
         #tls-sheet-caja .tls-sheet-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:14px 0}
-        #tls-sheet-caja button{border:1px solid #8b9cb4;padding:8px 12px;border-radius:8px;cursor:pointer;background:transparent;color:inherit}
+        #tls-sheet-caja button{border:1px solid #2f999a;padding:8px 12px;border-radius:8px;cursor:pointer;background:#173033!important;color:#f3ffff!important;font-weight:600}
         #tls-sheet-caja button:disabled{opacity:.48;cursor:wait}
-        #tls-sheet-caja a{color:inherit;text-decoration:underline}
-        #tls-sheet-caja [data-tls-status]{font-size:12px;opacity:.9}
-        #tls-sheet-caja .tls-sheet-error{color:#bf3030}
+        #tls-sheet-caja a{color:#64e4df!important;text-decoration:underline}
+        #tls-sheet-caja [data-tls-status]{font-size:12px;color:#c6d7d9;opacity:1}
+        #tls-sheet-caja .tls-sheet-error{color:#ff9a9a!important}
         #tls-sheet-caja .tls-sheet-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0}
-        #tls-sheet-caja .tls-sheet-metrics>div{padding:10px;border:1px solid var(--border,#d9dce2);border-radius:8px}
+        #tls-sheet-caja .tls-sheet-metrics>div{padding:10px;background:#172326;border:1px solid #2a4549;border-radius:8px}
         #tls-sheet-caja .tls-sheet-metrics span{display:block;font-size:11px;opacity:.7}
         #tls-sheet-caja .tls-sheet-metrics strong{display:block;margin-top:3px;font-size:16px}
         #tls-sheet-caja .tls-sheet-scroll{max-height:420px;overflow:auto}
         #tls-sheet-caja table{width:100%;border-collapse:collapse;min-width:670px}
-        #tls-sheet-caja th,#tls-sheet-caja td{padding:6px;border-bottom:1px solid var(--border,#dde0e6);text-align:left}
-        #tls-sheet-caja thead th{position:sticky;top:0;background:var(--card,#fff);z-index:1}
-        #tls-sheet-caja .tls-sheet-field{width:100%;min-width:90px;box-sizing:border-box;padding:7px;border:1px solid #aab1bd;border-radius:6px;background:transparent;color:inherit}
+        #tls-sheet-caja th,#tls-sheet-caja td{padding:6px;border-bottom:1px solid #304247;text-align:left;color:#edf6f6}
+        #tls-sheet-caja thead th{position:sticky;top:0;background:#1a2a2e!important;color:#ddf2f2;z-index:1}
+        #tls-sheet-caja .tls-sheet-field{width:100%;min-width:90px;box-sizing:border-box;padding:7px;border:1px solid #42656b;border-radius:6px;background:#0c1518!important;color:#f5fafa!important}
         #tls-sheet-caja td:nth-child(4) input{min-width:210px}
         #tls-sheet-caja tr[data-dirty="true"]{outline:1px solid #d5ac43;outline-offset:-1px}
-        #tls-sheet-caja .tls-sheet-save{background:#2563eb;color:#fff;border-color:#2563eb}
+        #tls-sheet-caja .tls-sheet-save{background:#00c7c0!important;color:#082122!important;border-color:#00c7c0!important}
+        #tls-sheet-caja [data-tls-refresh]{background:#00c7c0!important;color:#082122!important;border-color:#00c7c0!important}
+        #tls-sheet-caja button:focus-visible,#tls-sheet-caja input:focus-visible,#tls-sheet-caja a:focus-visible{outline:2px solid #6ff8eb;outline-offset:2px}
         #tls-sheet-caja [hidden]{display:none!important}
       </style>
       <h3>Ingresos y Egresos · Google Sheets</h3>
