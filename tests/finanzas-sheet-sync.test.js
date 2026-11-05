@@ -121,3 +121,31 @@ test('the sheet is authoritative and no duplicate Airtable sync is introduced',(
   assert.match(finance,/function ldGetDisplayAll/);
   assert.match(finance,/ldFiltradas=ldGetDisplayAll\(\)/);
 });
+test('la conexión usa el lenguaje visual común y aparece al entrar a Libro Diario',()=>{
+  assert.match(script,/panel\.prepend\(toolbar\)/);
+  assert.match(script,/getElementById\('fin-panel-diario'\)/);
+  assert.match(script,/class="btn btn-primary btn-sm" data-sheet-connect/);
+  assert.match(script,/class="btn btn-ghost btn-sm" target="_blank"/);
+  assert.match(script,/data-sheet-indicator data-state="disconnected"/);
+  assert.match(script,/data-sheet-status role="status" aria-live="polite"/);
+  assert.match(script,/data-sheet-auto/);
+  assert.match(script,/#tls-sheet-ledger-toolbar\{[^']*var\(--surface/);
+  assert.match(script,/@media\(max-width:760px\)/);
+});
+
+test('el selector de fuente está integrado en el formulario y permite conectar sin desplazarse',()=>{
+  assert.match(script,/money\.parentElement\.insertAdjacentElement\('afterend',block\)/);
+  assert.match(script,/data-sheet-quick-connect/);
+  assert.match(script,/block\.querySelector\('\[data-sheet-quick-connect\]'\)\.addEventListener\('click',\(\)=>refresh\(true\)\)/);
+  assert.match(script,/select id="tls-sheet-source"/);
+  assert.match(script,/sourceSelect\.value='journal'/);
+  assert.match(script,/Cada ingreso o egreso tendrá su propia fila/);
+});
+
+test('el estado conectado se muestra solo después de lectura y conserva errores visibles',()=>{
+  assert.match(script,/const state=busy\?'loading':lastError\?'error':connected\?'connected':'disconnected'/);
+  assert.match(script,/const \{next,visible\}=accept\(res\.values\|\|\[\]\)/);
+  assert.match(script,/entries=visible;connected=true;lastRead=Date\.now\(\)/);
+  assert.match(script,/lastError=Boolean\(error\)/);
+  assert.match(script,/renderConnection\(\)/);
+});
