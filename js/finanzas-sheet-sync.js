@@ -26,7 +26,7 @@
   const sheetRange=range=>"'"+TAB+"'!"+range;
   async function api(method,range,body,params=''){
     if(typeof _driveApiFetch!=='function')throw new Error('Google Drive no está disponible en el dashboard.');
-    const uri=ENDPOINT+encodeURIComponent(sheetRange(range))+params;
+    const uri=ENDPOINT+encodeURIComponent(sheetRange(range))+(method==='POST'?':append':'')+params;
     return _driveApiFetch(uri,method==='GET'?{}:{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   }
   const read=range=>api('GET',range,null,'?valueRenderOption=UNFORMATTED_VALUE');
