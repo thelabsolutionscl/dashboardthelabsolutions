@@ -13,6 +13,7 @@ function mock(){
     ['tls-legacy-2026-11-03-gasto','2026-11-03','gasto','Caja · Google Sheets','COMIDA KAISER',10380,'Google Sheets','NOVIEMBRE 2026','','Activo','2026-11-05T00:00:00Z']
   ];
   const writes=[];
+  let sequence=0;
   const dom={};
   for(const id of ['ld-fecha','ld-tipo','ld-descripcion','ld-monto','ld-metodo','ld-referencia','ld-contraparte'])
     dom[id]={value:'',scrollIntoView(){},focus(){}};
@@ -21,7 +22,7 @@ function mock(){
   const win={};
   const context={window:win,document:{readyState:'loading',addEventListener(){},getElementById:id=>dom[id]||null},
     Date,Number,String,JSON,Map,Array,Error,Intl,Set,Option:function(text,value){return {text,value}},
-    crypto:{randomUUID:()=> 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'},
+    crypto:{randomUUID:()=> 'aaaaaaaa-aaaa-4aaa-8aaa-'+String(++sequence).padStart(12,'0')},
     toast(){},ldFiltrar(){updates++},ldSwitchTipo(){},confirm(){return true},
     _driveApiFetch:async(url,opts={})=>{
       const range=decodeURIComponent(url.split('/values/')[1].split('?')[0]);
@@ -76,11 +77,14 @@ test('appends two expenses on the same day without replacing totals or each othe
   const entry=(text,monto)=>({fecha:'2026-11-05',tipo:'gasto',categoria:'Materiales',descripcion:text,monto,metodo:'Transferencia',referencia:'',contraparte:''});
   assert.equal(await m.api.saveFromForm(entry('Filamento',2000)),true);
   const first=Array.from(m.api.getEntries());assert.equal(first.length,3);
-  // use a distinct generated ID for a separate movement in this test
-  const secondEntry={fecha:'2026-11-05',tipo:'ingreso',categoria:'Ventas',descripcion:'Venta',monto:15000,metodo:'Efectivo',referencia:'',contraparte:''};
-  assert.equal(await m.api.saveFromForm(secondEntry),false,'duplicate UUID response must be refused, not silently merge');
+  assert.equal(await m.api.saveFromForm(entry('Pintura',500)),true);
+  assert.equal(m.api.getEntries().length,4);
+  assert.equal(m.writes.length,2);
   assert.equal(m.writes[0].kind,'append');
+  assert.equal(m.writes[1].kind,'append');
   assert.equal(m.data[3][4],'Filamento');
+  assert.equal(m.data[4][4],'Pintura');
+  assert.equal(m.data[3][5]+m.data[4][5],2500);
 });
 test('edits one record by ID without changing a different record',async()=>{
   const m=mock();await m.api.refresh(true);
