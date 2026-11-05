@@ -1498,6 +1498,13 @@ const LD_CAT={
 
 function ldGetAll(){try{return JSON.parse(localStorage.getItem(LD_KEY)||'[]');}catch(e){return[];}}
 function ldSaveAll(arr){try{localStorage.setItem(LD_KEY,JSON.stringify(arr));}catch(e){toast('Sin espacio de almacenamiento','error');}}
+// Separate read-through projection: never persist Sheet records to FINANZAS_V2.
+// Keep ldGetAll native for tax, cash count and accounting calculations elsewhere.
+function ldGetDisplayAll(){
+  const native=ldGetAll();
+  const external=typeof window!=='undefined'&&window.TLSFinanceSheets?.getEntries?.()||[];
+  return native.concat(external);
+}
 
 function ldSwitchTipo(){
   const tipo=document.getElementById('ld-tipo')?.value||'gasto';
@@ -1514,6 +1521,7 @@ function ldLimpiar(){
   ['ld-descripcion','ld-referencia','ld-contraparte'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const m=document.getElementById('ld-monto');if(m)m.value='';
   const mt=document.getElementById('ld-metodo');if(mt)mt.value='Transferencia';
+  window.TLSFinanceSheets?.clearEdit?.();
 }
 
 async function ldGuardar(){
@@ -1528,6 +1536,13 @@ async function ldGuardar(){
   if(!fecha){toast('Selecciona una fecha','error');return;}
   if(!descripcion){toast('Ingresa una descripción','error');return;}
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
+  // Explicit destination: Sheet cash entries are never duplicated in FINANZAS_V2.
+  if(window.TLSFinanceSheets?.isSelected?.()){
+    const ok=await window.TLSFinanceSheets.saveFromForm({fecha,tipo,descripcion,monto});
+    if(!ok)return;
+    ldLimpiar();ldInit();toast('✓ Google Sheets actualizado desde Libro Diario','success');
+    return;
+  }
   const entry={id:Date.now()+'_'+Math.random().toString(36).slice(2,7),fecha,tipo,categoria,descripcion,monto,metodo,referencia,contraparte};
   const ok=await _finSharedMutate(doc=>{doc.journal=[...(doc.journal||[]),entry];},{label:'movimiento del Libro Diario'});
   if(!ok)return;
@@ -1535,6 +1550,12 @@ async function ldGuardar(){
 }
 
 async function ldEliminar(id){
+  if(/^tls-sheet-2026-11-(0[1-9]|[12][0-9]|30)-(ingreso|gasto)$/.test(String(id))){
+    if(!confirm('¿Eliminar este movimiento también de Google Sheets?'))return;
+    const ok=await window.TLSFinanceSheets?.remove?.(id);
+    if(ok)toast('✓ Registro eliminado de Google Sheets','success');
+    return;
+  }
   if(!confirm('¿Eliminar este registro?'))return;
   const ok=await _finSharedMutate(doc=>{doc.journal=(doc.journal||[]).filter(e=>e.id!==id);},{label:'eliminación del Libro Diario'});
   if(!ok)return;ldInit();toast('Registro eliminado','success');
@@ -1551,7 +1572,7 @@ function ldFiltrar(){
   const hasta=document.getElementById('ld-f-hasta')?.value||'';
   const tipo=document.getElementById('ld-f-tipo')?.value||'';
   const busca=(document.getElementById('ld-f-busca')?.value||'').toLowerCase();
-  ldFiltradas=ldGetAll().filter(e=>{
+  ldFiltradas=ldGetDisplayAll().filter(e=>{
     if(desde&&e.fecha<desde)return false;
     if(hasta&&e.fecha>hasta)return false;
     if(tipo&&e.tipo!==tipo)return false;
@@ -1586,11 +1607,16 @@ function ldRenderTabla(){
     document.getElementById('ld-pag').innerHTML='';return;
   }
   tb.innerHTML=page.map(e=>{
+    const isSheet=e._sheetSource===true;
     const isIng=e.tipo==='ingreso';
     const color=isIng?'var(--accent3)':'var(--danger)';
     const badge=isIng
       ?'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(100,220,80,0.12);color:var(--accent3);font-weight:600">↑ Ingreso</span>'
       :'<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(255,68,68,0.12);color:var(--danger);font-weight:600">↓ Gasto</span>';
+    const actions=isSheet
+      ?'<button class="btn btn-ghost btn-sm" onclick="window.TLSFinanceSheets.edit(\''+e.id+'\')" title="Editar esta fila de Google Sheets">Editar</button> '+
+       '<button class="btn btn-danger btn-sm" onclick="ldEliminar(\''+e.id+'\')" title="Borrar movimiento también de Google Sheets">✕</button>'
+      :'<button class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:12px" onclick="ldEliminar(\''+e.id+'\')" title="Eliminar">✕</button>';
     return`<tr>
 <td style="white-space:nowrap;font-size:12px">${e.fecha}</td>
 <td>${badge}</td>
@@ -1600,7 +1626,7 @@ function ldRenderTabla(){
 <td style="font-size:11px;color:var(--text3)">${escapeHtml(e.metodo||'—')}</td>
 <td style="font-size:11px;color:var(--text3)">${escapeHtml(e.referencia||'—')}</td>
 <td style="font-size:11px;color:var(--text3)">${escapeHtml(e.contraparte||'—')}</td>
-<td><button class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:12px" onclick="ldEliminar('${e.id}')" title="Eliminar">✕</button></td>
+<td>${actions}</td>
 </tr>`;
   }).join('');
   const totalPages=Math.ceil(total/LD_PAG);
@@ -1614,7 +1640,7 @@ function ldPagGo(p){ldPag=p;ldRenderTabla();}
 function ldRenderKPIs(){
   const hoy=hoyCL();
   const mes=hoy.slice(0,7);
-  const all=ldGetAll();
+  const all=ldGetDisplayAll();
   const mesData=all.filter(e=>e.fecha.startsWith(mes));
   const hoyData=all.filter(e=>e.fecha===hoy);
   const sum=(arr,tipo)=>arr.filter(e=>e.tipo===tipo).reduce((s,e)=>s+(+e.monto||0),0);
@@ -3576,7 +3602,7 @@ function _ivaSetOff(o){const el=document.getElementById('ivaMensualCard');if(el)
     if(document.getElementById('tls-finance-sheet-script'))return;
     const script=document.createElement('script');
     script.id='tls-finance-sheet-script';
-    script.src='js/finanzas-sheet-sync.js?v=20261105-dark2';
+    script.src='js/finanzas-sheet-sync.js?v=20261105-unified';
     script.defer=true;
     document.head.appendChild(script);
   }
