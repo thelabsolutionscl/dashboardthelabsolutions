@@ -3569,3 +3569,17 @@ function renderIvaMensual(){
   </div>`;
 }
 function _ivaSetOff(o){const el=document.getElementById('ivaMensualCard');if(el)el.dataset.off=o;renderIvaMensual();}
+
+/* Finance Google Sheets bridge: optional, same-origin, no credentials embedded. */
+;(function(){
+  function install(){
+    if(document.getElementById('tls-finance-sheet-script'))return;
+    const script=document.createElement('script');
+    script.id='tls-finance-sheet-script';
+    script.src='js/finanzas-sheet-sync.js?v=20261105';
+    script.defer=true;
+    document.head.appendChild(script);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});
+  else install();
+})();
