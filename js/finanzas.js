@@ -3576,7 +3576,7 @@ function _ivaSetOff(o){const el=document.getElementById('ivaMensualCard');if(el)
     if(document.getElementById('tls-finance-sheet-script'))return;
     const script=document.createElement('script');
     script.id='tls-finance-sheet-script';
-    script.src='js/finanzas-sheet-sync.js?v=20261105';
+    script.src='js/finanzas-sheet-sync.js?v=20261105-dark2';
     script.defer=true;
     document.head.appendChild(script);
   }
