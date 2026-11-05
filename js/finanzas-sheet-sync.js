@@ -173,6 +173,7 @@
         notice('Movimiento actualizado en Google Sheets.');
       }else{
         const idNew='tls-mov-'+crypto.randomUUID();
+        if(rawById.has(idNew))throw new Error('ID de movimiento repetido. Recarga la planilla antes de guardar.');
         const values=asCells(idNew,parsed);
         // Append into A:K; never overwrite existing rows or reuse daily slots.
         writing=true;
