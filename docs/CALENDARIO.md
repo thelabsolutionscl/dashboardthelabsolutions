@@ -212,3 +212,25 @@ Nuevo objeto opcional `expected: {open, close, note, checkedAt}` para fechas dif
 - Cuando el organismo publique la convocatoria, mover las fechas a `open`/`close` y borrar `expected`.
 
 Pruebas: `tests/fondos-noviembre-2026.test.js` y `tests/fondos-visual-tls.test.js`. Las pruebas del aviso «sin ventanas vigentes» usan un reloj fijo (15/12/2026) para no depender del día en que corre la suite.
+
+
+## Expediente de postulación TLS — noviembre 2026
+
+**Ruta:** Dashboard → Calendario → Fondos Concursables → **Revisar para TLS** → **Mi mesa de trabajo**.
+
+Desde noviembre de 2026 se muestra un expediente específico en la mesa para los tres programas evaluados:
+- **Crea y Valida Corfo** (llamado 2026 cerrado, nueva edición sin fecha oficial): requiere desafío de I+D genuino, prototipo, pruebas y validación. Fuente oficial: https://www.corfo.gob.cl/sites/cpp/convocatoria/crea-y-valida-2026/
+- **Start-Up Chile BIG 13**: Growth solo si el proyecto es startup tecnológica escalable, antigüedad y rango de ventas comprobables. Cierre 24/11/2026 13:00. Fuente oficial: https://startupchile.org/postula/
+- **PATI**: requiere grupo de empresas y entidad gestora; último llamado nacional cerrado 15/07/2026. Fuente oficial: https://www.corfo.gob.cl/sites/cpp/programa/programa-absorcion-tecnologica-innovacion/
+
+### Cómo completar el expediente
+
+1. Abrir la ficha **Revisar para TLS** del programa.
+2. Revisar los **7 controles** de bases, empresa, proyecto, finanzas, documentos, formulario y plazos; cada uno ahora ofrece una guía específica del concurso. Marcar únicamente lo verificado. Los 7 controles ya se sincronizan por la mesa compartida si el proxy está conectado.
+3. Completar los campos del expediente: responsable, problema y línea base, prototipo y brecha tecnológica, validación y clientes, presupuesto y enlace a respaldos. Estos **borradores se guardan en localStorage del navegador y NO se suben al servidor compartido**, para no almacenar respuestas ni documentación sensible en el registro de seguimiento de Airtable.
+4. Utilizar **Copiar expediente** para respaldar el estado editable en un documento privado de Drive. No pegues secretos, RUT ni datos personales en la ficha.
+5. El botón **Analizar con IA** utiliza solo el texto del proyecto que el operador envía de forma explícita; el resto del expediente no se envía automáticamente al modelo. El copiloto prepara borradores, no presenta solicitudes.
+6. Verificar los documentos reales y fases de la nueva convocatoria antes de marcar "postulado". El progreso no es acreditación de elegibilidad.
+
+La integración es progresiva: hoy se comparte el estado de las 7 casillas, pero los textos del expediente son locales. Para colaboración en un mismo expediente textual entre varios dispositivos se necesita una ruta de almacenamiento de documentos privada y permisos de acceso, no el actual `FONDOS_TLS` de estados.
+
