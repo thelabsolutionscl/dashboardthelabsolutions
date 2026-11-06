@@ -270,3 +270,26 @@
 #tab-calendario .fondos-workspace-milestones b{color:#ecdfc5}
 #tab-calendario .fondos-workspace-milestones a{color:#85e5dc;text-decoration:underline;text-underline-offset:2px}
 #tab-calendario .fondos-milestone-card-flag{font-size:11px;color:#f0c888;line-height:1.55;margin:10px 0}
+
+
+/* ── Expediente de postulación TLS: integrado a la mesa de fondos ── */
+#tab-calendario .fondos-workspace-checks label b{display:block;font-size:11px;color:#e5f3f4;font-weight:700}
+#tab-calendario .fondos-workspace-checks label small{display:block;margin-top:4px;font-size:10px;color:#9bb0b9;line-height:1.6;font-weight:400}
+#tab-calendario .fondos-dossier{grid-column:1/-1;min-width:0;padding:19px;border:1px solid rgba(0,212,204,.26);background:linear-gradient(150deg,rgba(0,212,204,.055),rgba(11,20,25,.58));border-radius:12px}
+#tab-calendario .fondos-dossier-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+#tab-calendario .fondos-dossier-head h4{font-size:18px;color:#f2fbfb;line-height:1.35;margin:6px 0 0}
+#tab-calendario .fondos-dossier-warning{background:rgba(255,170,0,.055);border:1px solid rgba(255,170,0,.24);border-radius:8px;padding:10px 12px;font-size:11px;line-height:1.65;color:#dfc49d}
+#tab-calendario .fondos-dossier-metric{display:flex;align-items:center;gap:12px;margin:14px 0;padding:12px;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:rgba(0,0,0,.15)}
+#tab-calendario .fondos-dossier-metric strong{font-size:22px;font-variant-numeric:tabular-nums;line-height:1;color:#70e9df}
+#tab-calendario .fondos-dossier-metric span{font-size:11px;color:#b8c9ce;line-height:1.5}
+#tab-calendario .fondos-dossier-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#tab-calendario .fondos-dossier-field{display:flex;flex-direction:column;min-width:0;gap:5px}
+#tab-calendario .fondos-dossier-field strong{font-size:11px;font-weight:700;color:#e8f2f3}
+#tab-calendario .fondos-dossier-field small{font-size:10px;line-height:1.5;color:#9db3ba}
+#tab-calendario .fondos-dossier-field textarea{width:100%;box-sizing:border-box;min-height:52px;border:1px solid rgba(166,195,201,.25);background:#121a1e;color:#ecf7f7;border-radius:8px;padding:9px 11px;font:400 11px 'DM Sans',sans-serif;line-height:1.6;resize:vertical}
+#tab-calendario .fondos-dossier-field textarea:focus-visible{outline:2px solid #00d4cc;outline-offset:2px}
+#tab-calendario .fondos-dossier-field textarea::placeholder{color:#789097}
+#tab-calendario .fondos-dossier-foot{display:flex;align-items:start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px}
+#tab-calendario .fondos-dossier-foot small{max-width:670px;font-size:10px;line-height:1.6;color:#9db3ba}
+#tab-calendario .fondos-dossier-foot [data-fondos-dossier-message]{font-size:10px;color:#72dfd6}
+@media(max-width:740px){#tab-calendario .fondos-dossier{padding:14px}#tab-calendario .fondos-dossier-editor{grid-template-columns:1fr}#tab-calendario .fondos-dossier-metric{align-items:start}}
