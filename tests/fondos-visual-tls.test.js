@@ -24,7 +24,7 @@ function view(options={}){
     'fondosDetalleModal':modal,'fondosDetalleBody':detail,'fondosDetallePreparar':prepare};
   const state=new Map();
   const doc={readyState:'complete',baseURI:'https://dashboard.thelab.solutions/',
-    head:{appendChild:x=>links.push(x)},createElement:tag=>({tagName:tag}),
+    head:{appendChild:x=>links.push(x)},createElement:tag=>({tagName:tag,addEventListener(){}}),
     getElementById:id=>nodes[id]||null,
     addEventListener:(event,fn)=>{hooks['doc:'+event]=fn;}
   };
@@ -40,9 +40,11 @@ function view(options={}){
 test('radar TLS carga un CSS externo con marca propia y sin romper Calendario',async()=>{
   const v=view();
   await v.api.load();
-  assert.equal(v.links.length,1);
-  assert.equal(v.links[0].rel,'stylesheet');
-  assert.match(v.links[0].href,/\/fondos-tls\.css\?v=/);
+  assert.equal(v.links.length,2);
+  assert.equal(v.links[0].tagName,'script');
+  assert.match(v.links[0].src,/\/js\/fondos-expediente\.js\?v=/);
+  assert.equal(v.links[1].rel,'stylesheet');
+  assert.match(v.links[1].href,/\/fondos-tls\.css\?v=/);
   assert.match(v.list.innerHTML,/THE LAB SOLUTIONS · OPPORTUNITY RADAR/);
   assert.match(v.list.innerHTML,/fondos-kpis/);
   assert.match(v.list.innerHTML,/fondos-filter-pills/);
