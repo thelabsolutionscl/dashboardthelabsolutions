@@ -278,7 +278,7 @@ test('mesa TLS abre una ficha real con requisitos, fuente, checklist y CTA al ag
   assert.match(v.list.innerHTML,/Un fondo a la vez. Un plan claro./);
   const selected='corfo-crea-y-valida-proxima-vigilar';
   assert.equal(v.api.openWorkspace(selected),true);
-  assert.match(v.list.innerHTML,/MI MESA DE TRABAJO · 3 PASOS/);
+  assert.match(v.list.innerHTML,/MI MESA DE TRABAJO · PREPARACIÓN GUIADA/);
   assert.match(v.list.innerHTML,/¿Conviene postular?/);
   assert.match(v.list.innerHTML,/¿Qué falta reunir?/);
   assert.match(v.list.innerHTML,/Preparar con el agente/);
