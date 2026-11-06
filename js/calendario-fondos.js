@@ -935,7 +935,7 @@
     if(typeof document.createElement==='function'&&document.head&&!document.getElementById('fondosTlsStyles')){
       const sheet=document.createElement('link');
       sheet.rel='stylesheet';sheet.id='fondosTlsStyles';
-      sheet.href=new URL('fondos-tls.css?v=20261015workflow',document.baseURI).href;
+      sheet.href=new URL('fondos-tls.css?v=20261105-expediente',document.baseURI).href;
       document.head.appendChild(sheet);
     }
     root.addEventListener('click',e=>{
