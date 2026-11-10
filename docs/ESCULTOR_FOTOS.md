@@ -67,12 +67,41 @@ convierte una foto en una pieza imprimible y la descarga como STL binario.
 - Medallón sin sujeto detectado salía plano sin avisar.
 - El visor no se recuperaba si el sistema reclamaba la GPU (contexto WebGL perdido).
 
+## Auditoría del mallador (2026-11-10, tras la primera prueba real)
+
+Disparada por una moto de motocross impresa: ruedas como copas, paredes
+plisadas y manchas. Se midió con un banco que compara el STL con la foto.
+
+| Hallazgo | Causa | Corrección |
+|---|---|---|
+| Ruedas hundidas como copas | Los huecos entre rayos se rellenaban con la profundidad del fondo, y la IA (518 px) mezcla con el fondo todo lo que está a < 4 px de él | Fiabilidad medida en píxeles de la foto: lo cercano al fondo y lo rellenado toma la profundidad del interior del sujeto (`depthReliability` + `inpaint`) |
+| Silueta ~4 % más gorda | Se umbralizaba el *promedio* del campo por celda: una celda con 20 % de sujeto entraba | Cobertura a resolución de la foto: la celda entra con ≥ 50 % (`maskBinary`) |
+| Huecos reales rellenos y detalles borrados | Limpieza en celdas y en % del área: a 200 mm borraba detalles de 2 mm y rellenaba huecos de cientos de mm² | Limpieza en mm (`cleanMaskMM`): lo < 0,8 mm se **engrosa** a 0,8 mm (imprimible) en vez de borrarse; sólo se rellenan huecos < 0,8 mm² |
+| Bordes plisados / escalonados | Contorno en escalera de la grilla + perfil smoothstep (pie plano y luego acantilado) | Vértices del borde corridos al nivel 0 de una distancia con signo suavizada (`snapContour`), alturas por vértice y perfil de cuarto de círculo (`roundProfile`) |
+| Manchas oscuras en el relieve | "Detalle fino" al 15 % por defecto convertía sombras en hundimientos | Por defecto 0 % |
+| Cara de apoyo podía quedar fuera de z = 0 | El grosor mínimo bajaba la cara inferior | El grosor mínimo sube la superior |
+| 300 ms por reconstrucción | Desenfoques de radio grande O(n·r) | Tres pasadas de caja para σ > 3: 155 ms |
+
+Resultado (objeto 80 mm, res. 260, profundidad sintética tipo IA):
+
+- Malla cerrada, manifold, sin degenerados en 60 combinaciones de forma, resolución y parámetros.
+- Silueta: IoU 0,946 (antes 0,913); área a > 0,4 mm fuera de la foto 0,5 % (rayos engrosados); faltante 0 %.
+- Sin corrimiento: la mejor alineación es con desplazamiento (0, 0) px.
+- Tamaño pedido: error ≤ 0,7 %.
+- Relieve: correlación 0,995 con la profundidad de entrada.
+- Caras de apoyo exactamente en z = 0; STL binario idéntico a la malla del visor.
+
+Tests de regresión en `tests/foto3d.test.js` (sección «Fidelidad a la foto»),
+con una rueda sintética: cubierta, maza y 12 rayos.
+
 ## Límites conocidos
 
 - Es un **relieve**, no un escaneo: lo que no se ve en la foto se inventa
   (reverso espejado o plano).
-- Estructuras muy finas (marcos de impresora, rejas, pelos sueltos) se pierden
-  en el recorte: la limpieza borra lo que mide menos de ~2 celdas.
+- Estructuras más finas que 0,8 mm se engrosan a 0,8 mm para poder imprimirse:
+  a tamaños chicos los rayos o antenas salen más gruesos que en la foto.
+- El relieve es la profundidad *relativa* de la IA estirada a la "Profundidad
+  del relieve" pedida: las proporciones de profundidad no son métricas.
 - Fondos complejos con el sujeto a la misma distancia que el fondo dan un
   recorte pobre: usar *Ajuste del recorte*, *Fondo uniforme* o una foto con
   fondo quitado (PNG transparente).
