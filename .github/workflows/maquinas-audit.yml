@@ -21,6 +21,7 @@ on:
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
       - 'js/foto3d.js'
+      - 'js/foto3d-worker.js'
       - 'tests/foto3d.test.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
@@ -56,6 +57,7 @@ on:
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
       - 'js/foto3d.js'
+      - 'js/foto3d-worker.js'
       - 'tests/foto3d.test.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
@@ -111,6 +113,7 @@ jobs:
           node --check js/correo-input-compat.js
           node --check js/slicer3d.js
           node --check js/foto3d.js
+          node --check js/foto3d-worker.js
           node --check sw.js
           node --check printer-bridge/server.js
           node --check printer-bridge/farm-controller.js

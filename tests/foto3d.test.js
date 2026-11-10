@@ -11,6 +11,8 @@ const ROOT=path.join(__dirname,'..');
 const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
 const OPS=fs.readFileSync(path.join(ROOT,'js','maquinas-operaciones.js'),'utf8');
 const SRC=fs.readFileSync(path.join(ROOT,'js','foto3d.js'),'utf8');
+const WORKER=fs.readFileSync(path.join(ROOT,'js','foto3d-worker.js'),'utf8');
+const vm=require('vm');
 
 // Foto sintética: fondo blanco parejo y un sujeto oscuro elíptico; la
 // "profundidad" es una semiesfera (más cerca en el centro), como la entregaría la IA.
@@ -157,9 +159,147 @@ test('el escultor está enlazado en el Taller de Máquinas',()=>{
   assert.match(OPS,/workshopNavCard\('escultor'/,'falta la tarjeta de acceso en el Taller');
 });
 
-test('la IA corre local: versión fija de transformers.js y modelo Small con licencia comercial',()=>{
-  assert.match(SRC,/@huggingface\/transformers@\d+\.\d+\.\d+\//,'la librería debe ir con versión exacta');
-  assert.match(SRC,/depth-anything-v2-small/);
-  assert.doesNotMatch(SRC,/depth-anything-v2-(base|large)/i,'Base/Large son no comerciales');
-  assert.doesNotMatch(SRC,/fetch\([^)]*(api|upload)/i,'la foto no se envía a ningún servidor');
+test('la IA corre local en un worker: versión fija y modelo Small con licencia comercial',()=>{
+  assert.match(WORKER,/@huggingface\/transformers@\d+\.\d+\.\d+\//,'la librería debe ir con versión exacta');
+  assert.match(WORKER,/depth-anything-v2-small/);
+  for(const src of[SRC,WORKER]){
+    assert.doesNotMatch(src,/depth-anything-v2-(base|large)/i,'Base/Large son no comerciales');
+    assert.doesNotMatch(src,/fetch\([^)]*(api|upload)/i,'la foto no se envía a ningún servidor');
+  }
+  // El código del CDN no se ejecuta en la página (donde viven las claves de localStorage).
+  assert.doesNotMatch(SRC,/cdn\.jsdelivr\.net|await import\(/,'foto3d.js no debe importar código de terceros');
+  assert.match(SRC,/new Worker\(/);
+});
+
+// ── Regresiones de bugs encontrados en revisión ──────────────────────────
+function shapeImage(w,h,inside){
+  const rgba=new Uint8ClampedArray(w*h*4),depth=new Float32Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,v=inside(x,y);const c=v?60:245;rgba.set([c,c,v?90:245,255],i*4);depth[i]=v?.7:.05;}
+  return CORE.prepareFields({w,h,rgba},depth);
+}
+function shellCount(mesh){
+  const t=mesh.tris,par=new Map(),find=x=>{while(par.get(x)!==x){par.set(x,par.get(par.get(x)));x=par.get(x);}return x;};
+  for(let f=0;f<mesh.count;f++){
+    const b=f*9,k=[key(t,b),key(t,b+3),key(t,b+6)];
+    for(const x of k)if(!par.has(x))par.set(x,x);
+    par.set(find(k[0]),find(k[1]));par.set(find(k[1]),find(k[2]));
+  }
+  const roots=new Set();for(const x of par.keys())roots.add(find(x));return roots.size;
+}
+
+test('llavero: la argolla queda unida aunque el sujeto tenga dos orejas',()=>{
+  const F=shapeImage(200,200,(x,y)=>((x-100)/60)**2+((y-120)/55)**2<=1||((x-55)/14)**2+((y-50)/30)**2<=1||((x-145)/14)**2+((y-50)/30)**2<=1);
+  const r=CORE.buildModel(F,'llavero',{res:160});
+  assert.ok(!r.warning,r.warning);
+  assertWatertight(r.mesh,'llavero orejas');
+  assert.equal(shellCount(r.mesh),1,'argolla y sujeto deben ser un solo cuerpo');
+  assert.equal(eulerCharacteristic(r.mesh),0,'la argolla conserva su agujero');
+});
+
+test('figura: patas de distinto largo apoyan todas en la base',()=>{
+  const F=shapeImage(200,240,(x,y)=>((x-100)/60)**2+((y-100)/70)**2<=1||(x>60&&x<80&&y>140&&y<230)||(x>120&&x<140&&y>140&&y<224));
+  const r=CORE.buildModel(F,'figura',{res:160,baseH:5});
+  assertWatertight(r.mesh,'figura patas');
+  const t=r.mesh.tris,n=(r.mesh.count-96*4)*9;
+  for(const[lo,hi]of[[-40,-15],[15,40]]){
+    let z=Infinity;for(let i=0;i<n;i+=3)if(t[i]>lo&&t[i]<hi)z=Math.min(z,t[i+2]);
+    assert.ok(z<5,`la pata en x∈[${lo},${hi}] debe hundirse en la base (z=${z.toFixed(2)})`);
+  }
+});
+
+test('"Imagen completa" respeta el tamaño pedido y el llavero conserva la argolla',()=>{
+  const F=shapeImage(100,100,()=>true);
+  const r=CORE.buildModel(F,'objeto',{res:100,maskMode:'none',size:100,backMode:'plano'});
+  assert.ok(Math.abs((r.bounds.max[0]-r.bounds.min[0])-100)<.5,'sin margen extra fuera de la foto');
+  const k=CORE.buildModel(F,'llavero',{res:120,maskMode:'none'});
+  assertWatertight(k.mesh,'llavero completo');
+  assert.equal(eulerCharacteristic(k.mesh),0,'el llavero debe tener agujero');
+});
+
+test('invertir también invierte el detalle fino',()=>{
+  const{img,depth}=syntheticImage();
+  const F=CORE.prepareFields(img,depth);
+  const a=CORE.buildModel(F,'objeto',{res:80,detail:40,gamma:1,invert:false}).grid.d;
+  const b=CORE.buildModel(F,'objeto',{res:80,detail:40,gamma:1,invert:true}).grid.d;
+  let maxErr=0;for(let i=0;i<a.length;i++)maxErr=Math.max(maxErr,Math.abs(a[i]+b[i]-1));
+  assert.ok(maxErr<1e-5,`d invertido debe ser 1−d (error ${maxErr})`);
+});
+
+test('medallón sin sujeto avisa en vez de salir plano en silencio',()=>{
+  const blanco={w:60,h:60,rgba:new Uint8ClampedArray(60*60*4).fill(255)};
+  const r=CORE.buildModel(CORE.prepareFields(blanco,null),'medallon',{res:60,maskMode:'color'});
+  assert.match(r.warning,/sujeto/);
+});
+
+test('estimación de gramos y ajuste al volumen de las impresoras',()=>{
+  // Cubo macizo de 20 mm: 8 cm³; con cáscara de 1 mm y 15 % de relleno pesa bastante menos.
+  const g=CORE.estimateGrams(8000,2400);
+  assert.ok(g>2.5&&g<4.5,`gramos ${g}`);
+  assert.deepEqual(CORE.printersThatFit(200,200,200),['K1','K2','Ender-5 Max','K2 Plus','Giga']);
+  assert.deepEqual(CORE.printersThatFit(300,100,560),['Ender-5 Max','Giga']);
+  assert.deepEqual(CORE.printersThatFit(900,10,10),[]);
+});
+
+// ── Worker de IA: se ejecuta con un transformers.js falso ─────────────────
+function loadWorker(fake){
+  const posted=[];
+  const code=WORKER.replace('await import(TJS_URL)','await __import(TJS_URL)');
+  const self={navigator:fake.gpu?{gpu:fake.gpu}:{},postMessage:m=>posted.push(m)};
+  const ctx=vm.createContext({self,console:{warn(){},log(){}},__import:async()=>fake.module,Float32Array,Uint16Array,Uint8ClampedArray,ArrayBuffer,Promise,Math,String,Array,Error});
+  vm.runInContext(code,ctx);
+  return{send:m=>self.onmessage({data:m}),posted,settle:()=>new Promise(r=>setTimeout(r,20))};
+}
+function fakeTransformers(opts={}){
+  const calls=[];
+  return{calls,module:{env:{},RawImage:class{constructor(d,w,h){this.width=w;this.height=h;}},
+    pipeline:async(task,model,o)=>{
+      calls.push(o.device);
+      return async img=>{
+        if(opts.failOn===o.device)throw new Error('falla '+o.device);
+        return{predicted_depth:{dims:[img.height,img.width],data:new Float32Array(img.width*img.height).fill(.5)}};
+      };
+    }}};
+}
+const req=(id)=>({type:'depth',id,rgba:new ArrayBuffer(4*4*4),w:4,h:4});
+
+test('worker: devuelve la profundidad y cancela lo que quedó en cola',async()=>{
+  const T=fakeTransformers(),W=loadWorker(T);
+  W.send(req(1));W.send(req(2));W.send({type:'cancel',below:3});W.send(req(3));
+  for(let i=0;i<10;i++)await W.settle();
+  const by=id=>W.posted.filter(m=>m.id===id&&m.type!=='progress').map(m=>m.type);
+  assert.deepEqual(by(3),['depth'],'la última foto se procesa');
+  assert.ok(by(2).includes('cancelled'),'una foto anterior en cola se descarta');
+  const d=W.posted.find(m=>m.id===3&&m.type==='depth');
+  assert.equal(d.data.length,16);assert.equal(d.label,'CPU (WASM)');
+});
+
+test('worker: si la GPU falla al ejecutar, reintenta en CPU',async()=>{
+  const T=fakeTransformers({failOn:'webgpu'});
+  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
+  const W=loadWorker({...T,gpu});
+  W.send(req(1));
+  for(let i=0;i<10;i++)await W.settle();
+  assert.deepEqual(T.calls,['webgpu','wasm']);
+  assert.equal(W.posted.find(m=>m.type==='depth').label,'CPU (WASM)');
+});
+
+test('worker: un fallo de carga se informa como error, sin colgarse',async()=>{
+  const W=loadWorker({module:{env:{},pipeline:async()=>{throw new Error('sin red');}}});
+  W.send(req(7));
+  for(let i=0;i<10;i++)await W.settle();
+  const e=W.posted.find(m=>m.type==='error');
+  assert.ok(e&&e.id===7&&/sin red/.test(e.message));
+  W.send({type:'depth',id:8,rgba:'no es un buffer',w:4,h:4});
+  await W.settle();
+  assert.ok(!W.posted.some(m=>m.id===8),'mensajes mal formados se ignoran');
+});
+
+test('figura: avisa si el centro de masa cae fuera de la base',()=>{
+  // Sujeto con todo el peso a un costado y patita fina al otro: sin base se vuelca.
+  const F=shapeImage(220,200,(x,y)=>((x-160)/45)**2+((y-80)/50)**2<=1||(x>40&&x<60&&y>60&&y<190)||(y>50&&y<70&&x>40&&x<160));
+  const sinBase=CORE.buildModel(F,'figura',{res:120,baseShape:'ninguna'});
+  assert.match(sinBase.warning,/volcarse/);
+  const{img,depth}=syntheticImage();
+  const ok=CORE.buildModel(CORE.prepareFields(img,depth),'figura',{res:100});
+  assert.ok(!/volcarse/.test(ok.warning),'una figura centrada sobre su base no avisa');
 });

@@ -3,7 +3,8 @@
 Herramienta del **Taller** (Máquinas → Taller → *Escultor de fotos*) que
 convierte una foto en una pieza imprimible y la descarga como STL binario.
 
-- Código: `js/foto3d.js` (núcleo geométrico + visor WebGL + interfaz).
+- Código: `js/foto3d.js` (núcleo geométrico + visor WebGL + interfaz) y
+  `js/foto3d-worker.js` (IA de profundidad en un Web Worker).
 - Vista: `data-maq-view="escultor"` en `index.html`, agrupada en la pantalla
   `taller` de `js/maquinas-operaciones.js`.
 - Tests: `tests/foto3d.test.js` (mallas cerradas, tamaños, cableado).
@@ -17,6 +18,9 @@ convierte una foto en una pieza imprimible y la descarga como STL binario.
 | Sólo el modelo **Small** | Small es Apache-2.0 (uso comercial OK). Base y Large de Depth Anything V2 son **CC-BY-NC**: no usarlos. Un test lo vigila. |
 | Respaldo sin IA | Si el CDN o Hugging Face no responden, el relieve sale del **brillo** de la imagen (claro = alto) y la herramienta sigue funcionando. |
 | GPU → CPU | Se intenta WebGPU con fp16 si la tarjeta soporta `shader-f16`; si falla al cargar o al ejecutar, se reintenta en WASM con el modelo q8. |
+| **IA en un Web Worker** (2026-11-10, revisión) | transformers.js viene de jsDelivr: en la página tendría acceso a `localStorage`, donde el dashboard guarda claves (`proxy_key`, `printer_device_token`…). En el worker no ve `localStorage` ni el DOM y la inferencia no congela la interfaz. Sigue pudiendo hacer `fetch` con cookies, así que el aislamiento es parcial. |
+| Worker nuevo tras un error | Un `import()` fallido queda en caché en ese contexto: sin descartar el worker, "Recalcular IA" nunca volvía a pedir el módulo. |
+| Una inferencia a la vez | ONNX Runtime no admite dos `run` simultáneos en la misma sesión. El worker atiende en cola y descarta lo que quedó pendiente de fotos anteriores. |
 | Salida sólo **descarga STL** | Elección del usuario. Enviar al Agente 3D o cotizar quedan como mejoras posibles. |
 
 ## Cómo funciona
@@ -49,6 +53,20 @@ convierte una foto en una pieza imprimible y la descarga como STL binario.
    La figura lleva dos cuerpos que se superponen (figura + base); los
    laminadores los unen al laminar.
 
+## Bugs corregidos en la revisión del 2026-11-10
+
+- Llavero con dos orejas: la argolla quedaba suelta (se ubicaba entre ambas).
+  Ahora va sobre el punto más alto y baja hasta apoyarse en ≥ 6 mm² de pieza.
+- Figura con patas de distinto largo: una quedaba flotando sobre la base. Las
+  patas que terminan hasta un 5 % (mín. 2 mm) más arriba se alargan hasta el piso.
+- "Imagen completa" sumaba un margen de 3 celdas fuera de la foto (106 mm en
+  vez de 100) y dejaba el llavero sin agujero.
+- Si la IA fallaba rápido, la reconstrucción de la malla borraba el aviso.
+- Cambiar a "Brillo" mientras la IA calculaba terminaba aplicando la IA igual.
+- "Invertir relieve" no invertía el detalle fino.
+- Medallón sin sujeto detectado salía plano sin avisar.
+- El visor no se recuperaba si el sistema reclamaba la GPU (contexto WebGL perdido).
+
 ## Límites conocidos
 
 - Es un **relieve**, no un escaneo: lo que no se ve en la foto se inventa
@@ -66,6 +84,9 @@ convierte una foto en una pieza imprimible y la descarga como STL binario.
 ```bash
 node --test tests/foto3d.test.js
 ```
+
+Los tests del worker lo ejecutan en `vm` con un transformers.js falso
+(cancelación en cola, GPU → CPU, errores de carga).
 
 La inferencia de IA sólo se prueba en un navegador con acceso a
 `cdn.jsdelivr.net` y `huggingface.co`.

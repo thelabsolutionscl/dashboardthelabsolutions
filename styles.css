@@ -3222,6 +3222,9 @@ html[data-theme="light"] .appearance-choice.is-active{background:rgba(0,158,154,
 #maquinaEscultorView .f3d-nogl{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:var(--text3);font-size:12px}
 #maquinaEscultorView .f3d-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 #maquinaEscultorView .f3d-note{font-size:10.5px;color:var(--text3);line-height:1.5}
+#maquinaEscultorView .f3d-note[data-tone=warn]{color:var(--warn)}
+#maquinaEscultorView .f3d-stats span.bad{border-color:rgba(255,68,68,.4)}
+#maquinaEscultorView .f3d-stats span.bad b{color:var(--danger)}
 #maquinaEscultorView .f3d-prog-track{height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}
 #maquinaEscultorView #f3dProgBar{height:100%;width:0;background:var(--accent);transition:width .25s}
 #maquinaEscultorView #f3dProgTxt{font-size:10.5px;color:var(--text3);margin-top:4px}
