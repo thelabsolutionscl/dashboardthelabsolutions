@@ -72,8 +72,39 @@ function sampleRect(src,S,sw,sh,rx,ry,rw,rh,gw,gh,outside){
 }
 
 // ── Filtros ───────────────────────────────────────────────────────────────
+// Desenfoque de caja con bordes replicados (suma móvil, O(n) sin importar el radio).
+function _boxBlurH(src,dst,w,h,r){
+  const k=1/(2*r+1);
+  for(let y=0;y<h;y++){
+    const row=y*w;let acc=src[row]*(r+1);
+    for(let x=1;x<=r;x++)acc+=src[row+Math.min(w-1,x)];
+    for(let x=0;x<w;x++){
+      dst[row+x]=acc*k;
+      acc+=src[row+Math.min(w-1,x+r+1)]-src[row+Math.max(0,x-r)];
+    }
+  }
+}
+function _boxBlurV(src,dst,w,h,r){
+  const k=1/(2*r+1);
+  for(let x=0;x<w;x++){
+    let acc=src[x]*(r+1);
+    for(let y=1;y<=r;y++)acc+=src[Math.min(h-1,y)*w+x];
+    for(let y=0;y<h;y++){
+      dst[y*w+x]=acc*k;
+      acc+=src[Math.min(h-1,y+r+1)*w+x]-src[Math.max(0,y-r)*w+x];
+    }
+  }
+}
 function gaussianBlur(src,w,h,sigma){
   if(!(sigma>0.05))return Float32Array.from(src);
+  if(sigma>3){
+    // Tres pasadas de caja ≈ gaussiana (error < 3 %) en tiempo constante por píxel.
+    const wi=Math.sqrt(12*sigma*sigma/3+1);let wl=Math.floor(wi);if(wl%2===0)wl--;
+    const m=Math.round((12*sigma*sigma-3*wl*wl-12*wl-9)/(-4*wl-4));
+    let a=Float32Array.from(src),b=new Float32Array(w*h);
+    for(let i=0;i<3;i++){const r=((i<m?wl:wl+2)-1)/2;_boxBlurH(a,b,w,h,r);_boxBlurV(b,a,w,h,r);}
+    return a;
+  }
   const r=Math.max(1,Math.ceil(sigma*3)),k=new Float32Array(2*r+1);let s=0;
   for(let i=-r;i<=r;i++){const v=Math.exp(-(i*i)/(2*sigma*sigma));k[i+r]=v;s+=v;}
   for(let i=0;i<k.length;i++)k[i]/=s;
@@ -263,31 +294,111 @@ function placeRing(subject,w,h,px,holeR,ringR){
   return{cx,cy};
 }
 
+// ── Contorno suave ────────────────────────────────────────────────────────
+// La máscara es binaria por celda: su borde es una escalera. Se calcula una
+// distancia con signo (+ dentro, − fuera, 0 en el borde), se suaviza y los
+// vértices del borde se corren (≤ 0,45 celda) hasta su nivel 0. La topología no
+// cambia, así que la malla sigue cerrada; sólo desaparecen los escalones.
+function signedDistance(mask,w,h){
+  const din=distanceInside(mask,w,h),dout=distanceOutside(mask,w,h),o=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++)o[i]=mask[i]?din[i]-.5:-(Math.min(dout[i],64)-.5);
+  return o;
+}
+// Bilineal sobre centros de celda; (x, y) en unidades de celda con el centro
+// de la celda (0,0) en (0,0). Fuera de la grilla vale `outside`.
+function sampleCells(f,w,h,x,y,outside){
+  const x0=Math.floor(x),y0=Math.floor(y),tx=x-x0,ty=y-y0;
+  const at=(i,j)=>(i<0||j<0||i>=w||j>=h)?outside:f[j*w+i];
+  return(at(x0,y0)*(1-tx)+at(x0+1,y0)*tx)*(1-ty)+(at(x0,y0+1)*(1-tx)+at(x0+1,y0+1)*tx)*ty;
+}
+function vertexCounts(mask,w,h){
+  const VW=w+1,cnt=new Uint8Array(VW*(h+1));
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++)if(mask[j*w+i]){const v=j*VW+i;cnt[v]++;cnt[v+1]++;cnt[v+VW]++;cnt[v+VW+1]++;}
+  return cnt;
+}
+function snapContour(mask,w,h,phi,cnt){
+  const VW=w+1,nv=VW*(h+1),ox=new Float32Array(nv),oy=new Float32Array(nv);
+  const C=(i,j)=>(i<0||j<0||i>=w||j>=h)?-1:phi[j*w+i];
+  for(let j=0;j<=h;j++)for(let i=0;i<=w;i++){
+    const v=j*VW+i;if(!(cnt[v]>0&&cnt[v]<4))continue;
+    const a=C(i-1,j-1),b=C(i,j-1),c=C(i-1,j),d=C(i,j);
+    const f=(a+b+c+d)/4,gx=((b+d)-(a+c))/2,gy=((c+d)-(a+b))/2,g2=gx*gx+gy*gy;
+    if(g2<1e-6)continue;
+    let dx=-f*gx/g2,dy=-f*gy/g2;const L=Math.hypot(dx,dy);
+    if(L>.45){dx*=.45/L;dy*=.45/L;}
+    ox[v]=dx;oy[v]=dy;
+  }
+  return{ox,oy};
+}
+// Rellena valores poco fiables (p. ej. huecos entre rayos que se cerraron:
+// traen la profundidad del fondo) a partir de los vecinos fiables.
+function inpaint(src,known,w,h){
+  const n=w*h,out=Float32Array.from(src),done=Uint8Array.from(known);
+  let left=0;for(let i=0;i<n;i++)if(!done[i])left++;
+  if(!left)return out;
+  const a=new Float32Array(n),m=new Float32Array(n);
+  for(let i=0;i<n;i++)if(known[i]){a[i]=src[i];m[i]=1;}
+  for(const sg of[1.5,3,6,12,24]){
+    const ba=gaussianBlur(a,w,h,sg),bm=gaussianBlur(m,w,h,sg);
+    for(let i=0;i<n;i++)if(!done[i]&&bm[i]>1e-3){out[i]=ba[i]/bm[i];done[i]=1;left--;}
+    if(!left)break;
+  }
+  return out;
+}
+// Perfil de borde redondeado (cuarto de círculo): vertical en el contorno y
+// plano hacia adentro, como una almohada. t = distancia / ancho del redondeo.
+const roundProfile=t=>{t=clamp(t,0,1);return Math.sqrt(1-(1-t)*(1-t));};
+
 // ── Malla cerrada desde dos campos de altura sobre una máscara ────────────
 // Cada celda interior aporta dos triángulos arriba y dos abajo; cada arista
 // de celda que limita con el exterior aporta una pared. Las alturas viven en
 // los vértices (esquinas de celda) y se comparten, así que la malla resulta
 // cerrada y con orientación consistente (normales hacia afuera).
+// Alturas: por celda (top/bot, se promedian en cada vértice) o por vértice
+// (vt/vb). ox/oy: corrimiento de cada vértice en celdas (contorno suave).
 // Coordenadas: X = columna·px, Y = (h − fila)·px (la foto queda derecha), Z = altura.
 function buildSolid(o){
-  const{w,h,mask,top,bot,px}=o,minT=o.minThickness==null?.4:o.minThickness;
-  const VW=w+1,nv=VW*(h+1),vt=new Float32Array(nv),vb=new Float32Array(nv),cnt=new Uint8Array(nv);
+  const{w,h,mask,px}=o,minT=o.minThickness==null?.4:o.minThickness;
+  const VW=w+1,nv=VW*(h+1);
+  let vt,vb;
+  if(o.vt&&o.vb){vt=Float32Array.from(o.vt);vb=Float32Array.from(o.vb);}
+  else{
+    vt=new Float32Array(nv);vb=new Float32Array(nv);const cnt=new Uint8Array(nv);
+    for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+      const c=j*w+i;if(!mask[c])continue;
+      for(const v of[j*VW+i,j*VW+i+1,(j+1)*VW+i,(j+1)*VW+i+1]){vt[v]+=o.top[c];vb[v]+=o.bot[c];cnt[v]++;}
+    }
+    for(let v=0;v<nv;v++)if(cnt[v]){vt[v]/=cnt[v];vb[v]/=cnt[v];}
+  }
   let cells=0,walls=0;
   for(let j=0;j<h;j++)for(let i=0;i<w;i++){
     const c=j*w+i;if(!mask[c])continue;cells++;
-    const t=top[c],b=bot[c];
-    for(const v of[j*VW+i,j*VW+i+1,(j+1)*VW+i,(j+1)*VW+i+1]){vt[v]+=t;vb[v]+=b;cnt[v]++;}
     if(i===0||!mask[c-1])walls++;
     if(i===w-1||!mask[c+1])walls++;
     if(j===0||!mask[c-w])walls++;
     if(j===h-1||!mask[c+w])walls++;
   }
-  for(let v=0;v<nv;v++){
-    if(!cnt[v])continue;vt[v]/=cnt[v];vb[v]/=cnt[v];
-    if(vt[v]-vb[v]<minT){const m=(vt[v]+vb[v])/2;vt[v]=m+minT/2;vb[v]=m-minT/2;}
+  // Grosor mínimo subiendo la cara superior: la inferior es la de apoyo en las
+  // formas de reverso plano y tiene que quedar exactamente en z = 0.
+  for(let v=0;v<nv;v++)if(vt[v]-vb[v]<minT)vt[v]=vb[v]+minT;
+  const ox=o.ox?Float32Array.from(o.ox):new Float32Array(nv),oy=o.oy?Float32Array.from(o.oy):new Float32Array(nv);
+  const X=v=>(v%VW+ox[v])*px,Y=v=>(h-((v/VW)|0)-oy[v])*px;
+  // Un corrimiento nunca debe voltear una cara: si pasa, esa celda vuelve a la grilla.
+  if(o.ox||o.oy){
+    const cross=(a,b,c)=>(X(b)-X(a))*(Y(c)-Y(a))-(Y(b)-Y(a))*(X(c)-X(a));
+    for(let pass=0;pass<4;pass++){
+      let bad=0;
+      for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+        if(!mask[j*w+i])continue;
+        const v00=j*VW+i,v10=v00+1,v01=v00+VW,v11=v01+1;
+        if(cross(v01,v11,v10)<=1e-9*px*px||cross(v01,v10,v00)<=1e-9*px*px){
+          for(const v of[v00,v10,v01,v11]){ox[v]=0;oy[v]=0;}bad++;
+        }
+      }
+      if(!bad)break;
+    }
   }
   const nTris=cells*4+walls*2,tris=new Float32Array(nTris*9);let p=0;
-  const X=v=>(v%VW)*px,Y=v=>(h-((v/VW)|0))*px;
   function tri(a,za,b,zb,c,zc){
     tris[p++]=X(a);tris[p++]=Y(a);tris[p++]=za;
     tris[p++]=X(b);tris[p++]=Y(b);tris[p++]=zb;
@@ -411,7 +522,7 @@ const SHAPES={
   objeto:{label:'Solo el objeto',sub:'Sin base',hint:'Sólo el sujeto, sin base. Decide la orientación en el laminador.',
     defaults:{size:80,relief:14,thick:5,backMode:'espejo',back:60,edge:4}},
 };
-const COMMON_DEFAULTS={res:260,smooth:1.2,detail:15,gamma:1,invert:false,maskMode:'auto',maskAdj:0};
+const COMMON_DEFAULTS={res:260,smooth:1.5,detail:0,gamma:1,invert:false,maskMode:'auto',maskAdj:0};
 
 // ── Campos de la imagen (una vez por imagen) ──────────────────────────────
 // img = {w,h,rgba(Uint8ClampedArray), hasAlpha}; depth = Float32Array w·h
@@ -446,7 +557,9 @@ function prepareFields(img,depth){
   }
   const relief=depthN||lum;
   return{w,h,lum,alpha,colorDist,depthN,relief,bg,bgUniform:spread<.07,hasAlpha,
-    sat:{lum:makeSAT(lum,w,h),alpha:makeSAT(alpha,w,h),colorDist:makeSAT(colorDist,w,h),relief:makeSAT(relief,w,h)}};
+    // El recorte usa maskBinary (cobertura a resolución de la foto); aquí sólo
+    // hacen falta las tablas del relieve y del brillo.
+    sat:{lum:makeSAT(lum,w,h),relief:makeSAT(relief,w,h)}};
 }
 // Qué campo define el recorte y con qué umbral.
 function maskSource(F,params){
@@ -462,6 +575,50 @@ function maskSource(F,params){
   return{mode:'none',key:null,thr:0,label:'imagen completa'};
 }
 
+// Recorte binario a resolución de la foto (pixel por pixel) y su tabla de
+// áreas: cada celda de la grilla toma su COBERTURA y entra si es ≥ 50 %.
+// Umbralizar el promedio del campo (como antes) metía en la pieza celdas con
+// apenas un 20 % de sujeto y engordaba la silueta. Se cachea por imagen y umbral.
+function maskBinary(F,src){
+  const key=src.key+':'+src.thr.toFixed(4);
+  if(F._bin&&F._bin.key===key)return F._bin;
+  const W=F.w,H=F.h,fld=F[src.key],b=new Float32Array(W*H);
+  for(let i=0;i<W*H;i++)b[i]=fld[i]>src.thr?1:0;
+  F._bin={key,b,sat:makeSAT(b,W,H),rel:null};
+  return F._bin;
+}
+// Fiabilidad de la profundidad, medida en píxeles de la foto: la IA trabaja a
+// ~518 px y mezcla con el fondo lo que está a menos de ~4 px de él (rayos,
+// manubrios, bordes).
+function depthReliability(F,src){
+  const B=maskBinary(F,src);
+  if(!B.rel){
+    const W=F.w,H=F.h,m=new Uint8Array(W*H);for(let i=0;i<W*H;i++)m[i]=B.b[i];
+    const din=distanceInside(m,W,H),k=4*Math.max(W,H)/518,rel=new Float32Array(W*H);
+    for(let i=0;i<W*H;i++)rel[i]=din[i]>k?1:0;
+    B.rel={rel,sat:makeSAT(rel,W,H)};
+  }
+  return B.rel;
+}
+// Limpieza del recorte en MILÍMETROS (antes era en celdas y en % del área, y a
+// 200 mm borraba detalles imprimibles de 2 mm y rellenaba huecos de cientos de mm²):
+//  - lo más fino que `minFeature` (0,8 mm = dos pasadas de boquilla 0,4) no se
+//    borra: se engrosa hasta poder imprimirse (rayos, antenas, manubrios);
+//  - se cierran rendijas de menos de ~0,4 mm y huecos de menos de 0,8 mm².
+function cleanMaskMM(raw,w,h,px,opts={}){
+  const minW=opts.minFeature||.8,n=w*h;
+  let m=Uint8Array.from(raw);
+  if(px<minW){
+    const r=Math.max(1,Math.round(minW/2/px)),opened=openMask(m,w,h,r),thin=new Uint8Array(n);let any=false;
+    for(let i=0;i<n;i++)if(m[i]&&!opened[i]){thin[i]=1;any=true;}
+    if(any){const th=dilate(thin,w,h,r);for(let i=0;i<n;i++)if(th[i])m[i]=1;}
+  }
+  const rc=Math.round(.2/px);if(rc>=1)m=closeMask(m,w,h,rc);
+  if(opts.single!==false)m=keepLargest(m,w,h);
+  m=fillHoles(m,w,h,Math.max(2,Math.round(.8/(px*px))));
+  return fixDiagonals(m,w,h);
+}
+
 // ── Construcción completa: campos + parámetros → malla lista para STL ─────
 function buildModel(F,shape,params){
   const P=Object.assign({},COMMON_DEFAULTS,(SHAPES[shape]||SHAPES.figura).defaults,params||{});
@@ -471,8 +628,8 @@ function buildModel(F,shape,params){
   let bbox={x0:0,y0:0,x1:W,y1:H};
   if(shape!=='medallon'&&src.key){
     const cs=Math.min(1,200/Math.max(W,H)),cw=Math.max(8,Math.round(W*cs)),ch=Math.max(8,Math.round(H*cs));
-    const fld=sampleRect(F[src.key],F.sat[src.key],W,H,0,0,W,H,cw,ch,0);
-    const m=new Uint8Array(cw*ch);for(let i=0;i<m.length;i++)m[i]=fld[i]>src.thr?1:0;
+    const B=maskBinary(F,src),fld=sampleRect(B.b,B.sat,W,H,0,0,W,H,cw,ch,0);
+    const m=new Uint8Array(cw*ch);for(let i=0;i<m.length;i++)m[i]=fld[i]>=.5?1:0;
     const cm=cleanMask(m,cw,ch,{radius:1});const bb=maskBBox(cm,cw,ch);
     if(!bb)return{error:'No encontré el sujeto en la imagen. Ajusta el recorte o usa "Imagen completa".'};
     bbox={x0:bb.x0*W/cw,y0:bb.y0*H/ch,x1:(bb.x1+1)*W/cw,y1:(bb.y1+1)*H/ch};
@@ -494,12 +651,11 @@ function buildModel(F,shape,params){
   // 3) Campos en la grilla.
   const rel=sampleRect(F.relief,F.sat.relief,W,H,rx,ry,gw*spc,gh*spc,gw,gh,0);
   const lum=sampleRect(F.lum,F.sat.lum,W,H,rx,ry,gw*spc,gh*spc,gw,gh,1);
-  let subject;
+  let subject,raw=null;
   if(src.key){
-    const fld=sampleRect(F[src.key],F.sat[src.key],W,H,rx,ry,gw*spc,gh*spc,gw,gh,0);
-    subject=new Uint8Array(n);for(let i=0;i<n;i++)subject[i]=fld[i]>src.thr?1:0;
-    const r=Math.max(1,Math.round(res/180));
-    subject=cleanMask(subject,gw,gh,{radius:r,single:shape!=='medallon'});
+    const B=maskBinary(F,src),cov=sampleRect(B.b,B.sat,W,H,rx,ry,gw*spc,gh*spc,gw,gh,0);
+    raw=new Uint8Array(n);for(let i=0;i<n;i++)raw[i]=cov[i]>=.5?1:0;
+    subject=cleanMaskMM(raw,gw,gh,px,{single:shape!=='medallon'});
   }else{
     // "Imagen completa": sólo las celdas que caen dentro de la foto (sin el margen).
     subject=new Uint8Array(n);
@@ -521,12 +677,31 @@ function buildModel(F,shape,params){
       if(low>=0&&low<bb.y1){for(let y=low+1;y<=bb.y1;y++)subject[y*gw+x]=1;footFill.push([x,low,bb.y1]);}
     }
   }
+  // Celdas que el recorte cerró (huecos entre rayos, entre brazo y cuerpo) o
+  // alargó: su profundidad y brillo son del fondo y dejarían pozos. Además, la
+  // IA trabaja a ~518 px y mezcla con el fondo todo lo que está a pocos píxeles
+  // de él (rayos, manubrios, bordes): esas celdas tampoco son fiables. Todas se
+  // rellenan desde el interior del sujeto.
+  let relS=rel,lumS=lum;
+  if(raw&&!(shape==='medallon'&&P.subject==='todo')){
+    const base=new Uint8Array(n);let nSub=0;
+    for(let i=0;i<n;i++){base[i]=subject[i]&&raw[i]?1:0;if(subject[i])nSub++;}
+    let known=base;
+    if(F.depthN&&src.key){
+      const R=depthReliability(F,src),rg=sampleRect(R.rel,R.sat,W,H,rx,ry,gw*spc,gh*spc,gw,gh,0);
+      const deep=new Uint8Array(n);let nDeep=0;
+      for(let i=0;i<n;i++)if(base[i]&&rg[i]>.5){deep[i]=1;nDeep++;}
+      if(nDeep>=nSub*.15)known=deep; // un sujeto todo fino se queda con lo que hay
+    }
+    let unk=0;for(let i=0;i<n;i++)if(subject[i]&&!known[i])unk++;
+    if(unk){relS=inpaint(rel,known,gw,gh);if(known===base)lumS=inpaint(lum,known,gw,gh);else lumS=inpaint(lum,base,gw,gh);}
+  }
   // 4) Relieve normalizado dentro del sujeto: suavizado, detalle fino y curva.
   const relMask=(shape==='medallon'&&P.subject==='todo')?new Uint8Array(n).fill(1):subject;
-  let d=maskedBlur(rel,relMask,gw,gh,(Number(P.smooth)||0)*res/220);
+  let d=maskedBlur(relS,relMask,gw,gh,(Number(P.smooth)||0)*res/220);
   const[lo,hi]=percentiles(d,relMask,[.02,.98]),span=hi-lo||1;
   const detail=(Number(P.detail)||0)/100;
-  const hp=detail>0?(()=>{const bl=gaussianBlur(lum,gw,gh,2*res/220),o=new Float32Array(n);for(let i=0;i<n;i++)o[i]=lum[i]-bl[i];return o;})():null;
+  const hp=detail>0?(()=>{const bl=gaussianBlur(lumS,gw,gh,2*res/220),o=new Float32Array(n);for(let i=0;i<n;i++)o[i]=lumS[i]-bl[i];return o;})():null;
   const gamma=clamp(Number(P.gamma)||1,.2,5);
   for(let i=0;i<n;i++){
     let v=clamp((d[i]-lo)/span,0,1);
@@ -539,7 +714,7 @@ function buildModel(F,shape,params){
   // 5) Alturas por forma.
   const top=new Float32Array(n),bot=new Float32Array(n),R=Math.max(0,Number(P.relief)||0),T=Math.max(.4,Number(P.thick)||1);
   const edgeCells=Math.max(1e-6,(Number(P.edge)||0)/px);
-  let mask,taper;
+  let mask,taper;  // taper: sólo llavero (relieve sobre la placa)
   const taperFrom=dist=>{const t=new Float32Array(n);for(let i=0;i<n;i++)t[i]=(Number(P.edge)||0)<=0?1:smoothstep(dist[i]/edgeCells);return t;};
   if(shape==='medallon'){
     const n2={rectangular:40,redondeado:5,ovalado:2,circular:2}[P.plate]||5;
@@ -569,28 +744,38 @@ function buildModel(F,shape,params){
     let ringKept=0,ringCells=0;for(let i=0;i<n;i++)if(ring[i]&&!hole[i]&&!subject[i]){ringCells++;if(mask[i])ringKept++;}
     if(ringCells&&ringKept<ringCells*.5)warnings.push('No pude unir la argolla a la pieza: ajusta el recorte.');
     for(let i=0;i<n;i++){top[i]=T+(subject[i]?R*d[i]*taper[i]:0);bot[i]=0;}
-  }else{
-    // figura / objeto. En la figura el borde inferior se corta plano (sin
-    // redondeo) para que apoye completo sobre la base.
-    mask=subject;
-    let distMask=subject,dh=gh;
-    if(shape==='figura'){
-      const bb=maskBBox(subject,gw,gh),ext=Math.ceil(edgeCells)+2;dh=gh+ext;
-      distMask=new Uint8Array(gw*dh);distMask.set(subject);
-      for(let y=bb.y1+1;y<dh;y++)for(let x=0;x<gw;x++)distMask[y*gw+x]=subject[bb.y1*gw+x];
-    }
-    const dist=distanceInside(distMask,gw,dh).subarray(0,n);
-    taper=taperFrom(dist);
-    const back=clamp((Number(P.back)||0)/100,0,1),minT=.6;
-    for(let i=0;i<n;i++){
-      if(!mask[i])continue;
-      if(P.backMode==='plano'){top[i]=minT+(T+R*d[i])*taper[i];bot[i]=0;}
-      else{top[i]=minT/2+(T/2+R*d[i])*taper[i];bot[i]=-(minT/2+(T/2+R*back*d[i])*taper[i]);}
-    }
-  }
+  }else mask=subject;
   mask=fixDiagonals(mask,gw,gh);
   for(let i=0;i<n;i++)if(mask[i]&&top[i]===0&&bot[i]===0)top[i]=T; // celdas añadidas por fixDiagonals
-  let mesh=buildSolid({w:gw,h:gh,mask,top,bot,px,minThickness:.4});
+  // Contorno suave para todas las formas.
+  const VW=gw+1,cnt=vertexCounts(mask,gw,gh);
+  const phi=gaussianBlur(signedDistance(mask,gw,gh),gw,gh,1);
+  const{ox,oy}=snapContour(mask,gw,gh,phi,cnt);
+  let vt=null,vb=null;
+  if(shape==='figura'||shape==='objeto'){
+    // Alturas por vértice: el redondeo se mide sobre la distancia suavizada
+    // (sin escalones) y con perfil de cuarto de círculo. En la figura el borde
+    // inferior se corta plano (sin redondeo) para que apoye completo en la base.
+    let distMask=mask,dh=gh;
+    if(shape==='figura'){
+      const bb=maskBBox(mask,gw,gh),ext=Math.ceil(edgeCells)+4;dh=gh+ext;
+      distMask=new Uint8Array(gw*dh);distMask.set(mask);
+      for(let y=bb.y1+1;y<dh;y++)for(let x=0;x<gw;x++)distMask[y*gw+x]=mask[bb.y1*gw+x];
+    }
+    const phiT=shape==='figura'?gaussianBlur(signedDistance(distMask,gw,dh),gw,dh,1):phi;
+    const back=clamp((Number(P.back)||0)/100,0,1),minT=.6,edgeOn=(Number(P.edge)||0)>0;
+    vt=new Float32Array(VW*(gh+1));vb=new Float32Array(VW*(gh+1));
+    for(let j=0;j<=gh;j++)for(let i=0;i<=gw;i++){
+      const v=j*VW+i;if(!cnt[v])continue;
+      let ds=0,dc=0;
+      for(const[ci,cj]of[[i-1,j-1],[i,j-1],[i-1,j],[i,j]])if(ci>=0&&cj>=0&&ci<gw&&cj<gh&&mask[cj*gw+ci]){ds+=d[cj*gw+ci];dc++;}
+      const dv=dc?ds/dc:0,ph=sampleCells(phiT,gw,dh,i-.5+ox[v],j-.5+oy[v],-1);
+      const tp=edgeOn?roundProfile(ph/edgeCells):1;
+      if(P.backMode==='plano'){vt[v]=minT+(T+R*dv)*tp;vb[v]=0;}
+      else{vt[v]=minT/2+(T/2+R*dv)*tp;vb[v]=-(minT/2+(T/2+R*back*dv)*tp);}
+    }
+  }
+  let mesh=buildSolid({w:gw,h:gh,mask,top,bot,vt,vb,ox,oy,px,minThickness:.4});
   const parts=[mesh];
   // 6) Orientación de impresión.
   if(shape==='figura'){
@@ -598,9 +783,9 @@ function buildModel(F,shape,params){
     transformMesh(mesh,(x,y,z,o)=>{o[0]=x;o[1]=-z;o[2]=y;});
     const b=meshBounds(mesh),bb=maskBBox(mask,gw,gh),band=Math.max(2,Math.round((bb.y1-bb.y0)*.15));
     let xs=Infinity,xe=-Infinity,ys=Infinity,ye=-Infinity;
-    for(let y=bb.y1-band;y<=bb.y1;y++)for(let x=0;x<gw;x++){
-      const i=y*gw+x;if(!mask[i])continue;
-      xs=Math.min(xs,x*px);xe=Math.max(xe,(x+1)*px);ys=Math.min(ys,-top[i]);ye=Math.max(ye,-bot[i]);
+    for(let y=bb.y1-band;y<=bb.y1+1;y++)for(let x=0;x<=gw;x++){
+      const v=y*VW+x;if(!cnt[v])continue;
+      const X=(x+ox[v])*px;xs=Math.min(xs,X);xe=Math.max(xe,X);ys=Math.min(ys,-vt[v]);ye=Math.max(ye,-vb[v]);
     }
     const baseH=Math.max(1,Number(P.baseH)||5),sink=Math.min(1.5,baseH*.4),dz=baseH-sink-b.min[2];
     transformMesh(mesh,(x,y,z,o)=>{o[0]=x;o[1]=y;o[2]=z+dz;});
@@ -621,14 +806,16 @@ function buildModel(F,shape,params){
   const b=meshBounds(mesh),cx=(b.min[0]+b.max[0])/2,cy=(b.min[1]+b.max[1])/2;
   transformMesh(mesh,(x,y,z,o)=>{o[0]=x-cx;o[1]=y-cy;o[2]=z-b.min[2];});
   const bounds=meshBounds(mesh);
-  return{mesh,bounds,shells:parts.length,grid:{w:gw,h:gh,px,mask,subject,d,rect:{x:rx,y:ry,w:gw*spc,h:gh*spc}},mask:src,
+  // place: traslación final aplicada, para mapear la malla de vuelta a la foto
+  // (x_foto = rect.x + (X + cx)/px·spc; y_foto = rect.y + (h·px − (Y + cy))/px·spc).
+  return{mesh,bounds,shells:parts.length,place:{cx,cy,dz:b.min[2],spc},grid:{w:gw,h:gh,px,mask,subject,d,rect:{x:rx,y:ry,w:gw*spc,h:gh*spc}},mask:src,
     volume:meshVolume(mesh),area:meshArea(mesh),warning:warnings.join(' ')};
 }
 
 const CORE={clamp,smoothstep,makeSAT,sampleRect,gaussianBlur,maskedBlur,percentiles,otsu,
   distanceInside,distanceOutside,erode,dilate,openMask,closeMask,labelComponents,keepLargest,fillHoles,
   fixDiagonals,maskBBox,maskArea,cleanMask,diskMask,superellipseMask,buildSolid,basePrism,concatMeshes,
-  meshBounds,transformMesh,meshVolume,meshArea,meshCentroid,estimateGrams,printersThatFit,placeRing,writeSTL,prepareFields,maskSource,buildModel,SHAPES,COMMON_DEFAULTS};
+  meshBounds,transformMesh,meshVolume,meshArea,meshCentroid,signedDistance,snapContour,vertexCounts,inpaint,roundProfile,depthReliability,maskBinary,cleanMaskMM,estimateGrams,printersThatFit,placeRing,writeSTL,prepareFields,maskSource,buildModel,SHAPES,COMMON_DEFAULTS};
 
 if(typeof module!=='undefined'&&module.exports){module.exports=CORE;return;}
 
@@ -797,7 +984,7 @@ const DETAIL_CTRL={
   maskMode:['Recorte','select',[['auto','Automático'],['depth','Por profundidad (IA)'],['color','Fondo uniforme'],['none','Imagen completa']]],
   maskAdj:['Ajuste del recorte','range',-40,40,1,'','Negativo = toma más fondo; positivo = recorta más.'],
   smooth:['Suavizado','range',0,6,.1,'','Elimina ruido de la IA. Más alto = superficies más lisas.'],
-  detail:['Detalle fino','range',0,60,1,'%','Suma textura de la foto (pelo, ropa). Puede marcar manchas de color.'],
+  detail:['Detalle fino','range',0,60,1,'%','Suma textura del brillo de la foto (pelo, tela). Ojo: las sombras y manchas oscuras se vuelven hundimientos.'],
   gamma:['Curva de profundidad','range',.4,2.5,.05,'','Mayor que 1 = destaca lo más cercano; menor que 1 = relieve más parejo.'],
   invert:['Invertir relieve','check'],
   res:['Resolución','range',100,400,10,'celdas','Más celdas = más detalle y un STL más pesado.'],

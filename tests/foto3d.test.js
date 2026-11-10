@@ -303,3 +303,107 @@ test('figura: avisa si el centro de masa cae fuera de la base',()=>{
   const ok=CORE.buildModel(CORE.prepareFields(img,depth),'figura',{res:100});
   assert.ok(!/volcarse/.test(ok.warning),'una figura centrada sobre su base no avisa');
 });
+
+// ── Fidelidad a la foto (auditoría del mallador) ──────────────────────────
+// Rueda sintética: cubierta, maza y 12 rayos sobre fondo negro, con un cuerpo
+// pegado. La "IA" devuelve una profundidad que varía en toda la pieza y mezcla
+// el borde con el fondo en ~2 px, como hace el modelo real.
+function wheelImage(spokeW=3){
+  const w=320,h=300,rgba=new Uint8ClampedArray(w*h*4),gt=new Uint8Array(w*h),truth=new Float32Array(w*h);
+  const cx=150,cy=160;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const dx=x-cx,dy=y-cy,r=Math.hypot(dx,dy),a=Math.atan2(dy,dx);
+    const tire=r>=95&&r<=120,hub=r<=18,spoke=r<95&&r>18&&Math.abs(((a/(Math.PI/6))%1+1.5)%1-.5)*r*Math.PI/6<spokeW/2;
+    const body=x>240&&x<300&&y>40&&y<200;
+    const on=tire||hub||spoke||body,i=y*w+x;gt[i]=on?1:0;
+    const c=on?200:5;rgba[i*4]=c;rgba[i*4+1]=c;rgba[i*4+2]=c;rgba[i*4+3]=255;
+    truth[i]=.4+.4*(x/w)+.2*Math.max(0,1-r*r/14400);
+  }
+  const n=w*h;let d=new Float32Array(n);for(let i=0;i<n;i++)d[i]=gt[i]?truth[i]:.05;
+  for(let pass=0;pass<2;pass++){const o=new Float32Array(n);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let s=0,c=0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=w||yy>=h)continue;s+=d[yy*w+xx];c++;}o[y*w+x]=s/c;}d=o;}
+  return{F:CORE.prepareFields({w,h,rgba},d),gt,truth,w,h};
+}
+function gridVsPhoto(r,W,fn){
+  const G=r.grid,spc=r.place.spc;
+  for(let j=0;j<G.h;j++)for(let i=0;i<G.w;i++){const xi=Math.floor(G.rect.x+(i+.5)*spc),yi=Math.floor(G.rect.y+(j+.5)*spc);fn(j*G.w+i,xi,yi);}
+}
+
+test('fidelidad: la silueta coincide con la foto, sin engordar ni correrse',()=>{
+  const{F,gt,w,h}=wheelImage();
+  const r=CORE.buildModel(F,'objeto',{res:220,size:120});
+  let best=null;
+  for(let sy=-1;sy<=1;sy++)for(let sx=-1;sx<=1;sx++){
+    let I=0,U=0;gridVsPhoto(r,w,(c,xi,yi)=>{xi+=sx;yi+=sy;const a=xi>=0&&yi>=0&&xi<w&&yi<h?gt[yi*w+xi]:0,b=r.grid.mask[c];if(a&&b)I++;if(a||b)U++;});
+    if(!best||I/U>best.iou)best={sx,sy,iou:I/U};
+  }
+  assert.ok(best.iou>.93,`IoU ${best.iou.toFixed(3)}`);
+  assert.deepEqual([best.sx,best.sy],[0,0],'la malla no debe quedar corrida respecto de la foto');
+  // Área: la cobertura ≥ 50 % no debe engordar la pieza (antes sumaba ~4 %).
+  const G=r.grid,mmPerPx=G.px/r.place.spc;let cells=0;for(let i=0;i<G.mask.length;i++)cells+=G.mask[i];
+  const gA=gt.reduce((s,v)=>s+v,0)*mmPerPx*mmPerPx,mA=cells*G.px*G.px;
+  assert.ok(Math.abs(mA/gA-1)<.03,`área ${(100*(mA/gA-1)).toFixed(1)} %`);
+});
+
+test('fidelidad: los huecos imprimibles quedan abiertos y los rayos se conservan',()=>{
+  const{F}=wheelImage(3);
+  const r=CORE.buildModel(F,'objeto',{res:220,size:120,backMode:'plano'});
+  assertWatertight(r.mesh,'rueda');
+  assert.equal(shellCount(r.mesh),1,'maza, rayos, cubierta y cuerpo en una sola pieza');
+  const genus=(2-eulerCharacteristic(r.mesh))/2;
+  assert.ok(genus>=11,`los 12 huecos entre rayos deben quedar abiertos (hay ${genus})`);
+});
+
+test('fidelidad: detalles más finos que 0,8 mm se engrosan en vez de borrarse',()=>{
+  const{F}=wheelImage(2);           // a 40 mm los rayos miden ~0,3 mm
+  const r=CORE.buildModel(F,'objeto',{res:220,size:40,backMode:'plano'});
+  assertWatertight(r.mesh,'rueda chica');
+  assert.equal(shellCount(r.mesh),1,'la maza sigue unida por los rayos engrosados');
+  const G=r.grid,c=Math.round((150-G.rect.x)/r.place.spc),rr=Math.round((160-G.rect.y)/r.place.spc);
+  assert.equal(G.mask[rr*G.w+c],1,'la maza está en la pieza');
+});
+
+test('fidelidad: el relieve sigue a la profundidad de la IA y los rayos no hunden la rueda',()=>{
+  const{F,gt,truth,w,h}=wheelImage();
+  const r=CORE.buildModel(F,'objeto',{res:220,size:120});
+  const A=[],B=[];
+  gridVsPhoto(r,w,(c,xi,yi)=>{if(r.grid.mask[c]&&xi>=0&&yi>=0&&xi<w&&yi<h&&gt[yi*w+xi]){A.push(r.grid.d[c]);B.push(truth[yi*w+xi]);}});
+  const m=a=>a.reduce((s,v)=>s+v,0)/a.length,ma=m(A),mb=m(B);let nu=0,da=0,db=0;
+  for(let i=0;i<A.length;i++){nu+=(A[i]-ma)*(B[i]-mb);da+=(A[i]-ma)**2;db+=(B[i]-mb)**2;}
+  const rho=nu/Math.sqrt(da*db);
+  assert.ok(rho>.97,`correlación del relieve ${rho.toFixed(3)}`);
+});
+
+test('las caras de apoyo quedan exactamente en z = 0 y el STL es una copia exacta de la malla',()=>{
+  const{F}=wheelImage();
+  for(const[shape,p]of[['objeto',{backMode:'plano'}],['llavero',{}],['medallon',{}]]){
+    const r=CORE.buildModel(F,shape,{res:120,...p}),t=r.mesh.tris;let off=0;
+    for(let f=0;f<r.mesh.count;f++){const b=f*9;
+      const nz=(t[b+3]-t[b])*(t[b+7]-t[b+1])-(t[b+4]-t[b+1])*(t[b+6]-t[b]);
+      const l=Math.hypot((t[b+4]-t[b+1])*(t[b+8]-t[b+2])-(t[b+5]-t[b+2])*(t[b+7]-t[b+1]),(t[b+5]-t[b+2])*(t[b+6]-t[b])-(t[b+3]-t[b])*(t[b+8]-t[b+2]),nz);
+      if(nz/l<-.999&&Math.max(Math.abs(t[b+2]),Math.abs(t[b+5]),Math.abs(t[b+8]))>1e-9)off++;}
+    assert.equal(off,0,`${shape}: cara de apoyo fuera de z = 0`);
+  }
+  const r=CORE.buildModel(F,'objeto',{res:100}),buf=CORE.writeSTL(r.mesh,'x'),dv=new DataView(buf);
+  for(let f=0;f<r.mesh.count;f++)for(let k=0;k<9;k++)
+    assert.equal(dv.getFloat32(84+f*50+12+4*k,true),Math.fround(r.mesh.tris[f*9+k]));
+});
+
+test('contorno suave: sin caras volteadas y sin escalones de una celda',()=>{
+  const{F}=wheelImage();
+  const r=CORE.buildModel(F,'objeto',{res:160,size:120});
+  assertWatertight(r.mesh,'contorno');
+  // Con alturas constantes (arriba 1, abajo 0) las caras superiores son las de
+  // z = 1: todas deben conservar su orientación en planta tras correr el borde.
+  const G=r.grid,cnt=CORE.vertexCounts(G.mask,G.w,G.h);
+  const phi=CORE.gaussianBlur(CORE.signedDistance(G.mask,G.w,G.h),G.w,G.h,1);
+  const{ox,oy}=CORE.snapContour(G.mask,G.w,G.h,phi,cnt);
+  const nv=(G.w+1)*(G.h+1),m=CORE.buildSolid({w:G.w,h:G.h,mask:G.mask,vt:new Float32Array(nv).fill(1),vb:new Float32Array(nv),ox,oy,px:1});
+  assertWatertight(m,'contorno corrido');
+  const t=m.tris;let tops=0,flipped=0,moved=0;
+  for(let f=0;f<m.count;f++){const b=f*9;if(t[b+2]!==1||t[b+5]!==1||t[b+8]!==1)continue;tops++;
+    if((t[b+3]-t[b])*(t[b+7]-t[b+1])-(t[b+4]-t[b+1])*(t[b+6]-t[b])<=0)flipped++;}
+  for(let v=0;v<nv;v++)if(ox[v]||oy[v])moved++;
+  assert.ok(tops>0);
+  assert.equal(flipped,0,'ninguna cara superior se voltea');
+  assert.ok(moved>0,'el contorno debe seguir la curva, no la escalera de la grilla');
+});
