@@ -94,6 +94,17 @@ Resultado (objeto 80 mm, res. 260, profundidad sintética tipo IA):
 Tests de regresión en `tests/foto3d.test.js` (sección «Fidelidad a la foto»),
 con una rueda sintética: cubierta, maza y 12 rayos.
 
+## Definición (2026-11-10, segunda prueba real)
+
+Con la IA real la moto salió fiel en silueta pero "sin definición": ondas
+diagonales cada ~2–3 mm en toda la superficie y relieve blando.
+
+| Hallazgo | Causa | Corrección |
+|---|---|---|
+| Ondas regulares en toda la pieza | El ViT de Depth Anything deja ondas con el paso de sus parches de 14 px (≈ 2,3 mm en una pieza de 80 mm) | Varias pasadas con el contenido corrido medio parche y espejado, alineadas y promediadas (`inferTTA`): ondas −81 % en CPU (2 pasadas), −84 % en GPU (4). El corrimiento no cambia el tamaño de la imagen: si cambiara, cambiaría el periodo y no se cancelarían |
+| Relieve blando | La IA veía la foto a 518 px y el suavizado gaussiano borraba cantos | Con GPU la IA ve la foto a 1022 px (imagen de trabajo 1024 px; si la GPU no da abasto, 770 px); suavizado con filtro guiado (`guidedSmooth`): promedia las ondas y conserva escalones ≥ 10 % del rango (un escalón de 0,300 queda en 0,312; con gaussiano, 0,240) |
+| — | — | Resolución por defecto 260 → 300 celdas (máx. 500) |
+
 ## Límites conocidos
 
 - Es un **relieve**, no un escaneo: lo que no se ve en la foto se inventa

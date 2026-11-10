@@ -113,6 +113,24 @@ function gaussianBlur(src,w,h,sigma){
   for(let y=0;y<h;y++){for(let x=0;x<w;x++){let acc=0;for(let t=-r;t<=r;t++){let yy=y+t;yy=yy<0?0:yy>=h?h-1:yy;acc+=tmp[yy*w+x]*k[t+r];}out[y*w+x]=acc;}}
   return out;
 }
+function _boxMean(a,w,h,r){const t=new Float32Array(w*h),o=new Float32Array(w*h);_boxBlurH(a,t,w,h,r);_boxBlurV(t,o,w,h,r);return o;}
+// Suavizado que respeta cantos (filtro guiado de He et al., guiado por la propia
+// profundidad y sólo dentro de la máscara). Donde la variación local es menor que
+// √eps (ruido, ondas del modelo) promedia; donde hay un escalón real (un brazo
+// delante del cuerpo, la arista de una faceta) lo conserva. Un gaussiano borraba ambos.
+function guidedSmooth(p,mask,w,h,r,eps){
+  const n=w*h,m=new Float32Array(n),pm=new Float32Array(n),ppm=new Float32Array(n);
+  for(let i=0;i<n;i++)if(mask[i]){m[i]=1;pm[i]=p[i];ppm[i]=p[i]*p[i];}
+  const N=_boxMean(m,w,h,r),MP=_boxMean(pm,w,h,r),MPP=_boxMean(ppm,w,h,r),A=new Float32Array(n),B=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    if(!mask[i]||N[i]<1e-6)continue;
+    const mu=MP[i]/N[i],v=Math.max(0,MPP[i]/N[i]-mu*mu),a=v/(v+eps);
+    A[i]=a;B[i]=mu-a*mu;
+  }
+  const MA=_boxMean(A,w,h,r),MB=_boxMean(B,w,h,r),out=Float32Array.from(p);
+  for(let i=0;i<n;i++)if(mask[i]&&N[i]>1e-6)out[i]=(MA[i]*p[i]+MB[i])/N[i];
+  return out;
+}
 // Desenfoque normalizado: el fondo no "contamina" el borde del sujeto.
 function maskedBlur(src,mask,w,h,sigma){
   if(!(sigma>0.05))return Float32Array.from(src);
@@ -522,12 +540,12 @@ const SHAPES={
   objeto:{label:'Solo el objeto',sub:'Sin base',hint:'Sólo el sujeto, sin base. Decide la orientación en el laminador.',
     defaults:{size:80,relief:14,thick:5,backMode:'espejo',back:60,edge:4}},
 };
-const COMMON_DEFAULTS={res:260,smooth:1.5,detail:0,gamma:1,invert:false,maskMode:'auto',maskAdj:0};
+const COMMON_DEFAULTS={res:300,smooth:2,detail:0,gamma:1,invert:false,maskMode:'auto',maskAdj:0};
 
 // ── Campos de la imagen (una vez por imagen) ──────────────────────────────
 // img = {w,h,rgba(Uint8ClampedArray), hasAlpha}; depth = Float32Array w·h
 // (mayor = más cerca) o null para usar el brillo.
-function prepareFields(img,depth){
+function prepareFields(img,depth,opts={}){
   const{w,h,rgba}=img,n=w*h,lum=new Float32Array(n),alpha=new Float32Array(n);
   for(let i=0;i<n;i++){
     const r=rgba[i*4],g=rgba[i*4+1],b=rgba[i*4+2],a=rgba[i*4+3]/255;
@@ -556,7 +574,7 @@ function prepareFields(img,depth){
     depthN=new Float32Array(n);for(let i=0;i<n;i++)depthN[i]=clamp((depth[i]-lo)/span,0,1);
   }
   const relief=depthN||lum;
-  return{w,h,lum,alpha,colorDist,depthN,relief,bg,bgUniform:spread<.07,hasAlpha,
+  return{w,h,lum,alpha,colorDist,depthN,relief,bg,bgUniform:spread<.07,hasAlpha,modelRes:opts.modelRes||518,
     // El recorte usa maskBinary (cobertura a resolución de la foto); aquí sólo
     // hacen falta las tablas del relieve y del brillo.
     sat:{lum:makeSAT(lum,w,h),relief:makeSAT(relief,w,h)}};
@@ -594,7 +612,8 @@ function depthReliability(F,src){
   const B=maskBinary(F,src);
   if(!B.rel){
     const W=F.w,H=F.h,m=new Uint8Array(W*H);for(let i=0;i<W*H;i++)m[i]=B.b[i];
-    const din=distanceInside(m,W,H),k=4*Math.max(W,H)/518,rel=new Float32Array(W*H);
+    // ~4 px del modelo, llevados a píxeles de la foto según la resolución usada.
+    const din=distanceInside(m,W,H),k=4*Math.max(W,H)/(F.modelRes||518),rel=new Float32Array(W*H);
     for(let i=0;i<W*H;i++)rel[i]=din[i]>k?1:0;
     B.rel={rel,sat:makeSAT(rel,W,H)};
   }
@@ -698,7 +717,16 @@ function buildModel(F,shape,params){
   }
   // 4) Relieve normalizado dentro del sujeto: suavizado, detalle fino y curva.
   const relMask=(shape==='medallon'&&P.subject==='todo')?new Uint8Array(n).fill(1):subject;
-  let d=maskedBlur(relS,relMask,gw,gh,(Number(P.smooth)||0)*res/220);
+  const sm=Number(P.smooth)||0;let d;
+  if(sm>0){
+    const[l0,h0]=percentiles(relS,relMask,[.02,.98]),sp0=Math.max(1e-6,h0-l0);
+    // Radio en celdas según el suavizado; umbral de "escalón real" ≈ 10 % del
+    // rango del sujeto: las ondas del modelo (±2–3 %) se promedian, un brazo
+    // delante del cuerpo (≥ 20 %) se conserva.
+    d=guidedSmooth(relS,relMask,gw,gh,Math.max(1,Math.round(sm*res/220)),Math.pow(.1*sp0,2));
+    // Un toque gaussiano mínimo quita el grano de celda sin tocar la forma.
+    d=maskedBlur(d,relMask,gw,gh,Math.min(.8,sm*.3));
+  }else d=Float32Array.from(relS);
   const[lo,hi]=percentiles(d,relMask,[.02,.98]),span=hi-lo||1;
   const detail=(Number(P.detail)||0)/100;
   const hp=detail>0?(()=>{const bl=gaussianBlur(lumS,gw,gh,2*res/220),o=new Float32Array(n);for(let i=0;i<n;i++)o[i]=lumS[i]-bl[i];return o;})():null;
@@ -815,7 +843,7 @@ function buildModel(F,shape,params){
 const CORE={clamp,smoothstep,makeSAT,sampleRect,gaussianBlur,maskedBlur,percentiles,otsu,
   distanceInside,distanceOutside,erode,dilate,openMask,closeMask,labelComponents,keepLargest,fillHoles,
   fixDiagonals,maskBBox,maskArea,cleanMask,diskMask,superellipseMask,buildSolid,basePrism,concatMeshes,
-  meshBounds,transformMesh,meshVolume,meshArea,meshCentroid,signedDistance,snapContour,vertexCounts,inpaint,roundProfile,depthReliability,maskBinary,cleanMaskMM,estimateGrams,printersThatFit,placeRing,writeSTL,prepareFields,maskSource,buildModel,SHAPES,COMMON_DEFAULTS};
+  meshBounds,transformMesh,meshVolume,meshArea,meshCentroid,guidedSmooth,signedDistance,snapContour,vertexCounts,inpaint,roundProfile,depthReliability,maskBinary,cleanMaskMM,estimateGrams,printersThatFit,placeRing,writeSTL,prepareFields,maskSource,buildModel,SHAPES,COMMON_DEFAULTS};
 
 if(typeof module!=='undefined'&&module.exports){module.exports=CORE;return;}
 
@@ -825,7 +853,7 @@ if(typeof module!=='undefined'&&module.exports){module.exports=CORE;return;}
 // El worker carga transformers.js desde el CDN fuera de la página: el código de
 // terceros no ve localStorage ni el DOM, y la inferencia no congela la interfaz.
 const SELF_SRC=(typeof document!=='undefined'&&document.currentScript&&document.currentScript.src)||'';
-let _worker=null,_reqId=0,_aiLabel='';
+let _worker=null,_reqId=0,_aiLabel='',_aiRes=518;
 const _pending=new Map();
 function _resetWorker(){if(_worker){try{_worker.terminate();}catch(_){}_worker=null;}}
 function _failAll(err){for(const p of _pending.values())p.reject(err);_pending.clear();_resetWorker();}
@@ -838,7 +866,9 @@ function depthWorker(){
     const m=e.data||{},p=_pending.get(m.id);if(!p)return;
     if(m.type==='progress'){if(p.onProgress)p.onProgress(m.frac,m.total);return;}
     _pending.delete(m.id);
-    if(m.type==='depth'&&m.data instanceof Float32Array){_aiLabel=m.label||'';p.resolve(m);}
+    if(m.type==='depth'&&m.data instanceof Float32Array){
+      _aiLabel=(m.label||'')+(m.res?` · ${m.res} px`:'')+(m.passes>1?` · ${m.passes} pasadas`:'');_aiRes=m.res||518;p.resolve(m);
+    }
     else if(m.type==='cancelled'){const err=new Error('cancelado');err.cancelled=true;p.reject(err);}
     // Tras un error se descarta el worker: un import() fallido queda en caché
     // dentro de ese worker y "Recalcular IA" nunca volvería a intentarlo.
@@ -983,11 +1013,11 @@ const SHAPE_CTRLS={
 const DETAIL_CTRL={
   maskMode:['Recorte','select',[['auto','Automático'],['depth','Por profundidad (IA)'],['color','Fondo uniforme'],['none','Imagen completa']]],
   maskAdj:['Ajuste del recorte','range',-40,40,1,'','Negativo = toma más fondo; positivo = recorta más.'],
-  smooth:['Suavizado','range',0,6,.1,'','Elimina ruido de la IA. Más alto = superficies más lisas.'],
+  smooth:['Suavizado','range',0,6,.1,'','Quita ruido y ondas de la IA sin borrar cantos. 0 = profundidad cruda.'],
   detail:['Detalle fino','range',0,60,1,'%','Suma textura del brillo de la foto (pelo, tela). Ojo: las sombras y manchas oscuras se vuelven hundimientos.'],
   gamma:['Curva de profundidad','range',.4,2.5,.05,'','Mayor que 1 = destaca lo más cercano; menor que 1 = relieve más parejo.'],
   invert:['Invertir relieve','check'],
-  res:['Resolución','range',100,400,10,'celdas','Más celdas = más detalle y un STL más pesado.'],
+  res:['Resolución','range',100,500,10,'celdas','Más celdas = más detalle y un STL más pesado.'],
 };
 
 function loadSaved(){try{const s=JSON.parse(localStorage.getItem(LS_KEY)||'{}');return s&&typeof s==='object'?s:{};}catch(_){return{};}}
@@ -1051,8 +1081,8 @@ function onFiles(files){
   im.src=url;
 }
 function setImage(im){
-  // Imagen de trabajo ≤ 768 px: suficiente para la IA (trabaja a 518 px) y la malla.
-  const s=Math.min(1,768/Math.max(im.naturalWidth,im.naturalHeight)),w=Math.max(8,Math.round(im.naturalWidth*s)),h=Math.max(8,Math.round(im.naturalHeight*s));
+  // Imagen de trabajo ≤ 1024 px: la IA en GPU la ve a 1022 px (en CPU, a 518).
+  const s=Math.min(1,1024/Math.max(im.naturalWidth,im.naturalHeight)),w=Math.max(8,Math.round(im.naturalWidth*s)),h=Math.max(8,Math.round(im.naturalHeight*s));
   const cv=document.createElement('canvas');cv.width=w;cv.height=h;
   const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingQuality='high';ctx.drawImage(im,0,0,w,h);
   S.img={w,h,rgba:ctx.getImageData(0,0,w,h).data,canvas:cv};
@@ -1073,12 +1103,12 @@ async function runDepth(){
     const t0=performance.now();
     const depth=await estimateDepth(img,(f,total)=>{if(mine()&&$('f3dSource').value==='ia')progress(f,f>=.999?'Calculando profundidad…':`Descargando modelo · ${Math.round(f*100)}% de ${(total/1048576).toFixed(0)} MB (queda en caché)`);});
     if(!mine())return; // llegó otra foto o se pidió otro cálculo mientras tanto
-    S.depth=depth;
+    S.depth=depth;S.depthRes=_aiRes;
     // Si mientras tanto se eligió "Brillo de la imagen", la profundidad queda
     // guardada (volver a "IA" no recalcula) pero no se aplica.
     if($('f3dSource').value!=='ia')return;
     progress(1,'Profundidad lista');setTimeout(()=>{if(mine())progress(null);},900);
-    S.fields=prepareFields(img,depth);
+    S.fields=prepareFields(img,depth,{modelRes:_aiRes});
     aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'} · ${((performance.now()-t0)/1000).toFixed(1)} s`);
     drawSource();schedule(true);
   }catch(e){
@@ -1095,7 +1125,7 @@ function onSourceChange(){
   const v=$('f3dSource').value;
   if(!S.img)return;
   if(v==='ia'){
-    if(S.depth){S.fields=prepareFields(S.img,S.depth);aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'}`);schedule(true);}
+    if(S.depth){S.fields=prepareFields(S.img,S.depth,{modelRes:S.depthRes});aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'}`);schedule(true);}
     else runDepth();
   }else{
     progress(null); // un cálculo en curso sigue, pero sólo guarda el resultado
