@@ -113,6 +113,17 @@ function gaussianBlur(src,w,h,sigma){
   for(let y=0;y<h;y++){for(let x=0;x<w;x++){let acc=0;for(let t=-r;t<=r;t++){let yy=y+t;yy=yy<0?0:yy>=h?h-1:yy;acc+=tmp[yy*w+x]*k[t+r];}out[y*w+x]=acc;}}
   return out;
 }
+// Mediana 3×3 sólo con vecinos de la máscara: quita picos de una celda sin
+// redondear cantos (un escalón recto conserva su mayoría a cada lado).
+function maskedMedian3(p,mask,w,h){
+  const out=Float32Array.from(p),v=new Float32Array(9);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x;if(!mask[i])continue;let k=0;
+    for(let j=-1;j<=1;j++)for(let q=-1;q<=1;q++){const yy=y+j,xx=x+q;if(yy<0||xx<0||yy>=h||xx>=w)continue;const c=yy*w+xx;if(mask[c])v[k++]=p[c];}
+    const s=v.subarray(0,k).sort();out[i]=k&1?s[k>>1]:(s[k/2-1]+s[k/2])/2;
+  }
+  return out;
+}
 function _boxMean(a,w,h,r){const t=new Float32Array(w*h),o=new Float32Array(w*h);_boxBlurH(a,t,w,h,r);_boxBlurV(t,o,w,h,r);return o;}
 // Suavizado que respeta cantos (filtro guiado de He et al., guiado por la propia
 // profundidad y sólo dentro de la máscara). Donde la variación local es menor que
@@ -570,6 +581,13 @@ function prepareFields(img,depth,opts={}){
   let hasAlpha=false;for(let i=0;i<n;i++)if(alpha[i]<.5){hasAlpha=true;break;}
   let depthN=null;
   if(depth){
+    // Un NaN o infinito (desborde fp16 en GPU) llegaba hasta los vértices del
+    // STL y lo dejaba corrupto: se rellena desde los vecinos válidos.
+    let bad=0;const known=new Uint8Array(n);for(let i=0;i<n;i++){if(Number.isFinite(depth[i]))known[i]=1;else bad++;}
+    if(bad){
+      if(bad===n)depth=new Float32Array(n);
+      else{const src=new Float32Array(n);for(let i=0;i<n;i++)src[i]=known[i]?depth[i]:0;depth=inpaint(src,known,w,h);}
+    }
     const[lo,hi]=percentiles(depth,null,[.01,.99]),span=hi-lo||1;
     depthN=new Float32Array(n);for(let i=0;i<n;i++)depthN[i]=clamp((depth[i]-lo)/span,0,1);
   }
@@ -723,7 +741,9 @@ function buildModel(F,shape,params){
     // Radio en celdas según el suavizado; umbral de "escalón real" ≈ 10 % del
     // rango del sujeto: las ondas del modelo (±2–3 %) se promedian, un brazo
     // delante del cuerpo (≥ 20 %) se conserva.
-    d=guidedSmooth(relS,relMask,gw,gh,Math.max(1,Math.round(sm*res/220)),Math.pow(.1*sp0,2));
+    // Primero la mediana: el filtro guiado conserva lo que parece un canto, y un
+    // pico aislado lo parece; sin este paso los picos llegaban a la malla.
+    d=guidedSmooth(maskedMedian3(relS,relMask,gw,gh),relMask,gw,gh,Math.max(1,Math.round(sm*res/220)),Math.pow(.1*sp0,2));
     // Un toque gaussiano mínimo quita el grano de celda sin tocar la forma.
     d=maskedBlur(d,relMask,gw,gh,Math.min(.8,sm*.3));
   }else d=Float32Array.from(relS);
@@ -843,7 +863,7 @@ function buildModel(F,shape,params){
 const CORE={clamp,smoothstep,makeSAT,sampleRect,gaussianBlur,maskedBlur,percentiles,otsu,
   distanceInside,distanceOutside,erode,dilate,openMask,closeMask,labelComponents,keepLargest,fillHoles,
   fixDiagonals,maskBBox,maskArea,cleanMask,diskMask,superellipseMask,buildSolid,basePrism,concatMeshes,
-  meshBounds,transformMesh,meshVolume,meshArea,meshCentroid,guidedSmooth,signedDistance,snapContour,vertexCounts,inpaint,roundProfile,depthReliability,maskBinary,cleanMaskMM,estimateGrams,printersThatFit,placeRing,writeSTL,prepareFields,maskSource,buildModel,SHAPES,COMMON_DEFAULTS};
+  meshBounds,transformMesh,meshVolume,meshArea,meshCentroid,guidedSmooth,maskedMedian3,signedDistance,snapContour,vertexCounts,inpaint,roundProfile,depthReliability,maskBinary,cleanMaskMM,estimateGrams,printersThatFit,placeRing,writeSTL,prepareFields,maskSource,buildModel,SHAPES,COMMON_DEFAULTS};
 
 if(typeof module!=='undefined'&&module.exports){module.exports=CORE;return;}
 
@@ -867,7 +887,8 @@ function depthWorker(){
     if(m.type==='progress'){if(p.onProgress)p.onProgress(m.frac,m.total);return;}
     _pending.delete(m.id);
     if(m.type==='depth'&&m.data instanceof Float32Array){
-      _aiLabel=(m.label||'')+(m.res?` · ${m.res} px`:'')+(m.passes>1?` · ${m.passes} pasadas`:'');_aiRes=m.res||518;p.resolve(m);
+      _aiLabel=(m.label||'')+(m.res?` · ${m.res} px`:'')+(m.passes>1?` · ${m.passes} pasadas`:'')+(m.asked&&m.res&&m.asked>m.res?` (bajó de ${m.asked} px: la GPU no dio resultados limpios)`:'');
+      _aiRes=m.res||518;p.resolve(m);
     }
     else if(m.type==='cancelled'){const err=new Error('cancelado');err.cancelled=true;p.reject(err);}
     // Tras un error se descarta el worker: un import() fallido queda en caché
@@ -877,7 +898,7 @@ function depthWorker(){
   _worker.onerror=e=>{if(e&&e.preventDefault)e.preventDefault();_failAll(new Error((e&&e.message)||'No se pudo iniciar el worker de IA'));};
   return _worker;
 }
-function estimateDepth(img,onProgress){
+function estimateDepth(img,onProgress,quality){
   return new Promise((resolve,reject)=>{
     if(typeof Worker==='undefined'){reject(new Error('Este navegador no tiene Web Workers'));return;}
     // Los píxeles transparentes van sobre gris neutro para que la IA no invente bordes.
@@ -887,7 +908,7 @@ function estimateDepth(img,onProgress){
     try{
       const w=depthWorker();
       w.postMessage({type:'cancel',below:id});  // lo que quedó en cola de fotos anteriores ya no sirve
-      w.postMessage({type:'depth',id,rgba:rgba.buffer,w:img.w,h:img.h},[rgba.buffer]);
+      w.postMessage({type:'depth',id,rgba:rgba.buffer,w:img.w,h:img.h,quality:quality||'normal'},[rgba.buffer]);
     }catch(e){_pending.delete(id);reject(e);}
   }).then(m=>{
     if(m.w===img.w&&m.h===img.h)return m.data;
@@ -1101,7 +1122,7 @@ async function runDepth(){
   progress(0,_aiLabel?'Calculando profundidad…':'Cargando la IA de profundidad (la primera vez descarga ~30–50 MB; después queda en caché)…');
   try{
     const t0=performance.now();
-    const depth=await estimateDepth(img,(f,total)=>{if(mine()&&$('f3dSource').value==='ia')progress(f,f>=.999?'Calculando profundidad…':`Descargando modelo · ${Math.round(f*100)}% de ${(total/1048576).toFixed(0)} MB (queda en caché)`);});
+    const depth=await estimateDepth(img,(f,total)=>{if(mine()&&$('f3dSource').value==='ia')progress(f,f>=.999?'Calculando profundidad…':`Descargando modelo · ${Math.round(f*100)}% de ${(total/1048576).toFixed(0)} MB (queda en caché)`);},aiQuality());
     if(!mine())return; // llegó otra foto o se pidió otro cálculo mientras tanto
     S.depth=depth;S.depthRes=_aiRes;
     // Si mientras tanto se eligió "Brillo de la imagen", la profundidad queda
@@ -1120,6 +1141,12 @@ async function runDepth(){
     // reconstrucción no la borra.
     aiNote('No se pudo cargar la IA de profundidad (¿sin conexión o CDN bloqueado?). Uso el brillo de la imagen como relieve; "Recalcular IA" lo vuelve a intentar.','warn');
   }finally{if(run===S.depthRun)$('f3dDepthBtn').disabled=false;}
+}
+const AIQ_KEY='foto3d_ai_quality_v1';
+function aiQuality(){const el=$('f3dAiQuality');return el&&el.value||'normal';}
+function onQualityChange(){
+  try{localStorage.setItem(AIQ_KEY,aiQuality());}catch(_){}
+  S.depth=null;if(S.img&&$('f3dSource').value==='ia')runDepth();
 }
 function onSourceChange(){
   const v=$('f3dSource').value;
@@ -1205,6 +1232,7 @@ function download(){
 function init(){
   const root=$('maquinaEscultorView');if(!root||root.dataset.ready)return;root.dataset.ready='1';
   const saved=loadSaved();
+  try{const q=localStorage.getItem(AIQ_KEY);if(q&&$('f3dAiQuality')&&[...$('f3dAiQuality').options].some(o=>o.value===q))$('f3dAiQuality').value=q;}catch(_){}
   if(saved.shape&&SHAPES[saved.shape])S.shape=saved.shape;
   if(saved.params&&typeof saved.params==='object')S.params=saved.params;
   renderControls();
@@ -1224,5 +1252,5 @@ function init(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.Foto3D={init,setShape,resetShape,resetDetail,setView,runDepth,onSourceChange,download,core:CORE,_state:S,_setImage:setImage,_rebuild:rebuild};
+root.Foto3D={init,setShape,resetShape,resetDetail,setView,runDepth,onSourceChange,onQualityChange,download,core:CORE,_state:S,_setImage:setImage,_rebuild:rebuild};
 })(typeof window!=='undefined'?window:globalThis);

@@ -105,6 +105,23 @@ diagonales cada ~2–3 mm en toda la superficie y relieve blando.
 | Relieve blando | La IA veía la foto a 518 px y el suavizado gaussiano borraba cantos | Con GPU la IA ve la foto a 1022 px (imagen de trabajo 1024 px; si la GPU no da abasto, 770 px); suavizado con filtro guiado (`guidedSmooth`): promedia las ondas y conserva escalones ≥ 10 % del rango (un escalón de 0,300 queda en 0,312; con gaussiano, 0,240) |
 | — | — | Resolución por defecto 260 → 300 celdas (máx. 500) |
 
+## Picos (2026-11-10, tercera prueba real)
+
+Tras subir la IA a 1022 px la pieza salió con picos agudos aislados en toda
+la superficie (y espejados en el reverso).
+
+| Hallazgo | Causa | Corrección |
+|---|---|---|
+| Picos agudos aislados | Fuera de su resolución de entrenamiento (518 px) y en fp16 sobre GPU, el ViT puede desbordarse en algunos parches y devolver valores basura | Por defecto vuelve a 518 px en GPU (4 pasadas). 770 y 1022 pasan a ser opcionales ("Detalle de la IA"); si una pasada trae > 0,5 % de valores no finitos o atípicos groseros, baja sola de resolución y lo dice en la nota |
+| El filtro guiado dejaba pasar los picos | Un pico aislado parece un canto y el filtro conserva cantos | Mediana 3×3 enmascarada antes del filtro guiado (quita picos de una celda, un escalón recto queda intacto) |
+| Una mancha basura en una pasada contaminaba el promedio | Las pasadas se combinaban con la media | Mediana por pixel entre pasadas |
+| **STL corrupto** si la profundidad traía NaN o infinito | Se propagaban hasta los vértices (`volumen NaN`) | `prepareFields` y el worker rellenan los no finitos desde los vecinos válidos |
+
+Límite: una mancha basura del tamaño de un parche que aparezca igual en todas
+las pasadas no se puede distinguir de un detalle real del mismo tamaño
+(dedos, puntas); por eso la defensa principal es no salir de 518 px salvo que
+se pida.
+
 ## Límites conocidos
 
 - Es un **relieve**, no un escaneo: lo que no se ve en la foto se inventa

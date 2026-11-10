@@ -434,9 +434,9 @@ function truthImage(w,h){
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,v=.3+.4*Math.exp(-((x-w*.45)**2+(y-h*.5)**2)/(2*(w*.25)**2))+.2*x/w;t[i]=Math.round(v*255)/255;rgba[i*4]=Math.round(v*255);rgba[i*4+3]=255;}
   return{rgba,t};
 }
-async function runWorker(T,gpu,w,h,rgba){
+async function runWorker(T,gpu,w,h,rgba,quality){
   const W=loadWorker({...T,gpu});
-  W.send({type:'depth',id:1,rgba:rgba.buffer.slice(0),w,h});
+  W.send({type:'depth',id:1,rgba:rgba.buffer.slice(0),w,h,quality});
   for(let i=0;i<40;i++)await W.settle();
   return W.posted.find(m=>m.type==='depth');
 }
@@ -460,13 +460,18 @@ test('worker: las pasadas desplazadas cancelan las ondas de los parches del ViT'
   assert.ok(eTTA<eSingle*.3,`las ondas deben bajar ≥ 70 % (una pasada ${eSingle.toFixed(4)}, promediadas ${eTTA.toFixed(4)})`);
 });
 
-test('worker: con GPU usa 1022 px y 4 pasadas',async()=>{
+const GPU={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
+test('worker: con GPU usa por defecto 518 px (resolución de entrenamiento) y 4 pasadas',async()=>{
   const w=300,h=200,{rgba}=truthImage(w,h),T=patchyTransformers();
-  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
-  const r=await runWorker(T,gpu,w,h,rgba);
-  assert.equal(r.res,1022);assert.equal(r.passes,4);assert.match(r.label,/GPU/);
-  assert.ok(T.calls.every(c=>c.L===1022),'el procesador del modelo recibe la resolución alta');
+  const r=await runWorker(T,GPU,w,h,rgba);
+  assert.equal(r.res,518);assert.equal(r.passes,4);assert.match(r.label,/GPU/);
   assert.equal(r.data.length,w*h,'la profundidad vuelve al tamaño de la foto');
+});
+test('worker: "Máximo" pide 1022 px al procesador del modelo',async()=>{
+  const w=300,h=200,{rgba}=truthImage(w,h),T=patchyTransformers();
+  const r=await runWorker(T,GPU,w,h,rgba,'maximo');
+  assert.equal(r.res,1022);
+  assert.ok(T.calls.every(c=>c.L===1022),'el procesador recibe la resolución alta');
 });
 
 test('suavizado: quita las ondas sin borrar un escalón real (filtro guiado)',()=>{
@@ -483,10 +488,53 @@ test('suavizado: quita las ondas sin borrar un escalón real (filtro guiado)',()
 });
 
 test('worker: si la GPU no da abasto a 1022 px, baja a 770 px antes de pasar a CPU',async()=>{
+  const quality='maximo';
   const w=200,h=150,{rgba}=truthImage(w,h),T=patchyTransformers();
   const orig=T.module.pipeline;
   T.module.pipeline=async(...a)=>{const f=await orig(...a);const g=async img=>{if(T.ip.size.width===1022)throw new Error('sin memoria de GPU');return f(img);};g.processor=f.processor;return g;};
-  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
-  const r=await runWorker(T,gpu,w,h,rgba);
+  const r=await runWorker(T,GPU,w,h,rgba,quality);
   assert.equal(r.res,770);assert.match(r.label,/GPU/);assert.equal(r.passes,4);
+  assert.equal(r.asked,1022,'informa que bajó de la resolución pedida');
+});
+
+// ── Picos (tercera prueba real: picos agudos en toda la pieza) ────────────
+test('worker: una pasada con desborde fp16 (NaN/infinito) baja de resolución sola',async()=>{
+  const w=200,h=150,{rgba}=truthImage(w,h),T=patchyTransformers(0);
+  const orig=T.module.pipeline;
+  T.module.pipeline=async(...a)=>{const f=await orig(...a);
+    const g=async img=>{const o=await f(img);if(T.ip.size.width>518){const d=o.predicted_depth.data;for(let i=0;i<d.length;i+=40)d[i]=i%80?NaN:Infinity;}return o;};
+    g.processor=f.processor;return g;};
+  const r=await runWorker(T,GPU,w,h,rgba,'maximo');
+  assert.equal(r.res,518,'1022 y 770 salen sucias: se queda en 518');
+  assert.ok(r.data.every(Number.isFinite),'sin NaN ni infinitos');
+});
+
+test('worker: una mancha basura en una sola pasada no llega al resultado (mediana)',async()=>{
+  const w=200,h=150,{rgba,t}=truthImage(w,h),T=patchyTransformers(0);
+  const orig=T.module.pipeline;let call=0;
+  T.module.pipeline=async(...a)=>{const f=await orig(...a);
+    const g=async img=>{const o=await f(img);if(call++===2){const d=o.predicted_depth.data;for(let y=60;y<70;y++)for(let x=90;x<100;x++)d[y*w+x]=5;}return o;};
+    g.processor=f.processor;return g;};
+  const r=await runWorker(T,GPU,w,h,rgba);
+  let maxErr=0;for(let y=58;y<72;y++)for(let x=88;x<102;x++)maxErr=Math.max(maxErr,Math.abs(r.data[y*w+x]-t[y*w+x]));
+  assert.ok(maxErr<.05,`la mancha se descarta (error ${maxErr.toFixed(3)})`);
+});
+
+test('NaN o infinito en la profundidad nunca llegan al STL',()=>{
+  const w=200,h=150,n=w*h,rgba=new Uint8ClampedArray(n*4),depth=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=i%w,y=(i/w)|0,inside=((x-100)/70)**2+((y-75)/50)**2<1;rgba.set(inside?[180,180,180,255]:[5,5,5,255],i*4);depth[i]=inside?.7:.1;}
+  for(let k=0;k<300;k++)depth[(k*997)%n]=k%2?NaN:Infinity;
+  const r=CORE.buildModel(CORE.prepareFields({w,h,rgba},depth),'objeto',{res:120});
+  assert.ok(r.mesh.tris.every(Number.isFinite),'todos los vértices son números');
+  assert.ok(r.volume>0);
+  assertWatertight(r.mesh,'profundidad con NaN');
+});
+
+test('picos de una celda se eliminan sin redondear un escalón real',()=>{
+  const w=60,h=40,n=w*h,p=new Float32Array(n),mask=new Uint8Array(n).fill(1);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)p[y*w+x]=x<30?.3:.7;
+  for(const[x,y]of[[10,10],[45,20],[20,30]])p[y*w+x]=1.5;
+  const m=CORE.maskedMedian3(p,mask,w,h);
+  for(const[x,y]of[[10,10],[45,20],[20,30]])assert.ok(m[y*w+x]<.8,'el pico desaparece');
+  assert.ok(Math.abs(m[20*w+29]-.3)<1e-6&&Math.abs(m[20*w+30]-.7)<1e-6,"el escalón queda intacto a ambos lados");
 });
