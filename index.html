@@ -3371,6 +3371,65 @@
   </div>
 
   <!-- ── CALENDARIO ── -->
+  <!-- ── ESCULTOR DE FOTOS — IMAGEN → STL CON IA DE PROFUNDIDAD LOCAL (js/foto3d.js) ── -->
+  <div id="maquinaEscultorView" class="maquina-section" data-maq-view="escultor" style="display:none;margin-bottom:28px">
+    <div class="maq-view-head">
+      <div><div class="maq-view-title">🗿 Escultor de fotos</div><div class="maq-view-sub">Convierte una foto en una pieza imprimible: figura con base, medallón, llavero u objeto. La IA de profundidad corre en este navegador; la foto no sale del equipo.</div></div>
+      <div class="maq-view-actions"><span class="badge badge-purple">Imagen → STL · IA local</span></div>
+    </div>
+    <div class="card f3d">
+      <div id="f3dDrop" class="f3d-drop">
+        <div id="f3dDropEmpty" class="f3d-empty" onclick="document.getElementById('f3dFile').click()">
+          <div class="f3d-empty-icon" aria-hidden="true">🖼️</div>
+          <div class="f3d-empty-title">Arrastra una foto aquí, pégala o <span>elige un archivo</span></div>
+          <div class="f3d-empty-sub">JPG, PNG o WebP · personas, mascotas, productos o dibujos · un PNG con fondo transparente da el mejor recorte</div>
+        </div>
+        <input type="file" id="f3dFile" accept="image/*" style="display:none">
+        <div id="f3dWork" class="f3d-work" style="display:none">
+          <div class="f3d-pane">
+            <div class="f3d-pane-head">
+              <b>Foto</b>
+              <div class="f3d-seg"><button type="button" class="active" data-f3dview="mascara" onclick="Foto3D.setView('mascara')">Recorte</button><button type="button" data-f3dview="profundidad" onclick="Foto3D.setView('profundidad')">Profundidad</button><button type="button" data-f3dview="original" onclick="Foto3D.setView('original')">Original</button></div>
+            </div>
+            <div id="f3dSrcWrap" class="f3d-src"><canvas id="f3dSrc"></canvas></div>
+            <div class="f3d-row">
+              <label class="f3d-field f3d-inline"><span>Relieve desde</span><select class="field-select" id="f3dSource" onchange="Foto3D.onSourceChange()"><option value="ia">IA de profundidad</option><option value="brillo">Brillo de la imagen</option></select></label>
+              <button class="btn btn-ghost btn-sm" id="f3dDepthBtn" onclick="Foto3D.runDepth()">↻ Recalcular IA</button>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('f3dFile').click()">Cambiar foto</button>
+            </div>
+            <div id="f3dAiNote" class="f3d-note"></div>
+            <div id="f3dProg" class="f3d-prog" style="display:none"><div class="f3d-prog-track"><div id="f3dProgBar"></div></div><div id="f3dProgTxt"></div></div>
+          </div>
+          <div class="f3d-pane">
+            <div class="f3d-pane-head"><b>Pieza 3D</b><span class="f3d-hint">arrastra para girar · rueda = zoom · doble clic = vista inicial</span></div>
+            <div class="f3d-viewer"><canvas id="f3dCanvas"></canvas><div id="f3dNoGL" class="f3d-nogl" style="display:none">Este navegador no tiene WebGL: no puedo mostrar la vista 3D, pero el STL se descarga igual.</div></div>
+            <div id="f3dStats" class="f3d-stats"></div>
+            <div class="f3d-row">
+              <button class="btn btn-primary" id="f3dDownload" onclick="Foto3D.download()" disabled>⬇ Descargar STL</button>
+              <span class="f3d-note">Revísalo en el laminador antes de imprimir.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="f3dStatus" class="f3d-status" style="display:none"></div>
+      <div class="f3d-controls">
+        <div class="f3d-group f3d-group-wide">
+          <div class="f3d-group-title">Forma de la pieza <button type="button" class="f3d-link" onclick="Foto3D.resetShape()">Restablecer medidas</button></div>
+          <div id="f3dShapeBtns" class="f3d-shapes"></div>
+          <div id="f3dShapeHint" class="f3d-note"></div>
+        </div>
+        <div class="f3d-group">
+          <div class="f3d-group-title">Medidas</div>
+          <div id="f3dShapeCtrls" class="f3d-fields"></div>
+        </div>
+        <div class="f3d-group">
+          <div class="f3d-group-title">Recorte y relieve <button type="button" class="f3d-link" onclick="Foto3D.resetDetail()">Restablecer</button></div>
+          <div id="f3dDetailCtrls" class="f3d-fields"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="maquinaCalView" class="maquina-section" data-maq-view="planificacion" style="display:none">
     <div class="maq-view-title" style="margin-bottom:12px">📅 Disponibilidad semanal</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
@@ -20458,6 +20517,7 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
 </script>
 
 <script src="js/slicer3d.js?v=%%BUILD%%"></script>
+<script src="js/foto3d.js?v=%%BUILD%%"></script>
 
 <script>
 // ── Nav Drag/Reorder ─────────────────────────────────────────────────

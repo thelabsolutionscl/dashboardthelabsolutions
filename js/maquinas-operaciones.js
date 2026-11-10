@@ -1072,14 +1072,14 @@ function setText(id,value){const el=document.getElementById(id);if(el)el.textCon
 const VIEW_GROUPS={
   hoy:['inteligencia','operacion'],
   trabajos:['planificacion','calidad','postproduccion'],
-  taller:['capacidad','perfiles','laminado','materiales','mantenimiento','seguridad','analitica','automatizacion'],
+  taller:['capacidad','perfiles','laminado','escultor','materiales','mantenimiento','seguridad','analitica','automatizacion'],
 };
 const WORKSHOP_CORE=['materiales','mantenimiento','seguridad','capacidad'];
-const WORKSHOP_ADVANCED=['perfiles','laminado','analitica','automatizacion'];
+const WORKSHOP_ADVANCED=['perfiles','laminado','escultor','analitica','automatizacion'];
 const VIEW_TITLES={
   inteligencia:'🧠 Alertas',operacion:'📡 Máquinas',
   planificacion:'🗓 Planificación',calidad:'✅ Calidad',postproduccion:'🧩 Postproducción',
-  capacidad:'🧮 Capacidad',perfiles:'🎛 Perfiles',laminado:'🖨 Laminado',materiales:'🧵 Materiales',
+  capacidad:'🧮 Capacidad',perfiles:'🎛 Perfiles',laminado:'🖨 Laminado',escultor:'🗿 Escultor',materiales:'🧵 Materiales',
   mantenimiento:'🔧 Mantenimiento',seguridad:'🛡 Seguridad',analitica:'📊 Analítica',automatizacion:'⚙ Automatización',
 };
 // Los enlaces guardados, el localStorage y las llamadas internas siguen usando
@@ -1139,6 +1139,7 @@ const WORKSHOP_CARD_META={
   capacidad:{icon:'capacity',accent:'violet'},
   perfiles:{icon:'sliders',accent:'cyan'},
   laminado:{icon:'printer',accent:'violet'},
+  escultor:{icon:'photo',accent:'amber'},
   analitica:{icon:'chart',accent:'green'},
   automatizacion:{icon:'gear',accent:'slate'},
 };
@@ -1150,6 +1151,7 @@ function workshopIcon(name){
     capacity:'<rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/><path d="M4 10.5 10 5l4 2.2 6-5"/>',
     sliders:'<path d="M4 6h7m4 0h5M4 12h3m4 0h9M4 18h9m4 0h3"/><circle cx="13" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="18" r="2"/>',
     printer:'<rect x="5" y="3" width="14" height="5" rx="1.5"/><path d="M7 8v5h10V8M9 13v3h6v-3M7 21h10M12 16v5"/><path d="M9 6h6"/>',
+    photo:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9.5" r="1.8"/><path d="m3 17 5-5 4 4 3-3 6 6"/>',
     chart:'<path d="M4 20V10m5 10V5m5 15v-7m5 7V3"/><path d="m4 8 5-3 5 5 5-7"/>',
     gear:'<circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2.1-.7a7.1 7.1 0 0 0-.7-1.7l1-2-2.2-2.2-2 1a7.1 7.1 0 0 0-1.7-.7L10.5 2h-3l-.7 2.1a7.1 7.1 0 0 0-1.7.7l-2-1L.9 6l1 2a7.1 7.1 0 0 0-.7 1.7L-1 10.5v3l2.1.7a7.1 7.1 0 0 0 .7 1.7l-1 2L3 20.1l2-1a7.1 7.1 0 0 0 1.7.7l.8 2.2h3l.7-2.1a7.1 7.1 0 0 0 1.7-.7l2 1 2.2-2.2-1-2a7.1 7.1 0 0 0 .7-1.7L19 13.5Z" transform="translate(3 0) scale(.75)"/>'
   };
@@ -1196,9 +1198,10 @@ function renderWorkshopHome(){
       ${workshopNavCard('seguridad','Seguridad','Sensor/lectura manual y reglas de preflight',safetyState,safetyTone)}
       ${workshopNavCard('capacidad','Capacidad','Simulador de escenario; no promesa automática','Simular','neutral')}
     </div>
-    <div class="mops-workshop-section-title"><div><b>Herramientas de producción</b><small>Laminado, perfiles, análisis y configuración disponibles también en modo Simple.</small></div></div>
+    <div class="mops-workshop-section-title"><div><b>Herramientas de producción</b><small>Laminado, escultor de fotos, perfiles, análisis y configuración disponibles también en modo Simple.</small></div></div>
     <div class="mops-workshop-nav-grid advanced">
       ${workshopNavCard('laminado','Laminador','Agente 3D, G-code y preflight','Abrir','neutral')}
+      ${workshopNavCard('escultor','Escultor de fotos','Foto → STL con IA de profundidad local','Abrir','neutral')}
       ${workshopNavCard('perfiles','Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
       ${workshopNavCard('analitica','Analítica','QA, tiempos reales y costos modelados','Abrir','neutral')}
       ${workshopNavCard('automatizacion','Configuración','Umbrales, automatización y costos','Avanzado','neutral')}
