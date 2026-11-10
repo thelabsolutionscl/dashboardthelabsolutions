@@ -407,3 +407,86 @@ test('contorno suave: sin caras volteadas y sin escalones de una celda',()=>{
   assert.equal(flipped,0,'ninguna cara superior se voltea');
   assert.ok(moved>0,'el contorno debe seguir la curva, no la escalera de la grilla');
 });
+
+// ── Definición: ondas del ViT y cantos (auditoría de definición) ─────────
+// Modelo falso que reproduce el defecto real del ViT: la profundidad verdadera
+// (codificada en el rojo de la imagen) más ondas atadas a la grilla de parches
+// de 14 px del tamaño al que el procesador escala la imagen.
+function patchyTransformers(amp=.04){
+  const calls=[];
+  const ip={size:{width:518,height:518}};
+  return{calls,ip,module:{env:{},RawImage:class{constructor(d,w,h){this.data=d;this.width=w;this.height=h;}},
+    pipeline:async(task,model,o)=>{
+      const f=async img=>{
+        const L=ip.size.width,W=img.width,H=img.height,d=new Float32Array(W*H);
+        let sw=L/W,sh=L/H;if(Math.abs(1-sw)<Math.abs(1-sh))sh=sw;else sw=sh;
+        const mw=Math.round(sw*W/14)*14,mh=Math.round(sh*H/14)*14,Px=14*W/mw,Py=14*H/mh;
+        calls.push({device:o.device,L,W,H});
+        for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;d[i]=img.data[i*4]/255+amp*(Math.cos(2*Math.PI*x/Px)+Math.cos(2*Math.PI*y/Py));}
+        return{predicted_depth:{dims:[H,W],data:d}};
+      };
+      f.processor={image_processor:ip};
+      return f;
+    }}};
+}
+function truthImage(w,h){
+  const rgba=new Uint8ClampedArray(w*h*4),t=new Float32Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,v=.3+.4*Math.exp(-((x-w*.45)**2+(y-h*.5)**2)/(2*(w*.25)**2))+.2*x/w;t[i]=Math.round(v*255)/255;rgba[i*4]=Math.round(v*255);rgba[i*4+3]=255;}
+  return{rgba,t};
+}
+async function runWorker(T,gpu,w,h,rgba){
+  const W=loadWorker({...T,gpu});
+  W.send({type:'depth',id:1,rgba:rgba.buffer.slice(0),w,h});
+  for(let i=0;i<40;i++)await W.settle();
+  return W.posted.find(m=>m.type==='depth');
+}
+function rmsVsTruth(d,t,w,h){
+  // compara tras alinear escala y desfase (la profundidad es relativa)
+  const n=w*h;let md=0,mt=0;for(let i=0;i<n;i++){md+=d[i];mt+=t[i];}md/=n;mt/=n;
+  let cv=0,vd=0;for(let i=0;i<n;i++){cv+=(d[i]-md)*(t[i]-mt);vd+=(d[i]-md)**2;}
+  const a=cv/vd,b=mt-a*md;let e=0,c=0;
+  for(let y=20;y<h-20;y++)for(let x=20;x<w-20;x++){const i=y*w+x;e+=(a*d[i]+b-t[i])**2;c++;}
+  return Math.sqrt(e/c);
+}
+
+test('worker: las pasadas desplazadas cancelan las ondas de los parches del ViT',async()=>{
+  const w=400,h=300,{rgba,t}=truthImage(w,h);
+  const one=await runWorker(patchyTransformers(),null,w,h,rgba);
+  // referencia: una sola pasada, la misma onda
+  const T1=patchyTransformers();const f1=await T1.module.pipeline('d','m',{});T1.ip.size={width:518,height:518};
+  const raw=(await f1(new T1.module.RawImage(new Uint8ClampedArray(rgba),w,h))).predicted_depth.data;
+  const eSingle=rmsVsTruth(raw,t,w,h),eTTA=rmsVsTruth(one.data,t,w,h);
+  assert.equal(one.passes,2,'en CPU se hacen 2 pasadas');
+  assert.ok(eTTA<eSingle*.3,`las ondas deben bajar ≥ 70 % (una pasada ${eSingle.toFixed(4)}, promediadas ${eTTA.toFixed(4)})`);
+});
+
+test('worker: con GPU usa 1022 px y 4 pasadas',async()=>{
+  const w=300,h=200,{rgba}=truthImage(w,h),T=patchyTransformers();
+  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
+  const r=await runWorker(T,gpu,w,h,rgba);
+  assert.equal(r.res,1022);assert.equal(r.passes,4);assert.match(r.label,/GPU/);
+  assert.ok(T.calls.every(c=>c.L===1022),'el procesador del modelo recibe la resolución alta');
+  assert.equal(r.data.length,w*h,'la profundidad vuelve al tamaño de la foto');
+});
+
+test('suavizado: quita las ondas sin borrar un escalón real (filtro guiado)',()=>{
+  // Brazo delante del cuerpo: escalón de 0,3 + ondas de ±0,02.
+  const w=120,h=80,n=w*h,p=new Float32Array(n),clean=new Float32Array(n),mask=new Uint8Array(n).fill(1);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x;clean[i]=x<60?.4:.7;p[i]=clean[i]+.02*Math.sin(2*Math.PI*x/7)*Math.sin(2*Math.PI*y/7);}
+  // mismo umbral que usa buildModel: 10 % del rango del sujeto (aquí 0,3)
+  const g=CORE.guidedSmooth(p,mask,w,h,3,Math.pow(.1*.3,2)),gb=CORE.gaussianBlur(p,w,h,2);
+  let rip=0,ripG=0,c=0;for(let y=10;y<h-10;y++)for(let x=10;x<w-10;x++){if(Math.abs(x-59.5)<6)continue;const i=y*w+x;rip+=(g[i]-clean[i])**2;ripG+=(p[i]-clean[i])**2;c++;}
+  assert.ok(Math.sqrt(rip/c)<Math.sqrt(ripG/c)*.5,'las ondas bajan a menos de la mitad');
+  const row=40*w,stepG=g[row+62]-g[row+57],stepB=gb[row+62]-gb[row+57];
+  assert.ok(stepG>.27,`el escalón se conserva (${stepG.toFixed(3)} de 0,3)`);
+  assert.ok(stepG>stepB+.03,'y queda más nítido que con un desenfoque gaussiano');
+});
+
+test('worker: si la GPU no da abasto a 1022 px, baja a 770 px antes de pasar a CPU',async()=>{
+  const w=200,h=150,{rgba}=truthImage(w,h),T=patchyTransformers();
+  const orig=T.module.pipeline;
+  T.module.pipeline=async(...a)=>{const f=await orig(...a);const g=async img=>{if(T.ip.size.width===1022)throw new Error('sin memoria de GPU');return f(img);};g.processor=f.processor;return g;};
+  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
+  const r=await runWorker(T,gpu,w,h,rgba);
+  assert.equal(r.res,770);assert.match(r.label,/GPU/);assert.equal(r.passes,4);
+});
