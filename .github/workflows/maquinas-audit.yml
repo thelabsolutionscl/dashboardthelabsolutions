@@ -20,6 +20,8 @@ on:
       - 'js/dashboard-notification-badges.js'
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
+      - 'js/foto3d.js'
+      - 'tests/foto3d.test.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
@@ -53,6 +55,8 @@ on:
       - 'js/dashboard-notification-badges.js'
       - 'js/correo-input-compat.js'
       - 'js/slicer3d.js'
+      - 'js/foto3d.js'
+      - 'tests/foto3d.test.js'
       - 'printer-bridge/**'
       - 'tests/maquinas-*.test.js'
       - 'tests/machine-ops-*.test.js'
@@ -106,6 +110,7 @@ jobs:
           node --check js/dashboard-notification-badges.js
           node --check js/correo-input-compat.js
           node --check js/slicer3d.js
+          node --check js/foto3d.js
           node --check sw.js
           node --check printer-bridge/server.js
           node --check printer-bridge/farm-controller.js
@@ -114,6 +119,9 @@ jobs:
           node --check printer-bridge/farm-health-preload.js
           bash -n printer-bridge/install-farm-controller.sh
           bash -n printer-bridge/rollback-farm-controller.sh
+
+      - name: Probar escultor de fotos (imagen → STL)
+        run: node --test tests/foto3d.test.js
 
       - name: Probar cache y actualización del dashboard
         run: node --test tests/service-worker-cache-safety.test.js tests/service-worker-registration.test.js

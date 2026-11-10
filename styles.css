@@ -3194,3 +3194,68 @@ html[data-theme="light"] .appearance-choice.is-active{background:rgba(0,158,154,
   .mail-compose-hdr-btn{min-width:36px;min-height:36px}
   .mail-compose-footer{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));flex-wrap:wrap}
 }
+
+/* ── Escultor de fotos: imagen → STL (js/foto3d.js) ───────────────────── */
+@media(min-width:1181px){#tab-maquinas .mops-workshop-nav-grid.advanced{grid-template-columns:repeat(5,minmax(0,1fr))}}
+#maquinaEscultorView .f3d{padding:16px}
+#maquinaEscultorView .f3d-drop{border:2px dashed var(--border2);border-radius:12px;transition:border-color .2s,background .2s}
+#maquinaEscultorView .f3d-drop.over{border-color:var(--accent);background:rgba(0,212,204,.05)}
+#maquinaEscultorView .f3d-drop.has-img{border-color:transparent;border-style:solid;border-width:0}
+#maquinaEscultorView .f3d-empty{padding:44px 16px;text-align:center;cursor:pointer}
+#maquinaEscultorView .f3d-empty-icon{font-size:30px;margin-bottom:8px}
+#maquinaEscultorView .f3d-empty-title{font-size:13px;font-weight:700;color:var(--text2)}
+#maquinaEscultorView .f3d-empty-title span{color:var(--accent)}
+#maquinaEscultorView .f3d-empty-sub{font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5}
+#maquinaEscultorView .f3d-work{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px}
+#maquinaEscultorView .f3d-pane{min-width:0;display:flex;flex-direction:column;gap:10px}
+#maquinaEscultorView .f3d-pane-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;min-height:28px}
+#maquinaEscultorView .f3d-pane-head>b{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text2)}
+#maquinaEscultorView .f3d-hint{font-size:10.5px;color:var(--text3)}
+#maquinaEscultorView .f3d-seg{display:inline-flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+#maquinaEscultorView .f3d-seg button{appearance:none;border:0;background:transparent;color:var(--text2);font:inherit;font-size:11px;padding:5px 10px;cursor:pointer}
+#maquinaEscultorView .f3d-seg button+button{border-left:1px solid var(--border2)}
+#maquinaEscultorView .f3d-seg button.active{background:var(--surface3);color:var(--text)}
+#maquinaEscultorView .f3d-src{background:#0d0d0d;border:1px solid var(--border);border-radius:10px;overflow:hidden;min-height:200px;display:flex;align-items:center}
+#maquinaEscultorView .f3d-src canvas{width:100%;display:block}
+#maquinaEscultorView .f3d-viewer{position:relative;height:440px;background:#0d0d0d;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+#maquinaEscultorView .f3d-viewer canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#maquinaEscultorView .f3d-nogl{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:var(--text3);font-size:12px}
+#maquinaEscultorView .f3d-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#maquinaEscultorView .f3d-note{font-size:10.5px;color:var(--text3);line-height:1.5}
+#maquinaEscultorView .f3d-prog-track{height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}
+#maquinaEscultorView #f3dProgBar{height:100%;width:0;background:var(--accent);transition:width .25s}
+#maquinaEscultorView #f3dProgTxt{font-size:10.5px;color:var(--text3);margin-top:4px}
+#maquinaEscultorView .f3d-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+#maquinaEscultorView .f3d-stats span{display:flex;flex-direction:column;gap:2px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;font-size:10px;color:var(--text3);min-width:0}
+#maquinaEscultorView .f3d-stats b{font-size:12.5px;color:var(--text);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#maquinaEscultorView .f3d-status{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:11.5px;line-height:1.5;border:1px solid var(--border2);background:var(--surface2);color:var(--text2)}
+#maquinaEscultorView .f3d-status[data-tone=error]{border-color:rgba(255,68,68,.4);color:var(--danger)}
+#maquinaEscultorView .f3d-status[data-tone=warn]{border-color:rgba(255,170,0,.4);color:var(--warn)}
+#maquinaEscultorView .f3d-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}
+#maquinaEscultorView .f3d-group{padding:12px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;min-width:0}
+#maquinaEscultorView .f3d-group-wide{grid-column:1/-1}
+#maquinaEscultorView .f3d-group-title{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:10px}
+#maquinaEscultorView .f3d-link{appearance:none;border:0;background:none;color:var(--accent);font:inherit;font-size:10.5px;font-weight:600;text-transform:none;letter-spacing:0;cursor:pointer;padding:0}
+#maquinaEscultorView .f3d-shapes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}
+#maquinaEscultorView .f3d-shape{appearance:none;text-align:left;padding:10px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text2);font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+#maquinaEscultorView .f3d-shape b{font-size:12px;font-weight:600}
+#maquinaEscultorView .f3d-shape small{font-size:10px;color:var(--text3)}
+#maquinaEscultorView .f3d-shape.active{border-color:var(--accent);color:var(--text);box-shadow:inset 0 0 0 1px var(--accent)}
+#maquinaEscultorView .f3d-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px 16px}
+#maquinaEscultorView .f3d-field{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text2);min-width:0}
+#maquinaEscultorView .f3d-field>span{display:flex;justify-content:space-between;gap:6px}
+#maquinaEscultorView .f3d-field b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+#maquinaEscultorView .f3d-field input[type=range]{width:100%;accent-color:var(--accent)}
+#maquinaEscultorView .f3d-field .field-select{font-size:12px;padding:6px 8px}
+#maquinaEscultorView .f3d-check{flex-direction:row;align-items:center;gap:8px;cursor:pointer;align-self:end;min-height:30px}
+#maquinaEscultorView .f3d-inline{flex-direction:row;align-items:center;gap:8px}
+#maquinaEscultorView .f3d-inline .field-select{width:auto}
+@media(max-width:900px){
+  #maquinaEscultorView .f3d-work,#maquinaEscultorView .f3d-controls{grid-template-columns:1fr}
+  #maquinaEscultorView .f3d-viewer{height:340px}
+}
+@media(max-width:640px){
+  #maquinaEscultorView .f3d{padding:12px}
+  #maquinaEscultorView .f3d-shapes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #maquinaEscultorView .f3d-hint{display:none}
+}
