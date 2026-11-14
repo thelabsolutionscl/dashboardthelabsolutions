@@ -69,10 +69,12 @@ function resample(src,sw,sh,dw,dh){
   }
   return o;
 }
+let lastDtype='';
 async function infer(rgba,w,h){
   const out=await pipe(new T.RawImage(rgba,w,h,4));
   const pd=(Array.isArray(out)?out[0]:out).predicted_depth;
   const raw=pd.data,dims=pd.dims.slice(-2);
+  lastDtype=String(pd.type||(raw&&raw.constructor&&raw.constructor.name)||'');
   const data=raw instanceof Uint16Array?Float32Array.from(raw,halfToFloat):Float32Array.from(raw);
   return resample(data,dims[1],dims[0],w,h);
 }
@@ -112,6 +114,40 @@ function fillNaN(d,w,h){
   return d;
 }
 class DirtyPass extends Error{}
+// ── Diagnóstico ───────────────────────────────────────────────────────────
+// El modelo corre en la GPU de cada usuario y sus defectos no se pueden
+// reproducir en las pruebas: estas tres medidas viajan con el resultado y se
+// muestran bajo la foto, para saber qué pasó sin adivinar.
+// Rango robusto (p2–p98) y cantidad de niveles distintos dentro de él: pocos
+// niveles = salida cuantizada (fp16), que al estirar el relieve da escalones.
+function depthLevels(d){
+  const step=Math.max(1,Math.floor(d.length/60000)),v=[];
+  for(let i=0;i<d.length;i+=step)if(Number.isFinite(d[i]))v.push(d[i]);
+  if(v.length<16)return{range:0,levels:0};
+  v.sort((a,b)=>a-b);
+  const lo=v[Math.floor(.02*(v.length-1))],hi=v[Math.floor(.98*(v.length-1))],range=hi-lo;
+  // paso típico: mediana de las diferencias positivas entre valores vecinos del tramo central
+  const gaps=[];for(let i=Math.floor(v.length*.25);i<Math.floor(v.length*.75);i++){const g=v[i+1]-v[i];if(g>0)gaps.push(g);}
+  if(!gaps.length||!(range>0))return{range,levels:1};
+  gaps.sort((a,b)=>a-b);
+  return{range,levels:Math.min(99999,Math.round(range/gaps[gaps.length>>1]))};
+}
+// Amplitud de la componente periódica de periodo P a lo largo de un eje, sumada
+// en fase sobre todas las filas (o columnas) con ventana de Hann.
+function rippleAt(d,w,h,P,alongX){
+  const x0=Math.floor(w*.15),x1=Math.ceil(w*.85),y0=Math.floor(h*.15),y1=Math.ceil(h*.85);
+  let re=0,im=0,ws=0;const k=2*Math.PI/P;
+  if(alongX){const n=x1-x0;for(let y=y0;y<y1;y+=2)for(let x=x0;x<x1;x++){const v=d[y*w+x];if(!Number.isFinite(v))continue;const win=.5-.5*Math.cos(2*Math.PI*(x-x0)/(n-1));re+=v*win*Math.cos(k*x);im-=v*win*Math.sin(k*x);ws+=win;}}
+  else{const n=y1-y0;for(let x=x0;x<x1;x+=2)for(let y=y0;y<y1;y++){const v=d[y*w+x];if(!Number.isFinite(v))continue;const win=.5-.5*Math.cos(2*Math.PI*(y-y0)/(n-1));re+=v*win*Math.cos(k*y);im-=v*win*Math.sin(k*y);ws+=win;}}
+  return ws?2*Math.hypot(re,im)/ws:0;
+}
+// Ondas con el paso de los parches del ViT, como fracción del rango. Se resta lo
+// que hay en periodos vecinos (bordes del sujeto) para medir sólo el exceso.
+function patchRipple(d,w,h,Px,Py,range){
+  if(!(range>0))return 0;
+  const ex=(P,ax)=>Math.max(0,rippleAt(d,w,h,P,ax)-(rippleAt(d,w,h,P*1.37,ax)+rippleAt(d,w,h,P*.73,ax))/2);
+  return Math.max(ex(Px,true),ex(Py,false))/range;
+}
 // Varias pasadas promediadas (test-time augmentation). El ViT deja ondas
 // periódicas con el paso de sus parches de 14 px: corriendo el contenido medio
 // parche (y espejándolo) las ondas caen en contrafase y al promediar se
@@ -124,7 +160,8 @@ class DirtyPass extends Error{}
 async function inferTTA(rgba,w,h,L,passes,maxDirty){
   const[mw,mh]=modelDims(w,h,L),hx=Math.max(1,Math.round(7*w/mw)),hy=Math.max(1,Math.round(7*h/mh));
   const plan=[{x:0,y:0,flip:false},{x:hx,y:hy,flip:false},{x:0,y:0,flip:true},{x:hx,y:hy,flip:true}].slice(0,passes);
-  const n=w*h,runs=[];let ref=null;
+  const n=w*h,runs=[],diag={dtype:'',levels:0,rippleIn:0,rippleOut:0,dirty:0};let ref=null;
+  const Px=14*w/mw,Py=14*h/mh;
   for(const p of plan){
     // Contenido corrido (x, y) px: se replica el borde que entra y se pierde el que sale.
     const img=new Uint8ClampedArray(n*4);
@@ -135,8 +172,10 @@ async function inferTTA(rgba,w,h,L,passes,maxDirty){
         const a=(sy*w+sx)*4,b=(y*w+x)*4;img[b]=rgba[a];img[b+1]=rgba[a+1];img[b+2]=rgba[a+2];img[b+3]=255;
       }
     }
-    const d=await infer(img,w,h);
-    if(sanitizePass(d)>maxDirty)throw new DirtyPass('pasada sucia a '+L+' px');
+    const d=await infer(img,w,h),dirty=sanitizePass(d);
+    if(dirty>maxDirty)throw new DirtyPass('pasada sucia a '+L+' px');
+    diag.dirty=Math.max(diag.dirty,dirty);
+    if(!ref){const lv=depthLevels(d);diag.dtype=lastDtype;diag.levels=lv.levels;diag.range=lv.range;diag.rippleIn=patchRipple(d,w,h,Px,Py,lv.range);}
     const o=new Float32Array(n).fill(NaN);
     for(let y=0;y+p.y<h;y++)for(let x=0;x+p.x<w;x++){
       const cx=p.flip?w-1-x:x;o[y*w+cx]=d[(y+p.y)*w+x+p.x];
@@ -156,16 +195,19 @@ async function inferTTA(rgba,w,h,L,passes,maxDirty){
     if(!k){out[i]=NaN;continue;}
     const s=v.subarray(0,k).sort();out[i]=k&1?s[k>>1]:(s[k/2-1]+s[k/2])/2;
   }
-  return fillNaN(out,w,h);
+  fillNaN(out,w,h);
+  diag.rippleOut=patchRipple(out,w,h,Px,Py,depthLevels(out).range);
+  out.diag=diag;
+  return out;
 }
 async function run(rgba,w,h,quality){
   const gpu=label.indexOf('GPU')===0,passes=gpu?4:2;
-  if(!gpu){setModelRes(RES_CPU);return{data:await inferTTA(rgba,w,h,RES_CPU,passes,1),res:RES_CPU,passes};}
+  if(!gpu){setModelRes(RES_CPU);const data=await inferTTA(rgba,w,h,RES_CPU,passes,1);return{data,diag:data.diag,res:RES_CPU,passes};}
   // Resoluciones a probar de mayor a menor; 518 siempre se acepta (saneada).
   const want=RES_BY_QUALITY[quality]||RES_BY_QUALITY.normal,ladder=[1022,770,518].filter(L=>L<=want);
   let last;
   for(const L of ladder){
-    try{setModelRes(L);return{data:await inferTTA(rgba,w,h,L,passes,L===518?1:.005),res:L,passes,asked:want};}
+    try{setModelRes(L);const data=await inferTTA(rgba,w,h,L,passes,L===518?1:.005);return{data,diag:data.diag,res:L,passes,asked:want};}
     catch(e){
       // Sin memoria o pasada sucia (desborde fp16): se baja de resolución en la misma GPU.
       last=e;console.warn('[Foto3D worker] GPU a '+L+' px falló ('+(e&&e.message)+'), bajo de resolución');
@@ -186,7 +228,7 @@ async function handle(m){
       console.warn('[Foto3D worker] inferencia en GPU falló, reintento en CPU:',e);
       forceWasm=true;pipe=null;await load();r=await run(rgba,m.w,m.h,m.quality);
     }
-    self.postMessage({type:'depth',id:m.id,data:r.data,w:m.w,h:m.h,label,res:r.res,passes:r.passes,asked:r.asked||r.res},[r.data.buffer]);
+    self.postMessage({type:'depth',id:m.id,data:r.data,w:m.w,h:m.h,label,res:r.res,passes:r.passes,asked:r.asked||r.res,diag:r.diag||null},[r.data.buffer]);
   }catch(e){
     self.postMessage({type:'error',id:m.id,message:String(e&&e.message||e)});
   }

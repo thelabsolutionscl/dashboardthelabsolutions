@@ -95,16 +95,17 @@ function _boxBlurV(src,dst,w,h,r){
     }
   }
 }
+// Tres pasadas de caja ≈ gaussiana (error < 3 %) en tiempo constante por píxel.
+function boxGaussian(src,w,h,sigma){
+  const wi=Math.sqrt(12*sigma*sigma/3+1);let wl=Math.floor(wi);if(wl%2===0)wl--;
+  const m=Math.round((12*sigma*sigma-3*wl*wl-12*wl-9)/(-4*wl-4));
+  let a=Float32Array.from(src),b=new Float32Array(w*h);
+  for(let i=0;i<3;i++){const r=Math.max(0,((i<m?wl:wl+2)-1)/2);_boxBlurH(a,b,w,h,r);_boxBlurV(b,a,w,h,r);}
+  return a;
+}
 function gaussianBlur(src,w,h,sigma){
   if(!(sigma>0.05))return Float32Array.from(src);
-  if(sigma>3){
-    // Tres pasadas de caja ≈ gaussiana (error < 3 %) en tiempo constante por píxel.
-    const wi=Math.sqrt(12*sigma*sigma/3+1);let wl=Math.floor(wi);if(wl%2===0)wl--;
-    const m=Math.round((12*sigma*sigma-3*wl*wl-12*wl-9)/(-4*wl-4));
-    let a=Float32Array.from(src),b=new Float32Array(w*h);
-    for(let i=0;i<3;i++){const r=((i<m?wl:wl+2)-1)/2;_boxBlurH(a,b,w,h,r);_boxBlurV(b,a,w,h,r);}
-    return a;
-  }
+  if(sigma>3)return boxGaussian(src,w,h,sigma);
   const r=Math.max(1,Math.ceil(sigma*3)),k=new Float32Array(2*r+1);let s=0;
   for(let i=-r;i<=r;i++){const v=Math.exp(-(i*i)/(2*sigma*sigma));k[i+r]=v;s+=v;}
   for(let i=0;i<k.length;i++)k[i]/=s;
@@ -152,11 +153,13 @@ function maskedBlur(src,mask,w,h,sigma){
   return out;
 }
 function percentiles(src,mask,ps){
-  const vals=[];
-  for(let i=0;i<src.length;i++)if(!mask||mask[i])vals.push(src[i]);
-  if(!vals.length)return ps.map(()=>0);
-  vals.sort((a,b)=>a-b);
-  return ps.map(p=>vals[clamp(Math.round(p*(vals.length-1)),0,vals.length-1)]);
+  // Arreglo tipado: su sort numérico nativo es varias veces más rápido que
+  // Array.sort con comparador, y esto corre en cada reconstrucción.
+  let n=0;const vals=new Float32Array(src.length);
+  for(let i=0;i<src.length;i++)if((!mask||mask[i])&&src[i]===src[i])vals[n++]=src[i];
+  if(!n)return ps.map(()=>0);
+  const v=vals.subarray(0,n).sort();
+  return ps.map(p=>v[clamp(Math.round(p*(n-1)),0,n-1)]);
 }
 function otsu(src,bins=128){
   const hist=new Float64Array(bins);let n=0;
@@ -367,8 +370,9 @@ function inpaint(src,known,w,h){
   if(!left)return out;
   const a=new Float32Array(n),m=new Float32Array(n);
   for(let i=0;i<n;i++)if(known[i]){a[i]=src[i];m[i]=1;}
+  // Es un relleno suave: basta la gaussiana aproximada (rápida) en todos los radios.
   for(const sg of[1.5,3,6,12,24]){
-    const ba=gaussianBlur(a,w,h,sg),bm=gaussianBlur(m,w,h,sg);
+    const ba=boxGaussian(a,w,h,sg),bm=boxGaussian(m,w,h,sg);
     for(let i=0;i<n;i++)if(!done[i]&&bm[i]>1e-3){out[i]=ba[i]/bm[i];done[i]=1;left--;}
     if(!left)break;
   }
@@ -410,46 +414,82 @@ function buildSolid(o){
   // Grosor mínimo subiendo la cara superior: la inferior es la de apoyo en las
   // formas de reverso plano y tiene que quedar exactamente en z = 0.
   for(let v=0;v<nv;v++)if(vt[v]-vb[v]<minT)vt[v]=vb[v]+minT;
+  const snapped=!!(o.ox||o.oy);
   const ox=o.ox?Float32Array.from(o.ox):new Float32Array(nv),oy=o.oy?Float32Array.from(o.oy):new Float32Array(nv);
-  const X=v=>(v%VW+ox[v])*px,Y=v=>(h-((v/VW)|0)-oy[v])*px;
-  // Un corrimiento nunca debe voltear una cara: si pasa, esa celda vuelve a la grilla.
-  if(o.ox||o.oy){
-    const cross=(a,b,c)=>(X(b)-X(a))*(Y(c)-Y(a))-(Y(b)-Y(a))*(X(c)-X(a));
-    for(let pass=0;pass<4;pass++){
-      let bad=0;
-      for(let j=0;j<h;j++)for(let i=0;i<w;i++){
-        if(!mask[j*w+i])continue;
-        const v00=j*VW+i,v10=v00+1,v01=v00+VW,v11=v01+1;
-        if(cross(v01,v11,v10)<=1e-9*px*px||cross(v01,v10,v00)<=1e-9*px*px){
-          for(const v of[v00,v10,v01,v11]){ox[v]=0;oy[v]=0;}bad++;
-        }
+  // Posiciones XY de cada vértice (una vez: se usan muchas veces).
+  const PX=new Float32Array(nv),PY=new Float32Array(nv);
+  const place=v=>{PX[v]=(v%VW+ox[v])*px;PY[v]=(h-((v/VW)|0)-oy[v])*px;};
+  for(let v=0;v<nv;v++)place(v);
+  // Diagonal de cada celda. Antes todas se partían igual y en una pendiente
+  // quedaba un diente de sierra; ahora cada celda une sus dos esquinas de altura
+  // más parecida, así la arista sigue crestas y valles en vez de cruzarlos.
+  // Con el contorno corrido una celda puede dejar de ser convexa: se usa la
+  // diagonal que no voltea ninguna cara, y si ninguna sirve la celda vuelve a la grilla.
+  const diagT=new Uint8Array(w*h),diagB=new Uint8Array(w*h); // 0: v01–v10 · 1: v00–v11
+  const cross=(a,b,c)=>(PX[b]-PX[a])*(PY[c]-PY[a])-(PY[b]-PY[a])*(PX[c]-PX[a]),tiny=1e-9*px*px;
+  for(let pass=0;pass<64;pass++){
+    let bad=0;
+    for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+      const c=j*w+i;if(!mask[c])continue;
+      const v00=j*VW+i,v10=v00+1,v01=v00+VW,v11=v01+1;
+      let ok0=true,ok1=true;
+      if(snapped){
+        ok0=cross(v01,v11,v10)>tiny&&cross(v01,v10,v00)>tiny;
+        ok1=cross(v01,v11,v00)>tiny&&cross(v11,v10,v00)>tiny;
+        if(!ok0&&!ok1){for(const v of[v00,v10,v01,v11]){ox[v]=0;oy[v]=0;place(v);}bad++;continue;}
       }
-      if(!bad)break;
+      const wantT=Math.abs(vt[v00]-vt[v11])<Math.abs(vt[v01]-vt[v10])?1:0,wantB=Math.abs(vb[v00]-vb[v11])<Math.abs(vb[v01]-vb[v10])?1:0;
+      diagT[c]=(wantT?ok1:ok0)?wantT:1-wantT;
+      diagB[c]=(wantB?ok1:ok0)?wantB:1-wantB;
     }
+    if(!bad)break;
   }
-  const nTris=cells*4+walls*2,tris=new Float32Array(nTris*9);let p=0;
-  function tri(a,za,b,zb,c,zc){
-    tris[p++]=X(a);tris[p++]=Y(a);tris[p++]=za;
-    tris[p++]=X(b);tris[p++]=Y(b);tris[p++]=zb;
-    tris[p++]=X(c);tris[p++]=Y(c);tris[p++]=zc;
+  // Normales por vértice para el visor (sombreado suave): cada vértice promedia
+  // las caras que lo tocan, por separado arriba, abajo y en las paredes, así el
+  // canto entre relieve y pared sigue viéndose nítido. El STL no las usa.
+  const nT=new Float32Array(nv*3),nB=new Float32Array(nv*3),nW=new Float32Array(nv*2);
+  function acc(N,a,za,b,zb,c,zc){
+    const ux=PX[b]-PX[a],uy=PY[b]-PY[a],uz=zb-za,vx=PX[c]-PX[a],vy=PY[c]-PY[a],vz=zc-za;
+    const x=uy*vz-uz*vy,y=uz*vx-ux*vz,z=ux*vy-uy*vx;
+    N[a*3]+=x;N[a*3+1]+=y;N[a*3+2]+=z;N[b*3]+=x;N[b*3+1]+=y;N[b*3+2]+=z;N[c*3]+=x;N[c*3+1]+=y;N[c*3+2]+=z;
   }
+  function accWall(a,b){ // normal horizontal hacia afuera de la pared a→b
+    const x=PY[b]-PY[a],y=-(PX[b]-PX[a]);
+    nW[a*2]+=x;nW[a*2+1]+=y;nW[b*2]+=x;nW[b*2+1]+=y;
+  }
+  const quads=fn=>{
+    for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+      const c=j*w+i;if(!mask[c])continue;
+      const v00=j*VW+i,v10=v00+1,v01=v00+VW,v11=v01+1;
+      fn(c,v00,v10,v01,v11,j===h-1||!mask[c+w],i===w-1||!mask[c+1],j===0||!mask[c-w],i===0||!mask[c-1]);
+    }
+  };
+  quads((c,v00,v10,v01,v11,wS,wE,wN,wW)=>{
+    if(diagT[c]){acc(nT,v01,vt[v01],v11,vt[v11],v00,vt[v00]);acc(nT,v11,vt[v11],v10,vt[v10],v00,vt[v00]);}
+    else{acc(nT,v01,vt[v01],v11,vt[v11],v10,vt[v10]);acc(nT,v01,vt[v01],v10,vt[v10],v00,vt[v00]);}
+    if(diagB[c]){acc(nB,v01,vb[v01],v00,vb[v00],v11,vb[v11]);acc(nB,v11,vb[v11],v00,vb[v00],v10,vb[v10]);}
+    else{acc(nB,v01,vb[v01],v10,vb[v10],v11,vb[v11]);acc(nB,v01,vb[v01],v00,vb[v00],v10,vb[v10]);}
+    if(wS)accWall(v01,v11);if(wE)accWall(v11,v10);if(wN)accWall(v10,v00);if(wW)accWall(v00,v01);
+  });
+  const nTris=cells*4+walls*2,tris=new Float32Array(nTris*9),normals=new Float32Array(nTris*9);let p=0;
+  function put(v,z,nx,ny,nz){
+    const l=Math.hypot(nx,ny,nz)||1;
+    normals[p]=nx/l;normals[p+1]=ny/l;normals[p+2]=nz/l;
+    tris[p++]=PX[v];tris[p++]=PY[v];tris[p++]=z;
+  }
+  const top=(a,b,c)=>{put(a,vt[a],nT[a*3],nT[a*3+1],nT[a*3+2]);put(b,vt[b],nT[b*3],nT[b*3+1],nT[b*3+2]);put(c,vt[c],nT[c*3],nT[c*3+1],nT[c*3+2]);};
+  const bot=(a,b,c)=>{put(a,vb[a],nB[a*3],nB[a*3+1],nB[a*3+2]);put(b,vb[b],nB[b*3],nB[b*3+1],nB[b*3+2]);put(c,vb[c],nB[c*3],nB[c*3+1],nB[c*3+2]);};
   function wall(a,b){ // a→b es la arista en el ciclo CCW de la cara superior
-    tri(b,vt[b],a,vt[a],a,vb[a]);
-    tri(b,vt[b],a,vb[a],b,vb[b]);
+    const ax=nW[a*2],ay=nW[a*2+1],bx=nW[b*2],by=nW[b*2+1];
+    put(b,vt[b],bx,by,0);put(a,vt[a],ax,ay,0);put(a,vb[a],ax,ay,0);
+    put(b,vt[b],bx,by,0);put(a,vb[a],ax,ay,0);put(b,vb[b],bx,by,0);
   }
-  for(let j=0;j<h;j++)for(let i=0;i<w;i++){
-    const c=j*w+i;if(!mask[c])continue;
-    const v00=j*VW+i,v10=v00+1,v01=v00+VW,v11=v01+1;
-    tri(v01,vt[v01],v11,vt[v11],v10,vt[v10]);
-    tri(v01,vt[v01],v10,vt[v10],v00,vt[v00]);
-    tri(v01,vb[v01],v10,vb[v10],v11,vb[v11]);
-    tri(v01,vb[v01],v00,vb[v00],v10,vb[v10]);
-    if(j===h-1||!mask[c+w])wall(v01,v11);
-    if(i===w-1||!mask[c+1])wall(v11,v10);
-    if(j===0||!mask[c-w])wall(v10,v00);
-    if(i===0||!mask[c-1])wall(v00,v01);
-  }
-  return{tris,count:nTris};
+  quads((c,v00,v10,v01,v11,wS,wE,wN,wW)=>{
+    if(diagT[c]){top(v01,v11,v00);top(v11,v10,v00);}else{top(v01,v11,v10);top(v01,v10,v00);}
+    if(diagB[c]){bot(v01,v00,v11);bot(v11,v00,v10);}else{bot(v01,v10,v11);bot(v01,v00,v10);}
+    if(wS)wall(v01,v11);if(wE)wall(v11,v10);if(wN)wall(v10,v00);if(wW)wall(v00,v01);
+  });
+  return{tris,normals,count:nTris};
 }
 // Prisma de base: superelipse (n=2 óvalo, n=6 rectángulo redondeado).
 function basePrism(cx,cy,rx,ry,z0,z1,n,seg){
@@ -459,30 +499,36 @@ function basePrism(cx,cy,rx,ry,z0,z1,n,seg){
     const a=k/seg*Math.PI*2,c=Math.cos(a),s=Math.sin(a);
     pts.push([cx+rx*Math.sign(c)*Math.pow(Math.abs(c),2/n),cy+ry*Math.sign(s)*Math.pow(Math.abs(s),2/n)]);
   }
-  const tris=new Float32Array(seg*4*9);let p=0;
-  const put=(x,y,z)=>{tris[p++]=x;tris[p++]=y;tris[p++]=z;};
+  // Normal lateral de cada vértice: promedio de sus dos tramos (borde liso en el visor).
+  const sn=pts.map((A,k)=>{const B=pts[(k+1)%seg];const x=B[1]-A[1],y=-(B[0]-A[0]),l=Math.hypot(x,y)||1;return[x/l,y/l];});
+  const vn=pts.map((_,k)=>{const a=sn[(k+seg-1)%seg],b=sn[k],x=a[0]+b[0],y=a[1]+b[1],l=Math.hypot(x,y)||1;return[x/l,y/l];});
+  const tris=new Float32Array(seg*4*9),normals=new Float32Array(seg*4*9);let p=0;
+  const put=(x,y,z,nx,ny,nz)=>{normals[p]=nx;normals[p+1]=ny;normals[p+2]=nz;tris[p++]=x;tris[p++]=y;tris[p++]=z;};
   for(let k=0;k<seg;k++){
-    const A=pts[k],B=pts[(k+1)%seg];
-    put(cx,cy,z1);put(A[0],A[1],z1);put(B[0],B[1],z1);
-    put(cx,cy,z0);put(B[0],B[1],z0);put(A[0],A[1],z0);
-    put(B[0],B[1],z1);put(A[0],A[1],z1);put(A[0],A[1],z0);
-    put(B[0],B[1],z1);put(A[0],A[1],z0);put(B[0],B[1],z0);
+    const j=(k+1)%seg,A=pts[k],B=pts[j],na=vn[k],nb=vn[j];
+    put(cx,cy,z1,0,0,1);put(A[0],A[1],z1,0,0,1);put(B[0],B[1],z1,0,0,1);
+    put(cx,cy,z0,0,0,-1);put(B[0],B[1],z0,0,0,-1);put(A[0],A[1],z0,0,0,-1);
+    put(B[0],B[1],z1,nb[0],nb[1],0);put(A[0],A[1],z1,na[0],na[1],0);put(A[0],A[1],z0,na[0],na[1],0);
+    put(B[0],B[1],z1,nb[0],nb[1],0);put(A[0],A[1],z0,na[0],na[1],0);put(B[0],B[1],z0,nb[0],nb[1],0);
   }
-  return{tris,count:seg*4};
+  return{tris,normals,count:seg*4};
 }
 function concatMeshes(list){
-  const count=list.reduce((s,m)=>s+m.count,0),tris=new Float32Array(count*9);let off=0;
-  for(const m of list){tris.set(m.tris.subarray(0,m.count*9),off);off+=m.count*9;}
-  return{tris,count};
+  const count=list.reduce((s,m)=>s+m.count,0),tris=new Float32Array(count*9),all=list.every(m=>m.normals);
+  const normals=all?new Float32Array(count*9):null;let off=0;
+  for(const m of list){tris.set(m.tris.subarray(0,m.count*9),off);if(all)normals.set(m.normals.subarray(0,m.count*9),off);off+=m.count*9;}
+  return all?{tris,normals,count}:{tris,count};
 }
 function meshBounds(m){
   const mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity],t=m.tris;
   for(let i=0;i<m.count*9;i+=3)for(let k=0;k<3;k++){const v=t[i+k];if(v<mn[k])mn[k]=v;if(v>mx[k])mx[k]=v;}
   return{min:mn,max:mx};
 }
-function transformMesh(m,fn){
+// fn mueve los puntos; nfn (opcional) gira las normales con la misma rotación.
+function transformMesh(m,fn,nfn){
   const t=m.tris,o=[0,0,0];
   for(let i=0;i<m.count*9;i+=3){fn(t[i],t[i+1],t[i+2],o);t[i]=o[0];t[i+1]=o[1];t[i+2]=o[2];}
+  if(nfn&&m.normals){const q=m.normals;for(let i=0;i<m.count*9;i+=3){nfn(q[i],q[i+1],q[i+2],o);q[i]=o[0];q[i+1]=o[1];q[i+2]=o[2];}}
   return m;
 }
 // Volumen con signo (teorema de la divergencia): positivo si las normales
@@ -731,7 +777,11 @@ function buildModel(F,shape,params){
       if(nDeep>=nSub*.15)known=deep; // un sujeto todo fino se queda con lo que hay
     }
     let unk=0;for(let i=0;i<n;i++)if(subject[i]&&!known[i])unk++;
-    if(unk){relS=inpaint(rel,known,gw,gh);if(known===base)lumS=inpaint(lum,known,gw,gh);else lumS=inpaint(lum,base,gw,gh);}
+    if(unk){
+      relS=inpaint(rel,known,gw,gh);
+      // El brillo sólo se usa para el "Detalle fino": si está en 0 no se rellena.
+      if((Number(P.detail)||0)>0)lumS=inpaint(lum,base,gw,gh);
+    }
   }
   // 4) Relieve normalizado dentro del sujeto: suavizado, detalle fino y curva.
   const relMask=(shape==='medallon'&&P.subject==='todo')?new Uint8Array(n).fill(1):subject;
@@ -828,7 +878,8 @@ function buildModel(F,shape,params){
   // 6) Orientación de impresión.
   if(shape==='figura'){
     // De pie: la foto pasa al plano XZ y el frente mira hacia −Y.
-    transformMesh(mesh,(x,y,z,o)=>{o[0]=x;o[1]=-z;o[2]=y;});
+    const stand=(x,y,z,o)=>{o[0]=x;o[1]=-z;o[2]=y;};
+    transformMesh(mesh,stand,stand);
     const b=meshBounds(mesh),bb=maskBBox(mask,gw,gh),band=Math.max(2,Math.round((bb.y1-bb.y0)*.15));
     let xs=Infinity,xe=-Infinity,ys=Infinity,ye=-Infinity;
     for(let y=bb.y1-band;y<=bb.y1+1;y++)for(let x=0;x<=gw;x++){
@@ -873,7 +924,7 @@ if(typeof module!=='undefined'&&module.exports){module.exports=CORE;return;}
 // El worker carga transformers.js desde el CDN fuera de la página: el código de
 // terceros no ve localStorage ni el DOM, y la inferencia no congela la interfaz.
 const SELF_SRC=(typeof document!=='undefined'&&document.currentScript&&document.currentScript.src)||'';
-let _worker=null,_reqId=0,_aiLabel='',_aiRes=518;
+let _worker=null,_reqId=0,_aiLabel='',_aiRes=518,_aiDiag=null;
 const _pending=new Map();
 function _resetWorker(){if(_worker){try{_worker.terminate();}catch(_){}_worker=null;}}
 function _failAll(err){for(const p of _pending.values())p.reject(err);_pending.clear();_resetWorker();}
@@ -888,7 +939,7 @@ function depthWorker(){
     _pending.delete(m.id);
     if(m.type==='depth'&&m.data instanceof Float32Array){
       _aiLabel=(m.label||'')+(m.res?` · ${m.res} px`:'')+(m.passes>1?` · ${m.passes} pasadas`:'')+(m.asked&&m.res&&m.asked>m.res?` (bajó de ${m.asked} px: la GPU no dio resultados limpios)`:'');
-      _aiRes=m.res||518;p.resolve(m);
+      _aiRes=m.res||518;_aiDiag=m.diag||null;p.resolve(m);
     }
     else if(m.type==='cancelled'){const err=new Error('cancelado');err.cancelled=true;p.reject(err);}
     // Tras un error se descarta el worker: un import() fallido queda en caché
@@ -923,26 +974,43 @@ function estimateDepth(img,onProgress,quality){
 function createViewer(canvas){
   const gl=canvas.getContext('webgl',{antialias:true,alpha:false});
   if(!gl)return null;
-  const vs=`attribute vec3 p;attribute vec3 n;uniform mat4 mvp;varying vec3 vn;void main(){gl_Position=mvp*vec4(p,1.);vn=n;}`;
-  const fs=`precision mediump float;varying vec3 vn;uniform vec3 l1;uniform vec3 l2;uniform vec3 col;uniform float uFlat;
-    void main(){if(uFlat>.5){gl_FragColor=vec4(col,1.);return;}vec3 N=normalize(vn);if(!gl_FrontFacing)N=-N;
-    float d=max(dot(N,l1),0.)*.75+max(dot(N,l2),0.)*.3+.18;gl_FragColor=vec4(col*d,1.);}`;
+  const vs=`attribute vec3 p;attribute vec3 n;uniform mat4 mvp;varying vec3 vn;varying vec3 vp;void main(){gl_Position=mvp*vec4(p,1.);vn=n;vp=p;}`;
+  // Luz principal, relleno y contraluz fijas a la cámara + luz de cielo/suelo y
+  // un brillo especular leve: el relieve se lee por el sombreado, no por las facetas.
+  const fs=`#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
+    precision mediump float;
+    #endif
+    varying vec3 vn;varying vec3 vp;uniform vec3 eye;uniform vec3 l1;uniform vec3 l2;uniform vec3 l3;uniform vec3 col;uniform float uFlat;
+    void main(){if(uFlat>.5){gl_FragColor=vec4(col,1.);return;}
+    vec3 N=normalize(vn),V=normalize(eye-vp);if(dot(N,V)<0.)N=-N;
+    float key=max(dot(N,l1),0.),fill=max(dot(N,l2),0.),rim=max(dot(N,l3),0.),sky=.5+.5*N.z;
+    float spec=pow(max(dot(N,normalize(l1+V)),0.),40.)*.10;
+    vec3 c=col*(.10+.10*sky+.60*key+.16*fill+.08*rim)+spec;
+    gl_FragColor=vec4(pow(c,vec3(.4545)),1.);}`;
   const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;};
-  let prog,loc,meshBuf,gridBuf,lost=false,lastMesh=null;
+  let prog,loc,meshBuf,gridBuf,lost=false,lastMesh=null,facets=false;
   function initGL(){
     prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,vs));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(prog);
-    loc={p:gl.getAttribLocation(prog,'p'),n:gl.getAttribLocation(prog,'n'),mvp:gl.getUniformLocation(prog,'mvp'),l1:gl.getUniformLocation(prog,'l1'),l2:gl.getUniformLocation(prog,'l2'),col:gl.getUniformLocation(prog,'col'),flat:gl.getUniformLocation(prog,'uFlat')};
+    loc={p:gl.getAttribLocation(prog,'p'),n:gl.getAttribLocation(prog,'n'),mvp:gl.getUniformLocation(prog,'mvp'),l1:gl.getUniformLocation(prog,'l1'),l2:gl.getUniformLocation(prog,'l2'),l3:gl.getUniformLocation(prog,'l3'),eye:gl.getUniformLocation(prog,'eye'),col:gl.getUniformLocation(prog,'col'),flat:gl.getUniformLocation(prog,'uFlat')};
     meshBuf=gl.createBuffer();gridBuf=gl.createBuffer();
   }
   initGL();
   let nv=0,gridN=0,target=[0,0,0],radius=50,yaw=-Math.PI/2-.55,pitch=.45,dist=150,home=null;
   function setMesh(m,view){
     lastMesh=m;if(lost)return;
-    const t=m.tris,data=new Float32Array(m.count*18);
+    const t=m.tris,q=!facets&&m.normals,data=new Float32Array(m.count*18);
     for(let i=0,o=0;i<m.count*9;i+=9){
-      const ux=t[i+3]-t[i],uy=t[i+4]-t[i+1],uz=t[i+5]-t[i+2],vx=t[i+6]-t[i],vy=t[i+7]-t[i+1],vz=t[i+8]-t[i+2];
-      let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
-      for(let k=0;k<3;k++){data[o++]=t[i+k*3];data[o++]=t[i+k*3+1];data[o++]=t[i+k*3+2];data[o++]=nx;data[o++]=ny;data[o++]=nz;}
+      let nx=0,ny=0,nz=1;
+      if(!q){ // facetas: la normal de cada triángulo, como lo muestra un laminador
+        const ux=t[i+3]-t[i],uy=t[i+4]-t[i+1],uz=t[i+5]-t[i+2],vx=t[i+6]-t[i],vy=t[i+7]-t[i+1],vz=t[i+8]-t[i+2];
+        nx=uy*vz-uz*vy;ny=uz*vx-ux*vz;nz=ux*vy-uy*vx;const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
+      }
+      for(let k=0;k<3;k++){
+        const j=i+k*3;data[o++]=t[j];data[o++]=t[j+1];data[o++]=t[j+2];
+        if(q){data[o++]=q[j];data[o++]=q[j+1];data[o++]=q[j+2];}else{data[o++]=nx;data[o++]=ny;data[o++]=nz;}
+      }
     }
     gl.bindBuffer(gl.ARRAY_BUFFER,meshBuf);gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);nv=m.count*3;
     const b=meshBounds(m);
@@ -977,12 +1045,17 @@ function createViewer(canvas){
     const eye=[target[0]+dir[0]*dist,target[1]+dir[1]*dist,target[2]+dir[2]*dist];
     const mvp=mul(persp(.7,cw/ch,Math.max(.5,dist-radius*4),dist+radius*6),lookAt(eye,target,[0,0,1]));
     gl.useProgram(prog);gl.uniformMatrix4fv(loc.mvp,false,new Float32Array(mvp));
-    const side=[Math.cos(yaw+1.1),Math.sin(yaw+1.1),0];
-    const L1=[dir[0]*.7+side[0]*.4,dir[1]*.7+side[1]*.4,dir[2]*.7+.55],l1n=Math.hypot(...L1);
-    gl.uniform3f(loc.l1,L1[0]/l1n,L1[1]/l1n,L1[2]/l1n);gl.uniform3f(loc.l2,-side[0],-side[1],.2);
+    // Base de la cámara: derecha y arriba en el mundo, para fijar las luces a la vista.
+    const rt=[-Math.sin(yaw),Math.cos(yaw),0],up=[-Math.sin(pitch)*Math.cos(yaw),-Math.sin(pitch)*Math.sin(yaw),Math.cos(pitch)];
+    const light=(a,b,c)=>{const v=[dir[0]*a+rt[0]*b+up[0]*c,dir[1]*a+rt[1]*b+up[1]*c,dir[2]*a+rt[2]*b+up[2]*c],l=Math.hypot(v[0],v[1],v[2]);return[v[0]/l,v[1]/l,v[2]/l];};
+    const L1=light(.55,-.55,.65),L2=light(.6,.75,-.1),L3=light(-.5,.3,.8);
+    gl.uniform3f(loc.l1,L1[0],L1[1],L1[2]);gl.uniform3f(loc.l2,L2[0],L2[1],L2[2]);gl.uniform3f(loc.l3,L3[0],L3[1],L3[2]);
+    gl.uniform3f(loc.eye,eye[0],eye[1],eye[2]);
     const bind=buf=>{gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.enableVertexAttribArray(loc.p);gl.vertexAttribPointer(loc.p,3,gl.FLOAT,false,24,0);gl.enableVertexAttribArray(loc.n);gl.vertexAttribPointer(loc.n,3,gl.FLOAT,false,24,12);};
-    if(gridN){bind(gridBuf);gl.uniform1f(loc.flat,1);gl.uniform3f(loc.col,.16,.17,.18);gl.drawArrays(gl.LINES,0,gridN);}
-    if(nv){bind(meshBuf);gl.uniform1f(loc.flat,0);gl.uniform3f(loc.col,.86,.84,.80);gl.drawArrays(gl.TRIANGLES,0,nv);}
+    // Mirando desde abajo la cuadrícula quedaría por delante de la pieza y parece
+    // un defecto de la malla: sólo se dibuja con la cámara sobre el plato.
+    if(gridN&&eye[2]>0){bind(gridBuf);gl.uniform1f(loc.flat,1);gl.uniform3f(loc.col,.16,.17,.18);gl.drawArrays(gl.LINES,0,gridN);}
+    if(nv){bind(meshBuf);gl.uniform1f(loc.flat,0);gl.uniform3f(loc.col,.62,.60,.56);gl.drawArrays(gl.TRIANGLES,0,nv);}
   }
   let drag=null;
   canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);canvas.style.cursor='grabbing';});
@@ -996,7 +1069,10 @@ function createViewer(canvas){
   // rearma solo con la última malla al recuperar el contexto.
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();lost=true;});
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;initGL();if(lastMesh)setMesh(lastMesh,null);});
-  return{setMesh,draw};
+  return{setMesh,draw,
+    // facetas = normal por triángulo (lo que es el STL); si no, sombreado suave.
+    setFacets(on){facets=!!on;if(lastMesh)setMesh(lastMesh,null);},
+    setCamera(c){if(c.yaw!=null)yaw=c.yaw;if(c.pitch!=null)pitch=clamp(c.pitch,-1.45,1.45);if(c.zoom)dist=clamp(radius*3.1/c.zoom,radius*.6,radius*12);if(c.target)target=c.target.slice();draw();}};
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1005,7 +1081,7 @@ function createViewer(canvas){
 const LS_KEY='foto3d_params_v1';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const S={img:null,name:'foto',depth:null,fields:null,shape:'figura',params:{},model:null,viewer:null,view:'mascara',timer:0,lastShape:null,depthRun:0};
+const S={img:null,name:'foto',depth:null,fields:null,shape:'figura',params:{},model:null,viewer:null,view:'mascara',timer:0,lastShape:null,depthRun:0,facets:false};
 
 // Controles: [clave, etiqueta, tipo, min, max, paso, unidad, ayuda]
 const CTRL={
@@ -1083,6 +1159,13 @@ function setShape(k){
 }
 function resetShape(){delete S.params[S.shape];save();renderControls();schedule();}
 function resetDetail(){delete S.params.common;save();renderControls();schedule();}
+// Línea de diagnóstico de la IA (datos medidos en este equipo, para soporte).
+function diagNote(d){
+  const el=$('f3dDiag');if(!el)return;
+  if(!d){el.textContent='';return;}
+  const pc=v=>(100*v).toLocaleString('es-CL',{maximumFractionDigits:1})+' %';
+  el.textContent=`Diagnóstico IA: ${d.dtype||'?'} · ${d.levels>=99999?'niveles continuos':d.levels+' niveles'} · ondas ${pc(d.rippleIn)} → ${pc(d.rippleOut)} · descartado ${pc(d.dirty)}`;
+}
 function aiNote(msg,tone){const el=$('f3dAiNote');if(!el)return;el.textContent=msg||'';el.dataset.tone=tone||'';}
 function status(msg,tone){const el=$('f3dStatus');if(!el)return;el.textContent=msg||'';el.dataset.tone=tone||'';el.style.display=msg?'':'none';}
 function progress(frac,label){
@@ -1107,7 +1190,7 @@ function setImage(im){
   const cv=document.createElement('canvas');cv.width=w;cv.height=h;
   const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingQuality='high';ctx.drawImage(im,0,0,w,h);
   S.img={w,h,rgba:ctx.getImageData(0,0,w,h).data,canvas:cv};
-  S.depth=null;S.model=null;
+  S.depth=null;S.model=null;diagNote(null);
   S.fields=prepareFields(S.img,null);
   aiNote($('f3dSource').value==='ia'?'':'Profundidad: brillo de la imagen (claro = alto)');
   $('f3dDropEmpty').style.display='none';$('f3dWork').style.display='';$('f3dDrop').classList.add('has-img');
@@ -1124,12 +1207,12 @@ async function runDepth(){
     const t0=performance.now();
     const depth=await estimateDepth(img,(f,total)=>{if(mine()&&$('f3dSource').value==='ia')progress(f,f>=.999?'Calculando profundidad…':`Descargando modelo · ${Math.round(f*100)}% de ${(total/1048576).toFixed(0)} MB (queda en caché)`);},aiQuality());
     if(!mine())return; // llegó otra foto o se pidió otro cálculo mientras tanto
-    S.depth=depth;S.depthRes=_aiRes;
+    S.depth=depth;S.depthRes=_aiRes;S.depthDiag=_aiDiag;
     // Si mientras tanto se eligió "Brillo de la imagen", la profundidad queda
     // guardada (volver a "IA" no recalcula) pero no se aplica.
     if($('f3dSource').value!=='ia')return;
     progress(1,'Profundidad lista');setTimeout(()=>{if(mine())progress(null);},900);
-    S.fields=prepareFields(img,depth,{modelRes:_aiRes});
+    S.fields=prepareFields(img,depth,{modelRes:_aiRes});diagNote(_aiDiag);
     aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'} · ${((performance.now()-t0)/1000).toFixed(1)} s`);
     drawSource();schedule(true);
   }catch(e){
@@ -1152,11 +1235,11 @@ function onSourceChange(){
   const v=$('f3dSource').value;
   if(!S.img)return;
   if(v==='ia'){
-    if(S.depth){S.fields=prepareFields(S.img,S.depth,{modelRes:S.depthRes});aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'}`);schedule(true);}
+    if(S.depth){S.fields=prepareFields(S.img,S.depth,{modelRes:S.depthRes});diagNote(S.depthDiag);aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'}`);schedule(true);}
     else runDepth();
   }else{
     progress(null); // un cálculo en curso sigue, pero sólo guarda el resultado
-    S.fields=prepareFields(S.img,null);aiNote('Profundidad: brillo de la imagen (claro = alto)');schedule(true);
+    S.fields=prepareFields(S.img,null);diagNote(null);aiNote('Profundidad: brillo de la imagen (claro = alto)');schedule(true);
   }
 }
 
@@ -1189,6 +1272,11 @@ function drawSource(){
     ctx.imageSmoothingEnabled=false;ctx.drawImage(tmp,rx,ry,rw,rh);ctx.restore();
   }
 }
+function toggleFacets(){
+  S.facets=!S.facets;
+  const b=$('f3dFacetsBtn');if(b){b.classList.toggle('active',S.facets);b.textContent=S.facets?'Facetas: sí':'Facetas: no';}
+  if(S.viewer)S.viewer.setFacets(S.facets);
+}
 function setView(v){
   S.view=v;document.querySelectorAll('#maquinaEscultorView [data-f3dview]').forEach(b=>b.classList.toggle('active',b.dataset.f3dview===v));drawSource();
 }
@@ -1208,7 +1296,7 @@ function rebuild(){
   const dl=$('f3dDownload');
   if(model.error){status(model.error,'error');dl.disabled=true;$('f3dStats').innerHTML='';return;}
   status(model.warning||'',model.warning?'warn':'');
-  if(S.viewer==null){try{S.viewer=createViewer($('f3dCanvas'))||false;}catch(e){console.warn('[Foto3D] WebGL',e);S.viewer=false;}}
+  if(S.viewer==null){try{S.viewer=createViewer($('f3dCanvas'))||false;if(S.viewer&&S.facets)S.viewer.setFacets(true);}catch(e){console.warn('[Foto3D] WebGL',e);S.viewer=false;}}
   if(S.viewer)S.viewer.setMesh(model.mesh,S.lastShape!==S.shape?S.shape:null);
   else $('f3dNoGL').style.display='';
   S.lastShape=S.shape;dl.disabled=false;
@@ -1252,5 +1340,5 @@ function init(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.Foto3D={init,setShape,resetShape,resetDetail,setView,runDepth,onSourceChange,onQualityChange,download,core:CORE,_state:S,_setImage:setImage,_rebuild:rebuild};
+root.Foto3D={init,setShape,resetShape,resetDetail,setView,toggleFacets,runDepth,onSourceChange,onQualityChange,download,core:CORE,_state:S,_setImage:setImage,_rebuild:rebuild};
 })(typeof window!=='undefined'?window:globalThis);

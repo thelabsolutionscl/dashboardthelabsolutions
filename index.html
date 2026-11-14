@@ -3399,10 +3399,11 @@
               <button class="btn btn-ghost btn-sm" onclick="document.getElementById('f3dFile').click()">Cambiar foto</button>
             </div>
             <div id="f3dAiNote" class="f3d-note"></div>
+            <div id="f3dDiag" class="f3d-note f3d-diag"></div>
             <div id="f3dProg" class="f3d-prog" style="display:none"><div class="f3d-prog-track"><div id="f3dProgBar"></div></div><div id="f3dProgTxt"></div></div>
           </div>
           <div class="f3d-pane">
-            <div class="f3d-pane-head"><b>Pieza 3D</b><span class="f3d-hint">arrastra para girar · rueda = zoom · doble clic = vista inicial</span></div>
+            <div class="f3d-pane-head"><b>Pieza 3D</b><span class="f3d-hint">arrastra para girar · rueda = zoom · doble clic = vista inicial</span><div class="f3d-seg"><button type="button" id="f3dFacetsBtn" title="Muestra los triángulos tal como son en el STL (así lo ve un laminador). Apagado, la superficie se ve suave como al imprimirla." onclick="Foto3D.toggleFacets()">Facetas: no</button></div></div>
             <div class="f3d-viewer"><canvas id="f3dCanvas"></canvas><div id="f3dNoGL" class="f3d-nogl" style="display:none">Este navegador no tiene WebGL: no puedo mostrar la vista 3D, pero el STL se descarga igual.</div></div>
             <div id="f3dStats" class="f3d-stats"></div>
             <div class="f3d-row">

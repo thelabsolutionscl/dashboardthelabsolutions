@@ -122,6 +122,35 @@ las pasadas no se puede distinguir de un detalle real del mismo tamaño
 (dedos, puntas); por eso la defensa principal es no salir de 518 px salvo que
 se pida.
 
+## Motor de render (2026-11-14)
+
+Al ampliar las capturas con la IA real aparecieron dos defectos que no vienen
+del modelo. Se reprodujeron con una profundidad perfectamente lisa: facetas en
+bandas y "pliegues de cortina" en las paredes.
+
+| Hallazgo | Causa | Corrección |
+|---|---|---|
+| Dentado en las pendientes | Todas las celdas se partían por la misma diagonal | Cada celda une sus dos esquinas de altura más parecida (la arista sigue crestas y valles). Con el contorno corrido se usa la diagonal que no voltea caras |
+| Facetas, bandas y paredes plisadas en el visor | Sombreado plano: una normal por triángulo | `buildSolid` entrega normales por vértice (relieve, reverso y paredes por separado, para que el canto siga nítido) y el visor sombrea suave, con luz principal, relleno, contraluz y luz de cielo. Botón **Facetas** para ver los triángulos reales, como en un laminador |
+| La cuadrícula del plato se veía sobre la pieza | Al mirar desde abajo queda por delante | Sólo se dibuja con la cámara sobre el plato |
+| Reconstrucción lenta | Percentiles con `Array.sort` y relleno con desenfoques exactos | Arreglo tipado y gaussiana por cajas: ~205 ms a 300 celdas |
+
+El sombreado suave es sólo de pantalla: `writeSTL` calcula su normal por
+faceta y el archivo no cambia por las normales (hay un test). La diagonal
+adaptativa sí cambia el STL, para mejor.
+
+**Diagnóstico de la IA.** El modelo corre en la GPU de cada usuario y sus
+defectos no se pueden reproducir en las pruebas. El worker mide y la interfaz
+muestra bajo la foto: tipo de dato de la salida, niveles distintos de
+profundidad (pocos = salida cuantizada, da escalones), ondas con el paso de los
+parches antes → después de promediar (el piso de la medida es ~0,4 %) y la
+fracción de valores descartados.
+
+**Pendiente.** No se pudo correr el modelo real en el entorno de desarrollo
+(bloqueado por los permisos de la sesión), así que la causa de las bandas que
+se ven con la IA real a 518 px sigue sin confirmar: ondas de parche del ViT o
+cuantización fp16. La línea de diagnóstico la distingue.
+
 ## Límites conocidos
 
 - Es un **relieve**, no un escaneo: lo que no se ve en la foto se inventa
