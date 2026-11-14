@@ -56,6 +56,19 @@ Si el Space deja de exponer `shape_generation`, el cliente lo detecta **antes** 
 - La malla de Hunyuan3D a octree 256 tiene cientos de miles de triángulos: el STL pesa decenas de MB.
 - Medallón y llavero usan sólo el **cuerpo más grande** de la silueta (una llave debe ser una sola pieza).
 
+## Primer uso real (2026-11-14): el servicio falló sin dar explicación
+
+Primera prueba en producción, modo Estándar (`Hunyuan3D-2`). La conexión y la subida funcionaron (el servicio respondió, tenía `shape_generation` y aceptó el trabajo), pero terminó con un evento `error` **sin mensaje**: «El servicio no pudo generar la pieza».
+
+- Lo que eso dice: el contrato con el Space está bien y el fallo ocurrió **dentro** de Hunyuan3D. Los errores controlados (cuota agotada, por ejemplo) sí traen mensaje; uno vacío es un fallo interno.
+- Lo que **no** se sabe (nunca se pudo consultar el servicio en vivo desde el entorno de desarrollo): si fue una entrada rechazada, se acabó el tiempo de GPU que el Space reserva (`@spaces.GPU(duration=40)` en el 2.0, `60` en el mini-Turbo) o el Space está fallando. El 2.0 no se actualiza desde 2025-06; el mini-Turbo, desde 2026-07-14.
+- Qué cambió: el mensaje ahora dice **cuánto tardó en fallar** (casi de inmediato → rechazó la entrada; cerca del tiempo reservado → se acabó la GPU) y qué modelo era, sugiere el modo Rápido o la malla Liviana, y tras un fallo del Estándar deja el selector en Rápido (sin reenviar la foto hasta que se pulse Generar). El detalle técnico va a la consola y al `--debug` del script.
+
+```bash
+node scripts/hy3d-smoke.js estandar --debug   # cada petición, cada evento y el detalle técnico del fallo
+node scripts/hy3d-smoke.js rapido --debug
+```
+
 ## Licencia y privacidad
 
 - **Licencia:** Hunyuan3D 2.0 se distribuye bajo la *Tencent Hunyuan 3D 2.0 Community License* (`LICENSE` del Space): uso comercial permitido y sin regalías, **excepto** (a) en la **UE, el Reino Unido y Corea del Sur**, donde la licencia no aplica y no se puede usar el modelo ni sus resultados, y (b) sobre **1 millón de usuarios activos al mes**, que exige pedir licencia a Tencent. Tencent no reclama derechos sobre los resultados. Se *recomienda* (no se exige) indicar «Powered by Tencent Hunyuan 3D». **Ojo:** el comentario del encabezado de `gradio_app.py` dice «NON-COMMERCIAL LICENSE», contradiciendo al `LICENSE`; rige el `LICENSE`, pero conviene confirmarlo con Tencent o un abogado antes de venderlo a clientes fuera de Chile.
