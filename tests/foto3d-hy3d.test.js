@@ -53,6 +53,7 @@ async function fake(o={}){
       if(o.idle)return; // nunca contesta más
       if(o.slow){return;}
       setTimeout(()=>{
+        if(o.nullError){res.write('event: error\ndata: null\n\n');return res.end();} // fallo interno del Space: sin mensaje
         if(o.error!=null){res.write('event: error\ndata: '+JSON.stringify(o.error)+'\n\n');return res.end();}
         const fd={path:'/tmp/gradio/x/white_mesh.glb',url:(o.evilUrl?'http://evil.invalid':origin)+pre+'/file=/tmp/gradio/x/white_mesh.glb',orig_name:'white_mesh.glb'};
         res.write('event: complete\ndata: '+JSON.stringify([fd,'<iframe></iframe>',{number_of_faces:SPHERE.indices.length/3,time:{total:3.2}},4321])+'\n\n');
@@ -246,4 +247,67 @@ test('hy3d-smoke sale con error y un mensaje claro si el servicio falla',async()
     const r=await runSmoke(['--host',f.origin],dir);
     assert.equal(r.code,2);assert.match(r.out,/quota: Se acabó la cuota gratis/);
   }finally{await f.close();fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+// ── Fallo del servicio sin mensaje (el caso real de la primera prueba) ────
+test('un error del servicio sin mensaje dice cuánto tardó y qué hacer, sin inventar una causa',async()=>{
+  const f=await fake({nullError:true});
+  try{
+    const phases=[];
+    const e=await expectCode(HY.generate(base(f,{quality:'estandar',onStatus:p=>phases.push(p)})),'failed');
+    assert.match(e.message,/no explicó por qué/);
+    assert.match(e.message,/Falló a los \d+ s \(Hunyuan3D-2\)/,'dice cuándo y en qué modelo falló');
+    assert.match(e.message,/casi de inmediato/,'falló al instante: puede haber rechazado la foto');
+    assert.equal(e.detail.raw,'null');assert.equal(e.detail.phase,'generating');assert.equal(e.detail.quality,'estandar');
+    assert.ok(typeof e.detail.seconds==='number'&&e.detail.seconds<8);
+    assert.ok(phases.includes('generating'),'el fallo vino después de encolar el trabajo');
+  }finally{await f.close();}
+});
+
+test('las sugerencias dependen de cuánto tardó en fallar y del modo',()=>{
+  const mk=()=>{const e=HY.classifyServiceError('null',0);e.raw='null';e.fromStream=true;return e;};
+  const quick=HY.describeFailure(mk(),{elapsed:2,quality:'rapido',space:'X',phase:'generating'});
+  assert.match(quick.message,/casi de inmediato.*otra \(más chica o en PNG\)/);
+  const std=HY.describeFailure(mk(),{elapsed:41,quality:'estandar',space:'X',phase:'generating'});
+  assert.match(std.message,/Falló a los 41 s/);assert.match(std.message,/modo Estándar es el más exigente: prueba el modo Rápido/);
+  const fast=HY.describeFailure(mk(),{elapsed:41,quality:'rapido',space:'X',phase:'generating'});
+  assert.match(fast.message,/malla Liviana u otra foto/);assert.doesNotMatch(fast.message,/modo Estándar/);
+  // si el servicio sí dio un mensaje, se muestra tal cual y no se agregan sugerencias inventadas
+  const e=HY.classifyServiceError('CUDA out of memory',0);e.fromStream=true;
+  const said=HY.describeFailure(e,{elapsed:30,quality:'estandar',space:'X',phase:'generating'});
+  assert.match(said.message,/: CUDA out of memory\. Falló a los 30 s/);assert.doesNotMatch(said.message,/Prueba|prueba/);
+});
+
+test('handleMessage entrega el detalle técnico del fallo a la página',async()=>{
+  const f=await fake({nullError:true}),out=[];
+  try{
+    await HY.handleMessage({type:'gen',id:5,png:PNG.buffer.slice(0),quality:'rapido'},m=>out.push(m),f.env);
+    const e=out.at(-1);assert.equal(e.type,'error');assert.equal(e.code,'failed');
+    assert.equal(e.detail.raw,'null');assert.equal(e.detail.space,'Hunyuan3D-2 mini Turbo');
+  }finally{await f.close();}
+});
+
+test('la página deja el modo en Rápido tras un fallo del Estándar y muestra el detalle',()=>{
+  const ui=fs.readFileSync(path.join(ROOT,'js','foto3d.js'),'utf8');
+  assert.match(ui,/e\.code==='failed'&&m\.quality==='estandar'[\s\S]{0,160}value='rapido'/,'cambia el selector a Rápido');
+  assert.match(ui,/pulsa Generar para reintentar/,'sin reenviar la foto hasta que el usuario pulse Generar');
+  assert.match(ui,/err\.detail=m\.detail/,'el detalle del worker llega a la página');
+});
+
+test('hy3d-smoke --debug muestra cada petición y cada evento; un fallo imprime el detalle técnico',async()=>{
+  const f=await fake(),dir=fs.mkdtempSync(path.join(os.tmpdir(),'hy3d-'));
+  try{
+    const r=await runSmoke(['--debug','--host',f.origin],dir);
+    assert.equal(r.code,0,r.out);
+    assert.match(r.out,/\[debug\] GET http:\/\/127\.0\.0\.1:\d+\/config/);
+    assert.match(r.out,/\[debug\]   → 200 \(\d+ ms\)/);
+    assert.match(r.out,/\[debug\]   evento complete:/);
+  }finally{await f.close();}
+  const g=await fake({nullError:true});
+  try{
+    const r=await runSmoke(['estandar','--host',g.origin],dir);
+    assert.equal(r.code,2);
+    assert.match(r.out,/no explicó por qué/);
+    assert.match(r.out,/detalle técnico: \{"code":"failed","seconds":[\d.]+,"quality":"estandar".*"raw":"null"\}/);
+  }finally{await g.close();fs.rmSync(dir,{recursive:true,force:true});}
 });

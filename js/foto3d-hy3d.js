@@ -43,6 +43,16 @@ function hostFor(quality,env){
   return((env&&env.hosts&&env.hosts[quality])||s.host).replace(/\/+$/,'');
 }
 function authHeaders(token){return token?{Authorization:'Bearer '+token}:{};}
+// fetch del entorno; con env.log registra cada petición y su respuesta (scripts/hy3d-smoke.js --debug).
+function getFetch(env){
+  const f=(env&&env.fetch)||root.fetch;
+  if(!env||!env.log)return f;
+  return async(u,o)=>{
+    const t=Date.now();env.log(`${(o&&o.method)||'GET'} ${u}`);
+    try{const r=await f(u,o);env.log(`  → ${r.status} (${Date.now()-t} ms)`);return r;}
+    catch(e){env.log('  ✘ '+(e&&e.message));throw e;}
+  };
+}
 
 // ── Errores del servicio → un código y un mensaje que el usuario entienda ──
 function classifyServiceError(text,status){
@@ -56,7 +66,23 @@ function classifyServiceError(text,status){
     return new HyError('busy','El servicio está saturado. Intenta de nuevo en unos minutos.',{status});
   if(/sleeping|building|starting|paused|runtime error/i.test(t))
     return new HyError('sleeping','El servicio está dormido o reiniciándose. Intenta de nuevo en un minuto.',{status});
-  return new HyError('failed','El servicio no pudo generar la pieza'+(t&&t!=='null'?': '+t.slice(0,200):'.'),{status});
+  const said=t&&t!=='null'?t.slice(0,200):'';
+  return new HyError('failed','El servicio no pudo generar la pieza'+(said?': '+said:'.'),{status,serviceText:said});
+}
+// Un fallo del servicio sin mensaje es lo más difícil de diagnosticar: cuánto tardó
+// en fallar distingue "rechazó la entrada" (casi de inmediato) de "se acabó el tiempo
+// de GPU" (cerca de la duración que el Space reserva) o un fallo interno.
+function describeFailure(err,ctx){
+  const secs=Math.max(0,Math.round(ctx.elapsed)),empty=!err.serviceText;
+  let hint='';
+  if(empty){
+    if(ctx.elapsed<8)hint=' Fue casi de inmediato: puede haber rechazado la foto; prueba con otra (más chica o en PNG).';
+    else if(ctx.quality==='estandar')hint=' El modo Estándar es el más exigente: prueba el modo Rápido o la malla Liviana.';
+    else hint=' Prueba con la malla Liviana u otra foto; si se repite, el servicio puede estar fallando.';
+  }
+  err.message=`El servicio no pudo generar la pieza${empty?' y no explicó por qué':': '+err.serviceText}. Falló a los ${secs} s (${ctx.space}).${hint}`;
+  err.detail={code:err.code,seconds:ctx.elapsed,quality:ctx.quality,space:ctx.space,phase:ctx.phase,raw:err.raw==null?null:String(err.raw).slice(0,300)};
+  return err;
 }
 function netError(e){
   if(e&&e.code==='cancelled')return e;
@@ -71,7 +97,7 @@ function apiPrefix(cfg){
 }
 // Lee /config: confirma que el Space responde y que la función existe.
 async function check(opts){
-  const env=opts.env||{},f=env.fetch||root.fetch,host=hostFor(opts.quality,env);
+  const env=opts.env||{},f=getFetch(env),host=hostFor(opts.quality,env);
   let res;
   try{res=await f(host+'/config',{headers:authHeaders(opts.token),signal:opts.signal});}catch(e){throw netError(e);}
   if(!res.ok)throw classifyServiceError('',res.status);
@@ -111,7 +137,7 @@ function parseBlock(block){
   }
   return{event,data:data.join('\n')};
 }
-async function stream(host,prefix,eventId,token,signal,f,onBeat,idleMs){
+async function stream(host,prefix,eventId,token,signal,f,onBeat,idleMs,log){
   let res;
   try{res=await f(host+prefix+'/call/'+API_NAME+'/'+eventId,{headers:Object.assign({Accept:'text/event-stream'},authHeaders(token)),signal});}
   catch(e){throw netError(e);}
@@ -132,6 +158,7 @@ async function stream(host,prefix,eventId,token,signal,f,onBeat,idleMs){
       let i;
       while((i=buf.indexOf('\n\n'))>=0){
         const ev=parseBlock(buf.slice(0,i));buf=buf.slice(i+2);
+        if(log)log(`  evento ${ev.event}: ${String(ev.data).slice(0,300)}`);
         if(ev.event==='heartbeat'){if(onBeat)onBeat();continue;}
         if(ev.event==='complete'){
           let out;try{out=JSON.parse(ev.data);}catch(_){throw new HyError('api','Respuesta del servicio ilegible.');}
@@ -139,7 +166,7 @@ async function stream(host,prefix,eventId,token,signal,f,onBeat,idleMs){
         }
         if(ev.event==='error'){
           let msg=ev.data;try{const j=JSON.parse(ev.data);msg=typeof j==='string'?j:(j&&(j.error||j.message))||'';}catch(_){}
-          throw classifyServiceError(msg,0);
+          const err=classifyServiceError(msg,0);err.raw=ev.data;err.fromStream=true;throw err;
         }
       }
     }
@@ -167,10 +194,11 @@ async function download(host,prefix,fileData,token,signal,f){
 // Foto → GLB. opts: {png, quality:'rapido'|'estandar', seed, octree, rembg, token,
 // signal, onStatus(fase,extra), env:{fetch,hosts}}
 async function generate(opts){
-  const env=opts.env||{},f=env.fetch||root.fetch,q=SPACES[opts.quality]?opts.quality:'rapido',sp=SPACES[q];
+  const env=opts.env||{},f=getFetch(env),q=SPACES[opts.quality]?opts.quality:'rapido',sp=SPACES[q];
   const ctl=new AbortController(),total=setTimeout(()=>ctl.abort(),TOTAL_MS);
   if(opts.signal){if(opts.signal.aborted)ctl.abort();else opts.signal.addEventListener('abort',()=>ctl.abort(),{once:true});}
-  const say=(phase,extra)=>{if(opts.onStatus)opts.onStatus(phase,extra||{});};
+  let phase='check';
+  const say=(p,extra)=>{phase=p;if(opts.onStatus)opts.onStatus(p,extra||{});};
   const t0=Date.now();
   try{
     say('check');
@@ -186,14 +214,15 @@ async function generate(opts){
       sp.steps,sp.guidance,seed,octree,opts.rembg!==false,sp.chunks,false];
     const id=await submit(svc.host,svc.prefix,data,opts.token,ctl.signal,f);
     say('generating',{elapsed:0});
-    const out=await stream(svc.host,svc.prefix,id,opts.token,ctl.signal,f,()=>say('generating',{elapsed:Math.round((Date.now()-t0)/1000)}),env.idleMs);
+    const out=await stream(svc.host,svc.prefix,id,opts.token,ctl.signal,f,()=>say('generating',{elapsed:Math.round((Date.now()-t0)/1000)}),env.idleMs,env.log);
     say('download');
     const glb=await download(svc.host,svc.prefix,Array.isArray(out)?out[0]:null,opts.token,ctl.signal,f);
     return{glb,seed:Array.isArray(out)&&Number.isFinite(Number(out[3]))?Number(out[3]):seed,stats:Array.isArray(out)&&out[2]&&typeof out[2]==='object'?out[2]:null,
       space:svc.label,version:svc.version,seconds:(Date.now()-t0)/1000};
   }catch(e){
-    if(e&&e.name==='HyError')throw e;
-    throw netError(e);
+    const err=e&&e.name==='HyError'?e:netError(e);
+    if(err.code==='failed'&&err.fromStream)describeFailure(err,{elapsed:(Date.now()-t0)/1000,quality:q,space:sp.label,phase});
+    throw err;
   }finally{clearTimeout(total);}
 }
 
@@ -219,11 +248,11 @@ async function handleMessage(m,post,env){
     post({type:'done',id:m.id,glb:r.glb,seed:r.seed,stats:r.stats,space:r.space,seconds:r.seconds},[r.glb]);
   }catch(e){
     const err=e&&e.name==='HyError'?e:netError(e);
-    post({type:'error',id:m.id,code:err.code,message:err.message,retrySeconds:err.retrySeconds||0});
+    post({type:'error',id:m.id,code:err.code,message:err.message,retrySeconds:err.retrySeconds||0,detail:err.detail||null});
   }finally{_jobs.delete(m.id);}
 }
 
-const API={SPACES,API_NAME,HyError,check,generate,handleMessage,classifyServiceError,parseBlock,apiPrefix};
+const API={SPACES,API_NAME,HyError,check,generate,handleMessage,classifyServiceError,describeFailure,parseBlock,apiPrefix};
 if(typeof module!=='undefined'&&module.exports)module.exports=API;
 else if(typeof importScripts==='function'&&typeof self!=='undefined'){
   self.onmessage=e=>handleMessage(e.data,(msg,transfer)=>self.postMessage(msg,transfer||[]),{});

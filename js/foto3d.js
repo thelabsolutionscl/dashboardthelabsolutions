@@ -1003,7 +1003,7 @@ function hyWorker(){
     if(m.type==='status'){if(j.onStatus)j.onStatus(m);return;}
     _jobs.delete(m.id);
     if(m.type==='done'||m.type==='checked')j.resolve(m);
-    else{const err=new Error(m.message||'Error del servicio');err.code=m.code||'failed';err.retrySeconds=m.retrySeconds||0;j.reject(err);}
+    else{const err=new Error(m.message||'Error del servicio');err.code=m.code||'failed';err.retrySeconds=m.retrySeconds||0;err.detail=m.detail||null;j.reject(err);}
   };
   _worker.onerror=e=>{
     if(e&&e.preventDefault)e.preventDefault();
@@ -1302,8 +1302,12 @@ async function generate(opts){
     if(e.code==='cancelled'){note('Cancelado.');}
     else{
       note(S.hy?'Se mantiene la pieza anterior.':'');
-      status(e.message||'No se pudo generar la pieza.',e.code==='quota'||e.code==='busy'||e.code==='sleeping'?'warn':'error');
-      console.warn('[Foto3D] generación',e.code,e.message);
+      let msg=e.message||'No se pudo generar la pieza.';
+      // El modo Estándar es el más exigente: tras un fallo del servicio se deja el modo
+      // en Rápido para el reintento (no se reenvía nada hasta que el usuario pulse Generar).
+      if(e.code==='failed'&&m.quality==='estandar'&&$('f3dQuality')){$('f3dQuality').value='rapido';saveMode();msg+=' Dejé el modo en Rápido: pulsa Generar para reintentar.';}
+      status(msg,e.code==='quota'||e.code==='busy'||e.code==='sleeping'?'warn':'error');
+      console.warn('[Foto3D] generación',e.code,e.message,e.detail||'');
     }
   }finally{
     if(mine()){clearInterval(S.gen.tick);S.gen=null;setBusy(false);}

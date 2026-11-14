@@ -9,6 +9,7 @@
  * Opciones:  --token hf_xxx   (o la variable HF_TOKEN) usa tu cuota de Hugging Face
  *            --octree 256     detalle de la malla
  *            --host URL       apunta a otro servidor Gradio (para pruebas locales)
+ *            --debug          muestra cada petición y cada evento que manda el servicio
  *
  * Usa exactamente el mismo cliente (js/foto3d-hy3d.js) y la misma limpieza de
  * malla (js/foto3d-glb.js) que la herramienta, así que si esto funciona, la
@@ -31,7 +32,8 @@ const checkOnly=args.includes('--check')&&!!args.splice(args.indexOf('--check'),
 const token=opt('token',process.env.HF_TOKEN||'');
 const octree=Number(opt('octree','256'))||256;
 const host=opt('host','');
-const env=host?{hosts:{rapido:host,estandar:host}}:{};
+const debug=args.includes('--debug')&&!!args.splice(args.indexOf('--debug'),1);
+const env=Object.assign(host?{hosts:{rapido:host,estandar:host}}:{},debug?{log:m=>console.log('    [debug] '+m)}:{});
 const quality=['rapido','estandar'].includes(args[0])?args.shift():'rapido';
 const imgPath=path.resolve(args[0]||path.join(__dirname,'..','ender5max.png'));
 
@@ -59,6 +61,7 @@ const t0=Date.now(),secs=()=>((Date.now()-t0)/1000).toFixed(1)+' s';
       onStatus:(p,x)=>{const m=p==='generating'?`generando… ${x.elapsed||0} s`:p;if(m!==last){process.stdout.write('  · '+m+'\n');last=m;}}});
   }catch(e){
     bad(`${e.code}: ${e.message}`);
+    if(e.detail)console.log('    detalle técnico:',JSON.stringify(e.detail));
     if(e.code==='quota')console.log('    (Es normal si ya usaste la cuota del día; con --token tu cuenta de Hugging Face tiene más.)');
     process.exit(2);
   }
