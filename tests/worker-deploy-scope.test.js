@@ -49,3 +49,7 @@ test('all production jobs depend on selector and skip unrelated Workers',()=>{
   assert.match(workflow,/      - 'scripts\/worker-deploy-targets\.sh'/);
   assert.match(workflow,/      - all[\s\S]*      - lead[\s\S]*      - proxy[\s\S]*      - sii/);
 });
+test('shared client matching changes select both consumers but never SII',()=>{
+  assert.deepEqual(select('push','lead-worker/src/client-match.js\n').outputs,
+    {lead:'true',proxy:'true',sii:'false'});
+});

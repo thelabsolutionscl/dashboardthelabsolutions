@@ -36,6 +36,7 @@
  */
 
 import { waNotify, waSend, waPhone, mensajeLead, mensajeImpresora, waDailyReminders, WA_RUTAS, waWebhookVerify, waWebhookFirmaValida, waWebhookEvento } from "./wa-notify.js";
+import { clientIdentity, resolveClientMatch } from "./client-match.js";
 import { deliverFundAlerts } from "./fondos-notify.js";
 
 const AIRTABLE_API = "https://api.airtable.com/v0";
@@ -1599,7 +1600,7 @@ async function handleNewsletter(request, env, ctx, cors) {
   const doubleOptIn = !!env.RESEND_API_KEY && env.NEWSLETTER_DOUBLE_OPTIN !== "false";
 
   try {
-    const existing = await airtableFindCliente(env, { email });
+    const existing = await airtableFindCliente(env, { email, company });
 
     if (doubleOptIn) {
       // Aseguramos que el contacto exista (sin marcar "Suscrito" todavía).
@@ -1681,6 +1682,7 @@ async function handleNewsletterConfirm(request, env) {
       }
     } catch (e) {
       console.error("[leads-worker] confirm:", e.message);
+      return htmlPage("No pudimos confirmar", "Tu solicitud requiere revisión. Inténtalo nuevamente más tarde.", false, 503);
     }
   }
   return htmlPage("¡Suscripción confirmada! 🎉", "Gracias por confirmar. Te escribiremos con novedades, casos reales y ofertas — sin spam.", true);
@@ -1715,8 +1717,9 @@ async function handleNewsletterUnsubscribe(request, env) {
   }
   if (env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
     try {
-      const id = await airtableFindCliente(env, { email });
-      if (id) await airtableUpdateTolerant(env, "Clientes", id, stripEmpty({ "Baja newsletter": true, "Suscrito newsletter": false }));
+      const records = await airtableClientCandidates(env, { email });
+      for (const record of records.filter(r => clientIdentity(r.fields).email === clientIdentity({ email }).email))
+        await airtableUpdateTolerant(env, "Clientes", record.id, stripEmpty({ "Baja newsletter": true, "Suscrito newsletter": false }));
     } catch (e) {
       console.error("[leads-worker] unsubscribe:", e.message);
       return htmlPage("No pudimos procesar la baja", "Inténtalo nuevamente. Tu suscripción no se modificó.", false, 503);
@@ -2106,11 +2109,11 @@ async function handleLinkedinOfficial(request, env, ctx, cors, url) {
 
   await env.RL.put(dedupeKey, JSON.stringify({
     action: "CREATED", leadId, clienteId: result.clienteId || null,
-    queueId: result.queueId || null, buffered: !!result.buffered,
+    queueId: result.queueId || null, buffered: !!result.buffered, reviewRequired: !!result.reviewRequired,
   }), { expirationTtl: 90 * 86400 });
   if (result.clienteId)
     ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId, "LinkedIn Lead Sync"));
-  return json({ ok: true, clienteId: result.clienteId || null, queueId: result.queueId || null, buffered: !!result.buffered }, 200, cors);
+  return json({ ok: true, clienteId: result.clienteId || null, queueId: result.queueId || null, buffered: !!result.buffered, reviewRequired: !!result.reviewRequired }, 200, cors);
 }
 
 async function linkedinApiHeaders(env) {
@@ -2229,7 +2232,7 @@ async function handleLinkedin(request, env, ctx, cors) {
       const previous = await env.RL.get(idemKey);
       if (previous) {
         const saved = JSON.parse(previous);
-        return json({ ok: true, duplicate: true, clienteId: saved.clienteId || null, queueId: saved.queueId || null }, 200, cors);
+        return json({ ok: true, duplicate: true, clienteId: saved.clienteId || null, queueId: saved.queueId || null, buffered: !!saved.buffered, reviewRequired: !!saved.reviewRequired }, 200, cors);
       }
     } catch (_) {}
   }
@@ -2243,16 +2246,16 @@ async function handleLinkedin(request, env, ctx, cors) {
   });
 
   const result = await response.clone().json().catch(() => null);
-  if (response.ok && result?.ok && result.clienteId) {
+  if (response.ok && result?.ok) {
     if (idemKey && env.RL) {
       try {
         await env.RL.put(idemKey, JSON.stringify({
-          clienteId: result.clienteId,
-          queueId: result.queueId || null,
+          clienteId: result.clienteId || null,
+          queueId: result.queueId || null, buffered: !!result.buffered, reviewRequired: !!result.reviewRequired,
         }), { expirationTtl: 30 * 86400 });
       } catch (_) {}
     }
-    ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId));
+    if (result.clienteId) ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId));
   }
   return response;
 }
@@ -2627,6 +2630,13 @@ export class SocialEventGuard {
     if(request.method!=="POST")return Response.json({ok:false,error:"Method not allowed"},{status:405});
     const path=new URL(request.url).pathname;
     let p;try{p=await request.json();}catch(_){return Response.json({ok:false,error:"Invalid JSON"},{status:422});}
+    if(path==="/lead-intake"){
+      if(!/^dl:[a-f0-9]{64}$/.test(p?.key||"")||!p?.item?.norm)
+        return Response.json({ok:false,error:"Invalid lead intake"},{status:422});
+      const work=(this.leadPending||Promise.resolve()).then(()=>processSavedLead(this.env,this.state.storage,p.key,p.item));
+      this.leadPending=work.catch(()=>{});
+      return Response.json(await work);
+    }
     if(path==="/publish-reserve"){
       if(!/^rec[A-Za-z0-9]{14}$/.test(String(p?.postId||""))||typeof p?.idempotencyKey!=="string")
         return Response.json({ok:false,error:"Invalid publish reserve"},{status:422});
@@ -2715,122 +2725,125 @@ function buildClienteFields(norm, source) {
   });
 }
 
-async function createLeadAndQueue(env, ctx, cors, { norm, agente, evento, source, campaign, attachment }) {
-  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID) {
-    return json({ ok: false, error: "Airtable no configurado" }, 500, cors);
-  }
-
-  // 1) Cliente — campos tolerantes (si no existen en la base, se descartan)
-  const clienteFields = buildClienteFields(norm, source);
-
-  let clienteId = null;
-  let recurrente = false;
+async function createLeadAndQueue(env, ctx, cors, item) {
+  if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID || !env.RL || !env.SOCIAL_EVENT_GUARD)
+    return json({ ok: false, error: "Almacenamiento seguro de leads no configurado" }, 503, cors);
+  // Stable transport key prevents replay after a lost HTTP response from creating
+  // another intake. Without an external event ID, identical normalized payloads
+  // coalesce conservatively; a new commercial request must change the brief.
+  const externalId = item.norm.linkedinLeadId || item.norm.externalLeadId;
+  const fingerprint = JSON.stringify(externalId ? [item.source, item.evento, externalId] :
+    [item.source, item.evento, item.campaign || "", item.norm, item.attachment || null]);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
+  const key = "dl:" + [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, "0")).join("");
   try {
-    const existing = await airtableFindCliente(env, {
-      email: norm.email,
-      phone: norm.phone,
-      linkedinUrl: source === "linkedin" ? norm.linkedinUrl : "",
-    });
-    if (existing) {
-      // Cliente recurrente: reutiliza el registro y refresca interés/cargo
-      // sin pisar notas ni la fecha de primer contacto.
-      clienteId = existing;
-      recurrente = true;
-      await airtableUpdateTolerant(
-        env,
-        "Clientes",
-        existing,
-        stripEmpty({
-          "Servicio interés": norm.service,
-          "Cargo contacto": norm.jobTitle,
-          // Refresca el gclid/campaña si el lead recurrente llega por un clic de Ads
-          // (stripEmpty descarta los vacíos → no borra un gclid previo).
-          GCLID: norm.gclid,
-          "Campaña Ads": norm.utmCampaign,
-        })
-      );
-    } else {
-      const cliente = await airtableCreateTolerant(env, "Clientes", clienteFields);
-      clienteId = cliente?.id || null;
+    // Persist the entire intake (including attachment) before touching CRM.
+    await env.RL.put(key, JSON.stringify({ ...item, version: 2 }));
+    const result = await runSavedLead(env, key, item);
+    if (result.buffered) {
+      ctx.waitUntil(sendLeadSaveFailedAlert(env, item.norm, result.reason || "Revisión de identidad", {
+        title: "Lead retenido para revisión",
+        intro: "El lead y su adjunto están conservados sin vencimiento en el buffer protegido. " +
+          "No crear clientes ni tareas manualmente sin comprobar el resultado previo. Referencia: " + key,
+        subject: "Lead retenido para revisión de identidad",
+      }));
+    } else if (!result.replayed) {
+      await finishLeadIntake(env, ctx, item, result);
+    }
+    return json({ ok: true, ...result }, 200, cors);
+  } catch (e) {
+    // Never acknowledge preservation if storage/guard could not be confirmed.
+    return json({ ok: false, error: "No se pudo confirmar la recepción segura del lead" }, 503, cors);
+  }
+}
+
+async function runSavedLead(env, key, item) {
+  const stub = env.SOCIAL_EVENT_GUARD.get(env.SOCIAL_EVENT_GUARD.idFromName("lead-intake:" + key));
+  const response = await stub.fetch("https://social-guard.internal/lead-intake", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, item }),
+  });
+  if (!response.ok) throw new Error("Lead intake guard unavailable");
+  return await response.json();
+}
+
+// Only called inside the per-intake Durable Object. A durable phase is written
+// BEFORE each POST; crashes, timeouts and overlapping cron runs cannot repeat it.
+async function processSavedLead(env, storage, key, item) {
+  let state = await storage.get("lead-state") || { phase: "lookup" };
+  if (state.phase === "complete") {
+    await env.RL.delete(key).catch(() => {});
+    return { ...state.result, replayed: true };
+  }
+  const held = () => ({ clienteId: null, queueId: null, buffered: true,
+    reviewRequired: state.phase !== "lookup", reason: state.reason || state.phase });
+  if (["review", "creating_client", "creating_queue"].includes(state.phase)) return held();
+  const save = async patch => {
+    state = { ...state, ...patch };
+    await storage.put("lead-state", state);
+  };
+  const { norm, agente, evento, source, campaign, attachment } = item;
+  try {
+    if (state.phase === "lookup") {
+      const resolution = await airtableResolveCliente(env, norm);
+      if (resolution.status === "ambiguous") {
+        await save({ phase: "review", reason: resolution.reason, candidateIds: resolution.candidateIds });
+        await env.RL.put(key, JSON.stringify({ ...item, version: 2, review: state }));
+        return held();
+      }
+      if (resolution.status === "match") {
+        await save({ phase: "client_saved", clienteId: resolution.record.id, recurrente: true });
+      } else {
+        await save({ phase: "creating_client" });
+        const client = await airtableCreateTolerant(env, "Clientes", buildClienteFields(norm, source), 8, true);
+        if (!client?.id) throw new Error("Missing created client ID");
+        await save({ phase: "client_saved", clienteId: client.id, recurrente: false });
+      }
+    }
+    if (state.phase === "client_saved") {
+      if (state.recurrente) {
+        // Revalidate on recovery: identity may have changed while intake was held.
+        const resolution = await airtableResolveCliente(env, norm);
+        if (resolution.status !== "match" || resolution.record.id !== state.clienteId) {
+          await save({ phase: "review", reason: "identity_changed" });
+          return held();
+        }
+        await airtableUpdateTolerant(env, "Clientes", state.clienteId, stripEmpty({
+          "Servicio interés": norm.service, "Cargo contacto": norm.jobTitle,
+          GCLID: norm.gclid, "Campaña Ads": norm.utmCampaign,
+        }));
+      }
+      await save({ phase: "creating_queue" });
+      const queue = await airtableCreateTolerant(env, "Agent_Queue", stripEmpty({
+        Evento: evento, Entidad: "Cliente", "ID entidad": state.clienteId, Agente: agente,
+        Estado: "Pendiente", Prioridad: source === "google_ads" ? "Alta" : "Media",
+        "Input JSON": JSON.stringify(norm).slice(0, 95000), Source: source, Campaign: campaign,
+        "Fecha creación": new Date().toISOString(),
+      }), 8, true);
+      if (!queue?.id) throw new Error("Missing created queue ID");
+      const result = { clienteId: state.clienteId, queueId: queue.id, recurrente: !!state.recurrente };
+      await save({ phase: "complete", result });
+      // Completion marker precedes best-effort attachment upload and buffer cleanup.
+      if (attachment) await uploadAttachmentToCliente(env, state.clienteId, attachment);
+      await env.RL.delete(key).catch(() => {});
+      return result;
     }
   } catch (e) {
-    console.error("[leads-worker] Clientes:", e.message);
-    // No perder el lead: a buffer (KV) para reintento por cron + auto-reply igual +
-    // aviso interno para rescatarlo a mano (antes fallaba en silencio).
-    await bufferDeadLetter(env, { norm, agente, evento, source, campaign, reason: e.message });
-    if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
-    ctx.waitUntil(sendLeadSaveFailedAlert(env, norm, e.message));
-    return json({ ok: true, clienteId: null, queueId: null, buffered: true }, 200, cors);
+    state.reason = state.phase === "lookup" ? "lookup_failed" : "intake_requires_review";
+    await storage.put("lead-state", state);
+    await env.RL.put(key, JSON.stringify({ ...item, version: 2, review: state }));
+    return held();
   }
+  return held();
+}
 
-  // 1b) Adjunto → campo de attachments del Cliente (best-effort: si el campo
-  //     no existe en la base, se loguea y el lead sigue su curso normal).
-  if (attachment && clienteId && ctx) {
-    ctx.waitUntil(uploadAttachmentToCliente(env, clienteId, attachment));
-  }
-
-  // 2) Agent_Queue — tabla bajo nuestro control (campos fijos)
-  let queueId = null;
-  const queueFields = stripEmpty({
-    Evento: evento,
-    Entidad: "Cliente",
-    "ID entidad": clienteId,
-    Agente: agente,
-    Estado: "Pendiente",
-    Prioridad: source === "google_ads" ? "Alta" : "Media",
-    "Input JSON": JSON.stringify(norm).slice(0, 95000),
-    Source: source,
-    Campaign: campaign,
-    "Fecha creación": new Date().toISOString(),
-  });
-  try {
-    const q = await airtableCreateTolerant(env, "Agent_Queue", queueFields);
-    queueId = q?.id || null;
-  } catch (e) {
-    // El cliente ya se guardó, pero la tarea del pipeline no: NO fallar en silencio.
-    // Al buffer (el cron reintenta crear la tarea — el cliente ya existe, no se duplica)
-    // + aviso al equipo, para que el lead no se quede sin procesar sin que nadie lo sepa.
-    console.error("[leads-worker] Agent_Queue:", e.message);
-    await bufferDeadLetter(env, {
-      norm,
-      agente,
-      evento,
-      source,
-      campaign,
-      reason: "Agent_Queue: " + e.message,
-    });
-    ctx.waitUntil(
-      sendLeadSaveFailedAlert(env, norm, e.message, {
-        title: "⚠️ Lead guardado, pero SIN tarea de seguimiento",
-        intro:
-          "El cliente <strong>sí</strong> quedó en el CRM, pero no se pudo crear su tarea en el " +
-          "pipeline (Agent_Queue), así que no se auto-procesa ni se le asigna seguimiento al vendedor. " +
-          "Quedó en el buffer de reintentos (cada hora); si en ~1 hora sigue sin tarea, créala a mano.",
-        subject: `⚠️ Lead sin tarea de seguimiento: ${norm.name || norm.email || "sin nombre"}`,
-      })
-    );
-  }
-
-  // Auto-respuesta al lead (speed-to-lead), best-effort, no bloquea la respuesta
+async function finishLeadIntake(env, ctx, item, result) {
+  const { norm, source, agente } = item;
+  const { clienteId, queueId, recurrente } = result;
   if (norm.email) ctx.waitUntil(sendLeadAutoReply(env, norm));
-
-  // Aviso interno por WhatsApp (Nicanor + Gustavo), una vez por cliente y hora.
-  ctx.waitUntil(
-    waNotify(env, "lead", mensajeLead(norm, source, { recurrente }), { dedupKey: clienteId, ttl: 3600 })
-      .catch((e) => console.error("[wa-notify] lead", e.message))
-  );
-
-  // 3) Procesamiento opcional con Claude (no bloquea la respuesta)
-  if (
-    env.AUTO_PROCESS_LEADS === "true" &&
-    leadAiProxyConfigured(env) &&
-    queueId &&
-    (await autoProcessAllowed(env))
-  ) {
+  ctx.waitUntil(waNotify(env, "lead", mensajeLead(norm, source, { recurrente }), { dedupKey: clienteId, ttl: 3600 })
+    .catch(e => console.error("[wa-notify] lead", e.message)));
+  if (env.AUTO_PROCESS_LEADS === "true" && leadAiProxyConfigured(env) && queueId && (await autoProcessAllowed(env)))
     ctx.waitUntil(processLeadAgent(env, { clienteId, queueId, norm, agente }));
-  }
-
-  return json({ ok: true, clienteId, queueId }, 200, cors);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -3239,6 +3252,7 @@ function normalizeGoogleAds(b) {
     service: pick("service", "what_service") || str(b.service),
     message: pick("message", "comments") || str(b.message),
     source: "google_ads",
+    externalLeadId: str(b.lead_id),
     utmCampaign: str(b.campaign_name) || str(b.campaign_id),
     gclid: str(b.gcl_id) || str(b.gclid),
     landingUrl: str(b.landingUrl),
@@ -3371,44 +3385,45 @@ async function airtableUpdate(env, table, recordId, fields) {
   return await r.json();
 }
 
-// Busca un Cliente existente por email o teléfono (dedupe). Best-effort.
-async function airtableFindCliente(env, { email, phone, linkedinUrl, socialIdentity }) {
-  const esc = (s) => String(s).replace(/'/g, "\\'");
+// Retrieve all pages: absence is only established by a successful complete lookup.
+async function airtableClientCandidates(env, input) {
+  const identity = clientIdentity(input);
+  const esc = s => String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   const clauses = [];
-  if (email) clauses.push(`LOWER(TRIM({Email}))=LOWER('${esc(String(email).trim())}')`);
-  const phoneDigitsRaw = phone ? String(phone).replace(/[^0-9]/g, "") : "";
-  const phoneDigits = phoneDigitsRaw.length >= 9 ? phoneDigitsRaw.slice(-9) : "";
-  if (phoneDigits)
-    clauses.push(`RIGHT(REGEX_REPLACE({Teléfono} & "", "[^0-9]", ""), ${phoneDigits.length}) = '${phoneDigits}'`);
-  if (linkedinUrl) clauses.push(`LOWER({LinkedIn URL} & "")=LOWER('${esc(String(linkedinUrl).trim())}')`);
-  if (socialIdentity) clauses.push(`LOWER({Social identity key} & "")=LOWER('${esc(String(socialIdentity).trim())}')`);
-  if (!clauses.length) return null;
-  const formula = clauses.length > 1 ? `OR(${clauses.join(",")})` : clauses[0];
-  const url =
-    `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent("Clientes")}` +
-    `?maxRecords=1&filterByFormula=${encodeURIComponent(formula)}`;
-  // Reintenta ante rate-limit / transitorio: un blip acá haría que se cree un
-  // Cliente DUPLICADO en vez de actualizar el existente. Best-effort (null si no se pudo).
-  for (let i = 0; i < 5; i++) {
-    try {
-      const r = await fetch(url, {
-        headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN },
-      });
-      if (r.ok) {
-        const data = await r.json();
-        return data?.records?.[0]?.id || null;
-      }
-      if (r.status === 429 || r.status >= 500) {
-        await sleep(300 * (i + 1));
-        continue;
-      }
-      return null; // 4xx no transitorio (formula/permiso): no insistir
-    } catch (_) {
-      await sleep(300 * (i + 1));
-    }
+  for (const [key, field] of Object.entries({email:"Email", company:"Empresa", socialIdentity:"Social identity key"})) {
+    if (identity[key]) clauses.push(`LOWER(TRIM({${field}} & ""))='${esc(identity[key])}'`);
   }
-  console.error("[leads-worker] dedup Clientes: sin respuesta tras reintentos");
-  return null;
+  if (identity.phone) clauses.push(`RIGHT(REGEX_REPLACE({Teléfono} & "", "[^0-9]", ""), 9) = '${identity.phone}'`);
+  if (identity.rut) clauses.push(`LOWER(REGEX_REPLACE({RUT} & "", "[. -]", ""))='${esc(identity.rut)}'`);
+  // URL canonicalization happens in the resolver; a broad profile clause avoids
+  // missing stored URLs with www, query strings or a trailing slash.
+  if (identity.linkedinUrl) clauses.push(`FIND('${esc(identity.linkedinUrl)}',LOWER({LinkedIn URL} & ""))>0`);
+  if (!clauses.length) return [];
+  const records = [], seen = new Set();
+  let offset = "";
+  for (let page = 0; page < 100; page++) {
+    const url = `${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/Clientes?pageSize=100&filterByFormula=${encodeURIComponent(`OR(${clauses.join(",")})`)}` +
+      (offset ? `&offset=${encodeURIComponent(offset)}` : "");
+    const r = await fetch(url, { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+    if (!r.ok) throw new Error("Client lookup failed: " + r.status);
+    const data = await r.json();
+    if (!Array.isArray(data.records) || data.records.some(r => !r.id || !r.fields)) throw new Error("Malformed client lookup");
+    records.push(...data.records);
+    if (!data.offset) return records;
+    if (typeof data.offset !== "string" || seen.has(data.offset)) throw new Error("Invalid client pagination");
+    seen.add(data.offset); offset = data.offset;
+  }
+  throw new Error("Client lookup pagination limit");
+}
+async function airtableResolveCliente(env, input) {
+  return resolveClientMatch(input, await airtableClientCandidates(env, input));
+}
+// Compatibility for email-only newsletter and platform-scoped social callers.
+// Ambiguity and lookup failures must never be interpreted as a missing customer.
+async function airtableFindCliente(env, input) {
+  const result = await airtableResolveCliente(env, input);
+  if (result.status === "ambiguous") throw new Error("Client identity requires review");
+  return result.record?.id || null;
 }
 
 // Espera breve para el backoff de reintentos ante errores transitorios de Airtable.
@@ -3418,12 +3433,13 @@ function sleep(ms) {
 
 // Crea reintentando: descarta campos que Airtable rechaza (desconocidos o inválidos)
 // y reintenta con backoff ante rate-limit / errores transitorios (429 / 5xx).
-async function airtableCreateTolerant(env, table, fields, maxTries = 8) {
+async function airtableCreateTolerant(env, table, fields, maxTries = 8, noUncertainRetry = false) {
   let f = { ...fields };
   for (let i = 0; i < maxTries; i++) {
     const r = await airtableCreate(env, table, f);
     if (r.ok) return await r.json();
     if (r.status === 429 || r.status >= 500) {
+      if (noUncertainRetry) throw new Error("Airtable create outcome requires review");
       await sleep(300 * (i + 1)); // rate-limit / transitorio → esperar y reintentar
       continue;
     }
@@ -3533,68 +3549,38 @@ async function autoProcessAllowed(env) {
   return true;
 }
 
-// ── Dead-letter: nunca perder un lead si Airtable falla ──────────────────
-async function bufferDeadLetter(env, item) {
-  if (!env.RL) return;
-  try {
-    const key = `dl:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-    await env.RL.put(key, JSON.stringify(item), { expirationTtl: 604800 }); // 7 días
-  } catch (_) {}
-}
-
+// Retained intakes have no automatic TTL. Legacy entries have no trustworthy
+// commit checkpoint: keep them for review instead of risking a duplicate POST.
 async function retryDeadLetters(env) {
-  if (!env.RL || !env.AIRTABLE_TOKEN) return;
-  const { keys } = await env.RL.list({ prefix: "dl:" });
+  if (!env.RL || !env.AIRTABLE_TOKEN || !env.SOCIAL_EVENT_GUARD) return;
+  const keys = [], seen = new Set();
+  let cursor;
+  do {
+    const page = await env.RL.list({ prefix: "dl:", ...(cursor ? { cursor } : {}) });
+    keys.push(...page.keys);
+    cursor = page.list_complete ? undefined : page.cursor;
+    if (cursor && seen.has(cursor)) throw new Error("Invalid intake pagination");
+    if (cursor) seen.add(cursor);
+  } while (cursor);
   for (const k of keys) {
-    const raw = await env.RL.get(k.name);
-    if (!raw) continue;
-    let item;
     try {
-      item = JSON.parse(raw);
-    } catch {
-      await env.RL.delete(k.name);
-      continue;
-    }
-    const { norm, agente, evento, source, campaign, reason } = item;
-    try {
-      let clienteId = await airtableFindCliente(env, {
-        email: norm.email,
-        phone: norm.phone,
-      });
-      const recurrente = !!clienteId;
-      if (!clienteId) {
-        const cliente = await airtableCreateTolerant(
-          env,
-          "Clientes",
-          buildClienteFields(norm, source)
-        );
-        clienteId = cliente?.id || null;
+      const raw = await env.RL.get(k.name);
+      if (!raw) continue;
+      const item = JSON.parse(raw);
+      if (item.version !== 2) {
+        await env.RL.put(k.name, JSON.stringify({ ...item, reviewRequired: true }));
+        continue;
       }
-      await airtableCreateTolerant(
-        env,
-        "Agent_Queue",
-        stripEmpty({
-          Evento: evento,
-          Entidad: "Cliente",
-          "ID entidad": clienteId,
-          Agente: agente,
-          Estado: "Pendiente",
-          Prioridad: source === "google_ads" ? "Alta" : "Media",
-          "Input JSON": JSON.stringify(norm).slice(0, 95000),
-          Source: source,
-          Campaign: campaign,
-          "Fecha creación": new Date().toISOString(),
-        })
-      );
-      await env.RL.delete(k.name); // recuperado → fuera del buffer
-      // Si cayó al buffer antes de crear el Cliente, nunca avisó: avisa ahora.
-      // (Si solo falló Agent_Queue, el aviso ya salió al entrar el lead.)
-      if (!String(reason || "").startsWith("Agent_Queue")) {
-        await waNotify(env, "lead", mensajeLead(norm, source, { recurrente }), { dedupKey: clienteId, ttl: 3600 }).catch(() => {});
+      const result = await runSavedLead(env, k.name, item);
+      if (!result.buffered) {
+        await env.RL.delete(k.name);
+        if (!result.replayed) {
+          const pending = [];
+          await finishLeadIntake(env, { waitUntil: p => pending.push(p) }, item, result);
+          await Promise.allSettled(pending);
+        }
       }
-    } catch (_) {
-      /* sigue en buffer para el próximo intento */
-    }
+    } catch (_) { /* preserve intake; never infer absence from a failed read */ }
   }
 }
 
