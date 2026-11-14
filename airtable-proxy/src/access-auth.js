@@ -236,6 +236,7 @@ function accessAllows(identity,method,path){
   const operator=identity.role==='operator';
   const isWrite=method!=='GET';
   if(path==='/access/me')return method==='GET';
+  if(path==='/lead/review')return admin&&['GET','POST'].includes(method);
   // Solo administradores verificados consultan las claves de servicios externos.
   if(path==='/integrations/check')return admin&&method==='GET';
   if(path==='/ads/campaign-shell')return method==='POST'&&(operator||finance||admin);

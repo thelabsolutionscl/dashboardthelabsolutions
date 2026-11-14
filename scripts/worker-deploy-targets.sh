@@ -20,7 +20,7 @@ case "$mode" in
   push)
     while IFS= read -r file; do
       case "$file" in
-        lead-worker/src/client-match.js) lead=true;proxy=true ;;
+        lead-worker/src/client-match.js|airtable-proxy/src/access-auth.js) lead=true;proxy=true ;;
         lead-worker/*) lead=true ;;
         airtable-proxy/*) proxy=true ;;
         sii-worker/*) sii=true ;;

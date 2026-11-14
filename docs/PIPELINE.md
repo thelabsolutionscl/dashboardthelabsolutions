@@ -270,3 +270,87 @@ simultáneamente el mismo prospecto dentro de este sistema.
 
 `LinkedIn_Events` es el event log del embudo. Los KPI del panel se calculan server-side y
 no reconstruyen tiempos a partir de la etapa actual.
+
+## Revisión segura de identidad e idempotencia (preparado el 14-11-2026)
+
+El matching del Worker devuelve `match`, `ambiguous` o `not_found`; una búsqueda
+fallida nunca equivale a ausencia. Teléfono compartido no autoriza asociación
+automática. Email/perfil/identidad social deben ser únicos y compatibles con
+empresa/RUT. Los casos retenidos no crean Clientes ni Agent_Queue ni adjuntan
+archivos a un cliente elegido por orden.
+
+### Contrato de envío
+
+- Web: `submissionId` UUID v4, generado una vez por solicitud en el navegador,
+  conservado junto al payload durante reintentos/recarga y renovado únicamente
+  después de recepción confirmada. `cotiza.html` implementa este contrato.
+- Google Ads: `lead_id`; LinkedIn: ID de lead real (nunca click ID). Make/Zapier
+  deben conservar el ID upstream al reintentar y distinguir nuevas solicitudes.
+- No se genera un ID nuevo en el servidor para fingir que un reintento es nuevo.
+  Sin ID utilizable, cada recepción se conserva con referencia propia en `dl:` y
+  queda en revisión `missing_submission_id`; no se deduplica indefinidamente por
+  contenido ni crea registros CRM automáticamente. Copias recibidas sin ID se
+  reconcilian por un administrador, sin asumir que son solicitudes nuevas.
+- El guard conserva el payload/adjunto canónico. Un replay con el mismo ID no
+  puede sustituirlo. Una nueva solicitud legítima usa otro ID aunque el contenido
+  sea idéntico. Los IDs no conceden permisos ni sustituyen Turnstile/rate limits.
+
+### Recuperación administrativa
+
+`GET/POST /lead/review` en el Worker reutiliza **el mismo verificador JWT y mapa
+de roles Cloudflare Access del proxy**. Solo acepta identidad firmada `admin`;
+legacy, claves públicas, claves de portal/webhook y service tokens no autorizan.
+Requiere configuración Access coherente en el lead-worker: `ACCESS_ENFORCE=true`,
+`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ACCESS_ROLE_MAP` y los mismos mapas/revocaciones
+aplicables (`ACCESS_SELLER_MAP`, `ACCESS_BLOCKED_EMAILS`,
+`ACCESS_SESSION_NOT_BEFORE`). No se cambiaron valores ni usuarios. Sin esa
+configuración la revisión falla cerrada. `Cf-Access-Jwt-Assertion` debe contener
+un JWT válido de la aplicación existente; no es un email ni una clave inventada.
+
+1. Consultar `GET /lead/review` con la sesión administrativa verificada para
+   enumerar referencias; usar `cursor` para continuar. Consultar
+   `GET /lead/review?key=dl:<hash>` para ver el payload, estado, `revision` e
+   historial. El adjunto es privado: no copiarlo a issues/PR públicos.
+2. Confirmar empresa, contacto y resultado previo. Si falta el cliente correcto,
+   crearlo únicamente mediante el flujo CRM autorizado existente y después de
+   comprobar que no hubo una creación incierta. Este endpoint no crea clientes.
+3. Para estado `review`, enviar POST JSON con `action:"resume"`, `key`,
+   `expectedRevision`, `requestId` UUID, `clienteId` y `reason` (10–2000 caracteres).
+   Se verifican nuevamente los datos del cliente seleccionado; un conflicto de
+   email/empresa/RUT no se puede saltar. La selección humana puede corroborar
+   teléfono cuando no hay otra señal contradictoria. Se registra actor, motivo y
+   fase anterior antes de reanudar. No se cambia ownership ni se refresca la ficha
+   del cliente seleccionado: se crea la tarea y se conserva/sube el adjunto correcto.
+4. Para `creating_client` o `creating_queue`, **no usar resume ni borrar/resetear
+   marcadores**. Comprobar el cliente y la tarea existentes. Enviar
+   `action:"reconcile"` con los mismos campos más `queueId`. La tarea debe apuntar
+   al cliente seleccionado, tener Evento/Agente correctos y su `Input JSON` debe
+   corresponder al payload original. La reconciliación cierra el intake sin
+   repetir POST CRM, adjuntos ni envíos. Si la evidencia es insuficiente, sigue
+   retenido. Un resultado incierto no autoriza crear otra copia.
+5. Reutilizar el mismo `requestId` si se pierde la respuesta de revisión. Repetirlo
+   con parámetros distintos devuelve conflicto. Una revisión obsoleta exige
+   consultar otra vez. Historial reciente y cada registro de auditoría quedan en
+   el Durable Object; el payload/adjunto revisado se archiva en `reviewed:dl:...`
+   antes de la transición. En reconciliación, el operador debe comprobar/entregar
+   cualquier adjunto pendiente desde ese archivo; el endpoint no lo reenvía.
+
+Entradas históricas sin checkpoint de versión 2 continúan retenidas para revisión
+operativa; no se convierte una marca antigua en permiso para repetir POSTs.
+El archivo protegido y auditorías no tienen borrado automático en esta corrección.
+
+### Aplicación futura coordinada (no ejecutada)
+
+1. Mantener los PR en draft hasta revisión y autorización de aplicación. Preparar
+   las variables Access del lead-worker con los mismos roles/revocaciones; no
+   habilitar un modo legacy para evitar la configuración.
+2. Aplicar primero el backend del dashboard: durante la transición los clientes
+   antiguos sin ID quedan conservados para revisión, nunca se pierden ni generan
+   duplicados CRM automáticos.
+3. Aplicar `web-thelab-solutions`: `src/lib/leads.ts`, formularios Contact,
+   ContactForm y ClienteForm, ruta `/api/lead` y Server Action `cliente` conservan
+   la referencia. El correo de respaldo informa resultado incierto y exige
+   reconciliar esa referencia antes de crear registros manuales.
+4. Verificar en entorno aislado solicitudes nuevas idénticas, reintentos del mismo
+   ID, fallo de lookup, fallo de POST incierto y recuperación administrativa.
+   No usar contactos reales ni enviar mensajes de prueba a clientes.

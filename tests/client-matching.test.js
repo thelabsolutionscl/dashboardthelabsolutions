@@ -6,8 +6,8 @@ const { webcrypto } = require('node:crypto');
 const root = require('node:path').join(__dirname, '..');
 function load(file, names, extra = {}) {
   const source = fs.readFileSync(root + '/' + file, 'utf8')
-    .replace(/^import .*;\s*$/gm, '').replace(/export default \{/, 'const worker = {').replace(/export (class|function) /g, '$1 ');
-  const context = vm.createContext({ console: {error() {}}, URL, Request, Response, Headers, TextEncoder,
+    .replace(/^import .*;\s*$/gm, '').replace(/export default \{/, 'const worker = {').replace(/export (async )?(class|function) /g, '$1$2 ');
+  const context = vm.createContext({ console: {error() {}}, URL, Request, Response, Headers, TextEncoder, TextDecoder,
     crypto: webcrypto, btoa, atob, setTimeout, clearTimeout, ...extra });
   vm.runInContext(source + '\n;globalThis.api = {' + names.join(',') + '};', context);
   return context.api;
@@ -15,7 +15,7 @@ function load(file, names, extra = {}) {
 const matcher = load('lead-worker/src/client-match.js', ['resolveClientMatch', 'clientIdentity']);
 const row = (id, fields) => ({id, fields});
 const A = 'recAAAAAAAAAAAAAA', B = 'recBBBBBBBBBBBBBB', Q = 'recQQQQQQQQQQQQQQ', P = 'recPPPPPPPPPPPPPP';
-const norm = {name:'Synthetic Contact',company:'Example Alpha',email:'alpha@example.invalid',phone:'+56 9 0000 0011',service:'Prototype'};
+const norm = {submissionId:'11111111-1111-4111-8111-111111111111',name:'Synthetic Contact',company:'Example Alpha',email:'alpha@example.invalid',phone:'+56 9 0000 0011',service:'Prototype'};
 const alpha = row(A, {Empresa:norm.company,Email:norm.email,'Teléfono':norm.phone});
 const beta = row(B, {Empresa:'Example Beta',Email:'beta@example.invalid','Teléfono':norm.phone});
 const identity = fields => matcher.resolveClientMatch(fields, [alpha,beta]);
@@ -27,6 +27,7 @@ function memory() {
 function harness(options = {}) {
   const kv = memory(), states = new Map(), writes = [], reads = [];
   let candidates = options.candidates || [beta,alpha], failLookup = !!options.failLookup;
+  const recordsById=new Map((options.records||[]).map(r=>[r.id,r]));
   const fetchMock = async (url, init = {}) => {
     const u = new URL(url); const method = init.method || 'GET';
     if (u.hostname === 'api.linkedin.com' && options.officialLead) return Response.json(options.officialLead);
@@ -34,6 +35,8 @@ function harness(options = {}) {
       reads.push(u);
       if (failLookup) return Response.json({}, {status:503});
       if (options.badLookup) return Response.json({unexpected:true});
+      const recordId=u.pathname.split('/').pop();
+      if(recordId.startsWith('rec')){const record=recordsById.get(recordId)||candidates.find(r=>r.id===recordId);return Response.json(record||{}, {status:record?200:404});}
       if (options.pages && !u.searchParams.has('offset')) return Response.json({records:[beta],offset:'next'});
       return Response.json({records:options.pages ? [alpha] : candidates});
     }
@@ -41,10 +44,11 @@ function harness(options = {}) {
     if (options.failPost && method === 'POST') return Response.json({}, {status:503});
     if (options.failQueue && u.pathname.endsWith('/Agent_Queue')) return Response.json({}, {status:503});
     const id = u.pathname.endsWith('/Clientes') ? A : u.pathname.endsWith('/Agent_Queue') ? Q : A;
+    if(method==='POST')recordsById.set(id,{id,fields:body.fields});
     return Response.json({id,fields:body.fields});
   };
-  const api = load('lead-worker/src/index.js', ['worker','createLeadAndQueue','retryDeadLetters','SocialEventGuard','airtableFindCliente','handleNewsletterUnsubscribe','nlSign'], {
-    ...matcher, fetch:fetchMock, waNotify:async()=>[], mensajeLead:()=>'', deliverFundAlerts:async()=>{},
+  const api = load('lead-worker/src/index.js', ['worker','handleLeadReview','createLeadAndQueue','retryDeadLetters','SocialEventGuard','airtableFindCliente','handleNewsletterUnsubscribe','nlSign'], {
+    ...matcher, accessAuthorize:options.accessAuthorize|| (async(_request,env)=>env.testAuth||{legacy:true}), fetch:fetchMock, waNotify:async()=>[], mensajeLead:()=>'', deliverFundAlerts:async()=>{},
   });
   const env = {AIRTABLE_TOKEN:'synthetic',AIRTABLE_BASE_ID:'test',RL:kv, SOCIAL_EVENT_GUARD:{
     idFromName:k=>k, get(k) { if(!states.has(k)) states.set(k,new api.SocialEventGuard({storage:memory()},env));
@@ -52,7 +56,7 @@ function harness(options = {}) {
   }};
   const pending = [], ctx={waitUntil:p=>pending.push(p)};
   const item = {norm:{...norm},agente:'LEAD_AGENT',evento:'lead.received',source:'web',attachment:{name:'synthetic.txt',type:'text/plain',data:'dGVzdA=='}};
-  return {api,env,kv,writes,reads,states,item,ctx,pending,
+  return {api,env,kv,writes,reads,states,item,ctx,pending,recordsById,
     async submit() { const r=await api.createLeadAndQueue(env,ctx,{},item); await Promise.all(pending); return {status:r.status,body:await r.json()}; },
     setCandidates(v){candidates=v;}, recover(){failLookup=false;}};
 }
@@ -153,7 +157,7 @@ test('LinkedIn uncertain previous create cannot create another client',async()=>
 test('web, Ads and LinkedIn HTTP routes hold identity conflicts without CRM writes',async()=>{
   for(const [path,key,header] of [['/lead','PUBLIC_LEAD_KEY','X-Public-Lead-Key'],['/webhooks/google-ads','GOOGLE_ADS_WEBHOOK_KEY','X-Google-Ads-Webhook-Key'],['/webhooks/linkedin','LINKEDIN_WEBHOOK_KEY','X-Linkedin-Webhook-Key']]) {
     const h=harness(); h.env[key]='synthetic-key';
-    const body={...norm,company:'Example Other',leadId:'synthetic-event'};
+    const body={...norm,company:'Example Other',leadId:'synthetic-event',lead_id:'synthetic-event'};
     const request=()=>new Request('https://test.invalid'+path,{method:'POST',headers:{[header]:'synthetic-key','Content-Type':'application/json'},body:JSON.stringify(body)});
     const result=await h.api.worker.fetch(request(),h.env,h.ctx);assert.equal(result.status,200);
     assert.equal((await result.json()).reviewRequired,true);await Promise.all(h.pending);assert.equal(h.writes.filter(w=>/Clientes|Agent_Queue|uploadAttachment/.test(w.url)).length,0);
@@ -233,4 +237,94 @@ test('completed LinkedIn transport replay cannot overwrite staging with changed 
   await h.kv.delete('linkedin:webhook:synthetic-event');const before=h.writes.length;
   const replay=await send({...body,email:'changed@example.invalid',company:'Example Other'});
   assert.equal(replay.replayed,true);assert.equal(replay.canonicalItem,undefined);assert.equal(h.writes.length,before);
+});
+const admin={identity:{role:'admin',email:'admin@example.invalid'}};
+async function review(h, action='inspect', fields={}){
+  h.env.testAuth=admin;
+  const key=fields.key||[...h.kv.map.keys()].find(k=>k.startsWith('dl:'));
+  const request=action==='inspect'
+    ?new Request('https://test.invalid/lead/review?key='+encodeURIComponent(key))
+    :new Request('https://test.invalid/lead/review',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({key,action,requestId:webcrypto.randomUUID(),reason:'Synthetic identity checked by administrator',...fields})});
+  const r=await h.api.handleLeadReview(request,h.env,h.ctx,{});await Promise.all(h.pending);
+  return {status:r.status,body:await r.json()};
+}
+test('admin review resumes a held intake against a verified customer, audits actor, and replays without extra writes',async()=>{
+  const h=harness({candidates:[beta],records:[alpha]});const held=await h.submit();
+  assert.equal(held.body.reviewRequired,true);assert.equal(h.writes.length,0);
+  const inspected=await review(h);const requestId=webcrypto.randomUUID();
+  const fields={key:held.body.intakeKey,expectedRevision:inspected.body.revision,clienteId:A,requestId,actor:{role:'admin',email:'forged@example.invalid'}};
+  const resumed=await review(h,'resume',fields);assert.equal(resumed.status,200);assert.equal(resumed.body.clienteId,A);
+  assert.ok(h.writes.every(w=>!w.url.includes(B)));
+  assert.equal(h.writes.filter(w=>w.method==='PATCH'&&w.url.includes('Clientes')).length,0);
+  const count=h.writes.length;assert.equal((await review(h,'resume',fields)).body.replayed,true);assert.equal(h.writes.length,count);
+  const final=await review(h,'inspect',{key:held.body.intakeKey});
+  assert.equal(final.body.state.phase,'complete');assert.equal(final.body.audit[0].actor,'admin@example.invalid');
+  assert.equal(final.body.audit[0].decision,'resume');assert.ok(await h.kv.get('reviewed:'+held.body.intakeKey));
+});
+test('review rejects stale revisions, conflicting customer and non-admin/legacy/service identities',async()=>{
+  const h=harness({candidates:[beta]});const held=await h.submit();const inspected=await review(h);
+  assert.equal((await review(h,'resume',{expectedRevision:'0'.repeat(64),clienteId:A})).status,409);
+  assert.equal((await review(h,'resume',{expectedRevision:inspected.body.revision,clienteId:B})).status,409);
+  for(const auth of [{legacy:true},{serviceIdentity:{role:'lead-service'}},{identity:{role:'operator'}},{identity:{role:'sales'}},{identity:{role:'finance'}}]){
+    h.env.testAuth=auth;
+    const r=await h.api.handleLeadReview(new Request('https://test.invalid/lead/review?key='+held.body.intakeKey),h.env,h.ctx,{});
+    assert.equal(r.status,403);
+  }
+  assert.equal(h.writes.length,0);
+  const authApi=load('airtable-proxy/src/access-auth.js',['accessAllows','accessAuthorize']);
+  for(const role of ['viewer','sales','operator','finance'])assert.equal(authApi.accessAllows({role},'POST','/lead/review'),false);
+  assert.equal(authApi.accessAllows({role:'admin'},'POST','/lead/review'),true);
+  const missing=await authApi.accessAuthorize(new Request('https://test.invalid'),{},'/lead/review');assert.equal(missing.legacy,true);
+});
+test('uncertain writes cannot resume; reconciliation verifies existing queue and never repeats CRM writes',async()=>{
+  for(const options of [{candidates:[],failPost:true},{failQueue:true}]){
+    const h=harness(options);const held=await h.submit();h.recordsById.set(A,alpha);
+    const inspected=await review(h);const fields={key:held.body.intakeKey,expectedRevision:inspected.body.revision,clienteId:A};
+    const before=h.writes.length;
+    assert.equal((await review(h,'resume',fields)).status,409);
+    const queue={id:Q,fields:{Entidad:'Cliente','ID entidad':B,Evento:h.item.evento,Agente:h.item.agente,'Input JSON':JSON.stringify(h.item.norm)}};
+    h.recordsById.set(Q,queue);
+    assert.equal((await review(h,'reconcile',{...fields,queueId:Q})).status,409);
+    queue.fields['ID entidad']=A;h.recordsById.set(Q,queue);
+    const reconciled=await review(h,'reconcile',{...fields,queueId:Q});assert.equal(reconciled.body.reconciled,true);
+    await h.api.retryDeadLetters(h.env);assert.equal(h.writes.length,before);
+    const final=await review(h,'inspect',{key:held.body.intakeKey});assert.equal(final.body.state.phase,'complete');
+    assert.equal(final.body.audit[0].before,inspected.body.state.phase);
+  }
+});
+test('new submission IDs allow identical legitimate requests while same ID replays exactly once',async()=>{
+  const h=harness();await h.submit();await h.submit();
+  assert.equal(h.writes.filter(w=>w.url.endsWith('/Agent_Queue')).length,1);
+  h.item.norm.submissionId=webcrypto.randomUUID();await h.submit();
+  assert.equal(h.writes.filter(w=>w.url.endsWith('/Agent_Queue')).length,2);
+});
+test('missing submission ID preserves each receipt for review, with no automatic CRM or notification workflow',async()=>{
+  const h=harness();delete h.item.norm.submissionId;
+  const one=await h.submit(),two=await h.submit();
+  assert.equal(one.body.reason,'missing_submission_id');assert.equal(two.body.reviewRequired,true);
+  assert.notEqual(one.body.intakeKey,two.body.intakeKey);assert.equal(h.writes.length,0);
+  assert.equal([...h.kv.map.keys()].filter(k=>k.startsWith('dl:')).length,2);
+  await h.api.retryDeadLetters(h.env);assert.equal(h.writes.length,0);
+});
+test('review uses real JWT verification: signed admin succeeds, wrong audience, expired, forged and non-admin tokens fail closed',async()=>{
+  const {generateKeyPairSync,sign}=require('node:crypto');
+  const {publicKey,privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+  const jwk={...publicKey.export({format:'jwk'}),kid:'synthetic-key',alg:'RS256',use:'sig'};
+  const team='https://synthetic-review.cloudflareaccess.com',aud='synthetic-review-audience';
+  const auth=load('airtable-proxy/src/access-auth.js',['accessAuthorize'],{fetch:async()=>Response.json({keys:[jwk]})});
+  const h=harness({candidates:[beta],records:[alpha],accessAuthorize:auth.accessAuthorize});
+  Object.assign(h.env,{ACCESS_ENFORCE:'true',ACCESS_TEAM_DOMAIN:team,ACCESS_AUD:aud,
+    ACCESS_ROLE_MAP:JSON.stringify({'admin@example.invalid':'admin','viewer@example.invalid':'viewer'})});
+  const held=await h.submit();const url='https://test.invalid/lead/review?key='+held.body.intakeKey;
+  const token=(email='admin@example.invalid',extra={})=>{
+    const now=Math.floor(Date.now()/1000),encode=v=>Buffer.from(JSON.stringify(v)).toString('base64url');
+    const body=encode({alg:'RS256',kid:'synthetic-key'})+'.'+encode({iss:team,aud:[aud],iat:now-2,exp:now+120,type:'app',email,...extra});
+    return body+'.'+sign('RSA-SHA256',Buffer.from(body),privateKey).toString('base64url');
+  };
+  for(const [jwt,status] of [['',401],['forged',401],[token('viewer@example.invalid'),403],[token(undefined,{aud:['wrong']}),401],[token(undefined,{exp:1}),401]]){
+    const r=await h.api.handleLeadReview(new Request(url,{headers:{'Cf-Access-Jwt-Assertion':jwt}}),h.env,h.ctx,{});assert.equal(r.status,status);
+  }
+  const r=await h.api.handleLeadReview(new Request(url,{headers:{'Cf-Access-Jwt-Assertion':token()}}),h.env,h.ctx,{});
+  assert.equal(r.status,200);assert.equal(h.writes.length,0);
 });

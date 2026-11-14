@@ -36,6 +36,7 @@
  */
 
 import { waNotify, waSend, waPhone, mensajeLead, mensajeImpresora, waDailyReminders, WA_RUTAS, waWebhookVerify, waWebhookFirmaValida, waWebhookEvento } from "./wa-notify.js";
+import { accessAuthorize } from "../../airtable-proxy/src/access-auth.js";
 import { clientIdentity, resolveClientMatch } from "./client-match.js";
 import { deliverFundAlerts } from "./fondos-notify.js";
 
@@ -53,6 +54,7 @@ export default {
     }
 
     try {
+      if (url.pathname === "/lead/review") return await handleLeadReview(request, env, ctx, cors);
       // Latido para la "Oficina Virtual" del dashboard (best-effort, no bloquea).
       if (ctx && env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) {
         ctx.waitUntil(ofHeartbeat(env, "lead-worker").catch(() => {}));
@@ -2630,6 +2632,13 @@ export class SocialEventGuard {
     if(request.method!=="POST")return Response.json({ok:false,error:"Method not allowed"},{status:405});
     const path=new URL(request.url).pathname;
     let p;try{p=await request.json();}catch(_){return Response.json({ok:false,error:"Invalid JSON"},{status:422});}
+    if(path==="/lead-review"){
+      if(!/^dl:[a-f0-9]{64}$/.test(p?.key||"")||p?.actor?.role!=="admin")
+        return Response.json({ok:false,error:"Invalid review request"},{status:403});
+      const work=(this.leadPending||Promise.resolve()).then(()=>reviewSavedLead(this.env,this.state.storage,p));
+      this.leadPending=work.catch(()=>{});
+      return Response.json(await work);
+    }
     if(path==="/lead-intake"){
       if(!/^dl:[a-f0-9]{64}$/.test(p?.key||"")||!p?.item?.norm)
         return Response.json({ok:false,error:"Invalid lead intake"},{status:422});
@@ -2725,17 +2734,133 @@ function buildClienteFields(norm, source) {
   });
 }
 
+async function leadDigest(value) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map(v => v.toString(16).padStart(2, "0")).join("");
+}
+
+async function handleLeadReview(request, env, ctx, cors) {
+  if (!["GET", "POST"].includes(request.method)) return json({ error: "Method not allowed" }, 405, cors);
+  const origin = request.headers.get("Origin");
+  if (origin && !String(env.ALLOWED_ORIGINS || "").split(",").map(v => v.trim()).includes(origin))
+    return json({ error: "Forbidden origin" }, 403, cors);
+  const auth = await accessAuthorize(request, env, "/lead/review");
+  if (auth.response) return auth.response;
+  // The public APP_KEY, portal key, legacy mode and webhook keys grant nothing.
+  if (auth.identity?.role !== "admin") return json({ error: "Verified administrator required" }, 403, cors);
+  if (!env.RL || !env.SOCIAL_EVENT_GUARD) return json({ error: "Review storage unavailable" }, 503, cors);
+  const headers = { ...cors, "Cache-Control": "private, no-store" };
+  const url = new URL(request.url);
+  let p;
+  if (request.method === "GET") {
+    const key = url.searchParams.get("key");
+    if (!key) {
+      const page = await env.RL.list({ prefix: "dl:", limit: 50, cursor: url.searchParams.get("cursor") || undefined });
+      return json({ keys: page.keys.map(k => k.name), cursor: page.cursor, complete: page.list_complete }, 200, headers);
+    }
+    p = { key, action: "inspect" };
+  } else {
+    p = await readJson(request);
+    if (!p || !["resume", "reconcile"].includes(p.action) ||
+        !/^[a-f0-9-]{36}$/i.test(p.requestId || "") || !/^[a-f0-9]{64}$/.test(p.expectedRevision || "") ||
+        typeof p.reason !== "string" || p.reason.trim().length < 10 || p.reason.length > 2000)
+      return json({ error: "Review requires action, requestId, expectedRevision and reason" }, 422, headers);
+  }
+  if (!/^dl:[a-f0-9]{64}$/.test(p.key || "")) return json({ error: "Invalid intake key" }, 422, headers);
+  const stub = env.SOCIAL_EVENT_GUARD.get(env.SOCIAL_EVENT_GUARD.idFromName("lead-intake:" + p.key));
+  const reply = await stub.fetch("https://social-guard.internal/lead-review", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, actor: auth.identity }) });
+  if (!reply.ok) return json({ error: "Review guard unavailable" }, 503, headers);
+  const { canonicalItem, completion, ...result } = await reply.json();
+  if (completion && !result.replayed) await finishLeadIntake(env, ctx, canonicalItem, completion);
+  return json(result, result.status || 200, headers);
+}
+
+async function leadReadRecord(env, table, id) {
+  if (!/^rec[A-Za-z0-9]{14}$/.test(id || "")) throw new Error("Invalid record ID");
+  const r = await fetch(`${AIRTABLE_API}/${env.AIRTABLE_BASE_ID}/${encodeURIComponent(table)}/${id}`,
+    { headers: { Authorization: "Bearer " + env.AIRTABLE_TOKEN } });
+  if (!r.ok) throw new Error("Review record read failed");
+  const row = await r.json();
+  if (row?.id !== id || !row.fields) throw new Error("Invalid review record");
+  return row;
+}
+
+// Explicit admin confirmation can use a phone as contact evidence, but cannot
+// override a conflicting email, company or RUT or discard a supplied business.
+function reviewClientCompatible(norm, fields) {
+  const p = clientIdentity(norm), c = clientIdentity(fields);
+  if (["email", "company", "rut", "linkedinUrl", "socialIdentity"].some(k => p[k] && c[k] && p[k] !== c[k])) return false;
+  if ((p.company || p.rut) && !(p.company && p.company === c.company || p.rut && p.rut === c.rut)) return false;
+  return ["email", "phone", "linkedinUrl", "socialIdentity"].some(k => p[k] && p[k] === c[k]);
+}
+
+async function reviewSavedLead(env, storage, p) {
+  const state = await storage.get("lead-state") || { phase: "lookup" };
+  const revision = await leadDigest(JSON.stringify(state));
+  const raw = await env.RL.get(p.key) || await env.RL.get("reviewed:" + p.key);
+  if (!raw) return { status: 404, error: "Retained intake unavailable" };
+  const item = JSON.parse(raw);
+  if (p.action === "inspect") return { state, revision, item, audit: await storage.get("review-history") || [] };
+  const requestDigest = await leadDigest(JSON.stringify([p.action, p.clienteId, p.queueId || "", p.reason, p.expectedRevision, p.actor.email]));
+  const auditKey = "review-audit:" + p.requestId;
+  const previous = await storage.get(auditKey);
+  if (previous) return previous.requestDigest === requestDigest
+    ? { ...(previous.result || { status: 409, error: "Review outcome requires inspection" }), replayed: true }
+    : { status: 409, error: "Review request ID already used" };
+  if (revision !== p.expectedRevision) return { status: 409, error: "Intake changed; inspect again" };
+  if (item.version !== 2 || state.phase === "complete") return { status: 409, error: "Intake not eligible for review action" };
+  if (p.action === "resume" && state.phase !== "review")
+    return { status: 409, error: "Only held review can resume; uncertain writes require reconciliation" };
+  let client, queue;
+  try {
+    client = await leadReadRecord(env, "Clientes", p.clienteId);
+    if (!reviewClientCompatible(item.norm, client.fields)) return { status: 409, error: "Selected customer conflicts with retained identity" };
+    if (p.action === "reconcile") {
+      queue = await leadReadRecord(env, "Agent_Queue", p.queueId);
+      const f = queue.fields, input = JSON.parse(f["Input JSON"] || "null");
+      const keys = Object.keys(item.norm).sort();
+      if (f.Entidad !== "Cliente" || f["ID entidad"] !== client.id || f.Evento !== item.evento || f.Agente !== item.agente ||
+          !input || Object.keys(input).length !== keys.length || keys.some(k => JSON.stringify(input[k]) !== JSON.stringify(item.norm[k])))
+        return { status: 409, error: "Queue does not prove completion of this intake" };
+    }
+  } catch (_) { return { status: 503, error: "Could not verify review targets" }; }
+  const audit = { requestId: p.requestId, requestDigest, actor: p.actor.email, reason: p.reason,
+    decision: p.action, before: state.phase, clienteId: client.id, queueId: queue?.id || null, at: new Date().toISOString() };
+  // Audit and archive precede any state transition. Never reset uncertain POSTs.
+  await storage.put(auditKey, audit);
+  const history = await storage.get("review-history") || [];
+  await storage.put("review-history", [...history.slice(-19), audit]);
+  await env.RL.put("reviewed:" + p.key, JSON.stringify(item));
+  let result, completion;
+  if (p.action === "reconcile") {
+    result = { ok: true, reconciled: true, clienteId: client.id, queueId: queue.id };
+    await storage.put("lead-state", { ...state, phase: "complete", result, reviewAudit: p.requestId });
+    await env.RL.delete(p.key);
+  } else {
+    await storage.put("lead-state", { ...state, phase: "client_saved", clienteId: client.id,
+      recurrente: true, reviewed: true, reviewAudit: p.requestId });
+    const processed = await processSavedLead(env, storage, p.key, item);
+    result = { ok: true, ...processed };
+    if (!processed.buffered) completion = processed;
+  }
+  await storage.put(auditKey, { ...audit, result });
+  return { ...result, canonicalItem: item, completion };
+}
+
 async function createLeadAndQueue(env, ctx, cors, item) {
   if (!env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID || !env.RL || !env.SOCIAL_EVENT_GUARD)
     return json({ ok: false, error: "Almacenamiento seguro de leads no configurado" }, 503, cors);
-  // Stable transport key prevents replay after a lost HTTP response from creating
-  // another intake. Without an external event ID, identical normalized payloads
-  // coalesce conservatively; a new commercial request must change the brief.
+  // Upstream event IDs and browser submission IDs distinguish new commercial
+  // requests from transport retries. Missing IDs are preserved, never auto-run.
   const externalId = item.norm.linkedinLeadId || item.norm.externalLeadId;
-  const fingerprint = JSON.stringify(externalId ? [item.source, item.evento, externalId] :
-    [item.source, item.evento, item.campaign || "", item.norm, item.attachment || null]);
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
-  const key = "dl:" + [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, "0")).join("");
+  const submissionId = item.norm.submissionId;
+  const validExternal = typeof externalId === "string" && /^[A-Za-z0-9:._-]{1,200}$/.test(externalId);
+  const validSubmission = typeof submissionId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(submissionId);
+  item = { ...item, identityMissing: !validExternal && !validSubmission };
+  const fingerprint = JSON.stringify([item.source, item.evento,
+    validExternal ? "event:" + externalId : validSubmission ? "submission:" + submissionId : "unidentified:" + crypto.randomUUID()]);
+  const key = "dl:" + await leadDigest(fingerprint);
   try {
     // Canonical preservation happens inside the serialized guard, never here:
     // a changed replay must not replace the original payload or attachment.
@@ -2751,7 +2876,7 @@ async function createLeadAndQueue(env, ctx, cors, item) {
     } else if (!result.replayed) {
       await finishLeadIntake(env, ctx, savedItem, result);
     }
-    return json({ ok: true, ...result }, 200, cors);
+    return json({ ok: true, intakeKey: key, ...result }, 200, cors);
   } catch (e) {
     // Never acknowledge preservation if storage/guard could not be confirmed.
     return json({ ok: false, error: "No se pudo confirmar la recepción segura del lead" }, 503, cors);
@@ -2773,8 +2898,8 @@ async function runSavedLead(env, key, item) {
 async function preserveAndProcessLead(env, storage, key, raw) {
   const state = await storage.get("lead-state");
   if (state?.phase === "complete") return await processSavedLead(env, storage, key, {});
-  const { norm, agente, evento, source, campaign, attachment } = raw;
-  const item = { norm, agente, evento, source, campaign, attachment };
+  const { norm, agente, evento, source, campaign, attachment, identityMissing } = raw;
+  const item = { norm, agente, evento, source, campaign, attachment, identityMissing };
   const encoded = JSON.stringify(item);
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(encoded));
   const digest = [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, "0")).join("");
@@ -2814,6 +2939,11 @@ async function processSavedLead(env, storage, key, item) {
   const { norm, agente, evento, source, campaign, attachment } = item;
   try {
     if (state.phase === "lookup") {
+      if (item.identityMissing) {
+        await save({ phase: "review", reason: "missing_submission_id" });
+        await env.RL.put(key, JSON.stringify({ ...item, version: 2, review: state }));
+        return held();
+      }
       const resolution = await airtableResolveCliente(env, norm);
       if (resolution.status === "ambiguous") {
         await save({ phase: "review", reason: resolution.reason, candidateIds: resolution.candidateIds });
@@ -2830,7 +2960,14 @@ async function processSavedLead(env, storage, key, item) {
       }
     }
     if (state.phase === "client_saved") {
-      if (state.recurrente) {
+      if (state.reviewed) {
+        const selected = await leadReadRecord(env, "Clientes", state.clienteId);
+        if (!reviewClientCompatible(norm, selected.fields)) {
+          await save({ phase: "review", reason: "reviewed_identity_changed" });
+          return held();
+        }
+      }
+      if (state.recurrente && !state.reviewed) {
         // Revalidate on recovery: identity may have changed while intake was held.
         const resolution = await airtableResolveCliente(env, norm);
         if (resolution.status !== "match" || resolution.record.id !== state.clienteId) {
@@ -3229,6 +3366,7 @@ async function uploadAttachmentToCliente(env, recordId, att) {
 function normalizeWeb(b) {
   return {
     name: str(b.name),
+    submissionId: str(b.submissionId),
     company: str(b.company),
     email: str(b.email),
     phone: str(b.phone),

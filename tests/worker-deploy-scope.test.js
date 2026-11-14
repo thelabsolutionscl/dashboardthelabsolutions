@@ -53,3 +53,7 @@ test('shared client matching changes select both consumers but never SII',()=>{
   assert.deepEqual(select('push','lead-worker/src/client-match.js\n').outputs,
     {lead:'true',proxy:'true',sii:'false'});
 });
+test('shared Access verifier changes select both identity consumers',()=>{
+  assert.deepEqual(select('push','airtable-proxy/src/access-auth.js\n').outputs,
+    {lead:'true',proxy:'true',sii:'false'});
+});
