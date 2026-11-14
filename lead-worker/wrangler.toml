@@ -135,3 +135,9 @@ new_sqlite_classes = ["SocialEventGuard"]
 #   RESEND_API_KEY          doble opt-in del formulario web
 #   RESEND_WEBHOOK_SECRET   firma whsec_... del webhook /newsletter/resend-webhook
 # El envío masivo NO vive en este Worker; lo ejecuta airtable-proxy /newsletter/send.
+
+# Revisión /lead/review: reutiliza el verificador y roles Access del proxy.
+# Configurar los mismos ACCESS_ENFORCE, ACCESS_TEAM_DOMAIN, ACCESS_AUD,
+# ACCESS_ROLE_MAP y mapas/revocaciones aplicables en el entorno del lead-worker.
+# Sin identidad admin firmada no hay fallback a claves públicas/portal/webhooks.
+# No se incorporan valores ni nuevas personas autorizadas en este archivo.

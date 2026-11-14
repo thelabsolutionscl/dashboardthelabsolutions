@@ -298,7 +298,7 @@ test('cableado: el Worker avisa leads, corre el resumen y protege /notify con WA
   assert.match(WORKER,/waDailyReminders\(env, new Date\(event\.scheduledTime/);
   assert.match(WORKER,/!env\.WA_NOTIFY_KEY \|\| !timingSafeEqual\(key, env\.WA_NOTIFY_KEY\)/);
   assert.match(WORKER,/perdido \? 502 : 200/,'si el aviso se perdería, el farm-controller debe reintentar');
-  assert.match(WORKER,/startsWith\("Agent_Queue"\)/,'recuperar solo la tarea no re-avisa el lead');
+  assert.match(WORKER,/if \(!result\.replayed\)/,'un replay completado no re-avisa el lead');
   assert.match(TOML,/WA_PHONE_NICANOR = "56971806142"/);
   assert.match(TOML,/WA_PHONE_GUSTAVO = "56988285822"/);
   assert.doesNotMatch(TOML,/^WA_ACCESS_TOKEN\s*=/m,'el token va como secreto, nunca en el toml');

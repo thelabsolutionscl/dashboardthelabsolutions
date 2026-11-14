@@ -14,6 +14,7 @@ test('service-only route uses same Anthropic cost guard without generic proxy',(
 });
 let pass=true;
 const srcEval=src.replace("import { accessAuthorize } from './access-auth.js';",'')
+  .replace('import { resolveClientMatch } from "../../lead-worker/src/client-match.js";',require('./helpers/client-match-source.cjs'))
   .replace('export class AiBudgetGuard','class AiBudgetGuard')
   .replace('export class CrmMutationGuard','class CrmMutationGuard')
   .replace('export default','const worker =');
