@@ -3371,11 +3371,11 @@
   </div>
 
   <!-- ── CALENDARIO ── -->
-  <!-- ── ESCULTOR DE FOTOS — IMAGEN → STL CON IA DE PROFUNDIDAD LOCAL (js/foto3d.js) ── -->
+  <!-- ── ESCULTOR DE FOTOS — IMAGEN → STL CON HUNYUAN3D (js/foto3d.js) ── -->
   <div id="maquinaEscultorView" class="maquina-section" data-maq-view="escultor" style="display:none;margin-bottom:28px">
     <div class="maq-view-head">
-      <div><div class="maq-view-title">🗿 Escultor de fotos</div><div class="maq-view-sub">Convierte una foto en una pieza imprimible: figura con base, medallón, llavero u objeto. La IA de profundidad corre en este navegador; la foto no sale del equipo.</div></div>
-      <div class="maq-view-actions"><span class="badge badge-purple">Imagen → STL · IA local</span></div>
+      <div><div class="maq-view-title">🗿 Escultor de fotos</div><div class="maq-view-sub">Convierte una foto en una pieza imprimible con Hunyuan3D (Tencent): objeto 3D completo, medallón o llavero. La malla se genera en un servidor público de Hugging Face: la foto se envía a ese servicio.</div></div>
+      <div class="maq-view-actions"><span class="badge badge-purple">Imagen → STL · Hunyuan3D</span></div>
     </div>
     <div class="card f3d">
       <div id="f3dDrop" class="f3d-drop">
@@ -3389,22 +3389,32 @@
           <div class="f3d-pane">
             <div class="f3d-pane-head">
               <b>Foto</b>
-              <div class="f3d-seg"><button type="button" class="active" data-f3dview="mascara" onclick="Foto3D.setView('mascara')">Recorte</button><button type="button" data-f3dview="profundidad" onclick="Foto3D.setView('profundidad')">Profundidad</button><button type="button" data-f3dview="original" onclick="Foto3D.setView('original')">Original</button></div>
+              <div class="f3d-seg"><button type="button" class="active" data-f3dview="foto" onclick="Foto3D.setView('foto')">Foto</button><button type="button" data-f3dview="frontal" title="Profundidad de la vista frontal del modelo 3D: más claro = más cerca. Es la base del medallón y del llavero." onclick="Foto3D.setView('frontal')">Vista frontal</button></div>
             </div>
             <div id="f3dSrcWrap" class="f3d-src"><canvas id="f3dSrc"></canvas></div>
             <div class="f3d-row">
-              <label class="f3d-field f3d-inline"><span>Relieve desde</span><select class="field-select" id="f3dSource" onchange="Foto3D.onSourceChange()"><option value="ia">IA de profundidad</option><option value="brillo">Brillo de la imagen</option></select></label>
-              <label class="f3d-field f3d-inline" title="Normal = resolución de entrenamiento (518 px), la más estable. Alto y Máximo ven más detalle pero algunas GPU devuelven picos; si pasa, baja sola."><span>Detalle de la IA</span><select class="field-select" id="f3dAiQuality" onchange="Foto3D.onQualityChange()"><option value="normal">Normal · 518 px</option><option value="alto">Alto · 770 px</option><option value="maximo">Máximo · 1022 px</option></select></label>
-              <button class="btn btn-ghost btn-sm" id="f3dDepthBtn" onclick="Foto3D.runDepth()">↻ Recalcular IA</button>
+              <label class="f3d-field f3d-inline" title="Rápido usa Hunyuan3D-2 mini Turbo (pocos segundos de GPU: rinde más cuota gratis). Estándar usa el modelo completo, con más detalle y unos 30 s de GPU por pieza."><span>Modo</span><select class="field-select" id="f3dQuality"><option value="rapido">Rápido · mini Turbo</option><option value="estandar">Estándar · más detalle</option></select></label>
+              <label class="f3d-field f3d-inline" title="Resolución con la que se extrae la malla. Liviana pesa menos; Normal conserva más detalle."><span>Malla</span><select class="field-select" id="f3dOctree"><option value="196">Liviana</option><option value="256" selected>Normal</option></select></label>
+            </div>
+            <div class="f3d-row">
+              <button class="btn btn-primary" id="f3dGenBtn" onclick="Foto3D.generate()">✨ Generar objeto 3D</button>
+              <button class="btn btn-ghost btn-sm" id="f3dVariantBtn" title="Genera otra versión con una semilla distinta (gasta más cuota de GPU)" onclick="Foto3D.variant()">Otra variante</button>
+              <button class="btn btn-ghost btn-sm" id="f3dCancelBtn" style="display:none" onclick="Foto3D.cancel()">Cancelar</button>
               <button class="btn btn-ghost btn-sm" onclick="document.getElementById('f3dFile').click()">Cambiar foto</button>
             </div>
             <div id="f3dAiNote" class="f3d-note"></div>
-            <div id="f3dDiag" class="f3d-note f3d-diag"></div>
             <div id="f3dProg" class="f3d-prog" style="display:none"><div class="f3d-prog-track"><div id="f3dProgBar"></div></div><div id="f3dProgTxt"></div></div>
+            <details class="f3d-adv">
+              <summary>Avanzado</summary>
+              <label class="f3d-field"><span>Token de Hugging Face (opcional)</span><input type="password" class="field-input" id="f3dToken" autocomplete="off" spellcheck="false" placeholder="hf_…"></label>
+              <div class="f3d-note">Con una cuenta gratis de Hugging Face tienes más cuota diaria de GPU que sin cuenta (con PRO, bastante más). El token se guarda sólo en este navegador.</div>
+              <button class="btn btn-ghost btn-sm" onclick="Foto3D.checkService()">Probar conexión</button>
+            </details>
+            <div class="f3d-note f3d-legal">Motor: <b>Tencent Hunyuan3D</b> en servidores públicos de Hugging Face. La foto sale de tu equipo y la cuota gratis de GPU es diaria y compartida. <a href="https://huggingface.co/spaces/tencent/Hunyuan3D-2/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Licencia</a>: no aplica en la UE, Reino Unido ni Corea del Sur.</div>
           </div>
           <div class="f3d-pane">
             <div class="f3d-pane-head"><b>Pieza 3D</b><span class="f3d-hint">arrastra para girar · rueda = zoom · doble clic = vista inicial</span><div class="f3d-seg"><button type="button" id="f3dFacetsBtn" title="Muestra los triángulos tal como son en el STL (así lo ve un laminador). Apagado, la superficie se ve suave como al imprimirla." onclick="Foto3D.toggleFacets()">Facetas: no</button></div></div>
-            <div class="f3d-viewer"><canvas id="f3dCanvas"></canvas><div id="f3dNoGL" class="f3d-nogl" style="display:none">Este navegador no tiene WebGL: no puedo mostrar la vista 3D, pero el STL se descarga igual.</div></div>
+            <div class="f3d-viewer"><canvas id="f3dCanvas"></canvas><div id="f3dEmpty" class="f3d-nogl">Pulsa «Generar objeto 3D» para crear la pieza.<br>La primera vez puede tardar un par de minutos si el servicio gratis tiene cola.</div><div id="f3dNoGL" class="f3d-nogl" style="display:none">Este navegador no tiene WebGL: no puedo mostrar la vista 3D, pero el STL se descarga igual.</div></div>
             <div id="f3dStats" class="f3d-stats"></div>
             <div class="f3d-row">
               <button class="btn btn-primary" id="f3dDownload" onclick="Foto3D.download()" disabled>⬇ Descargar STL</button>
@@ -3424,8 +3434,8 @@
           <div class="f3d-group-title">Medidas</div>
           <div id="f3dShapeCtrls" class="f3d-fields"></div>
         </div>
-        <div class="f3d-group">
-          <div class="f3d-group-title">Recorte y relieve <button type="button" class="f3d-link" onclick="Foto3D.resetDetail()">Restablecer</button></div>
+        <div class="f3d-group" id="f3dDetailGroup">
+          <div class="f3d-group-title">Relieve (medallón y llavero) <button type="button" class="f3d-link" onclick="Foto3D.resetDetail()">Restablecer</button></div>
           <div id="f3dDetailCtrls" class="f3d-fields"></div>
         </div>
       </div>
@@ -20519,6 +20529,7 @@ document.addEventListener('DOMContentLoaded',renderLocalModeBtn);
 </script>
 
 <script src="js/slicer3d.js?v=%%BUILD%%"></script>
+<script src="js/foto3d-glb.js?v=%%BUILD%%"></script>
 <script src="js/foto3d.js?v=%%BUILD%%"></script>
 
 <script>

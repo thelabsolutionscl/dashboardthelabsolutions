@@ -1,57 +1,76 @@
 # Escultor de fotos — imagen → STL
 
-Herramienta del **Taller** (Máquinas → Taller → *Escultor de fotos*) que
-convierte una foto en una pieza imprimible y la descarga como STL binario.
+Herramienta del **Taller** (Máquinas → Taller → *Escultor de fotos*) que convierte
+una foto en una pieza imprimible y la descarga como STL binario.
 
-- Código: `js/foto3d.js` (núcleo geométrico + visor WebGL + interfaz) y
-  `js/foto3d-worker.js` (IA de profundidad en un Web Worker).
-- Vista: `data-maq-view="escultor"` en `index.html`, agrupada en la pantalla
-  `taller` de `js/maquinas-operaciones.js`.
-- Tests: `tests/foto3d.test.js` (mallas cerradas, tamaños, cableado).
+- `js/foto3d.js` — núcleo geométrico (relieve, base, malla cerrada, STL), visor WebGL e interfaz.
+- `js/foto3d-hy3d.js` — cliente de Hunyuan3D, **corre como Web Worker**.
+- `js/foto3d-glb.js` — lee y limpia la malla GLB, la orienta y rasteriza su vista frontal.
+- `scripts/hy3d-smoke.js` — prueba en vivo del servicio, de punta a punta (ver «Verificar»).
+- Vista: `data-maq-view="escultor"` en `index.html`, en la pantalla `taller` de `js/maquinas-operaciones.js`.
+- Tests: `tests/foto3d.test.js`, `tests/foto3d-glb.test.js`, `tests/foto3d-hy3d.test.js`.
 
-## Decisiones (2026-11-10)
+## Decisión de motor (2026-11-14): Hunyuan3D, gratis, reemplaza el motor local
+
+Hasta el 2026-11-10 la herramienta estimaba la profundidad con Depth Anything V2
+Small en el navegador (relieve 2,5D con el reverso inventado). Tras tres pruebas
+reales con una moto el resultado seguía sin la definición esperada, y se decidió
+usar **Hunyuan3D (Tencent)**, que genera el objeto 3D completo, y reemplazar el
+motor local. Se eligió lo gratis: los **Spaces públicos de Tencent en Hugging Face**
+(ZeroGPU), no una API de pago.
 
 | Decisión | Por qué |
 |---|---|
-| **IA de profundidad local** (Depth Anything V2 **Small**, transformers.js 3.8.1) | Sin servidor, sin costo por uso, la foto no sale del navegador. El modelo (~27 MB en CPU, ~50 MB en GPU) se descarga una vez desde Hugging Face y queda en la caché del navegador. |
-| **No** a "foto → objeto 360°" | Los modelos que reconstruyen el objeto completo pesan GB y necesitan GPU de servidor. La IA local da un **frente esculpido** (2,5D) que se ve bien de frente y en ¾; el reverso es plano o un espejo suavizado del frente. Si algún día hace falta 360°, va como un Worker de Cloudflare aparte con API externa (costo por modelo). |
-| Sólo el modelo **Small** | Small es Apache-2.0 (uso comercial OK). Base y Large de Depth Anything V2 son **CC-BY-NC**: no usarlos. Un test lo vigila. |
-| Respaldo sin IA | Si el CDN o Hugging Face no responden, el relieve sale del **brillo** de la imagen (claro = alto) y la herramienta sigue funcionando. |
-| GPU → CPU | Se intenta WebGPU con fp16 si la tarjeta soporta `shader-f16`; si falla al cargar o al ejecutar, se reintenta en WASM con el modelo q8. |
-| **IA en un Web Worker** (2026-11-10, revisión) | transformers.js viene de jsDelivr: en la página tendría acceso a `localStorage`, donde el dashboard guarda claves (`proxy_key`, `printer_device_token`…). En el worker no ve `localStorage` ni el DOM y la inferencia no congela la interfaz. Sigue pudiendo hacer `fetch` con cookies, así que el aislamiento es parcial. |
-| Worker nuevo tras un error | Un `import()` fallido queda en caché en ese contexto: sin descartar el worker, "Recalcular IA" nunca volvía a pedir el módulo. |
-| Una inferencia a la vez | ONNX Runtime no admite dos `run` simultáneos en la misma sesión. El worker atiende en cola y descarta lo que quedó pendiente de fotos anteriores. |
-| Salida sólo **descarga STL** | Elección del usuario. Enviar al Agente 3D o cotizar quedan como mejoras posibles. |
+| Hunyuan3D en Spaces de Hugging Face | Es el único camino gratis: el modelo necesita GPU de servidor (no corre en el navegador ni en el entorno de desarrollo). |
+| Dos modos: **Rápido** (`Hunyuan3D-2mini-Turbo`, 5 pasos) y **Estándar** (`Hunyuan3D-2`, 30 pasos) | El mini-Turbo gasta pocos segundos de GPU por pieza, así que rinde más cuota gratis; el 2.0 completo da más detalle pero ~30 s por pieza. |
+| Se elimina Depth Anything, `foto3d-worker.js` y el respaldo "relieve desde el brillo" | Es lo que pidió el usuario (reemplazar). Está en el historial de git (commit `0329857` y anteriores). |
+| La foto se envía a un servidor público | Inevitable con un Space. Se pide confirmación la primera vez y la interfaz lo avisa. |
+| Todo lo demás sigue en el navegador | Limpieza de la malla, relieve y STL no salen del equipo. |
+| El cliente corre en un Web Worker | La foto sólo sale de la página desde ahí, el código del cliente no toca el DOM ni `localStorage` (donde el dashboard guarda claves) y la espera no congela la interfaz. |
+| Salida sólo **descarga STL** | Elección del usuario. |
 
 ## Cómo funciona
 
-1. **Imagen de trabajo** ≤ 768 px (la IA trabaja a 518 px).
-2. **Profundidad** (`predicted_depth`, mayor = más cerca) normalizada p1–p99.
-3. **Recorte** automático, en este orden:
-   - PNG con transparencia → se usa el canal alfa;
-   - borde de color parejo (estudio, dibujos) → distancia de color al fondo;
-   - si no → umbral de Otsu sobre la profundidad.
-   Luego apertura/cierre, componente mayor, relleno de agujeros chicos y
-   corrección de celdas unidas sólo por la esquina (evita aristas no-manifold).
-4. **Grilla** sobre el encuadre del sujeto: `Resolución` celdas en el lado
-   mayor; cada celda promedia los píxeles que cubre (tabla de áreas sumadas).
-5. **Relieve** dentro del sujeto: suavizado normalizado (el fondo no contamina
-   el borde), *detalle fino* = paso alto del brillo, curva γ, invertir.
-6. **Alturas por forma** (mm):
-   - *Figura con base*: frente `T/2 + R·d`, reverso `−(T/2 + R·vol·d)`,
-     bordes redondeados por transformada de distancia; el borde inferior se
-     corta plano y se hunde ~1,5 mm en una base ovalada o rectangular. Se
-     exporta de pie, con el frente hacia −Y.
-   - *Medallón*: placa (rectangular, redondeada, ovalada o circular) de grosor
-     `T`, marco opcional y agujero para colgar; el relieve se apaga antes del marco.
-   - *Llavero*: silueta con reverso plano y argolla (agujero pasante) sobre
-     el punto más alto del sujeto.
-   - *Solo el objeto*: como la figura, sin base, reverso plano o redondeado.
-7. **Malla**: dos campos de altura (arriba/abajo) sobre la máscara + paredes
-   en el contorno. Las alturas viven en las esquinas compartidas, así que la
-   malla sale **cerrada y orientada** (cada arista con exactamente dos caras).
-   La figura lleva dos cuerpos que se superponen (figura + base); los
-   laminadores los unen al laminar.
+1. **Foto** ≤ 1024 px. Si es PNG con transparencia se usa tal cual; si no, el Space quita el fondo.
+2. **Generar** (botón; nunca automático: gasta cuota y envía la foto). El worker habla con el Space por la API HTTP de Gradio 4.44:
+   `GET /config` → `POST /upload` → `POST /call/shape_generation` → `GET /call/shape_generation/{id}` (eventos SSE) → descarga del GLB.
+3. **Limpieza** (`cleanGLB`): lee el GLB con sus transformaciones de nodo, **suelda** vértices, quita **islas** sueltas (< 1 % de la mayor), **cierra agujeros** pequeños (≤ 300 aristas, con un fan desde el centroide), endereza la malla si venía invertida y mide aristas abiertas y no-manifold.
+4. **Colocación** (`placeMesh`): el GLB es Y arriba y su frente mira a +Z; la pieza usa Z arriba y el frente hacia −Y. Se gira (opción «Girar la pieza»), se escala al lado mayor pedido y se apoya en la cama (z = 0).
+5. **Formas**:
+   - **Objeto 3D** (`buildSolido3D`): la malla completa, con **base** opcional ovalada o rectangular (el cuerpo se hunde 1,5 mm en ella). Avisa si sin base puede volcarse (el centro de masa cae fuera de los puntos que apoyan).
+   - **Medallón** y **Llavero** (`reliefFields` + `buildModel`): relieve sobre la **vista frontal exacta del modelo** (rasterizada con z-buffer). El recorte es la silueta del modelo y la profundidad es exacta: no hay ruido ni ondas. La placa del medallón lleva margen para que el objeto quepa (en la circular, el objeto queda inscrito).
+6. **STL**: `writeSTL` calcula la normal de cada faceta; el sombreado suave del visor no afecta al archivo.
+
+## Contrato con el Space
+
+Sale del código público de los Spaces (`gradio_app.py` de `tencent/Hunyuan3D-2` y `tencent/Hunyuan3D-2mini-Turbo`, ambos en línea sobre `zero-a10g` el 2026-11-14).
+`shape_generation` recibe 13 entradas, en este orden: `caption, image, mv_front, mv_back, mv_left, mv_right, steps, guidance_scale, seed, octree_resolution, check_box_rembg, num_chunks, randomize_seed`
+y devuelve `[archivo GLB, html, estadísticas, semilla]`. Valores usados: guidance 5, `num_chunks` 8000, octree 256 (196 en «Malla liviana»), semilla 1234 (cambia con «Otra variante»), `randomize_seed` apagado.
+Si el Space deja de exponer `shape_generation`, el cliente lo detecta **antes** de subir la foto y avisa que la API cambió.
+
+## Cuota gratis, errores y límites
+
+- **ZeroGPU da una cuota diaria de GPU compartida.** Las fuentes de Hugging Face se contradicen (2 / 3,5 / 25 min o 2 / 5 / 40 min al día para sin cuenta / cuenta gratis / PRO); en la práctica son unas pocas piezas al día en modo Estándar y bastantes más en Rápido. Un **token de Hugging Face** opcional («Avanzado») usa la cuota de esa cuenta.
+- Errores con mensaje propio: cuota agotada (con el tiempo de espera que informe el servicio), servicio saturado, Space dormido, sin conexión, API cambiada, malla inválida, inactividad (90 s sin respuesta) y cancelación. Tras un error se conserva la pieza anterior.
+- Es un servicio **compartido y sin garantías**: puede tener cola de minutos, cambiar o dejar de existir.
+- La malla de Hunyuan3D a octree 256 tiene cientos de miles de triángulos: el STL pesa decenas de MB.
+- Medallón y llavero usan sólo el **cuerpo más grande** de la silueta (una llave debe ser una sola pieza).
+
+## Licencia y privacidad
+
+- **Licencia:** Hunyuan3D 2.0 se distribuye bajo la *Tencent Hunyuan 3D 2.0 Community License* (`LICENSE` del Space): uso comercial permitido y sin regalías, **excepto** (a) en la **UE, el Reino Unido y Corea del Sur**, donde la licencia no aplica y no se puede usar el modelo ni sus resultados, y (b) sobre **1 millón de usuarios activos al mes**, que exige pedir licencia a Tencent. Tencent no reclama derechos sobre los resultados. Se *recomienda* (no se exige) indicar «Powered by Tencent Hunyuan 3D». **Ojo:** el comentario del encabezado de `gradio_app.py` dice «NON-COMMERCIAL LICENSE», contradiciendo al `LICENSE`; rige el `LICENSE`, pero conviene confirmarlo con Tencent o un abogado antes de venderlo a clientes fuera de Chile.
+- **Privacidad:** el Space es público y compartido; guarda temporalmente las entradas y salidas en su servidor. No subir fotos de clientes (rostros, mascotas con dueño identificable) sin su permiso.
+
+## Verificar contra el servicio real
+
+Las pruebas automáticas usan un servidor Gradio simulado que reproduce el contrato leído en el código del Space; **no prueban el servicio en vivo**. Para eso:
+
+```bash
+node scripts/hy3d-smoke.js --check     # sólo comprueba la conexión; no usa GPU ni sube fotos
+node scripts/hy3d-smoke.js             # genera una pieza (usa cuota) y escribe hy3d-smoke.stl
+```
+
+Usa el mismo cliente y la misma limpieza que la herramienta e informa cada paso. En la herramienta, **Avanzado → Probar conexión** hace la misma comprobación sin gastar cuota.
 
 ## Bugs corregidos en la revisión del 2026-11-10
 
@@ -66,6 +85,7 @@ convierte una foto en una pieza imprimible y la descarga como STL binario.
 - "Invertir relieve" no invertía el detalle fino.
 - Medallón sin sujeto detectado salía plano sin avisar.
 - El visor no se recuperaba si el sistema reclamaba la GPU (contexto WebGL perdido).
+
 
 ## Auditoría del mallador (2026-11-10, tras la primera prueba real)
 
@@ -94,38 +114,11 @@ Resultado (objeto 80 mm, res. 260, profundidad sintética tipo IA):
 Tests de regresión en `tests/foto3d.test.js` (sección «Fidelidad a la foto»),
 con una rueda sintética: cubierta, maza y 12 rayos.
 
-## Definición (2026-11-10, segunda prueba real)
-
-Con la IA real la moto salió fiel en silueta pero "sin definición": ondas
-diagonales cada ~2–3 mm en toda la superficie y relieve blando.
-
-| Hallazgo | Causa | Corrección |
-|---|---|---|
-| Ondas regulares en toda la pieza | El ViT de Depth Anything deja ondas con el paso de sus parches de 14 px (≈ 2,3 mm en una pieza de 80 mm) | Varias pasadas con el contenido corrido medio parche y espejado, alineadas y promediadas (`inferTTA`): ondas −81 % en CPU (2 pasadas), −84 % en GPU (4). El corrimiento no cambia el tamaño de la imagen: si cambiara, cambiaría el periodo y no se cancelarían |
-| Relieve blando | La IA veía la foto a 518 px y el suavizado gaussiano borraba cantos | Con GPU la IA ve la foto a 1022 px (imagen de trabajo 1024 px; si la GPU no da abasto, 770 px); suavizado con filtro guiado (`guidedSmooth`): promedia las ondas y conserva escalones ≥ 10 % del rango (un escalón de 0,300 queda en 0,312; con gaussiano, 0,240) |
-| — | — | Resolución por defecto 260 → 300 celdas (máx. 500) |
-
-## Picos (2026-11-10, tercera prueba real)
-
-Tras subir la IA a 1022 px la pieza salió con picos agudos aislados en toda
-la superficie (y espejados en el reverso).
-
-| Hallazgo | Causa | Corrección |
-|---|---|---|
-| Picos agudos aislados | Fuera de su resolución de entrenamiento (518 px) y en fp16 sobre GPU, el ViT puede desbordarse en algunos parches y devolver valores basura | Por defecto vuelve a 518 px en GPU (4 pasadas). 770 y 1022 pasan a ser opcionales ("Detalle de la IA"); si una pasada trae > 0,5 % de valores no finitos o atípicos groseros, baja sola de resolución y lo dice en la nota |
-| El filtro guiado dejaba pasar los picos | Un pico aislado parece un canto y el filtro conserva cantos | Mediana 3×3 enmascarada antes del filtro guiado (quita picos de una celda, un escalón recto queda intacto) |
-| Una mancha basura en una pasada contaminaba el promedio | Las pasadas se combinaban con la media | Mediana por pixel entre pasadas |
-| **STL corrupto** si la profundidad traía NaN o infinito | Se propagaban hasta los vértices (`volumen NaN`) | `prepareFields` y el worker rellenan los no finitos desde los vecinos válidos |
-
-Límite: una mancha basura del tamaño de un parche que aparezca igual en todas
-las pasadas no se puede distinguir de un detalle real del mismo tamaño
-(dedos, puntas); por eso la defensa principal es no salir de 518 px salvo que
-se pida.
 
 ## Motor de render (2026-11-14)
 
-Al ampliar las capturas con la IA real aparecieron dos defectos que no vienen
-del modelo. Se reprodujeron con una profundidad perfectamente lisa: facetas en
+Al ampliar las capturas de una prueba real aparecieron dos defectos que no vienen
+del modelo de profundidad que se usaba entonces. Se reprodujeron con una profundidad perfectamente lisa: facetas en
 bandas y "pliegues de cortina" en las paredes.
 
 | Hallazgo | Causa | Corrección |
@@ -139,40 +132,16 @@ El sombreado suave es sólo de pantalla: `writeSTL` calcula su normal por
 faceta y el archivo no cambia por las normales (hay un test). La diagonal
 adaptativa sí cambia el STL, para mejor.
 
-**Diagnóstico de la IA.** El modelo corre en la GPU de cada usuario y sus
-defectos no se pueden reproducir en las pruebas. El worker mide y la interfaz
-muestra bajo la foto: tipo de dato de la salida, niveles distintos de
-profundidad (pocos = salida cuantizada, da escalones), ondas con el paso de los
-parches antes → después de promediar (el piso de la medida es ~0,4 %) y la
-fracción de valores descartados.
+## Historial: el motor de profundidad (eliminado el 2026-11-14)
 
-**Pendiente.** No se pudo correr el modelo real en el entorno de desarrollo
-(bloqueado por los permisos de la sesión), así que la causa de las bandas que
-se ven con la IA real a 518 px sigue sin confirmar: ondas de parche del ViT o
-cuantización fp16. La línea de diagnóstico la distingue.
+Lo aprendido con Depth Anything V2 por si algún día se vuelve a un motor local:
+- Fuera de los 518 px de su entrenamiento y en fp16 sobre GPU, el ViT podía desbordarse y devolver valores basura (picos agudos en la malla) y hasta `NaN`/infinito, que llegaban a los vértices y dejaban el STL corrupto. Se defendía con 518 px por defecto, mediana por píxel entre pasadas, mediana 3×3 antes del filtro guiado y relleno de valores no finitos.
+- Deja ondas con el paso de sus parches de 14 px; se cancelaban promediando pasadas con la imagen corrida medio parche y espejada (−81 % en CPU, −84 % en GPU).
+- Depth Anything V2 Small es Apache-2.0; Base y Large son CC-BY-NC.
+- Nunca se pudo ejecutar el modelo real en el entorno de desarrollo (red y permisos), así que su calidad se ajustó con modelos simulados.
 
-## Límites conocidos
-
-- Es un **relieve**, no un escaneo: lo que no se ve en la foto se inventa
-  (reverso espejado o plano).
-- Estructuras más finas que 0,8 mm se engrosan a 0,8 mm para poder imprimirse:
-  a tamaños chicos los rayos o antenas salen más gruesos que en la foto.
-- El relieve es la profundidad *relativa* de la IA estirada a la "Profundidad
-  del relieve" pedida: las proporciones de profundidad no son métricas.
-- Fondos complejos con el sujeto a la misma distancia que el fondo dan un
-  recorte pobre: usar *Ajuste del recorte*, *Fondo uniforme* o una foto con
-  fondo quitado (PNG transparente).
-- El STL pesa ~6–15 MB con la resolución por defecto (260). Subirla a 400
-  multiplica por ~2,4 el tamaño.
-
-## Probar
+## Cómo probar en local
 
 ```bash
-node --test tests/foto3d.test.js
+node --test tests/foto3d.test.js tests/foto3d-glb.test.js tests/foto3d-hy3d.test.js
 ```
-
-Los tests del worker lo ejecutan en `vm` con un transformers.js falso
-(cancelación en cola, GPU → CPU, errores de carga).
-
-La inferencia de IA sólo se prueba en un navegador con acceso a
-`cdn.jsdelivr.net` y `huggingface.co`.

@@ -3223,8 +3223,15 @@ html[data-theme="light"] .appearance-choice.is-active{background:rgba(0,158,154,
 #maquinaEscultorView .f3d-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 #maquinaEscultorView .f3d-note{font-size:10.5px;color:var(--text3);line-height:1.5}
 #maquinaEscultorView .f3d-note[data-tone=warn]{color:var(--warn)}
-#maquinaEscultorView .f3d-diag{font-size:10px;opacity:.75;font-variant-numeric:tabular-nums}
-#maquinaEscultorView .f3d-diag:empty{display:none}
+#maquinaEscultorView .f3d-adv{border:1px solid var(--border2);border-radius:9px;padding:8px 10px;display:flex;flex-direction:column;gap:8px}
+#maquinaEscultorView .f3d-adv summary{cursor:pointer;font-size:11px;color:var(--text2);font-weight:600;list-style:none}
+#maquinaEscultorView .f3d-adv summary::-webkit-details-marker{display:none}
+#maquinaEscultorView .f3d-adv[open] summary{margin-bottom:2px}
+#maquinaEscultorView .f3d-adv .f3d-field{margin-top:6px}
+#maquinaEscultorView .f3d-adv .field-input{font-size:12px;padding:6px 8px;width:100%;box-sizing:border-box}
+#maquinaEscultorView .f3d-legal{opacity:.85}
+#maquinaEscultorView .f3d-legal a{color:var(--accent)}
+#maquinaEscultorView #f3dEmpty{background:rgba(13,13,13,.9);z-index:1}
 #maquinaEscultorView .f3d-stats span.bad{border-color:rgba(255,68,68,.4)}
 #maquinaEscultorView .f3d-stats span.bad b{color:var(--danger)}
 #maquinaEscultorView .f3d-prog-track{height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}

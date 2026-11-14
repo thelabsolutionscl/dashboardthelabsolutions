@@ -6,16 +6,13 @@ const assert=require('node:assert/strict');
 const fs=require('fs');
 const path=require('path');
 const CORE=require('../js/foto3d.js');
+const GLBM=require('../js/foto3d-glb.js');
+const{sphere,torus,join,makeGLB}=require('./foto3d-mesh-helpers.js');
 
 const ROOT=path.join(__dirname,'..');
 const INDEX=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
 const OPS=fs.readFileSync(path.join(ROOT,'js','maquinas-operaciones.js'),'utf8');
 const SRC=fs.readFileSync(path.join(ROOT,'js','foto3d.js'),'utf8');
-const WORKER=fs.readFileSync(path.join(ROOT,'js','foto3d-worker.js'),'utf8');
-const vm=require('vm');
-
-// Foto sintética: fondo blanco parejo y un sujeto oscuro elíptico; la
-// "profundidad" es una semiesfera (más cerca en el centro), como la entregaría la IA.
 function syntheticImage(w=180,h=220,opts={}){
   const rgba=new Uint8ClampedArray(w*h*4),depth=new Float32Array(w*h);
   const cx=w/2,cy=h*.55,rx=w*.3,ry=h*.38;
@@ -153,25 +150,12 @@ test('writeSTL genera un STL binario válido',()=>{
 
 test('el escultor está enlazado en el Taller de Máquinas',()=>{
   assert.match(INDEX,/data-maq-view=["']escultor["']/,'falta la sección en index.html');
-  assert.match(INDEX,/<script src="js\/foto3d\.js\?v=%%BUILD%%"><\/script>/,'falta cargar js/foto3d.js');
+  assert.match(INDEX,/<script src="js\/foto3d-glb\.js\?v=%%BUILD%%"><\/script>\s*<script src="js\/foto3d\.js\?v=%%BUILD%%"><\/script>/,'foto3d-glb.js debe cargarse justo antes de foto3d.js');
   const groups=OPS.slice(OPS.indexOf('const VIEW_GROUPS='),OPS.indexOf('const VIEW_TITLES='));
   assert.match(groups,/taller:\[[^\]]*'escultor'/,'escultor debe pertenecer a la pantalla Taller');
   assert.match(OPS,/workshopNavCard\('escultor'/,'falta la tarjeta de acceso en el Taller');
 });
 
-test('la IA corre local en un worker: versión fija y modelo Small con licencia comercial',()=>{
-  assert.match(WORKER,/@huggingface\/transformers@\d+\.\d+\.\d+\//,'la librería debe ir con versión exacta');
-  assert.match(WORKER,/depth-anything-v2-small/);
-  for(const src of[SRC,WORKER]){
-    assert.doesNotMatch(src,/depth-anything-v2-(base|large)/i,'Base/Large son no comerciales');
-    assert.doesNotMatch(src,/fetch\([^)]*(api|upload)/i,'la foto no se envía a ningún servidor');
-  }
-  // El código del CDN no se ejecuta en la página (donde viven las claves de localStorage).
-  assert.doesNotMatch(SRC,/cdn\.jsdelivr\.net|await import\(/,'foto3d.js no debe importar código de terceros');
-  assert.match(SRC,/new Worker\(/);
-});
-
-// ── Regresiones de bugs encontrados en revisión ──────────────────────────
 function shapeImage(w,h,inside){
   const rgba=new Uint8ClampedArray(w*h*4),depth=new Float32Array(w*h);
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,v=inside(x,y);const c=v?60:245;rgba.set([c,c,v?90:245,255],i*4);depth[i]=v?.7:.05;}
@@ -241,59 +225,6 @@ test('estimación de gramos y ajuste al volumen de las impresoras',()=>{
 });
 
 // ── Worker de IA: se ejecuta con un transformers.js falso ─────────────────
-function loadWorker(fake){
-  const posted=[];
-  const code=WORKER.replace('await import(TJS_URL)','await __import(TJS_URL)');
-  const self={navigator:fake.gpu?{gpu:fake.gpu}:{},postMessage:m=>posted.push(m)};
-  const ctx=vm.createContext({self,console:{warn(){},log(){}},__import:async()=>fake.module,Float32Array,Uint16Array,Uint8ClampedArray,ArrayBuffer,Promise,Math,String,Array,Error});
-  vm.runInContext(code,ctx);
-  return{send:m=>self.onmessage({data:m}),posted,settle:()=>new Promise(r=>setTimeout(r,20))};
-}
-function fakeTransformers(opts={}){
-  const calls=[];
-  return{calls,module:{env:{},RawImage:class{constructor(d,w,h){this.width=w;this.height=h;}},
-    pipeline:async(task,model,o)=>{
-      calls.push(o.device);
-      return async img=>{
-        if(opts.failOn===o.device)throw new Error('falla '+o.device);
-        return{predicted_depth:{dims:[img.height,img.width],data:new Float32Array(img.width*img.height).fill(.5)}};
-      };
-    }}};
-}
-const req=(id)=>({type:'depth',id,rgba:new ArrayBuffer(4*4*4),w:4,h:4});
-
-test('worker: devuelve la profundidad y cancela lo que quedó en cola',async()=>{
-  const T=fakeTransformers(),W=loadWorker(T);
-  W.send(req(1));W.send(req(2));W.send({type:'cancel',below:3});W.send(req(3));
-  for(let i=0;i<10;i++)await W.settle();
-  const by=id=>W.posted.filter(m=>m.id===id&&m.type!=='progress').map(m=>m.type);
-  assert.deepEqual(by(3),['depth'],'la última foto se procesa');
-  assert.ok(by(2).includes('cancelled'),'una foto anterior en cola se descarta');
-  const d=W.posted.find(m=>m.id===3&&m.type==='depth');
-  assert.equal(d.data.length,16);assert.equal(d.label,'CPU (WASM)');
-});
-
-test('worker: si la GPU falla al ejecutar, reintenta en CPU',async()=>{
-  const T=fakeTransformers({failOn:'webgpu'});
-  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
-  const W=loadWorker({...T,gpu});
-  W.send(req(1));
-  for(let i=0;i<10;i++)await W.settle();
-  assert.deepEqual(T.calls,['webgpu','wasm']);
-  assert.equal(W.posted.find(m=>m.type==='depth').label,'CPU (WASM)');
-});
-
-test('worker: un fallo de carga se informa como error, sin colgarse',async()=>{
-  const W=loadWorker({module:{env:{},pipeline:async()=>{throw new Error('sin red');}}});
-  W.send(req(7));
-  for(let i=0;i<10;i++)await W.settle();
-  const e=W.posted.find(m=>m.type==='error');
-  assert.ok(e&&e.id===7&&/sin red/.test(e.message));
-  W.send({type:'depth',id:8,rgba:'no es un buffer',w:4,h:4});
-  await W.settle();
-  assert.ok(!W.posted.some(m=>m.id===8),'mensajes mal formados se ignoran');
-});
-
 test('figura: avisa si el centro de masa cae fuera de la base',()=>{
   // Sujeto con todo el peso a un costado y patita fina al otro: sin base se vuelca.
   const F=shapeImage(220,200,(x,y)=>((x-160)/45)**2+((y-80)/50)**2<=1||(x>40&&x<60&&y>60&&y<190)||(y>50&&y<70&&x>40&&x<160));
@@ -412,68 +343,6 @@ test('contorno suave: sin caras volteadas y sin escalones de una celda',()=>{
 // Modelo falso que reproduce el defecto real del ViT: la profundidad verdadera
 // (codificada en el rojo de la imagen) más ondas atadas a la grilla de parches
 // de 14 px del tamaño al que el procesador escala la imagen.
-function patchyTransformers(amp=.04){
-  const calls=[];
-  const ip={size:{width:518,height:518}};
-  return{calls,ip,module:{env:{},RawImage:class{constructor(d,w,h){this.data=d;this.width=w;this.height=h;}},
-    pipeline:async(task,model,o)=>{
-      const f=async img=>{
-        const L=ip.size.width,W=img.width,H=img.height,d=new Float32Array(W*H);
-        let sw=L/W,sh=L/H;if(Math.abs(1-sw)<Math.abs(1-sh))sh=sw;else sw=sh;
-        const mw=Math.round(sw*W/14)*14,mh=Math.round(sh*H/14)*14,Px=14*W/mw,Py=14*H/mh;
-        calls.push({device:o.device,L,W,H});
-        for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;d[i]=img.data[i*4]/255+amp*(Math.cos(2*Math.PI*x/Px)+Math.cos(2*Math.PI*y/Py));}
-        return{predicted_depth:{dims:[H,W],data:d}};
-      };
-      f.processor={image_processor:ip};
-      return f;
-    }}};
-}
-function truthImage(w,h){
-  const rgba=new Uint8ClampedArray(w*h*4),t=new Float32Array(w*h);
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,v=.3+.4*Math.exp(-((x-w*.45)**2+(y-h*.5)**2)/(2*(w*.25)**2))+.2*x/w;t[i]=Math.round(v*255)/255;rgba[i*4]=Math.round(v*255);rgba[i*4+3]=255;}
-  return{rgba,t};
-}
-async function runWorker(T,gpu,w,h,rgba,quality){
-  const W=loadWorker({...T,gpu});
-  W.send({type:'depth',id:1,rgba:rgba.buffer.slice(0),w,h,quality});
-  for(let i=0;i<40;i++)await W.settle();
-  return W.posted.find(m=>m.type==='depth');
-}
-function rmsVsTruth(d,t,w,h){
-  // compara tras alinear escala y desfase (la profundidad es relativa)
-  const n=w*h;let md=0,mt=0;for(let i=0;i<n;i++){md+=d[i];mt+=t[i];}md/=n;mt/=n;
-  let cv=0,vd=0;for(let i=0;i<n;i++){cv+=(d[i]-md)*(t[i]-mt);vd+=(d[i]-md)**2;}
-  const a=cv/vd,b=mt-a*md;let e=0,c=0;
-  for(let y=20;y<h-20;y++)for(let x=20;x<w-20;x++){const i=y*w+x;e+=(a*d[i]+b-t[i])**2;c++;}
-  return Math.sqrt(e/c);
-}
-
-test('worker: las pasadas desplazadas cancelan las ondas de los parches del ViT',async()=>{
-  const w=400,h=300,{rgba,t}=truthImage(w,h);
-  const one=await runWorker(patchyTransformers(),null,w,h,rgba);
-  // referencia: una sola pasada, la misma onda
-  const T1=patchyTransformers();const f1=await T1.module.pipeline('d','m',{});T1.ip.size={width:518,height:518};
-  const raw=(await f1(new T1.module.RawImage(new Uint8ClampedArray(rgba),w,h))).predicted_depth.data;
-  const eSingle=rmsVsTruth(raw,t,w,h),eTTA=rmsVsTruth(one.data,t,w,h);
-  assert.equal(one.passes,2,'en CPU se hacen 2 pasadas');
-  assert.ok(eTTA<eSingle*.3,`las ondas deben bajar ≥ 70 % (una pasada ${eSingle.toFixed(4)}, promediadas ${eTTA.toFixed(4)})`);
-});
-
-const GPU={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
-test('worker: con GPU usa por defecto 518 px (resolución de entrenamiento) y 4 pasadas',async()=>{
-  const w=300,h=200,{rgba}=truthImage(w,h),T=patchyTransformers();
-  const r=await runWorker(T,GPU,w,h,rgba);
-  assert.equal(r.res,518);assert.equal(r.passes,4);assert.match(r.label,/GPU/);
-  assert.equal(r.data.length,w*h,'la profundidad vuelve al tamaño de la foto');
-});
-test('worker: "Máximo" pide 1022 px al procesador del modelo',async()=>{
-  const w=300,h=200,{rgba}=truthImage(w,h),T=patchyTransformers();
-  const r=await runWorker(T,GPU,w,h,rgba,'maximo');
-  assert.equal(r.res,1022);
-  assert.ok(T.calls.every(c=>c.L===1022),'el procesador recibe la resolución alta');
-});
-
 test('suavizado: quita las ondas sin borrar un escalón real (filtro guiado)',()=>{
   // Brazo delante del cuerpo: escalón de 0,3 + ondas de ±0,02.
   const w=120,h=80,n=w*h,p=new Float32Array(n),clean=new Float32Array(n),mask=new Uint8Array(n).fill(1);
@@ -485,39 +354,6 @@ test('suavizado: quita las ondas sin borrar un escalón real (filtro guiado)',()
   const row=40*w,stepG=g[row+62]-g[row+57],stepB=gb[row+62]-gb[row+57];
   assert.ok(stepG>.27,`el escalón se conserva (${stepG.toFixed(3)} de 0,3)`);
   assert.ok(stepG>stepB+.03,'y queda más nítido que con un desenfoque gaussiano');
-});
-
-test('worker: si la GPU no da abasto a 1022 px, baja a 770 px antes de pasar a CPU',async()=>{
-  const quality='maximo';
-  const w=200,h=150,{rgba}=truthImage(w,h),T=patchyTransformers();
-  const orig=T.module.pipeline;
-  T.module.pipeline=async(...a)=>{const f=await orig(...a);const g=async img=>{if(T.ip.size.width===1022)throw new Error('sin memoria de GPU');return f(img);};g.processor=f.processor;return g;};
-  const r=await runWorker(T,GPU,w,h,rgba,quality);
-  assert.equal(r.res,770);assert.match(r.label,/GPU/);assert.equal(r.passes,4);
-  assert.equal(r.asked,1022,'informa que bajó de la resolución pedida');
-});
-
-// ── Picos (tercera prueba real: picos agudos en toda la pieza) ────────────
-test('worker: una pasada con desborde fp16 (NaN/infinito) baja de resolución sola',async()=>{
-  const w=200,h=150,{rgba}=truthImage(w,h),T=patchyTransformers(0);
-  const orig=T.module.pipeline;
-  T.module.pipeline=async(...a)=>{const f=await orig(...a);
-    const g=async img=>{const o=await f(img);if(T.ip.size.width>518){const d=o.predicted_depth.data;for(let i=0;i<d.length;i+=40)d[i]=i%80?NaN:Infinity;}return o;};
-    g.processor=f.processor;return g;};
-  const r=await runWorker(T,GPU,w,h,rgba,'maximo');
-  assert.equal(r.res,518,'1022 y 770 salen sucias: se queda en 518');
-  assert.ok(r.data.every(Number.isFinite),'sin NaN ni infinitos');
-});
-
-test('worker: una mancha basura en una sola pasada no llega al resultado (mediana)',async()=>{
-  const w=200,h=150,{rgba,t}=truthImage(w,h),T=patchyTransformers(0);
-  const orig=T.module.pipeline;let call=0;
-  T.module.pipeline=async(...a)=>{const f=await orig(...a);
-    const g=async img=>{const o=await f(img);if(call++===2){const d=o.predicted_depth.data;for(let y=60;y<70;y++)for(let x=90;x<100;x++)d[y*w+x]=5;}return o;};
-    g.processor=f.processor;return g;};
-  const r=await runWorker(T,GPU,w,h,rgba);
-  let maxErr=0;for(let y=58;y<72;y++)for(let x=88;x<102;x++)maxErr=Math.max(maxErr,Math.abs(r.data[y*w+x]-t[y*w+x]));
-  assert.ok(maxErr<.05,`la mancha se descarta (error ${maxErr.toFixed(3)})`);
 });
 
 test('NaN o infinito en la profundidad nunca llegan al STL',()=>{
@@ -588,16 +424,113 @@ test('malla: sobre una cúpula lisa las normales varían de forma continua entre
   assert.ok(worst<1e-6,'un mismo vértice lleva la misma normal en todos sus triángulos (sin facetas)');
 });
 
-test('worker: el diagnóstico mide las ondas de parche antes y después, y detecta salida cuantizada',async()=>{
-  const w=400,h=300,{rgba}=truthImage(w,h);
-  const r=await runWorker(patchyTransformers(.04),null,w,h,rgba);
-  assert.ok(r.diag,'el resultado trae diagnóstico');
-  assert.ok(r.diag.rippleIn>.02,`detecta las ondas de entrada (${r.diag.rippleIn.toFixed(4)})`);
-  assert.ok(r.diag.rippleOut<r.diag.rippleIn*.4,`y que bajaron al promediar (${r.diag.rippleOut.toFixed(4)})`);
-  // Salida en pocos niveles (como fp16 sobre un rango angosto) → se informa.
-  const T=patchyTransformers(0),orig=T.module.pipeline;
-  T.module.pipeline=async(...a)=>{const f=await orig(...a);const g=async img=>{const o=await f(img),d=o.predicted_depth.data;for(let i=0;i<d.length;i++)d[i]=Math.round(d[i]*40)/40;return o;};g.processor=f.processor;return g;};
-  const qz=await runWorker(T,null,w,h,rgba),smooth=await runWorker(patchyTransformers(0),null,w,h,rgba);
-  assert.ok(qz.diag.levels<60,`pocos niveles (${qz.diag.levels})`);
-  assert.ok(smooth.diag.levels>qz.diag.levels*3,`más niveles sin cuantizar (${smooth.diag.levels})`);
+// ══ Motor Hunyuan3D: objeto 3D, base y relieve desde la malla ═══════════════
+const clean=m=>GLBM.cleanGLB(makeGLB(m.positions,m.indices));
+const dims=b=>[0,1,2].map(k=>b.max[k]-b.min[k]);
+
+test('el motor es Hunyuan3D: sin IA de profundidad local, sin CDN de terceros y con aviso de privacidad',()=>{
+  assert.doesNotMatch(SRC,/transformers|jsdelivr|Depth Anything|estimateDepth|onnx/i,'no queda rastro del motor local');
+  assert.ok(!fs.existsSync(path.join(ROOT,'js','foto3d-worker.js')),'el worker de Depth Anything se eliminó');
+  assert.match(SRC,/foto3d-hy3d\.js/,'el worker de Hunyuan3D');
+  assert.match(INDEX,/Hunyuan3D/);
+  assert.match(INDEX,/la foto se envía|La foto sale de tu equipo/i,'avisa que la foto sale del equipo');
+  assert.match(INDEX,/huggingface\.co\/spaces\/tencent\/Hunyuan3D-2\/blob\/main\/LICENSE/,'enlaza la licencia');
+  assert.match(INDEX,/UE, Reino Unido ni Corea del Sur/,'avisa el límite territorial de la licencia');
+  assert.match(SRC,/confirm\(/,'pide confirmación la primera vez que se envía una foto');
+});
+
+test('cada elemento que usa la interfaz existe en index.html',()=>{
+  const ids=new Set([...SRC.matchAll(/\$\('(f3d\w+)'\)/g)].map(m=>m[1]));
+  for(const m of SRC.matchAll(/\[('f3d\w+'(?:,'f3d\w+')*)\]/g))for(const id of m[1].split(','))ids.add(id.replace(/'/g,''));
+  assert.ok(ids.size>20,'se detectaron los ids');
+  const html=INDEX.slice(INDEX.indexOf('id="maquinaEscultorView"'),INDEX.indexOf('id="maquinaCalView"'));
+  for(const id of ids)if(!['f3dC_'].some(p=>id.startsWith(p)))assert.ok(html.includes('id="'+id+'"'),'falta #'+id+' en index.html');
+  // cada acción del HTML existe en la API pública
+  const api=SRC.slice(SRC.indexOf('root.Foto3D={'));
+  for(const m of html.matchAll(/Foto3D\.(\w+)\(/g))assert.match(api,new RegExp('\\b'+m[1]+'\\b'),'Foto3D.'+m[1]+' no existe en la API pública');
+});
+
+test('objeto 3D: del tamaño pedido, apoyado en la cama y con la malla de Hunyuan3D intacta',()=>{
+  const c=clean(sphere(48,32,10,12,9)),r=CORE.buildSolido3D(c,{size:90});
+  assert.ok(!r.error);assertWatertight(r.mesh,'objeto 3D');
+  const d=dims(r.bounds);
+  assert.ok(Math.abs(Math.max(...d)-90)<1e-3,`lado mayor ${d}`);
+  assert.ok(Math.abs(r.bounds.min[2])<1e-6,'apoyado en z = 0');
+  assert.ok(r.volume>0&&r.mesh.normals.length===r.mesh.count*9,'volumen positivo y normales para el visor');
+  assert.equal(r.warning,'','una esfera cerrada no avisa nada');
+  // el STL es el de la malla: cada triángulo exacto
+  const buf=CORE.writeSTL(r.mesh,'x'),dv=new DataView(buf);
+  assert.equal(dv.getUint32(80,true),r.mesh.count);
+});
+
+test('objeto 3D con base: la base se une al cuerpo y todo apoya en z = 0',()=>{
+  const c=clean(sphere(48,32,10,12,9));
+  for(const shape of['oval','rect']){
+    const r=CORE.buildSolido3D(c,{size:80,baseShape:shape,baseH:6,baseMargin:5}),sin=CORE.buildSolido3D(c,{size:80});
+    assertWatertight(r.mesh,'con base '+shape);
+    assert.equal(r.shells,2);assert.ok(r.mesh.count>sin.mesh.count,'suma los triángulos de la base');
+    assert.ok(Math.abs(r.bounds.min[2])<1e-6);
+    const dz=r.bounds.max[2]-sin.bounds.max[2];
+    assert.ok(dz>3.5&&dz<6.5,`el cuerpo sube por el alto de la base menos lo que se hunde (${dz.toFixed(2)})`);
+    assert.ok((r.bounds.max[0]-r.bounds.min[0])>(sin.bounds.max[0]-sin.bounds.min[0])+8,'la base sobresale con su margen');
+  }
+});
+
+test('objeto 3D: avisa si sin base se vuelca y si la malla trae aristas abiertas',()=>{
+  // esfera grande de un lado y una chica que baja más: el apoyo queda lejos del centro de masa
+  const tip=join(sphere(32,20,20,20,20,[-30,20,0]),sphere(32,20,5,5,5,[40,-5,0]));
+  const r=CORE.buildSolido3D(clean(tip),{size:90});
+  assert.match(r.warning,/volcarse/);
+  assert.equal(CORE.buildSolido3D(clean(tip),{size:90,baseShape:'oval'}).warning,'','con base ya no avisa');
+  const c=clean(sphere(24,16));c.stats=Object.assign({},c.stats,{openAfter:7});
+  assert.match(CORE.buildSolido3D(c,{size:50}).warning,/7 aristas abiertas/);
+});
+
+test('girar la pieza lleva el frente al otro lado',()=>{
+  const e=join(sphere(24,16,8,8,8,[10,0,0]),sphere(24,16,3,3,3,[10,0,14])); // bulto en el frente (+Z de GLB)
+  const c=clean(e);
+  const centro=rot=>{const r=CORE.buildSolido3D(c,{size:60,rot}),t=r.mesh.tris;let ymin=Infinity,xs=0,n=0;
+    for(let i=1;i<t.length;i+=3)if(t[i]<ymin)ymin=t[i];
+    return ymin;};
+  const f=centro(0),b=centro(180);
+  // al girar 180° el bulto pasa de −Y a +Y: la caja deja de estar simétrica respecto de su centro
+  const bx=r=>{const m=CORE.buildSolido3D(c,{size:60,rot:r}),t=m.mesh.tris;let lo=Infinity,hi=-Infinity;for(let i=1;i<t.length;i+=3){lo=Math.min(lo,t[i]);hi=Math.max(hi,t[i]);}return[lo,hi];};
+  const [lo0,hi0]=bx(0),[lo1,hi1]=bx(180);
+  assert.ok(Math.abs((lo0+hi0)-(-(lo1+hi1)))<1e-3,'las cajas son espejo una de la otra');
+  assert.ok(Math.abs(f)+Math.abs(b)>0);
+});
+
+test('relieve desde la malla: la silueta del modelo es el recorte y el agujero del anillo se conserva',()=>{
+  const ring=clean(torus(64,32,14,5)); // visto de frente: anillo con agujero
+  for(const shape of['medallon','llavero']){
+    const F=CORE.reliefFields(ring,shape,{});
+    assert.ok(F.hasAlpha&&CORE.maskSource(F,{}).mode==='alpha',shape+': el recorte sale de la silueta');
+    const r=CORE.buildModel(F,shape,shape==='medallon'?{plate:'redondeado',hang:false}:{});
+    assert.ok(!r.error,r.error);assertWatertight(r.mesh,shape+' desde malla');
+    assert.ok(r.volume>0);
+    if(shape==='llavero')assert.ok(eulerCharacteristic(r.mesh)<=-2,'el llavero conserva el agujero del anillo y suma el de la argolla ('+eulerCharacteristic(r.mesh)+')');
+  }
+});
+
+test('relieve desde la malla: lo más cercano al frente queda más alto',()=>{
+  // dos esferas solapadas en la vista frontal (así forman una sola silueta, como exige el llavero):
+  // la de la izquierda está adelante (+Z de GLB = frente) y la de la derecha atrás
+  const m=clean(join(sphere(32,20,8,8,8,[-5,0,10]),sphere(32,20,8,8,8,[5,0,-10])));
+  const F=CORE.reliefFields(m,'llavero',{}),r=CORE.buildModel(F,'llavero',{edge:0,relief:10,smooth:0});
+  const G=r.grid,left=[],right=[];
+  for(let j=0;j<G.h;j++)for(let i=0;i<G.w;i++){const c=j*G.w+i;if(!G.mask[c])continue;(i<G.w/2?left:right).push(G.d[c]);}
+  const avg=a=>a.reduce((s,v)=>s+v,0)/a.length;
+  assert.ok(avg(left)>avg(right)+.15,`izquierda (adelante) ${avg(left).toFixed(2)} vs derecha (atrás) ${avg(right).toFixed(2)}`);
+});
+
+test('relieve desde la malla: el medallón circular deja margen para que el objeto quepa en la placa',()=>{
+  const wide=clean(sphere(32,20,20,5,5)); // alargado: la placa circular no debe recortarlo
+  const F=CORE.reliefFields(wide,'medallon',{plate:'circular'});
+  assert.equal(F.w,F.h,'lienzo cuadrado');
+  const r=CORE.buildModel(F,'medallon',{plate:'circular',hang:false,frame:0});
+  assert.ok(!r.error);
+  // toda la silueta cae dentro del círculo: no hay celdas de objeto fuera de la placa
+  let lost=0,total=0;const G=r.grid;
+  for(let j=0;j<G.h;j++)for(let i=0;i<G.w;i++){const c=j*G.w+i;if(G.subject[c]){total++;if(!G.mask[c])lost++;}}
+  assert.ok(total>0&&lost===0,`${lost} celdas del objeto quedan fuera de la placa`);
 });
