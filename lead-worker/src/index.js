@@ -2111,7 +2111,7 @@ async function handleLinkedinOfficial(request, env, ctx, cors, url) {
     action: "CREATED", leadId, clienteId: result.clienteId || null,
     queueId: result.queueId || null, buffered: !!result.buffered, reviewRequired: !!result.reviewRequired,
   }), { expirationTtl: 90 * 86400 });
-  if (result.clienteId)
+  if (result.clienteId && !result.canonicalReplay && !result.replayed)
     ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId, "LinkedIn Lead Sync"));
   return json({ ok: true, clienteId: result.clienteId || null, queueId: result.queueId || null, buffered: !!result.buffered, reviewRequired: !!result.reviewRequired }, 200, cors);
 }
@@ -2255,7 +2255,7 @@ async function handleLinkedin(request, env, ctx, cors) {
         }), { expirationTtl: 30 * 86400 });
       } catch (_) {}
     }
-    if (result.clienteId) ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId));
+    if (result.clienteId && !result.canonicalReplay && !result.replayed) ctx.waitUntil(syncLinkedinInboundProspect(env, norm, result.clienteId));
   }
   return response;
 }
@@ -2633,7 +2633,7 @@ export class SocialEventGuard {
     if(path==="/lead-intake"){
       if(!/^dl:[a-f0-9]{64}$/.test(p?.key||"")||!p?.item?.norm)
         return Response.json({ok:false,error:"Invalid lead intake"},{status:422});
-      const work=(this.leadPending||Promise.resolve()).then(()=>processSavedLead(this.env,this.state.storage,p.key,p.item));
+      const work=(this.leadPending||Promise.resolve()).then(()=>preserveAndProcessLead(this.env,this.state.storage,p.key,p.item));
       this.leadPending=work.catch(()=>{});
       return Response.json(await work);
     }
@@ -2737,18 +2737,19 @@ async function createLeadAndQueue(env, ctx, cors, item) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
   const key = "dl:" + [...new Uint8Array(digest)].map(v => v.toString(16).padStart(2, "0")).join("");
   try {
-    // Persist the entire intake (including attachment) before touching CRM.
-    await env.RL.put(key, JSON.stringify({ ...item, version: 2 }));
-    const result = await runSavedLead(env, key, item);
+    // Canonical preservation happens inside the serialized guard, never here:
+    // a changed replay must not replace the original payload or attachment.
+    const { canonicalItem, ...result } = await runSavedLead(env, key, item);
+    const savedItem = canonicalItem || item;
     if (result.buffered) {
-      ctx.waitUntil(sendLeadSaveFailedAlert(env, item.norm, result.reason || "Revisión de identidad", {
+      ctx.waitUntil(sendLeadSaveFailedAlert(env, savedItem.norm, result.reason || "Revisión de identidad", {
         title: "Lead retenido para revisión",
         intro: "El lead y su adjunto están conservados sin vencimiento en el buffer protegido. " +
           "No crear clientes ni tareas manualmente sin comprobar el resultado previo. Referencia: " + key,
         subject: "Lead retenido para revisión de identidad",
       }));
     } else if (!result.replayed) {
-      await finishLeadIntake(env, ctx, item, result);
+      await finishLeadIntake(env, ctx, savedItem, result);
     }
     return json({ ok: true, ...result }, 200, cors);
   } catch (e) {
@@ -2764,6 +2765,35 @@ async function runSavedLead(env, key, item) {
   });
   if (!response.ok) throw new Error("Lead intake guard unavailable");
   return await response.json();
+}
+
+// Reserve the canonical payload digest before its first KV write. If that write
+// is uncertain, only the identical payload may retry it. Once confirmed, every
+// replay processes the saved original, even when the transport changes content.
+async function preserveAndProcessLead(env, storage, key, raw) {
+  const state = await storage.get("lead-state");
+  if (state?.phase === "complete") return await processSavedLead(env, storage, key, {});
+  const { norm, agente, evento, source, campaign, attachment } = raw;
+  const item = { norm, agente, evento, source, campaign, attachment };
+  const encoded = JSON.stringify(item);
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(encoded));
+  const digest = [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, "0")).join("");
+  let input = await storage.get("lead-input");
+  if (!input) {
+    input = { digest, stored: false };
+    await storage.put("lead-input", input);
+  }
+  if (!input.stored) {
+    if (input.digest !== digest) throw new Error("Canonical intake persistence requires original payload");
+    await env.RL.put(key, JSON.stringify({ ...item, version: 2 }));
+    await storage.put("lead-input", { ...input, stored: true });
+    // Use the just-confirmed original rather than depending on a KV read after write.
+    return { ...await processSavedLead(env, storage, key, item), canonicalItem: item };
+  }
+  const saved = await env.RL.get(key);
+  if (!saved) throw new Error("Canonical intake unavailable; preserving durable state");
+  const canonicalItem = JSON.parse(saved);
+  return { ...await processSavedLead(env, storage, key, canonicalItem), canonicalItem, canonicalReplay: input.digest !== digest };
 }
 
 // Only called inside the per-intake Durable Object. A durable phase is written
@@ -3571,12 +3601,12 @@ async function retryDeadLetters(env) {
         await env.RL.put(k.name, JSON.stringify({ ...item, reviewRequired: true }));
         continue;
       }
-      const result = await runSavedLead(env, k.name, item);
+      const { canonicalItem, ...result } = await runSavedLead(env, k.name, item);
       if (!result.buffered) {
         await env.RL.delete(k.name);
         if (!result.replayed) {
           const pending = [];
-          await finishLeadIntake(env, { waitUntil: p => pending.push(p) }, item, result);
+          await finishLeadIntake(env, { waitUntil: p => pending.push(p) }, canonicalItem || item, result);
           await Promise.allSettled(pending);
         }
       }

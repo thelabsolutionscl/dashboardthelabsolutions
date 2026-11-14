@@ -186,8 +186,51 @@ test('official LinkedIn signed webhook preserves ambiguous form data and blocks 
   assert.equal(h.writes.filter(w=>/Clientes|Agent_Queue|uploadAttachment/.test(w.url)).length,0);
   assert.ok([...h.kv.map.keys()].some(k=>k.startsWith('dl:')));
 });
-test('same external lead ID is serialized even if a replay changes the payload',async()=>{
-  const h=harness({candidates:[],failPost:true});h.item.norm.externalLeadId='synthetic-event';
-  await h.submit();h.item.norm.message='transport replay changed formatting';await h.submit();
-  assert.equal(h.writes.length,1);
+test('changed replay preserves canonical payload and attachment in every held phase',async()=>{
+  for (const options of [{candidates:[],failPost:true},{candidates:[],failQueue:true},{}]) {
+    const h=harness(options);h.item.norm.externalLeadId='synthetic-event';
+    if(!options.failPost&&!options.failQueue)h.item.norm.company='Example Other';
+    await h.submit();
+    const key=[...h.kv.map.keys()].find(k=>k.startsWith('dl:'));
+    const original=JSON.parse(await h.kv.get(key));const count=h.writes.length;
+    h.item.norm.message='changed replay';h.item.norm.email='changed@example.invalid';
+    h.item.attachment={name:'replacement.pdf',type:'application/pdf',data:'cmVwbGFjZWQ='};
+    await Promise.all([h.submit(),h.submit(),h.api.retryDeadLetters(h.env)]);
+    const held=JSON.parse(await h.kv.get(key));
+    assert.deepEqual(held.norm,original.norm);assert.deepEqual(held.attachment,original.attachment);
+    assert.equal(h.writes.length,count);
+  }
+});
+test('lookup recovery uses original identity and attachment even if replay changes payload',async()=>{
+  const h=harness({failLookup:true});h.item.norm.externalLeadId='synthetic-event';
+  await h.submit();h.recover();h.env.RESEND_API_KEY='synthetic';
+  h.item.norm.email='changed@example.invalid';h.item.norm.company='Example Other';
+  h.item.attachment={name:'replacement.pdf',type:'application/pdf',data:'cmVwbGFjZWQ='};
+  const recovered=await h.submit();assert.equal(recovered.body.clienteId,A);
+  const upload=h.writes.find(w=>w.url.includes('uploadAttachment'));
+  assert.equal(upload.body.filename,'synthetic.txt');assert.equal(upload.body.file,'dGVzdA==');
+  const reply=h.writes.find(w=>w.url==='https://api.resend.com/emails');
+  assert.deepEqual(reply.body.to,[norm.email]);assert.equal(recovered.body.canonicalItem,undefined);
+});
+test('uncertain initial KV write cannot be replaced by a different payload',async()=>{
+  const h=harness();h.item.norm.externalLeadId='synthetic-event';
+  const put=h.kv.put.bind(h.kv);let fail=true;
+  h.kv.put=async(k,v)=>{if(fail&&k.startsWith('dl:'))throw new Error('synthetic storage failure');return put(k,v);};
+  assert.equal((await h.submit()).status,503);assert.equal(h.writes.length,0);
+  fail=false;h.item.norm.message='different replay';
+  assert.equal((await h.submit()).status,503);assert.equal(h.kv.map.size,0);assert.equal(h.writes.length,0);
+  delete h.item.norm.message;assert.equal((await h.submit()).status,200);
+});
+test('completed LinkedIn transport replay cannot overwrite staging with changed contact data',async()=>{
+  const h=harness();h.env.LINKEDIN_WEBHOOK_KEY='synthetic-key';
+  const send=async body=>{
+    const r=await h.api.worker.fetch(new Request('https://test.invalid/webhooks/linkedin',{method:'POST',
+      headers:{'X-Linkedin-Webhook-Key':'synthetic-key','Content-Type':'application/json'},body:JSON.stringify(body)}),h.env,h.ctx);
+    await Promise.all(h.pending);return await r.json();
+  };
+  const body={...norm,leadId:'synthetic-event'};await send(body);
+  // Simulate a missing/expired outer transport cache; the durable guard remains.
+  await h.kv.delete('linkedin:webhook:synthetic-event');const before=h.writes.length;
+  const replay=await send({...body,email:'changed@example.invalid',company:'Example Other'});
+  assert.equal(replay.replayed,true);assert.equal(replay.canonicalItem,undefined);assert.equal(h.writes.length,before);
 });
