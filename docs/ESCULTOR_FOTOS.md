@@ -105,6 +105,52 @@ diagonales cada ~2–3 mm en toda la superficie y relieve blando.
 | Relieve blando | La IA veía la foto a 518 px y el suavizado gaussiano borraba cantos | Con GPU la IA ve la foto a 1022 px (imagen de trabajo 1024 px; si la GPU no da abasto, 770 px); suavizado con filtro guiado (`guidedSmooth`): promedia las ondas y conserva escalones ≥ 10 % del rango (un escalón de 0,300 queda en 0,312; con gaussiano, 0,240) |
 | — | — | Resolución por defecto 260 → 300 celdas (máx. 500) |
 
+## Picos (2026-11-10, tercera prueba real)
+
+Tras subir la IA a 1022 px la pieza salió con picos agudos aislados en toda
+la superficie (y espejados en el reverso).
+
+| Hallazgo | Causa | Corrección |
+|---|---|---|
+| Picos agudos aislados | Fuera de su resolución de entrenamiento (518 px) y en fp16 sobre GPU, el ViT puede desbordarse en algunos parches y devolver valores basura | Por defecto vuelve a 518 px en GPU (4 pasadas). 770 y 1022 pasan a ser opcionales ("Detalle de la IA"); si una pasada trae > 0,5 % de valores no finitos o atípicos groseros, baja sola de resolución y lo dice en la nota |
+| El filtro guiado dejaba pasar los picos | Un pico aislado parece un canto y el filtro conserva cantos | Mediana 3×3 enmascarada antes del filtro guiado (quita picos de una celda, un escalón recto queda intacto) |
+| Una mancha basura en una pasada contaminaba el promedio | Las pasadas se combinaban con la media | Mediana por pixel entre pasadas |
+| **STL corrupto** si la profundidad traía NaN o infinito | Se propagaban hasta los vértices (`volumen NaN`) | `prepareFields` y el worker rellenan los no finitos desde los vecinos válidos |
+
+Límite: una mancha basura del tamaño de un parche que aparezca igual en todas
+las pasadas no se puede distinguir de un detalle real del mismo tamaño
+(dedos, puntas); por eso la defensa principal es no salir de 518 px salvo que
+se pida.
+
+## Motor de render (2026-11-14)
+
+Al ampliar las capturas con la IA real aparecieron dos defectos que no vienen
+del modelo. Se reprodujeron con una profundidad perfectamente lisa: facetas en
+bandas y "pliegues de cortina" en las paredes.
+
+| Hallazgo | Causa | Corrección |
+|---|---|---|
+| Dentado en las pendientes | Todas las celdas se partían por la misma diagonal | Cada celda une sus dos esquinas de altura más parecida (la arista sigue crestas y valles). Con el contorno corrido se usa la diagonal que no voltea caras |
+| Facetas, bandas y paredes plisadas en el visor | Sombreado plano: una normal por triángulo | `buildSolid` entrega normales por vértice (relieve, reverso y paredes por separado, para que el canto siga nítido) y el visor sombrea suave, con luz principal, relleno, contraluz y luz de cielo. Botón **Facetas** para ver los triángulos reales, como en un laminador |
+| La cuadrícula del plato se veía sobre la pieza | Al mirar desde abajo queda por delante | Sólo se dibuja con la cámara sobre el plato |
+| Reconstrucción lenta | Percentiles con `Array.sort` y relleno con desenfoques exactos | Arreglo tipado y gaussiana por cajas: ~205 ms a 300 celdas |
+
+El sombreado suave es sólo de pantalla: `writeSTL` calcula su normal por
+faceta y el archivo no cambia por las normales (hay un test). La diagonal
+adaptativa sí cambia el STL, para mejor.
+
+**Diagnóstico de la IA.** El modelo corre en la GPU de cada usuario y sus
+defectos no se pueden reproducir en las pruebas. El worker mide y la interfaz
+muestra bajo la foto: tipo de dato de la salida, niveles distintos de
+profundidad (pocos = salida cuantizada, da escalones), ondas con el paso de los
+parches antes → después de promediar (el piso de la medida es ~0,4 %) y la
+fracción de valores descartados.
+
+**Pendiente.** No se pudo correr el modelo real en el entorno de desarrollo
+(bloqueado por los permisos de la sesión), así que la causa de las bandas que
+se ven con la IA real a 518 px sigue sin confirmar: ondas de parche del ViT o
+cuantización fp16. La línea de diagnóstico la distingue.
+
 ## Límites conocidos
 
 - Es un **relieve**, no un escaneo: lo que no se ve en la foto se inventa

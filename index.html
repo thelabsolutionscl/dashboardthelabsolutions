@@ -3394,14 +3394,16 @@
             <div id="f3dSrcWrap" class="f3d-src"><canvas id="f3dSrc"></canvas></div>
             <div class="f3d-row">
               <label class="f3d-field f3d-inline"><span>Relieve desde</span><select class="field-select" id="f3dSource" onchange="Foto3D.onSourceChange()"><option value="ia">IA de profundidad</option><option value="brillo">Brillo de la imagen</option></select></label>
+              <label class="f3d-field f3d-inline" title="Normal = resolución de entrenamiento (518 px), la más estable. Alto y Máximo ven más detalle pero algunas GPU devuelven picos; si pasa, baja sola."><span>Detalle de la IA</span><select class="field-select" id="f3dAiQuality" onchange="Foto3D.onQualityChange()"><option value="normal">Normal · 518 px</option><option value="alto">Alto · 770 px</option><option value="maximo">Máximo · 1022 px</option></select></label>
               <button class="btn btn-ghost btn-sm" id="f3dDepthBtn" onclick="Foto3D.runDepth()">↻ Recalcular IA</button>
               <button class="btn btn-ghost btn-sm" onclick="document.getElementById('f3dFile').click()">Cambiar foto</button>
             </div>
             <div id="f3dAiNote" class="f3d-note"></div>
+            <div id="f3dDiag" class="f3d-note f3d-diag"></div>
             <div id="f3dProg" class="f3d-prog" style="display:none"><div class="f3d-prog-track"><div id="f3dProgBar"></div></div><div id="f3dProgTxt"></div></div>
           </div>
           <div class="f3d-pane">
-            <div class="f3d-pane-head"><b>Pieza 3D</b><span class="f3d-hint">arrastra para girar · rueda = zoom · doble clic = vista inicial</span></div>
+            <div class="f3d-pane-head"><b>Pieza 3D</b><span class="f3d-hint">arrastra para girar · rueda = zoom · doble clic = vista inicial</span><div class="f3d-seg"><button type="button" id="f3dFacetsBtn" title="Muestra los triángulos tal como son en el STL (así lo ve un laminador). Apagado, la superficie se ve suave como al imprimirla." onclick="Foto3D.toggleFacets()">Facetas: no</button></div></div>
             <div class="f3d-viewer"><canvas id="f3dCanvas"></canvas><div id="f3dNoGL" class="f3d-nogl" style="display:none">Este navegador no tiene WebGL: no puedo mostrar la vista 3D, pero el STL se descarga igual.</div></div>
             <div id="f3dStats" class="f3d-stats"></div>
             <div class="f3d-row">

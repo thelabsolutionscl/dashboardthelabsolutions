@@ -434,9 +434,9 @@ function truthImage(w,h){
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x,v=.3+.4*Math.exp(-((x-w*.45)**2+(y-h*.5)**2)/(2*(w*.25)**2))+.2*x/w;t[i]=Math.round(v*255)/255;rgba[i*4]=Math.round(v*255);rgba[i*4+3]=255;}
   return{rgba,t};
 }
-async function runWorker(T,gpu,w,h,rgba){
+async function runWorker(T,gpu,w,h,rgba,quality){
   const W=loadWorker({...T,gpu});
-  W.send({type:'depth',id:1,rgba:rgba.buffer.slice(0),w,h});
+  W.send({type:'depth',id:1,rgba:rgba.buffer.slice(0),w,h,quality});
   for(let i=0;i<40;i++)await W.settle();
   return W.posted.find(m=>m.type==='depth');
 }
@@ -460,13 +460,18 @@ test('worker: las pasadas desplazadas cancelan las ondas de los parches del ViT'
   assert.ok(eTTA<eSingle*.3,`las ondas deben bajar ≥ 70 % (una pasada ${eSingle.toFixed(4)}, promediadas ${eTTA.toFixed(4)})`);
 });
 
-test('worker: con GPU usa 1022 px y 4 pasadas',async()=>{
+const GPU={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
+test('worker: con GPU usa por defecto 518 px (resolución de entrenamiento) y 4 pasadas',async()=>{
   const w=300,h=200,{rgba}=truthImage(w,h),T=patchyTransformers();
-  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
-  const r=await runWorker(T,gpu,w,h,rgba);
-  assert.equal(r.res,1022);assert.equal(r.passes,4);assert.match(r.label,/GPU/);
-  assert.ok(T.calls.every(c=>c.L===1022),'el procesador del modelo recibe la resolución alta');
+  const r=await runWorker(T,GPU,w,h,rgba);
+  assert.equal(r.res,518);assert.equal(r.passes,4);assert.match(r.label,/GPU/);
   assert.equal(r.data.length,w*h,'la profundidad vuelve al tamaño de la foto');
+});
+test('worker: "Máximo" pide 1022 px al procesador del modelo',async()=>{
+  const w=300,h=200,{rgba}=truthImage(w,h),T=patchyTransformers();
+  const r=await runWorker(T,GPU,w,h,rgba,'maximo');
+  assert.equal(r.res,1022);
+  assert.ok(T.calls.every(c=>c.L===1022),'el procesador recibe la resolución alta');
 });
 
 test('suavizado: quita las ondas sin borrar un escalón real (filtro guiado)',()=>{
@@ -483,10 +488,116 @@ test('suavizado: quita las ondas sin borrar un escalón real (filtro guiado)',()
 });
 
 test('worker: si la GPU no da abasto a 1022 px, baja a 770 px antes de pasar a CPU',async()=>{
+  const quality='maximo';
   const w=200,h=150,{rgba}=truthImage(w,h),T=patchyTransformers();
   const orig=T.module.pipeline;
   T.module.pipeline=async(...a)=>{const f=await orig(...a);const g=async img=>{if(T.ip.size.width===1022)throw new Error('sin memoria de GPU');return f(img);};g.processor=f.processor;return g;};
-  const gpu={requestAdapter:async()=>({features:new Set(['shader-f16'])})};
-  const r=await runWorker(T,gpu,w,h,rgba);
+  const r=await runWorker(T,GPU,w,h,rgba,quality);
   assert.equal(r.res,770);assert.match(r.label,/GPU/);assert.equal(r.passes,4);
+  assert.equal(r.asked,1022,'informa que bajó de la resolución pedida');
+});
+
+// ── Picos (tercera prueba real: picos agudos en toda la pieza) ────────────
+test('worker: una pasada con desborde fp16 (NaN/infinito) baja de resolución sola',async()=>{
+  const w=200,h=150,{rgba}=truthImage(w,h),T=patchyTransformers(0);
+  const orig=T.module.pipeline;
+  T.module.pipeline=async(...a)=>{const f=await orig(...a);
+    const g=async img=>{const o=await f(img);if(T.ip.size.width>518){const d=o.predicted_depth.data;for(let i=0;i<d.length;i+=40)d[i]=i%80?NaN:Infinity;}return o;};
+    g.processor=f.processor;return g;};
+  const r=await runWorker(T,GPU,w,h,rgba,'maximo');
+  assert.equal(r.res,518,'1022 y 770 salen sucias: se queda en 518');
+  assert.ok(r.data.every(Number.isFinite),'sin NaN ni infinitos');
+});
+
+test('worker: una mancha basura en una sola pasada no llega al resultado (mediana)',async()=>{
+  const w=200,h=150,{rgba,t}=truthImage(w,h),T=patchyTransformers(0);
+  const orig=T.module.pipeline;let call=0;
+  T.module.pipeline=async(...a)=>{const f=await orig(...a);
+    const g=async img=>{const o=await f(img);if(call++===2){const d=o.predicted_depth.data;for(let y=60;y<70;y++)for(let x=90;x<100;x++)d[y*w+x]=5;}return o;};
+    g.processor=f.processor;return g;};
+  const r=await runWorker(T,GPU,w,h,rgba);
+  let maxErr=0;for(let y=58;y<72;y++)for(let x=88;x<102;x++)maxErr=Math.max(maxErr,Math.abs(r.data[y*w+x]-t[y*w+x]));
+  assert.ok(maxErr<.05,`la mancha se descarta (error ${maxErr.toFixed(3)})`);
+});
+
+test('NaN o infinito en la profundidad nunca llegan al STL',()=>{
+  const w=200,h=150,n=w*h,rgba=new Uint8ClampedArray(n*4),depth=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=i%w,y=(i/w)|0,inside=((x-100)/70)**2+((y-75)/50)**2<1;rgba.set(inside?[180,180,180,255]:[5,5,5,255],i*4);depth[i]=inside?.7:.1;}
+  for(let k=0;k<300;k++)depth[(k*997)%n]=k%2?NaN:Infinity;
+  const r=CORE.buildModel(CORE.prepareFields({w,h,rgba},depth),'objeto',{res:120});
+  assert.ok(r.mesh.tris.every(Number.isFinite),'todos los vértices son números');
+  assert.ok(r.volume>0);
+  assertWatertight(r.mesh,'profundidad con NaN');
+});
+
+test('picos de una celda se eliminan sin redondear un escalón real',()=>{
+  const w=60,h=40,n=w*h,p=new Float32Array(n),mask=new Uint8Array(n).fill(1);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)p[y*w+x]=x<30?.3:.7;
+  for(const[x,y]of[[10,10],[45,20],[20,30]])p[y*w+x]=1.5;
+  const m=CORE.maskedMedian3(p,mask,w,h);
+  for(const[x,y]of[[10,10],[45,20],[20,30]])assert.ok(m[y*w+x]<.8,'el pico desaparece');
+  assert.ok(Math.abs(m[20*w+29]-.3)<1e-6&&Math.abs(m[20*w+30]-.7)<1e-6,"el escalón queda intacto a ambos lados");
+});
+
+// ── Motor de render: triangulación y normales ─────────────────────────────
+test('malla: cada celda se parte por la diagonal que une sus esquinas de altura parecida',()=>{
+  // Cresta en diagonal: v00 y v11 a la misma altura, v10 y v01 a alturas distintas
+  // más abajo. La arista debe unir los dos de la cresta (orden: v00, v10, v01, v11).
+  const vt=new Float32Array([1,.5, 0,1]),vb=new Float32Array(4).fill(-1),mask=new Uint8Array([1]);
+  const m=CORE.buildSolid({w:1,h:1,mask,vt,vb,px:1}),t=m.tris;
+  const has=(a,b)=>{for(let f=0;f<m.count;f++)for(let e=0;e<3;e++){const i=f*9+e*3,j=f*9+((e+1)%3)*3;
+    const P=[t[i],t[i+1],t[i+2]],Q=[t[j],t[j+1],t[j+2]];
+    if((P+''===a+''&&Q+''===b+'')||(P+''===b+''&&Q+''===a+''))return true;}return false;};
+  assert.ok(has([0,1,1],[1,0,1]),'la diagonal sigue la cresta (une los dos vértices altos)');
+  assert.ok(!has([0,0,0],[1,1,.5]),'y no la cruza por los vértices bajos');
+  assertWatertight(m,'celda con cresta');
+});
+
+test('malla: las normales para el visor son unitarias, apuntan hacia afuera y no cambian el STL',()=>{
+  const{img,depth}=syntheticImage();
+  const r=CORE.buildModel(CORE.prepareFields(img,depth),'figura',{res:90}),m=r.mesh,t=m.tris,q=m.normals;
+  assert.equal(q.length,m.count*9,'una normal por vértice de triángulo');
+  let bad=0,against=0;
+  for(let f=0;f<m.count;f++){
+    const b=f*9,ux=t[b+3]-t[b],uy=t[b+4]-t[b+1],uz=t[b+5]-t[b+2],vx=t[b+6]-t[b],vy=t[b+7]-t[b+1],vz=t[b+8]-t[b+2];
+    const fx=uy*vz-uz*vy,fy=uz*vx-ux*vz,fz=ux*vy-uy*vx,fl=Math.hypot(fx,fy,fz);
+    for(let k=0;k<3;k++){
+      const nx=q[b+k*3],ny=q[b+k*3+1],nz=q[b+k*3+2];
+      if(Math.abs(Math.hypot(nx,ny,nz)-1)>1e-3)bad++;
+      // suavizada, pero del mismo lado que la cara (nunca hacia adentro)
+      if(fl>1e-9&&(nx*fx+ny*fy+nz*fz)/fl<-.2)against++;
+    }
+  }
+  assert.equal(bad,0,'normales unitarias');
+  assert.ok(against<m.count*3*.002,`normales del lado de la cara (${against} en contra)`);
+  // El STL sólo depende de los triángulos: calcula su propia normal por faceta.
+  const a=Buffer.from(CORE.writeSTL(m,'x')),b2=Buffer.from(CORE.writeSTL({tris:m.tris,count:m.count},'x'));
+  assert.ok(a.equals(b2),'writeSTL ignora las normales del visor');
+});
+
+test('malla: sobre una cúpula lisa las normales varían de forma continua entre celdas vecinas',()=>{
+  const w=40,h=40,nv=41*41,vt=new Float32Array(nv),vb=new Float32Array(nv),mask=new Uint8Array(w*h).fill(1);
+  for(let j=0;j<=h;j++)for(let i=0;i<=w;i++){const u=(i-20)/20,v=(j-20)/20;vt[j*41+i]=2+8*Math.max(0,1-u*u-v*v);}
+  const m=CORE.buildSolid({w,h,mask,vt,vb,px:1}),t=m.tris,q=m.normals,seen=new Map();let worst=0;
+  for(let i=0;i<m.count*9;i+=3){
+    if(t[i+2]<1)continue; // sólo la cara superior…
+    if(t[i]<=0||t[i]>=40||t[i+1]<=0||t[i+1]>=40)continue; // …sin el borde, que comparte posición con las paredes
+    const k=t[i]+','+t[i+1]+','+t[i+2],n=[q[i],q[i+1],q[i+2]],p=seen.get(k);
+    if(p)worst=Math.max(worst,Math.hypot(p[0]-n[0],p[1]-n[1],p[2]-n[2]));else seen.set(k,n);
+  }
+  assert.ok(worst<1e-6,'un mismo vértice lleva la misma normal en todos sus triángulos (sin facetas)');
+});
+
+test('worker: el diagnóstico mide las ondas de parche antes y después, y detecta salida cuantizada',async()=>{
+  const w=400,h=300,{rgba}=truthImage(w,h);
+  const r=await runWorker(patchyTransformers(.04),null,w,h,rgba);
+  assert.ok(r.diag,'el resultado trae diagnóstico');
+  assert.ok(r.diag.rippleIn>.02,`detecta las ondas de entrada (${r.diag.rippleIn.toFixed(4)})`);
+  assert.ok(r.diag.rippleOut<r.diag.rippleIn*.4,`y que bajaron al promediar (${r.diag.rippleOut.toFixed(4)})`);
+  // Salida en pocos niveles (como fp16 sobre un rango angosto) → se informa.
+  const T=patchyTransformers(0),orig=T.module.pipeline;
+  T.module.pipeline=async(...a)=>{const f=await orig(...a);const g=async img=>{const o=await f(img),d=o.predicted_depth.data;for(let i=0;i<d.length;i++)d[i]=Math.round(d[i]*40)/40;return o;};g.processor=f.processor;return g;};
+  const qz=await runWorker(T,null,w,h,rgba),smooth=await runWorker(patchyTransformers(0),null,w,h,rgba);
+  assert.ok(qz.diag.levels<60,`pocos niveles (${qz.diag.levels})`);
+  assert.ok(smooth.diag.levels>qz.diag.levels*3,`más niveles sin cuantizar (${smooth.diag.levels})`);
 });
