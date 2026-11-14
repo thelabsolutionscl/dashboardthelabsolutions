@@ -1201,7 +1201,7 @@ function renderWorkshopHome(){
     <div class="mops-workshop-section-title"><div><b>Herramientas de producción</b><small>Laminado, escultor de fotos, perfiles, análisis y configuración disponibles también en modo Simple.</small></div></div>
     <div class="mops-workshop-nav-grid advanced">
       ${workshopNavCard('laminado','Laminador','Agente 3D, G-code y preflight','Abrir','neutral')}
-      ${workshopNavCard('escultor','Escultor de fotos','Foto → STL con IA de profundidad local','Abrir','neutral')}
+      ${workshopNavCard('escultor','Escultor de fotos','Foto → objeto 3D con Hunyuan3D','Abrir','neutral')}
       ${workshopNavCard('perfiles','Perfiles','Versiones controladas y aprobación humana',s.readyProfiles+' listos',s.invalidApproved?'warning':'neutral')}
       ${workshopNavCard('analitica','Analítica','QA, tiempos reales y costos modelados','Abrir','neutral')}
       ${workshopNavCard('automatizacion','Configuración','Umbrales, automatización y costos','Avanzado','neutral')}

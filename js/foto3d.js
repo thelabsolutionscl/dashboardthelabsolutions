@@ -1,21 +1,25 @@
 /* js/foto3d.js — Escultor de fotos: una imagen → STL imprimible.
  *
- * Todo corre en el navegador. La profundidad la estima Depth Anything V2 Small
- * (Apache-2.0) con transformers.js: el modelo se descarga una vez desde Hugging
- * Face y queda en la caché del navegador; la foto nunca sale del equipo. Si la
- * IA no carga (sin red, CDN bloqueado) la herramienta sigue funcionando con el
- * brillo de la imagen como relieve.
+ * El motor es Hunyuan3D (Tencent): genera el objeto 3D completo desde la foto en
+ * un Space público de Hugging Face (js/foto3d-hy3d.js, en un Web Worker). La
+ * malla vuelve como GLB, se limpia (js/foto3d-glb.js) y de ahí salen las tres
+ * formas: el objeto 3D completo (con base opcional), el medallón y el llavero
+ * (relieve sobre la vista frontal exacta del modelo).
+ *
+ * PRIVACIDAD: la foto se envía a un servidor público de Hugging Face. Es lo único
+ * que sale del navegador; el resto (limpieza, relieve, STL) corre acá.
  *
  * Arquitectura y decisiones: docs/ESCULTOR_FOTOS.md.
  *
  * El archivo tiene dos mitades:
- *  - CORE: geometría pura sin DOM (recorte, profundidad, malla cerrada, STL).
+ *  - CORE: geometría pura sin DOM (relieve, base, malla cerrada, STL).
  *    Se exporta con module.exports para los tests de Node.
- *  - UI: vista "escultor" del Taller (data-maq-view="escultor"), visor WebGL
- *    y carga perezosa del modelo de IA.
+ *  - UI: vista "escultor" del Taller (data-maq-view="escultor") y visor WebGL.
  */
 (function(root){
 'use strict';
+// Lectura y limpieza de la malla GLB (js/foto3d-glb.js, cargado antes en el navegador).
+const GLBM=(typeof module!=='undefined'&&module.exports)?require('./foto3d-glb.js'):root.Foto3DGLB;
 
 /* ══════════════════════════════════════════════════════════════════════
  *  CORE — geometría pura
@@ -588,16 +592,22 @@ function writeSTL(m,label){
 
 // ── Formas: parámetros por defecto ────────────────────────────────────────
 const SHAPES={
-  figura:{label:'Figura con base',sub:'Se para sola',hint:'Se para sola sobre una base. Frente esculpido con IA, reverso redondeado.',
+  solido:{label:'Objeto 3D',sub:'Con reverso real',hint:'La malla completa que genera Hunyuan3D, con su reverso. Si quieres que se pare sola, agrégale una base.',
+    defaults:{size:80,rot:0,baseShape:'ninguna',baseH:5,baseMargin:4}},
+  figura:{label:'Figura con base',sub:'Se para sola',hint:'Relieve 2,5D con reverso inventado. Ya no se ofrece en la interfaz: el objeto 3D con base lo reemplaza.',
     defaults:{size:100,relief:16,thick:6,backMode:'espejo',back:60,edge:4,baseShape:'oval',baseH:5,baseMargin:5}},
   medallon:{label:'Medallón / cuadro',sub:'Para colgar o regalar',hint:'Relieve sobre una placa con marco. Se imprime acostado, sin soportes.',
     defaults:{size:100,relief:5,thick:3,plate:'redondeado',subject:'sujeto',edge:3,frame:4,frameH:2,hang:true}},
   llavero:{label:'Llavero / colgante',sub:'Con argolla',hint:'Silueta del sujeto con relieve y una argolla. Reverso plano.',
     defaults:{size:45,relief:2.5,thick:2.5,hole:4,edge:2}},
-  objeto:{label:'Solo el objeto',sub:'Sin base',hint:'Sólo el sujeto, sin base. Decide la orientación en el laminador.',
+  objeto:{label:'Solo el objeto',sub:'Sin base',hint:'Relieve 2,5D sin base. Ya no se ofrece en la interfaz: el objeto 3D lo reemplaza.',
     defaults:{size:80,relief:14,thick:5,backMode:'espejo',back:60,edge:4}},
 };
-const COMMON_DEFAULTS={res:300,smooth:2,detail:0,gamma:1,invert:false,maskMode:'auto',maskAdj:0};
+const COMMON_DEFAULTS={res:300,smooth:2,detail:0,gamma:1,invert:false,maskMode:'auto',maskAdj:0,rot:0};
+// Formas que ofrece la interfaz. figura y objeto (relieve 2,5D con reverso inventado)
+// siguen en el núcleo, pero con un modelo 3D real el objeto completo las supera.
+const UI_SHAPES=['solido','medallon','llavero'];
+const RELIEF_SHAPES=['medallon','llavero'];
 
 // ── Campos de la imagen (una vez por imagen) ──────────────────────────────
 // img = {w,h,rgba(Uint8ClampedArray), hasAlpha}; depth = Float32Array w·h
@@ -651,8 +661,8 @@ function maskSource(F,params){
   if(mode==='alpha')return{mode,key:'alpha',thr:clamp(.5+adj,.02,.98),label:'transparencia del PNG'};
   if(mode==='color')return{mode,key:'colorDist',thr:clamp(.12+adj*.5,.01,.9),label:'fondo uniforme'};
   if(mode==='depth'){
-    if(!F.depthN)return{mode:'color',key:'colorDist',thr:clamp(.12+adj*.5,.01,.9),label:'fondo uniforme (sin IA)'};
-    return{mode,key:'relief',thr:clamp(otsu(F.depthN)+adj,.02,.98),label:'profundidad (IA)'};
+    if(!F.depthN)return{mode:'color',key:'colorDist',thr:clamp(.12+adj*.5,.01,.9),label:'fondo uniforme'};
+    return{mode,key:'relief',thr:clamp(otsu(F.depthN)+adj,.02,.98),label:'profundidad'};
   }
   return{mode:'none',key:null,thr:0,label:'imagen completa'};
 }
@@ -669,9 +679,10 @@ function maskBinary(F,src){
   F._bin={key,b,sat:makeSAT(b,W,H),rel:null};
   return F._bin;
 }
-// Fiabilidad de la profundidad, medida en píxeles de la foto: la IA trabaja a
-// ~518 px y mezcla con el fondo lo que está a menos de ~4 px de él (rayos,
-// manubrios, bordes).
+// Fiabilidad de la profundidad, medida en píxeles de la imagen. Un modelo que
+// estima la profundidad desde una foto trabaja a ~518 px y mezcla con el fondo lo
+// que está a menos de ~4 px de él (rayos, manubrios, bordes). Con la profundidad
+// exacta de un modelo 3D (modelRes enorme) todo el interior es fiable.
 function depthReliability(F,src){
   const B=maskBinary(F,src);
   if(!B.rel){
@@ -761,10 +772,10 @@ function buildModel(F,shape,params){
     }
   }
   // Celdas que el recorte cerró (huecos entre rayos, entre brazo y cuerpo) o
-  // alargó: su profundidad y brillo son del fondo y dejarían pozos. Además, la
-  // IA trabaja a ~518 px y mezcla con el fondo todo lo que está a pocos píxeles
-  // de él (rayos, manubrios, bordes): esas celdas tampoco son fiables. Todas se
-  // rellenan desde el interior del sujeto.
+  // alargó: su profundidad y brillo son del fondo y dejarían pozos. Además, si la
+  // profundidad viene de un modelo que la estima desde una foto, mezcla con el
+  // fondo lo que está a pocos píxeles de él (ver depthReliability): esas celdas
+  // tampoco son fiables. Todas se rellenan desde el interior del sujeto.
   let relS=rel,lumS=lum;
   if(raw&&!(shape==='medallon'&&P.subject==='todo')){
     const base=new Uint8Array(n);let nSub=0;
@@ -911,7 +922,64 @@ function buildModel(F,shape,params){
     volume:meshVolume(mesh),area:meshArea(mesh),warning:warnings.join(' ')};
 }
 
-const CORE={clamp,smoothstep,makeSAT,sampleRect,gaussianBlur,maskedBlur,percentiles,otsu,
+// ── Objeto 3D completo: la malla de Hunyuan3D, con base opcional ──────────
+// clean: salida de GLBM.cleanGLB. P: {size, rot, baseShape, baseH, baseMargin}.
+// Si la pieza no apoya bien (el centro de masa cae fuera de sus puntos más bajos)
+// avisa que puede volcarse.
+function buildSolido3D(clean,P){
+  P=Object.assign({},SHAPES.solido.defaults,P||{});
+  const placed=GLBM.placeMesh(clean,{size:clamp(Number(P.size)||80,5,1000),rot:P.rot});
+  let mesh=GLBM.toTriMesh(placed.positions,placed.indices);
+  const b=placed.bounds,warnings=[],st=clean.stats||{};
+  const hasBase=P.baseShape&&P.baseShape!=='ninguna';
+  if(hasBase){
+    const baseH=clamp(Number(P.baseH)||5,1,40),sink=Math.min(1.5,baseH*.4),margin=Math.max(0,Number(P.baseMargin)||0);
+    // el cuerpo sube hasta apoyarse en la base y se hunde un poco para quedar unido
+    transformMesh(mesh,(x,y,z,o)=>{o[0]=x;o[1]=y;o[2]=z+baseH-sink;});
+    const rx=(b.max[0]-b.min[0])/2+margin,ry=Math.max((b.max[1]-b.min[1])/2+margin,rx*.4);
+    mesh=concatMeshes([mesh,basePrism(0,0,rx,ry,0,baseH,P.baseShape==='rect'?6:2,96)]);
+  }else{
+    // ¿Se sostiene sola? El apoyo es el rectángulo de los puntos casi en el piso.
+    const pos=placed.positions,h=b.max[2]-b.min[2],lim=b.min[2]+Math.max(h*.03,.3);
+    let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+    for(let i=0;i<pos.length;i+=3)if(pos[i+2]<=lim){if(pos[i]<x0)x0=pos[i];if(pos[i]>x1)x1=pos[i];if(pos[i+1]<y0)y0=pos[i+1];if(pos[i+1]>y1)y1=pos[i+1];}
+    const c=meshCentroid(mesh),px=Math.max(.5,(x1-x0)*.05),py=Math.max(.5,(y1-y0)*.05);
+    if(c[0]<x0-px||c[0]>x1+px||c[1]<y0-py||c[1]>y1+py)
+      warnings.push('Sin base la pieza puede volcarse: su peso cae fuera de los puntos que apoyan. Agrega una base.');
+  }
+  if(st.openAfter>0)warnings.push(`La malla tiene ${st.openAfter} aristas abiertas (el laminador suele repararlas solo).`);
+  if(st.nonManifold>0)warnings.push(`La malla tiene ${st.nonManifold} aristas compartidas por más de dos caras.`);
+  return{mesh,bounds:meshBounds(mesh),volume:meshVolume(mesh),area:meshArea(mesh),shells:hasBase?2:1,grid:null,
+    mask:{label:'malla de Hunyuan3D'},warning:warnings.join(' ')};
+}
+
+// ── Relieve (medallón, llavero) sobre la vista frontal exacta del modelo ──
+// Antes la profundidad la estimaba una IA a partir de la foto; ahora es la del
+// propio objeto 3D: el recorte es su silueta y no hay ruido ni ondas. Se deja un
+// margen alrededor para que la placa no quede justo al ras del objeto.
+function reliefFields(clean,shape,P){
+  P=Object.assign({},COMMON_DEFAULTS,SHAPES[shape].defaults,P||{});
+  const placed=GLBM.placeMesh(clean,{size:100,rot:P.rot}),r=GLBM.renderFront(placed.positions,placed.indices,shape==='medallon'?800:900);
+  let W=r.w,H=r.h;
+  if(shape==='medallon'){
+    if(P.plate==='circular'){W=H=Math.ceil(Math.hypot(r.w,r.h)*1.12);}
+    else if(P.plate==='ovalado'){W=Math.ceil(r.w*1.5);H=Math.ceil(r.h*1.5);}
+    else{W=Math.ceil(r.w*1.14);H=Math.ceil(r.h*1.14);}
+  }else{W=Math.ceil(r.w*1.06);H=Math.ceil(r.h*1.06);}
+  const ox=Math.floor((W-r.w)/2),oy=Math.floor((H-r.h)/2),rgba=new Uint8ClampedArray(W*H*4),depth=new Float32Array(W*H);
+  rgba.fill(255);
+  for(let y=0;y<r.h;y++)for(let x=0;x<r.w;x++){
+    const i=y*r.w+x,o=((y+oy)*W+x+ox);
+    if(r.alpha[i]){rgba[o*4]=rgba[o*4+1]=rgba[o*4+2]=200;rgba[o*4+3]=255;depth[o]=r.depth[i];}
+    else rgba[o*4+3]=0;
+  }
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const o=y*W+x;if(y<oy||y>=oy+r.h||x<ox||x>=ox+r.w)rgba[o*4+3]=0;}
+  // La profundidad es exacta: la "fiabilidad" por cercanía al borde (la del modelo
+  // de profundidad) no aplica.
+  return prepareFields({w:W,h:H,rgba},depth,{modelRes:1e9});
+}
+
+const CORE={UI_SHAPES,RELIEF_SHAPES,buildSolido3D,reliefFields,clamp,smoothstep,makeSAT,sampleRect,gaussianBlur,maskedBlur,percentiles,otsu,
   distanceInside,distanceOutside,erode,dilate,openMask,closeMask,labelComponents,keepLargest,fillHoles,
   fixDiagonals,maskBBox,maskArea,cleanMask,diskMask,superellipseMask,buildSolid,basePrism,concatMeshes,
   meshBounds,transformMesh,meshVolume,meshArea,meshCentroid,guidedSmooth,maskedMedian3,signedDistance,snapContour,vertexCounts,inpaint,roundProfile,depthReliability,maskBinary,cleanMaskMM,estimateGrams,printersThatFit,placeRing,writeSTL,prepareFields,maskSource,buildModel,SHAPES,COMMON_DEFAULTS};
@@ -919,54 +987,44 @@ const CORE={clamp,smoothstep,makeSAT,sampleRect,gaussianBlur,maskedBlur,percenti
 if(typeof module!=='undefined'&&module.exports){module.exports=CORE;return;}
 
 /* ══════════════════════════════════════════════════════════════════════
- *  IA DE PROFUNDIDAD — cliente del Web Worker (js/foto3d-worker.js)
+ *  MOTOR — cliente del Web Worker de Hunyuan3D (js/foto3d-hy3d.js)
  * ══════════════════════════════════════════════════════════════════════ */
-// El worker carga transformers.js desde el CDN fuera de la página: el código de
-// terceros no ve localStorage ni el DOM, y la inferencia no congela la interfaz.
+// La foto sale de la página sólo por este worker, hacia los Spaces de Tencent.
 const SELF_SRC=(typeof document!=='undefined'&&document.currentScript&&document.currentScript.src)||'';
-let _worker=null,_reqId=0,_aiLabel='',_aiRes=518,_aiDiag=null;
-const _pending=new Map();
-function _resetWorker(){if(_worker){try{_worker.terminate();}catch(_){}_worker=null;}}
-function _failAll(err){for(const p of _pending.values())p.reject(err);_pending.clear();_resetWorker();}
-function depthWorker(){
+let _worker=null,_jobId=0;
+const _jobs=new Map();
+function hyWorker(){
   if(_worker)return _worker;
   const base=SELF_SRC||new URL('js/foto3d.js',location.href).href;
-  const url=new URL('foto3d-worker.js',base);url.search=new URL(base).search; // mismo ?v= del deploy
-  _worker=new Worker(url,{type:'module'});
+  const url=new URL('foto3d-hy3d.js',base);url.search=new URL(base).search; // mismo ?v= del deploy
+  _worker=new Worker(url);
   _worker.onmessage=e=>{
-    const m=e.data||{},p=_pending.get(m.id);if(!p)return;
-    if(m.type==='progress'){if(p.onProgress)p.onProgress(m.frac,m.total);return;}
-    _pending.delete(m.id);
-    if(m.type==='depth'&&m.data instanceof Float32Array){
-      _aiLabel=(m.label||'')+(m.res?` · ${m.res} px`:'')+(m.passes>1?` · ${m.passes} pasadas`:'')+(m.asked&&m.res&&m.asked>m.res?` (bajó de ${m.asked} px: la GPU no dio resultados limpios)`:'');
-      _aiRes=m.res||518;_aiDiag=m.diag||null;p.resolve(m);
-    }
-    else if(m.type==='cancelled'){const err=new Error('cancelado');err.cancelled=true;p.reject(err);}
-    // Tras un error se descarta el worker: un import() fallido queda en caché
-    // dentro de ese worker y "Recalcular IA" nunca volvería a intentarlo.
-    else{const err=new Error(m.message||'Error de la IA de profundidad');p.reject(err);_failAll(err);}
+    const m=e.data||{},j=_jobs.get(m.id);if(!j)return;
+    if(m.type==='status'){if(j.onStatus)j.onStatus(m);return;}
+    _jobs.delete(m.id);
+    if(m.type==='done'||m.type==='checked')j.resolve(m);
+    else{const err=new Error(m.message||'Error del servicio');err.code=m.code||'failed';err.retrySeconds=m.retrySeconds||0;j.reject(err);}
   };
-  _worker.onerror=e=>{if(e&&e.preventDefault)e.preventDefault();_failAll(new Error((e&&e.message)||'No se pudo iniciar el worker de IA'));};
+  _worker.onerror=e=>{
+    if(e&&e.preventDefault)e.preventDefault();
+    const err=new Error('No se pudo iniciar el motor de generación.');err.code='worker';
+    for(const j of _jobs.values())j.reject(err);_jobs.clear();
+    try{_worker.terminate();}catch(_){}
+    _worker=null;
+  };
   return _worker;
 }
-function estimateDepth(img,onProgress,quality){
-  return new Promise((resolve,reject)=>{
-    if(typeof Worker==='undefined'){reject(new Error('Este navegador no tiene Web Workers'));return;}
-    // Los píxeles transparentes van sobre gris neutro para que la IA no invente bordes.
-    const rgba=new Uint8ClampedArray(img.rgba);
-    for(let i=0;i<rgba.length;i+=4){const a=rgba[i+3]/255;if(a<1){for(let k=0;k<3;k++)rgba[i+k]=rgba[i+k]*a+128*(1-a);rgba[i+3]=255;}}
-    const id=++_reqId;_pending.set(id,{resolve,reject,onProgress});
-    try{
-      const w=depthWorker();
-      w.postMessage({type:'cancel',below:id});  // lo que quedó en cola de fotos anteriores ya no sirve
-      w.postMessage({type:'depth',id,rgba:rgba.buffer,w:img.w,h:img.h,quality:quality||'normal'},[rgba.buffer]);
-    }catch(e){_pending.delete(id);reject(e);}
-  }).then(m=>{
-    if(m.w===img.w&&m.h===img.h)return m.data;
-    // Versiones antiguas de transformers.js devolvían la salida cruda del modelo.
-    return sampleRect(m.data,makeSAT(m.data,m.w,m.h),m.w,m.h,0,0,m.w,m.h,img.w,img.h,0);
+// Devuelve {id, promise}: el id sirve para cancelar.
+function hyCall(msg,onStatus,transfer){
+  const id=++_jobId;
+  const promise=new Promise((resolve,reject)=>{
+    if(typeof Worker==='undefined'){const e=new Error('Este navegador no soporta Web Workers.');e.code='worker';reject(e);return;}
+    _jobs.set(id,{resolve,reject,onStatus});
+    try{hyWorker().postMessage(Object.assign({id},msg),transfer||[]);}catch(e){_jobs.delete(id);reject(e);}
   });
+  return{id,promise};
 }
+function hyCancel(id){if(_worker)_worker.postMessage({type:'cancel',id});}
 
 /* ══════════════════════════════════════════════════════════════════════
  *  VISOR WebGL (orbitar con arrastre, zoom con rueda, doble clic = vista inicial)
@@ -1021,7 +1079,7 @@ function createViewer(canvas){
     for(let v=-ext;v<=ext;v+=10){g.push(v,-ext,0,0,0,1,v,ext,0,0,0,1,-ext,v,0,0,0,1,ext,v,0,0,0,1);}
     gl.bindBuffer(gl.ARRAY_BUFFER,gridBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(g),gl.STATIC_DRAW);gridN=g.length/6;
     if(view){
-      home=view==='figura'?{yaw:-Math.PI/2-.45,pitch:.25}:{yaw:-Math.PI/2-.35,pitch:.95};
+      home=(view==='figura'||view==='solido')?{yaw:-Math.PI/2-.45,pitch:.25}:{yaw:-Math.PI/2-.35,pitch:.95};
       yaw=home.yaw;pitch=home.pitch;dist=radius*3.1;
     }
     draw();
@@ -1070,28 +1128,31 @@ function createViewer(canvas){
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();lost=true;});
   canvas.addEventListener('webglcontextrestored',()=>{lost=false;initGL();if(lastMesh)setMesh(lastMesh,null);});
   return{setMesh,draw,
+    clear(){nv=0;gridN=0;lastMesh=null;draw();},
     // facetas = normal por triángulo (lo que es el STL); si no, sombreado suave.
     setFacets(on){facets=!!on;if(lastMesh)setMesh(lastMesh,null);},
     setCamera(c){if(c.yaw!=null)yaw=c.yaw;if(c.pitch!=null)pitch=clamp(c.pitch,-1.45,1.45);if(c.zoom)dist=clamp(radius*3.1/c.zoom,radius*.6,radius*12);if(c.target)target=c.target.slice();draw();}};
 }
 
+
 /* ══════════════════════════════════════════════════════════════════════
  *  UI — vista "escultor" del Taller
  * ══════════════════════════════════════════════════════════════════════ */
-const LS_KEY='foto3d_params_v1';
+const LS_KEY='foto3d_params_v2',OK_KEY='foto3d_hy3d_ok_v1',TOKEN_KEY='foto3d_hf_token_v1',MODE_KEY='foto3d_mode_v1';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const S={img:null,name:'foto',depth:null,fields:null,shape:'figura',params:{},model:null,viewer:null,view:'mascara',timer:0,lastShape:null,depthRun:0,facets:false};
+const S={img:null,name:'foto',hy:null,rel:null,frontCv:null,shape:'solido',params:{},model:null,viewer:null,view:'foto',timer:0,lastShape:null,facets:false,gen:null,seed:1234,svcChecked:false};
 
 // Controles: [clave, etiqueta, tipo, min, max, paso, unidad, ayuda]
 const CTRL={
-  size:['Tamaño (lado mayor)','range',15,300,1,'mm','Medida final del sujeto, sin contar la base ni la argolla.'],
+  size:['Tamaño (lado mayor)','range',15,300,1,'mm','Medida final de la pieza, sin contar la base ni la argolla.'],
+  rot:['Girar la pieza','select',[['0','Como salió (0°)'],['90','90°'],['180','Dar vuelta el frente (180°)'],['270','270°']]],
   relief:['Profundidad del relieve','range',.5,60,.5,'mm','Cuánto sobresale lo más cercano respecto de lo más lejano.'],
-  thick:['Grosor base','range',1,30,.5,'mm','Grosor mínimo del cuerpo o de la placa.'],
+  thick:['Grosor base','range',1,30,.5,'mm','Grosor mínimo de la placa.'],
   backMode:['Reverso','select',[['espejo','Redondeado (volumen atrás)'],['plano','Plano (apoya en la cama)']]],
   back:['Volumen del reverso','range',0,100,5,'%','Qué tanto del relieve se repite por detrás.'],
   edge:['Redondeo de bordes','range',0,15,.5,'mm','Distancia en que el relieve baja suave hacia el contorno.'],
-  baseShape:['Base','select',[['oval','Ovalada'],['rect','Rectangular'],['ninguna','Sin base']]],
+  baseShape:['Base','select',[['ninguna','Sin base'],['oval','Ovalada'],['rect','Rectangular']]],
   baseH:['Alto de la base','range',2,20,.5,'mm'],
   baseMargin:['Margen de la base','range',0,30,1,'mm'],
   plate:['Placa','select',[['redondeado','Rectangular redondeada'],['rectangular','Rectangular'],['ovalado','Ovalada'],['circular','Circular']]],
@@ -1102,16 +1163,13 @@ const CTRL={
   hole:['Diámetro de la argolla','range',2,8,.5,'mm'],
 };
 const SHAPE_CTRLS={
-  figura:['size','relief','thick','backMode','back','edge','baseShape','baseH','baseMargin'],
-  medallon:['size','relief','thick','plate','subject','edge','frame','frameH','hang'],
-  llavero:['size','relief','thick','hole','edge'],
-  objeto:['size','relief','thick','backMode','back','edge'],
+  solido:['size','rot','baseShape','baseH','baseMargin'],
+  medallon:['size','rot','relief','thick','plate','edge','frame','frameH','hang'],
+  llavero:['size','rot','relief','thick','hole','edge'],
 };
+// Relieve (sólo medallón y llavero). El recorte ya no se ajusta: es la silueta del modelo 3D.
 const DETAIL_CTRL={
-  maskMode:['Recorte','select',[['auto','Automático'],['depth','Por profundidad (IA)'],['color','Fondo uniforme'],['none','Imagen completa']]],
-  maskAdj:['Ajuste del recorte','range',-40,40,1,'','Negativo = toma más fondo; positivo = recorta más.'],
-  smooth:['Suavizado','range',0,6,.1,'','Quita ruido y ondas de la IA sin borrar cantos. 0 = profundidad cruda.'],
-  detail:['Detalle fino','range',0,60,1,'%','Suma textura del brillo de la foto (pelo, tela). Ojo: las sombras y manchas oscuras se vuelven hundimientos.'],
+  smooth:['Suavizado','range',0,6,.1,'','Alisa el relieve sin borrar cantos. 0 = profundidad cruda.'],
   gamma:['Curva de profundidad','range',.4,2.5,.05,'','Mayor que 1 = destaca lo más cercano; menor que 1 = relieve más parejo.'],
   invert:['Invertir relieve','check'],
   res:['Resolución','range',100,500,10,'celdas','Más celdas = más detalle y un STL más pesado.'],
@@ -1121,7 +1179,7 @@ function loadSaved(){try{const s=JSON.parse(localStorage.getItem(LS_KEY)||'{}');
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify({shape:S.shape,params:S.params}));}catch(_){}}
 function params(){return Object.assign({},COMMON_DEFAULTS,SHAPES[S.shape].defaults,S.params[S.shape]||{},S.params.common||{});}
 function setParam(k,v){
-  const bucket=DETAIL_CTRL[k]?'common':S.shape;
+  const bucket=(DETAIL_CTRL[k]||k==='rot')?'common':S.shape; // el giro vale para todas las formas
   S.params[bucket]=Object.assign({},S.params[bucket]||{},{[k]:v});save();schedule();
 }
 function ctrlHTML(k,def,val){
@@ -1133,40 +1191,27 @@ function ctrlHTML(k,def,val){
 }
 function fmtVal(v,unit){const n=Number(v);const s=Math.abs(n)>=10||Number.isInteger(n)?String(Math.round(n*10)/10):n.toFixed(2).replace(/0$/,'');return s+(unit?' '+unit:'');}
 function renderControls(){
-  const P=params();
-  $('f3dShapeBtns').innerHTML=Object.keys(SHAPES).map(k=>`<button type="button" class="f3d-shape${k===S.shape?' active':''}" onclick="Foto3D.setShape('${k}')"><b>${esc(SHAPES[k].label)}</b><small>${esc(SHAPES[k].sub)}</small></button>`).join('');
+  const P=params(),relief=RELIEF_SHAPES.includes(S.shape);
+  $('f3dShapeBtns').innerHTML=UI_SHAPES.map(k=>`<button type="button" class="f3d-shape${k===S.shape?' active':''}" onclick="Foto3D.setShape('${k}')"><b>${esc(SHAPES[k].label)}</b><small>${esc(SHAPES[k].sub)}</small></button>`).join('');
   $('f3dShapeHint').textContent=SHAPES[S.shape].hint;
   $('f3dShapeCtrls').innerHTML=SHAPE_CTRLS[S.shape].map(k=>ctrlHTML(k,CTRL[k],P[k])).join('');
   $('f3dDetailCtrls').innerHTML=Object.keys(DETAIL_CTRL).map(k=>ctrlHTML(k,DETAIL_CTRL[k],P[k])).join('');
+  $('f3dDetailGroup').style.display=relief?'':'none';
   document.querySelectorAll('#maquinaEscultorView [data-k]').forEach(el=>{
     const k=el.dataset.k,def=CTRL[k]||DETAIL_CTRL[k];
-    const on=()=>{
+    el.addEventListener(def[1]==='range'?'input':'change',()=>{
       const v=def[1]==='check'?el.checked:def[1]==='select'?el.value:Number(el.value);
       if(def[1]==='range'){const lab=$(el.id+'_v');if(lab)lab.textContent=fmtVal(v,def[5]);}
       setParam(k,v);
-      if(k==='backMode')syncVisibility();
-    };
-    el.addEventListener(def[1]==='range'?'input':'change',on);
+    });
   });
-  syncVisibility();
-}
-function syncVisibility(){
-  const P=params(),back=$('f3dC_back');
-  if(back)back.closest('.f3d-field').style.display=P.backMode==='plano'?'none':'';
 }
 function setShape(k){
-  if(!SHAPES[k])return;S.shape=k;save();renderControls();schedule(true);
+  if(!UI_SHAPES.includes(k))return;S.shape=k;save();renderControls();schedule(true);
 }
 function resetShape(){delete S.params[S.shape];save();renderControls();schedule();}
 function resetDetail(){delete S.params.common;save();renderControls();schedule();}
-// Línea de diagnóstico de la IA (datos medidos en este equipo, para soporte).
-function diagNote(d){
-  const el=$('f3dDiag');if(!el)return;
-  if(!d){el.textContent='';return;}
-  const pc=v=>(100*v).toLocaleString('es-CL',{maximumFractionDigits:1})+' %';
-  el.textContent=`Diagnóstico IA: ${d.dtype||'?'} · ${d.levels>=99999?'niveles continuos':d.levels+' niveles'} · ondas ${pc(d.rippleIn)} → ${pc(d.rippleOut)} · descartado ${pc(d.dirty)}`;
-}
-function aiNote(msg,tone){const el=$('f3dAiNote');if(!el)return;el.textContent=msg||'';el.dataset.tone=tone||'';}
+function note(msg,tone){const el=$('f3dAiNote');if(!el)return;el.textContent=msg||'';el.dataset.tone=tone||'';}
 function status(msg,tone){const el=$('f3dStatus');if(!el)return;el.textContent=msg||'';el.dataset.tone=tone||'';el.style.display=msg?'':'none';}
 function progress(frac,label){
   const w=$('f3dProg');if(!w)return;
@@ -1174,7 +1219,7 @@ function progress(frac,label){
   w.style.display='';$('f3dProgBar').style.width=Math.round(clamp(frac,0,1)*100)+'%';$('f3dProgTxt').textContent=label||'';
 }
 
-// ── Carga de imagen ───────────────────────────────────────────────────────
+// ── Carga de la foto ──────────────────────────────────────────────────────
 function onFiles(files){
   const f=files&&files[0];if(!f)return;
   if(!/^image\//.test(f.type)){status('El archivo no es una imagen (usa JPG, PNG o WebP).','error');return;}
@@ -1185,92 +1230,135 @@ function onFiles(files){
   im.src=url;
 }
 function setImage(im){
-  // Imagen de trabajo ≤ 1024 px: la IA en GPU la ve a 1022 px (en CPU, a 518).
+  cancel(true);
+  // ≤ 1024 px: de sobra para Hunyuan3D (trabaja a ~512) y el archivo sube más rápido.
   const s=Math.min(1,1024/Math.max(im.naturalWidth,im.naturalHeight)),w=Math.max(8,Math.round(im.naturalWidth*s)),h=Math.max(8,Math.round(im.naturalHeight*s));
   const cv=document.createElement('canvas');cv.width=w;cv.height=h;
   const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingQuality='high';ctx.drawImage(im,0,0,w,h);
-  S.img={w,h,rgba:ctx.getImageData(0,0,w,h).data,canvas:cv};
-  S.depth=null;S.model=null;diagNote(null);
-  S.fields=prepareFields(S.img,null);
-  aiNote($('f3dSource').value==='ia'?'':'Profundidad: brillo de la imagen (claro = alto)');
+  const rgba=ctx.getImageData(0,0,w,h).data;let hasAlpha=false;
+  for(let i=3;i<rgba.length;i+=4)if(rgba[i]<250){hasAlpha=true;break;}
+  S.img={w,h,canvas:cv,hasAlpha};
+  S.hy=null;S.model=null;S.rel=null;S.frontCv=null;S.seed=1234;
+  if(S.viewer)S.viewer.clear();
+  $('f3dEmpty').style.display='';$('f3dDownload').disabled=true;$('f3dStats').innerHTML='';
+  status('');progress(null);
+  note(hasAlpha?'La foto tiene fondo transparente: se usa tal cual (recorte perfecto).':'Pulsa «Generar objeto 3D». El servicio quita el fondo solo.');
   $('f3dDropEmpty').style.display='none';$('f3dWork').style.display='';$('f3dDrop').classList.add('has-img');
-  drawSource();schedule(true);
-  if($('f3dSource').value==='ia')runDepth();
+  setView('foto');drawSource();
+  if(!S.svcChecked){S.svcChecked=true;checkService(false);}
 }
-async function runDepth(){
-  if(!S.img)return;
-  const img=S.img,run=++S.depthRun,mine=()=>run===S.depthRun&&S.img===img;
-  $('f3dDepthBtn').disabled=true;
-  aiNote(_aiLabel?'Calculando profundidad…':'Cargando la IA de profundidad…');
-  progress(0,_aiLabel?'Calculando profundidad…':'Cargando la IA de profundidad (la primera vez descarga ~30–50 MB; después queda en caché)…');
+
+// ── Generación con Hunyuan3D ──────────────────────────────────────────────
+function consent(){
+  try{if(localStorage.getItem(OK_KEY)==='1')return true;}catch(_){}
+  const ok=typeof confirm==='function'?confirm('Para generar el objeto 3D, esta foto se enviará a un servidor público de Hugging Face (Tencent Hunyuan3D).\n\nEs gratis, pero la foto sale de tu equipo y el servicio es compartido. No uses fotos de personas sin su permiso.\n\n¿Continuar?'):true;
+  if(ok)try{localStorage.setItem(OK_KEY,'1');}catch(_){}
+  return ok;
+}
+function modeVals(){
+  const q=$('f3dQuality'),o=$('f3dOctree'),t=$('f3dToken');
+  return{quality:q&&q.value||'rapido',octree:Number(o&&o.value)||256,token:((t&&t.value)||'').trim()};
+}
+function saveMode(){const m=modeVals();try{localStorage.setItem(MODE_KEY,JSON.stringify({quality:m.quality,octree:m.octree}));if(m.token)localStorage.setItem(TOKEN_KEY,m.token);else localStorage.removeItem(TOKEN_KEY);}catch(_){}}
+function photoPng(){
+  return new Promise((res,rej)=>S.img.canvas.toBlob(b=>b?b.arrayBuffer().then(res,rej):rej(new Error('No pude preparar la foto.')),'image/png'));
+}
+function setBusy(on){
+  for(const id of['f3dGenBtn','f3dVariantBtn','f3dQuality','f3dOctree'])if($(id))$(id).disabled=on;
+  $('f3dCancelBtn').style.display=on?'':'none';
+}
+function phaseText(p){
+  const secs=S.gen?Math.round((performance.now()-S.gen.t0)/1000):0;
+  return({check:'Conectando con Hunyuan3D…',upload:'Subiendo la foto…',
+    generating:`Generando la pieza en la GPU de Hugging Face… ${secs} s (con cola puede tardar 1–2 min)`,
+    download:'Descargando la malla…',clean:'Limpiando la malla…'})[p]||'Trabajando…';
+}
+async function generate(opts){
+  opts=opts||{};
+  if(!S.img||S.gen)return;
+  if(!consent())return;
+  if(opts.variant)S.seed=Math.floor(Math.random()*9e6)+1;
+  saveMode();
+  const m=modeVals();status('');
+  let png;try{png=await photoPng();}catch(e){status(e.message,'error');return;}
+  const job=hyCall({type:'gen',png,quality:m.quality,seed:S.seed,octree:m.octree,rembg:!S.img.hasAlpha,token:m.token||undefined},
+    st=>{S.gen.phase=st.phase;progress(null);note(phaseText(st.phase));$('f3dProgTxt').textContent='';},[png]);
+  S.gen={id:job.id,t0:performance.now(),phase:'check',tick:0};
+  setBusy(true);note(phaseText('check'));
+  // El contador de segundos sigue corriendo aunque el servicio sólo avise cada ~15 s.
+  S.gen.tick=setInterval(()=>{if(S.gen&&S.gen.phase==='generating'){
+    const secs=(performance.now()-S.gen.t0)/1000;progress(Math.min(.95,secs/100),phaseText('generating'));}},1000);
+  const mine=()=>S.gen&&S.gen.id===job.id;
   try{
-    const t0=performance.now();
-    const depth=await estimateDepth(img,(f,total)=>{if(mine()&&$('f3dSource').value==='ia')progress(f,f>=.999?'Calculando profundidad…':`Descargando modelo · ${Math.round(f*100)}% de ${(total/1048576).toFixed(0)} MB (queda en caché)`);},aiQuality());
-    if(!mine())return; // llegó otra foto o se pidió otro cálculo mientras tanto
-    S.depth=depth;S.depthRes=_aiRes;S.depthDiag=_aiDiag;
-    // Si mientras tanto se eligió "Brillo de la imagen", la profundidad queda
-    // guardada (volver a "IA" no recalcula) pero no se aplica.
-    if($('f3dSource').value!=='ia')return;
-    progress(1,'Profundidad lista');setTimeout(()=>{if(mine())progress(null);},900);
-    S.fields=prepareFields(img,depth,{modelRes:_aiRes});diagNote(_aiDiag);
-    aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'} · ${((performance.now()-t0)/1000).toFixed(1)} s`);
-    drawSource();schedule(true);
+    const r=await job.promise;
+    if(!mine())return;
+    S.gen.phase='clean';progress(.97,phaseText('clean'));
+    await new Promise(r2=>setTimeout(r2,20)); // deja pintar el aviso antes de la limpieza
+    useGLB(r.glb,{seed:r.seed,space:r.space,seconds:r.seconds});
+    progress(1,'Listo');setTimeout(()=>{if(!S.gen)progress(null);},800);
   }catch(e){
-    if(e&&e.cancelled)return;
-    console.error('[Foto3D] profundidad',e);
-    if(!mine()||$('f3dSource').value!=='ia')return;
+    if(!mine())return;
     progress(null);
-    // Va en la nota de profundidad, no en el estado de la malla: la próxima
-    // reconstrucción no la borra.
-    aiNote('No se pudo cargar la IA de profundidad (¿sin conexión o CDN bloqueado?). Uso el brillo de la imagen como relieve; "Recalcular IA" lo vuelve a intentar.','warn');
-  }finally{if(run===S.depthRun)$('f3dDepthBtn').disabled=false;}
+    if(e.code==='cancelled'){note('Cancelado.');}
+    else{
+      note(S.hy?'Se mantiene la pieza anterior.':'');
+      status(e.message||'No se pudo generar la pieza.',e.code==='quota'||e.code==='busy'||e.code==='sleeping'?'warn':'error');
+      console.warn('[Foto3D] generación',e.code,e.message);
+    }
+  }finally{
+    if(mine()){clearInterval(S.gen.tick);S.gen=null;setBusy(false);}
+  }
 }
-const AIQ_KEY='foto3d_ai_quality_v1';
-function aiQuality(){const el=$('f3dAiQuality');return el&&el.value||'normal';}
-function onQualityChange(){
-  try{localStorage.setItem(AIQ_KEY,aiQuality());}catch(_){}
-  S.depth=null;if(S.img&&$('f3dSource').value==='ia')runDepth();
+// Limpia la malla (GLB) y la deja como pieza actual.
+function useGLB(glb,info){
+  const clean=GLBM.cleanGLB(glb),st=clean.stats;
+  S.hy=Object.assign({clean,glbBytes:glb.byteLength||glb.length||0},info||{});
+  S.rel=null;S.frontCv=null;
+  $('f3dEmpty').style.display='none';
+  const closed=st.openAfter===0&&st.nonManifold===0;
+  note(`${S.hy.space||'Hunyuan3D'}${S.hy.seconds?` · ${S.hy.seconds.toFixed(1)} s`:''}${S.hy.seed!=null?` · semilla ${S.hy.seed}`:''} · malla ${closed?'cerrada ✓':'con '+(st.openAfter+st.nonManifold)+' aristas por revisar'}${st.floaterShells?` · ${st.floaterShells} resto(s) suelto(s) quitado(s)`:''}`);
+  if(S.view==='frontal')drawSource();
+  schedule(true);
 }
-function onSourceChange(){
-  const v=$('f3dSource').value;
-  if(!S.img)return;
-  if(v==='ia'){
-    if(S.depth){S.fields=prepareFields(S.img,S.depth,{modelRes:S.depthRes});diagNote(S.depthDiag);aiNote(`Profundidad: IA en ${_aiLabel||'el navegador'}`);schedule(true);}
-    else runDepth();
-  }else{
-    progress(null); // un cálculo en curso sigue, pero sólo guarda el resultado
-    S.fields=prepareFields(S.img,null);diagNote(null);aiNote('Profundidad: brillo de la imagen (claro = alto)');schedule(true);
+function cancel(silent){
+  if(!S.gen)return;
+  const g=S.gen;clearInterval(g.tick);S.gen=null;hyCancel(g.id);setBusy(false);progress(null);
+  if(!silent)note('Cancelado.');
+}
+async function checkService(manual){
+  const m=modeVals();
+  if(manual)note('Probando la conexión…');
+  try{
+    const r=await hyCall({type:'check',quality:m.quality,token:m.token||undefined}).promise;
+    if(manual||!S.hy)note(`Servicio en línea: ${r.label} · Gradio ${r.version}${manual?' (no se usó GPU ni se envió la foto)':''}`,'');
+    return true;
+  }catch(e){
+    note('Servicio no disponible: '+(e.message||'sin respuesta'),'warn');
+    if(manual)status(e.message,'warn');
+    return false;
   }
 }
 
-// ── Vista previa 2D: recorte o mapa de profundidad ────────────────────────
+// ── Vista previa 2D: la foto o la vista frontal del modelo ───────────────
+function frontCanvas(){
+  if(!S.hy)return null;
+  const P=params(),key=String(P.rot);
+  if(S.frontCv&&S.frontCv.key===key)return S.frontCv;
+  const placed=GLBM.placeMesh(S.hy.clean,{size:100,rot:P.rot}),r=GLBM.renderFront(placed.positions,placed.indices,512);
+  const cv=document.createElement('canvas');cv.width=r.w;cv.height=r.h;
+  const ctx=cv.getContext('2d'),id=ctx.createImageData(r.w,r.h);
+  for(let i=0;i<r.w*r.h;i++){const v=Math.round(40+215*r.depth[i]);id.data[i*4]=v;id.data[i*4+1]=v;id.data[i*4+2]=v;id.data[i*4+3]=r.alpha[i];}
+  ctx.putImageData(id,0,0);cv.key=key;S.frontCv=cv;
+  return cv;
+}
 function drawSource(){
   const cv=$('f3dSrc');if(!cv||!S.img)return;
-  const m=S.model&&!S.model.error?S.model:null,G=m&&m.grid;
-  const box=cv.parentElement.clientWidth||320,ar=S.img.h/S.img.w,w=Math.round(box),h=Math.round(Math.min(box*ar,420));
-  const scale=Math.min(w/S.img.w,h/S.img.h),dw=S.img.w*scale,dh=S.img.h*scale,ox=(w-dw)/2,oy=(h-dh)/2;
+  const src=(S.view==='frontal'&&frontCanvas())||S.img.canvas;
+  const box=cv.parentElement.clientWidth||320,ar=src.height/src.width,w=Math.round(box),h=Math.round(Math.min(box*ar,420));
+  const scale=Math.min(w/src.width,h/src.height),dw=src.width*scale,dh=src.height*scale,ox=(w-dw)/2,oy=(h-dh)/2;
   const dpr=Math.min(2,window.devicePixelRatio||1);cv.width=w*dpr;cv.height=h*dpr;cv.style.height=h+'px';
   const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-  if(S.view==='profundidad'&&S.fields){
-    const F=S.fields,tmp=document.createElement('canvas');tmp.width=F.w;tmp.height=F.h;
-    const id=tmp.getContext('2d').createImageData(F.w,F.h);
-    for(let i=0;i<F.w*F.h;i++){const v=Math.round(F.relief[i]*255);id.data[i*4]=v;id.data[i*4+1]=v;id.data[i*4+2]=v;id.data[i*4+3]=255;}
-    tmp.getContext('2d').putImageData(id,0,0);ctx.imageSmoothingQuality='high';ctx.drawImage(tmp,ox,oy,dw,dh);
-  }else ctx.drawImage(S.img.canvas,ox,oy,dw,dh);
-  if(G&&S.view==='mascara'){
-    // Oscurece lo que queda fuera de la pieza y marca su contorno.
-    const tmp=document.createElement('canvas');tmp.width=G.w;tmp.height=G.h;
-    const id=tmp.getContext('2d').createImageData(G.w,G.h);
-    for(let i=0;i<G.w*G.h;i++){if(!G.mask[i]){id.data[i*4+3]=170;}else{id.data[i*4]=0;id.data[i*4+1]=212;id.data[i*4+2]=204;id.data[i*4+3]=28;}}
-    tmp.getContext('2d').putImageData(id,0,0);
-    const r=G.rect;ctx.save();ctx.beginPath();ctx.rect(ox,oy,dw,dh);ctx.clip();
-    ctx.fillStyle='rgba(0,0,0,.66)';
-    // Fuera del encuadre de la pieza también es descarte.
-    const rx=ox+r.x*scale,ry=oy+r.y*scale,rw=r.w*scale,rh=r.h*scale;
-    ctx.fillRect(ox,oy,dw,Math.max(0,ry-oy));ctx.fillRect(ox,ry+rh,dw,Math.max(0,oy+dh-ry-rh));
-    ctx.fillRect(ox,ry,Math.max(0,rx-ox),rh);ctx.fillRect(rx+rw,ry,Math.max(0,ox+dw-rx-rw),rh);
-    ctx.imageSmoothingEnabled=false;ctx.drawImage(tmp,rx,ry,rw,rh);ctx.restore();
-  }
+  ctx.imageSmoothingQuality='high';ctx.drawImage(src,ox,oy,dw,dh);
 }
 function toggleFacets(){
   S.facets=!S.facets;
@@ -1287,12 +1375,20 @@ function schedule(resetView){
   clearTimeout(S.timer);S.timer=setTimeout(rebuild,160);
 }
 function rebuild(){
-  if(!S.fields)return;
-  const t0=performance.now();
+  if(!S.hy)return;
+  const t0=performance.now(),P=params();
   let model;
-  try{model=buildModel(S.fields,S.shape,params());}
-  catch(e){console.error('[Foto3D] malla',e);model={error:'Error al generar la malla: '+(e&&e.message||e)};}
-  S.model=model;drawSource();
+  try{
+    if(S.shape==='solido')model=buildSolido3D(S.hy.clean,P);
+    else{
+      // El relieve se calcula sobre la vista frontal: sólo se rehace si cambia el giro o la placa.
+      const key=S.shape+'|'+P.rot+'|'+(S.shape==='medallon'?P.plate:'');
+      if(!S.rel||S.rel.key!==key)S.rel={key,F:reliefFields(S.hy.clean,S.shape,P)};
+      model=buildModel(S.rel.F,S.shape,P);
+      if(model.mask)model.mask={label:'silueta del modelo 3D'};
+    }
+  }catch(e){console.error('[Foto3D] malla',e);model={error:'Error al generar la pieza: '+(e&&e.message||e)};}
+  S.model=model;
   const dl=$('f3dDownload');
   if(model.error){status(model.error,'error');dl.disabled=true;$('f3dStats').innerHTML='';return;}
   status(model.warning||'',model.warning?'warn':'');
@@ -1306,7 +1402,7 @@ function rebuild(){
   $('f3dStats').innerHTML=`<span><b>${dx.toFixed(1)} × ${dy.toFixed(1)} × ${dz.toFixed(1)} mm</b>ancho × fondo × alto</span>
     <span${fit.length?'':' class="bad"'}><b>${esc(fitTxt)}</b>volumen de impresión</span>
     <span><b>≈ ${Math.round(g)} g de PLA</b>estimado: cáscara 1 mm + 15 % relleno</span>
-    <span><b>${model.mesh.count.toLocaleString('es-CL')} triángulos</b>${mb.toFixed(1)} MB · recorte: ${esc(model.mask.label)}</span>`;
+    <span><b>${model.mesh.count.toLocaleString('es-CL')} triángulos</b>${mb.toFixed(1)} MB · ${esc(model.mask.label)} · ${(performance.now()-t0).toFixed(0)} ms</span>`;
 }
 function download(){
   const m=S.model;if(!m||m.error)return;
@@ -1320,9 +1416,14 @@ function download(){
 function init(){
   const root=$('maquinaEscultorView');if(!root||root.dataset.ready)return;root.dataset.ready='1';
   const saved=loadSaved();
-  try{const q=localStorage.getItem(AIQ_KEY);if(q&&$('f3dAiQuality')&&[...$('f3dAiQuality').options].some(o=>o.value===q))$('f3dAiQuality').value=q;}catch(_){}
-  if(saved.shape&&SHAPES[saved.shape])S.shape=saved.shape;
+  if(saved.shape&&UI_SHAPES.includes(saved.shape))S.shape=saved.shape;
   if(saved.params&&typeof saved.params==='object')S.params=saved.params;
+  try{
+    const m=JSON.parse(localStorage.getItem(MODE_KEY)||'{}');
+    if(m.quality&&[...$('f3dQuality').options].some(o=>o.value===m.quality))$('f3dQuality').value=m.quality;
+    if(m.octree&&[...$('f3dOctree').options].some(o=>o.value===String(m.octree)))$('f3dOctree').value=String(m.octree);
+    const t=localStorage.getItem(TOKEN_KEY);if(t)$('f3dToken').value=t;
+  }catch(_){}
   renderControls();
   const drop=$('f3dDrop');
   ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
@@ -1336,9 +1437,12 @@ function init(){
     if(!root.offsetParent||!e.clipboardData)return;
     const it=[...e.clipboardData.items].find(i=>/^image\//.test(i.type));if(it)onFiles([it.getAsFile()]);
   });
+  for(const id of['f3dQuality','f3dOctree'])$(id).addEventListener('change',saveMode);
+  $('f3dToken').addEventListener('change',saveMode);
   if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>drawSource()).observe($('f3dSrcWrap'));
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 
-root.Foto3D={init,setShape,resetShape,resetDetail,setView,toggleFacets,runDepth,onSourceChange,onQualityChange,download,core:CORE,_state:S,_setImage:setImage,_rebuild:rebuild};
+root.Foto3D={init,setShape,resetShape,resetDetail,setView,toggleFacets,generate:()=>generate(),variant:()=>generate({variant:true}),cancel:()=>cancel(),checkService:()=>checkService(true),download,
+  core:CORE,_state:S,_setImage:setImage,_rebuild:rebuild,_useGLB:useGLB};
 })(typeof window!=='undefined'?window:globalThis);
