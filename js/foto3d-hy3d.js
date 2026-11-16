@@ -174,10 +174,18 @@ async function stream(host,prefix,eventId,token,signal,f,onBeat,idleMs,log){
   throw new HyError('failed','El servicio cerró la conexión sin entregar la pieza.');
 }
 async function download(host,prefix,fileData,token,signal,f){
-  if(!fileData||(!fileData.url&&!fileData.path))throw new HyError('empty','El servicio no entregó ninguna malla.');
+  // Gradio puede envolver FileData en una actualización del componente File.
+  if(fileData&&fileData.__type__==='update')fileData=fileData.value;
+  if(!fileData||typeof fileData!=='object'||Array.isArray(fileData))
+    throw new HyError('empty','El servicio no entregó ninguna malla.');
+  const path=typeof fileData.path==='string'?fileData.path:'';
+  const rawUrl=typeof fileData.url==='string'?fileData.url:'';
+  if(!path&&!rawUrl)throw new HyError('empty','El servicio no entregó ninguna malla.');
   let url=null;
-  if(fileData.url){try{if(new URL(fileData.url,host).origin===new URL(host).origin)url=new URL(fileData.url,host).href;}catch(_){}}
-  if(!url&&fileData.path)url=host+prefix+'/file='+fileData.path;
+  // La URL de Gradio 4 puede heredar /call/shape/ y resultar inválida.
+  // FileData.path es la fuente canónica; codificarlo evita query/fragmentos.
+  if(path)url=host+prefix+'/file='+encodeURI(path).replace(/[?#]/g,c=>encodeURIComponent(c));
+  else if(rawUrl){try{const u=new URL(rawUrl,host);if(u.origin===new URL(host).origin&&!u.username&&!u.password)url=u.href;}catch(_){}}
   if(!url)throw new HyError('api','El servicio indicó una dirección de descarga no válida.');
   let res;
   try{res=await f(url,{headers:authHeaders(token),signal});}catch(e){throw netError(e);}
