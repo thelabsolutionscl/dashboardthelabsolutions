@@ -56,7 +56,10 @@ async function fake(o={}){
         if(o.nullError){res.write('event: error\ndata: null\n\n');return res.end();} // fallo interno del Space: sin mensaje
         if(o.error!=null){res.write('event: error\ndata: '+JSON.stringify(o.error)+'\n\n');return res.end();}
         const fd={path:'/tmp/gradio/x/white_mesh.glb',url:(o.evilUrl?'http://evil.invalid':origin)+pre+'/file=/tmp/gradio/x/white_mesh.glb',orig_name:'white_mesh.glb'};
-        res.write('event: complete\ndata: '+JSON.stringify([fd,'<iframe></iframe>',{number_of_faces:SPHERE.indices.length/3,time:{total:3.2}},4321])+'\n\n');
+        if(o.badFileUrl)fd.url=origin+pre+'/call/shape/file='+fd.path;
+        if(o.noPath)delete fd.path;
+        const result=o.missingValue?{__type__:'update',value:null}:o.wrapped?{__type__:'update',value:fd}:fd;
+        res.write('event: complete\ndata: '+JSON.stringify([result,'<iframe></iframe>',{number_of_faces:SPHERE.indices.length/3,time:{total:3.2}},4321])+'\n\n');
         res.end();
       },15);
       return;
@@ -310,4 +313,26 @@ test('hy3d-smoke --debug muestra cada petición y cada evento; un fallo imprime 
     assert.match(r.out,/no explicó por qué/);
     assert.match(r.out,/detalle técnico: \{"code":"failed","seconds":[\d.]+,"quality":"estandar".*"raw":"null"\}/);
   }finally{await g.close();fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+
+for(const apiPrefix of ['', '/gradio_api']){
+  test('FileData envuelto y URL incorrecta usa ruta canónica '+apiPrefix,async()=>{
+    const f=await fake({wrapped:true,badFileUrl:true,apiPrefix});
+    try{const r=await HY.generate(base(f));assert.ok(r.glb.byteLength>100);
+      assert.equal(f.st.calls.at(-1).path,apiPrefix+'/file=/tmp/gradio/x/white_mesh.glb');
+    }finally{await f.close();}
+  });
+}
+test('actualización sin archivo produce empty sin descargar',async()=>{
+  const f=await fake({missingValue:true});
+  try{await expectCode(HY.generate(base(f)),'empty');assert.equal(f.st.calls.length,4);}finally{await f.close();}
+});
+test('archivo envuelto con URL externa sin path no transmite token',async()=>{
+  const f=await fake({wrapped:true,evilUrl:true,noPath:true});
+  try{await expectCode(HY.generate(base(f,{token:'hf_prueba'})),'api');assert.equal(f.st.calls.length,4);}finally{await f.close();}
+});
+test('archivo envuelto con URL propia sin path conserva compatibilidad',async()=>{
+  const f=await fake({wrapped:true,noPath:true});
+  try{const r=await HY.generate(base(f));assert.ok(r.glb.byteLength>100);}finally{await f.close();}
 });
