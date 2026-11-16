@@ -2821,13 +2821,14 @@ function renderFunnel(){
   const el=document.getElementById('ovFunnelBody');if(!el)return;
   const now=new Date();
   const ms=new Date(now.getFullYear(),now.getMonth(),1);
-  const me=new Date(now.getFullYear(),now.getMonth()+1,0);
+  // Límite exclusivo: incluye todas las horas del último día del mes.
+  const me=new Date(now.getFullYear(),now.getMonth()+1,1);
   const periodoLabel=ms.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
   const lbl=document.getElementById('ovFunnelPeriodo');if(lbl)lbl.textContent=periodoLabel;
   const _cot=isVendorMode()?state.cotizaciones.filter(vendorOwnsRecord):state.cotizaciones;
   const _ped=isVendorMode()?state.pedidos.filter(vendorOwnsRecord):state.pedidos;
   const _cli=isVendorMode()?state.clientes.filter(vendorOwnsRecord):state.clientes;
-  const inMes=d=>d&&new Date(d)>=ms&&new Date(d)<=me;
+  const inMes=d=>d&&new Date(d)>=ms&&new Date(d)<me;
   // Stages
   const leads=_cli.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
   const cots=_cot.filter(c=>c.createdTime&&inMes(c.createdTime)).length;
