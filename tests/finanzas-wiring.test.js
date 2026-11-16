@@ -417,3 +417,28 @@ test('aging detallado y CSV separan por vencer de facturas vencidas',()=>{
   assert.match(csv,/rawDias<=0\?'Por vencer \/ hoy'/);
   assert.doesNotMatch(csv,/dias<=30\?'Corriente'/);
 });
+
+test('el embudo incluye el último día completo y excluye el mes siguiente',()=>{
+  const vm=require('node:vm');
+  const body=FIN.slice(FIN.indexOf('function renderFunnel(){'),FIN.indexOf('// Stages',FIN.indexOf('function renderFunnel(){')));
+  const dates=body.slice(body.indexOf('const now='),body.indexOf('const periodoLabel='));
+  const predicate=body.match(/const inMes=.*;/)[0];
+  const previousTZ=process.env.TZ;
+  try{
+    for(const tz of ['America/Santiago','UTC']){
+      process.env.TZ=tz;
+      for(const [year,month,lastDay] of [[2026,10,30],[2026,11,31],[2024,1,29],[2025,1,28],[2026,8,30]]){
+        const current=new Date(year,month,15,12).getTime();
+        class FixedDate extends Date { constructor(...args){ super(...(args.length?args:[current])); } }
+        const inMonth=vm.runInNewContext(`${dates}\n${predicate}\ninMes`,{Date:FixedDate});
+        for(const d of [new Date(year,month,1),new Date(year,month,lastDay,0,0,0,1),new Date(year,month,lastDay,12),new Date(year,month,lastDay,23,59,59,999)]){
+          assert.equal(Boolean(inMonth(d.toISOString())),true,`${tz}: incluir ${d}`);
+        }
+        for(const d of [new Date(year,month,1).getTime()-1,new Date(year,month+1,1).getTime()]){
+          assert.equal(Boolean(inMonth(new Date(d).toISOString())),false,`${tz}: excluir ${d}`);
+        }
+        for(const invalid of ['',null,undefined,'no-es-fecha'])assert.equal(Boolean(inMonth(invalid)),false);
+      }
+    }
+  }finally{if(previousTZ===undefined)delete process.env.TZ;else process.env.TZ=previousTZ;}
+});
