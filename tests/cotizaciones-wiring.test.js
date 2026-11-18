@@ -19,6 +19,29 @@ const INLINE_JS = [...HTML.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
 const JS = `${INLINE_JS}\n${EXTERNAL_JS}`;
 const SOURCE = `${HTML}\n${JS}`;
 
+test('el importador conserva los productos de cotizaciones antiguas sin Detalle JSON', () => {
+  const vm = require('node:vm');
+  const context = vm.createContext({});
+  vm.runInContext(extractFunction('_copyCotItems'), context);
+  const detalle = Array.from({ length: 80 }, (_, i) =>
+    `Producto antiguo ${i + 1} | 10 und. | Costo: $3.000 | Venta: $8.000`).join('\n');
+  const items = context._copyCotItems({ 'Detalle productos': detalle });
+  assert.equal(items.length, 80);
+  assert.equal(items[79].desc, 'Producto antiguo 80');
+  assert.equal(items[79].und, 10);
+  assert.equal(items[79].costoUnit, 300);
+  assert.equal(items[79].ventaUnit, 800);
+});
+
+test('el importador de cotizaciones permite desplazar tarjetas largas sin recortarlas', () => {
+  const picker = extractFunction('openCopyCotPicker');
+  // El listado es flex-column con altura limitada: sin flex-shrink:0 las
+  // tarjetas se comprimen y overflow:hidden oculta el botón de importar.
+  assert.match(picker, /class="copy-cot-card" style="flex-shrink:0;/);
+  assert.match(HTML, /id="copyCotPickerList"[^>]*overflow-y:auto/);
+  assert.match(picker, /onclick="applyCopyCot\('/);
+});
+
 function count(pattern, text = SOURCE) {
   return (text.match(pattern) || []).length;
 }
