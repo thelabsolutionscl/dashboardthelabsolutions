@@ -465,6 +465,7 @@
     const tone=orderStateTone(current);
     return `<div class="op-status-select-wrap op-status-${tone}" title="Cambiar estado del pedido">
       <select class="op-status-select" aria-label="Estado del pedido ${esc(p?.fields?.['N° Pedido']||'')}" onchange="event.stopPropagation();if(this.value!==this.dataset.current){advancePedido('${p.id}',this.value)}" onclick="event.stopPropagation()" data-current="${esc(current)}">
+        ${!stages.includes(current)?`<option value="${esc(current)}" selected>${esc(current||'Sin estado')}</option>`:''}
         ${stages.map(s=>`<option value="${esc(s)}" ${s===current?'selected':''}>${esc(s)}</option>`).join('')}
       </select>
     </div>`;
