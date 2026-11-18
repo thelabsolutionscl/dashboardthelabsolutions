@@ -267,3 +267,15 @@ test('registry, cola y salud central no se pausan explícitamente al ocultar el 
   assert.match(HEALTH,/visibilitychange/);
   assert.match(HEALTH,/addEventListener\('online'/);
 });
+
+test('volver del reposo renueva sesión antes de reconectar y descarta backoff obsoleto',()=>{
+  const resume=fn(MAQ,'_resumePrinterRealtime');
+  assert.match(resume,/_printerResumePending/,'eventos focus y visibility simultáneos comparten recuperación');
+  assert.match(resume,/_printerLastResumeAt/,'limita la ráfaga de reconexiones');
+  assert.match(resume,/_remoteBridgeHealth\.at=0/,'invalida healthz cacheado');
+  assert.match(resume,/_nextPollAt\[m\.id\]=0/,'descarta backoff anterior al reposo');
+  assert.match(resume,/_wsConnected\[m\.id\]=false/,'no confía en WebSockets previos al reposo');
+  assert.ok(resume.indexOf('await refreshPrinterTunnelSession(false)')<resume.indexOf('reconnectAllPrinterWs()'),'renueva ticket antes de WebSocket');
+  assert.ok(resume.indexOf('reconnectAllPrinterWs()')<resume.indexOf('await pollPrinters()'),'consulta estado tras reconstruir el canal');
+  assert.doesNotMatch(resume,/restartPrinterBridge|startExisting|_postQueue|recoverPrinterCamera/,'no ejecuta operaciones físicas');
+});
