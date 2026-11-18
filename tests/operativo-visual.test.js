@@ -476,3 +476,18 @@ test('pedidos sin enlace no heredan los datos de otra cotización del mismo clie
   assert.match(html,/Sin cotización vinculada · Ingreso 22\/10\/2026/);
   assert.doesNotMatch(html,/261004/);
 });
+
+ test('el selector conserva estados externos o vacíos sin aparentar Confirmado',()=>{
+  const {op}=setup();
+  for(const estado of ['Entregado','Cancelado','En pausa','', '<externo>']){
+    const html=op.orderStatusDropdown(record('p',{'Estado pedido':estado}));
+    const selected=Array.from(html.matchAll(/<option value="([^"]*)" selected>([^<]*)<\/option>/g));
+    assert.equal(selected.length,1);
+    const escaped=estado.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    assert.equal(selected[0][1],escaped);
+    assert.equal(selected[0][2],escaped||'Sin estado');
+    assert.doesNotMatch(html,/<option value="Confirmado" selected>/);
+  }
+  const completed=op.orderStatusDropdown(record('p',{'Estado pedido':'Completado'}));
+  assert.match(completed,/<option value="Completado" selected>Completado<\/option>/);
+ });
