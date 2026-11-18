@@ -6,7 +6,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../lead-worker/src/index.js'),'utf8');
 const begin=source.indexOf('const EXTERNAL_CRM_IMMUTABLE_FIELDS =');
-const end=source.indexOf('// Busca un Cliente existente',begin);
+const end=source.indexOf('// Retrieve all pages:',begin);
 const tolerantBegin=source.indexOf('async function airtableCreateTolerant(',end);
 const tolerantEnd=source.indexOf('async function unknownFieldFrom(',tolerantBegin);
 assert.ok(begin>0&&end>begin&&tolerantBegin>end&&tolerantEnd>tolerantBegin,

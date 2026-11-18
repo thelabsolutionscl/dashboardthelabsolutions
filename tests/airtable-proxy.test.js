@@ -28,7 +28,8 @@ const path = require('path');
 // completo: se reemplaza `export default` por una captura y se devuelve al final,
 // de modo que TODO el módulo se inicializa igual que en Cloudflare.
 function cargarWorker() {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'airtable-proxy', 'src', 'worker.js'), 'utf8').replace("import { accessAuthorize } from './access-auth.js';",'');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'airtable-proxy', 'src', 'worker.js'), 'utf8').replace("import { accessAuthorize } from './access-auth.js';",'')
+  .replace('import { resolveClientMatch } from "../../lead-worker/src/client-match.js";',require('./helpers/client-match-source.cjs'));
   const body = src.replace('export class AiBudgetGuard', 'class AiBudgetGuard').replace('export class CrmMutationGuard','class CrmMutationGuard').replace('export default', 'const __wk =') + '\nreturn __wk;';
   return new Function(body)();
 }

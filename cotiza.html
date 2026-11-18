@@ -178,6 +178,38 @@ function _mailtoFallback(d){
   return `mailto:hola@thelab.solutions?subject=${encodeURIComponent('Solicitud de cotización — '+(d.company||d.name))}&body=${body}`;
 }
 
+// Preserve one submission across retries/reloads; a confirmed receipt ends it.
+// Storage must succeed before any request, including the original attachment.
+function _submission(storage, action, payload){
+  const key='tls:cotiza:submission:v1';
+  if(action==='complete'){storage.removeItem(key);return null;}
+  const saved=storage.getItem(key);
+  if(saved){
+    const item=JSON.parse(saved);
+    if(!item||typeof item.submissionId!=='string'||!item.name)throw Error('Invalid saved submission');
+    return item;
+  }
+  if(action==='peek')return null;
+  const {turnstileToken,...fields}=payload;
+  const item={...fields,submissionId:crypto.randomUUID()};
+  storage.setItem(key,JSON.stringify(item));
+  return item;
+}
+function _submissionLock(locked){
+  document.getElementById('cotForm').querySelectorAll('input,select,textarea,button').forEach(el=>{
+    if(el.id!=='btnSend')el.disabled=locked;
+  });
+}
+function _restoreSubmission(item){
+  const fields={name:'fName',company:'fCompany',email:'fEmail',phone:'fPhone',service:'fService',
+    quantity:'fQty',deliveryDate:'fDate',budget:'fBudget',message:'fMsg'};
+  Object.entries(fields).forEach(([key,id])=>{document.getElementById(id).value=item[key]||'';});
+  _fileAtt=item.attachment||null;
+  if(_fileAtt){document.getElementById('filePrev').style.display='flex';document.getElementById('filePrevName').textContent=_fileAtt.name;}
+  _submissionLock(true);
+  _show('err','Hay una solicitud pendiente de confirmar. Pulsa Enviar para reintentar la solicitud original.');
+}
+
 document.getElementById('cotForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
   const g=id=>document.getElementById(id).value.trim();
@@ -201,21 +233,28 @@ document.getElementById('cotForm').addEventListener('submit',async ev=>{
   }
   const btn=document.getElementById('btnSend');
   btn.disabled=true;const prev=btn.textContent;btn.textContent='Enviando…';
+  let sent=false;
   try{
+    const pending=_submission(sessionStorage,'prepare',d);
+    _submissionLock(true);
+    const submitted={...pending,turnstileToken:_tsToken};
     const headers={'Content-Type':'application/json'};
     if(_cfgOk(CFG.key)) headers['X-Public-Lead-Key']=CFG.key;
-    const r=await fetch(CFG.url.replace(/\/+$/,'')+'/lead',{method:'POST',headers,body:JSON.stringify(d)});
+    sent=true;
+    const r=await fetch(CFG.url.replace(/\/+$/,'')+'/lead',{method:'POST',headers,body:JSON.stringify(submitted)});
     const res=await r.json().catch(()=>null);
     if(r.ok&&res&&res.ok){
-      document.getElementById('cotForm').reset();_tsToken='';
+      _submission(sessionStorage,'complete');_submissionLock(false);
+      document.getElementById('cotForm').reset();_fileClear();_tsToken='';
       _show('ok','✓ ¡Recibido! Tu solicitud ya está en nuestro sistema.<br>Te contactaremos a la brevedad — normalmente dentro de 24 horas hábiles.');
     }else{
       _show('err',(res&&res.error?_esc(res.error)+'. ':'No pudimos registrar tu solicitud. ')+`También puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a>.`);
     }
   }catch(e){
-    _show('err',`Problema de conexión. Puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a> o escribirnos por WhatsApp.`);
-  }finally{btn.disabled=false;btn.textContent=prev;}
+    _show('err',sent?`Problema de conexión. Reintenta para confirmar la solicitud original. Puedes <a style="color:var(--accent)" href="${_mailtoFallback(d)}">enviarla por correo</a> o escribirnos por WhatsApp.`:'No pudimos conservar la solicitud para reintentar; no fue enviada. Prueba con un adjunto más pequeño o utiliza el correo de contacto.');
+  }finally{btn.disabled=false;btn.textContent=prev;if(window.turnstile){_tsToken='';window.turnstile.reset();}}
 });
+try{const pending=_submission(sessionStorage,'peek');if(pending)_restoreSubmission(pending);}catch(_){_show('err','No se pudo leer la solicitud pendiente. Conserva tus datos y contacta al equipo antes de volver a enviarla.');}
 </script>
 </body>
 </html>

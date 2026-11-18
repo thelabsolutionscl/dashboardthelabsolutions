@@ -28,11 +28,9 @@ test('prospecting uses staging and protected server conversion',()=>{
 test('prospect conversion deduplicates server-side before creating Clientes',()=>{
   assert.doesNotMatch(LI,/function findClient\(/);
   assert.doesNotMatch(LI,/wr\('Clientes','POST'/);
-  assert.match(PROXY,/function liClientMatches\(/);
-  assert.match(PROXY,/liEmail\(p\.Email\)/);
-  assert.match(PROXY,/liUrl\(p\['LinkedIn URL'\]\)/);
-  assert.match(PROXY,/liPhone\(p\['Teléfono'\]\)/);
-  assert.match(PROXY,/clients\.find\(r=>liClientMatches/);
+  assert.match(PROXY,/resolveClientMatch\(current,clients\)/);
+  assert.match(PROXY,/CLIENT_MATCH_AMBIGUOUS/);
+  assert.doesNotMatch(PROXY,/clients\.find\(r=>liClientMatches/);
   assert.match(PROXY,/liMutate\(this\.env,'Clientes','POST'/);
 });
 
@@ -126,7 +124,7 @@ test('funnel rejects impossible transitions and re-analysis does not regress act
 
 test('short phone fragments are not used as dedupe identifiers',()=>{
   assert.match(LI,/d\.length>=9\?d\.slice\(-9\):''/);
-  assert.match(WORKER,/phoneDigitsRaw\.length >= 9 \? phoneDigitsRaw\.slice\(-9\) : ""/);
+  assert.match(require('./helpers/client-match-source.cjs'),/digits\.length >= 9 \? digits\.slice\(-9\)/);
 });
 
 test('webhook idempotency uses the real LinkedIn lead id, not click attribution',()=>{

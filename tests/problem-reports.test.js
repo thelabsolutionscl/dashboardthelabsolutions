@@ -9,6 +9,7 @@ const AUTH=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/access-aut
   .replace('export async function accessAuthorize','async function accessAuthorize');
 const WORKER=fs.readFileSync(path.join(__dirname,'../airtable-proxy/src/worker.js'),'utf8')
   .replace("import { accessAuthorize } from './access-auth.js';",'')
+  .replace('import { resolveClientMatch } from "../../lead-worker/src/client-match.js";',require('./helpers/client-match-source.cjs'))
   .replace('export class AiBudgetGuard','class AiBudgetGuard')
   .replace('export class CrmMutationGuard','class CrmMutationGuard')
   .replace('export default','const worker=');

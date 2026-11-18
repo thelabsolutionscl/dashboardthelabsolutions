@@ -6,7 +6,8 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const SRC=fs.readFileSync(path.join(__dirname,'..','airtable-proxy','src','worker.js'),'utf8').replace("import { accessAuthorize } from './access-auth.js';",'');
+const SRC=fs.readFileSync(path.join(__dirname,'..','airtable-proxy','src','worker.js'),'utf8').replace("import { accessAuthorize } from './access-auth.js';",'')
+  .replace('import { resolveClientMatch } from "../../lead-worker/src/client-match.js";',require('./helpers/client-match-source.cjs'));
 function load(){
   const source=SRC.replace('export class AiBudgetGuard','class AiBudgetGuard')
     .replace('export class CrmMutationGuard','class CrmMutationGuard')

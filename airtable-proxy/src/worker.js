@@ -1,3 +1,4 @@
+import { resolveClientMatch } from "../../lead-worker/src/client-match.js";
 import { accessAuthorize } from './access-auth.js';
 const AIRTABLE_BASE = 'https://api.airtable.com';
 
@@ -2726,13 +2727,6 @@ function liDuplicate(a,b){
     an=liNorm(af.Prospecto),bn=liNorm(bf.Prospecto),ac=liNorm(af.Empresa),bc=liNorm(bf.Empresa);
   return !!((ae&&be&&ae===be)||(au&&bu&&au===bu)||(ap&&bp&&ap===bp)||(an&&bn&&ac&&bc&&an===bn&&ac===bc));
 }
-function liClientMatches(prospect,client){
-  const p=prospect||{},c=client||{},pe=liEmail(p.Email),ce=liEmail(c.Email),
-    pu=liUrl(p['LinkedIn URL']),cu=liUrl(c['LinkedIn URL']),
-    pp=liPhone(p['Teléfono']),cp=liPhone(c['Teléfono']),
-    pn=liNorm(p.Prospecto),cn=liNorm(c.Contacto),pc=liNorm(p.Empresa),cc=liNorm(c.Empresa);
-  return !!((pe&&ce&&pe===ce)||(pu&&cu&&pu===cu)||(pp&&cp&&pp===cp)||(pn&&cn&&pc&&cc&&pn===cn&&pc===cc));
-}
 function liProspectInput(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
   const out={
@@ -3088,10 +3082,11 @@ export class CrmMutationGuard {
         return this._json({error:'Primero califica el prospecto antes de pasarlo a Clientes'},409);
 
       const key='linkedin:convert:'+id;
-      let marker=null;try{marker=await this.state.storage.get(key);}catch(_){}
+      let marker;try{marker=await this.state.storage.get(key);}catch(_){return this._json({error:'No se pudo verificar la conversión anterior'},503);}
       if(marker?.clientId){
-        const client=await liReadOne(this.env,'Clientes',marker.clientId).catch(()=>null);
+        let client;try{client=await liReadOne(this.env,'Clientes',marker.clientId);}catch(_){return this._json({error:'No se pudo verificar el Cliente reservado'},503);}
         if(client){
+          if(resolveClientMatch(current,[client]).status!=='match')return this._json({error:'El vínculo reservado requiere revisión',code:'CLIENT_MATCH_AMBIGUOUS'},409);
           let linked;try{linked=await liMutate(this.env,LINKEDIN_PROSPECTS_TABLE,'PATCH',id,{Cliente:[client.id],Convertido:true,Estado:'Cliente','Próximo seguimiento':null});}
           catch(_){return this._json({error:'Cliente creado; falta reconciliar el vínculo LinkedIn',code:'LINKEDIN_CONVERSION_RECONCILE'},503);}
           await liWriteEvent(this.env,{prospect:linked,clienteId:client.id,type:'Conversión',oldState,newState:'Cliente',actor,detail:'Conversión reconciliada'});
@@ -3101,7 +3096,9 @@ export class CrmMutationGuard {
 
       let clients;try{clients=await liReadAll(this.env,'Clientes');}
       catch(_){return this._json({error:'No se pudo verificar Clientes antes de convertir'},503);}
-      let client=clients.find(r=>liClientMatches(current,r.fields||{}))||null,created=false;
+      const resolution=resolveClientMatch(current,clients);
+      if(resolution.status==='ambiguous')return this._json({error:'Identidad de cliente ambigua. Revisa empresa y datos de contacto antes de convertir.',code:'CLIENT_MATCH_AMBIGUOUS'},409);
+      let client=resolution.record||null,created=false;
       if(!client&&marker){
         return this._json({error:'Una conversión anterior tiene resultado incierto; no se creará un duplicado',code:'LINKEDIN_CONVERSION_PENDING_RECONCILIATION'},503);
       }
