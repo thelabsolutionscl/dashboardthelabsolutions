@@ -640,11 +640,35 @@ body.compact .ov-zone{margin:18px 0 10px;}
 .modal-footer{padding:12px 20px;border-top:1px solid var(--border2);flex-shrink:0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center;background:var(--surface2);}
 .modal-close{background:transparent;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1;transition:background .15s;flex-shrink:0;}
 .modal-close:hover{background:rgba(255,255,255,0.08);color:var(--text);}
-/* Ficha Propuesta layout helpers */
-.fp-top-grid{display:grid;grid-template-columns:110px 1fr;gap:12px;}
-.fp-fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.fp-span-2{grid-column:1/-1;}
-.fp-views-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+/* Ficha Propuesta (plantilla TLS): pestañas por producto y secciones plegables */
+.fp-editor{display:flex;flex-direction:column;gap:8px;}
+.fp-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}
+.fp-tab{border:1px solid var(--border2);background:var(--surface2);color:var(--text2);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fp-tab.on{border-color:#02b2c1;color:#02b2c1;background:rgba(2,178,193,0.08);}
+.fp-tab-add{border-style:dashed;}
+.fp-sec{border:1px solid var(--border2);border-radius:10px;background:var(--surface);}
+.fp-sec>summary{cursor:pointer;padding:10px 14px;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text2);}
+.fp-sec[open]>summary{border-bottom:1px solid var(--border2);color:#02b2c1;}
+.fp-sec-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px;}
+.fp-hint{font-size:10px;color:var(--text3);line-height:1.5;}
+.fp-opt{color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;}
+.fp-v1-aviso{font-size:11px;line-height:1.5;color:var(--text2);background:rgba(2,178,193,0.08);border:1px solid rgba(2,178,193,0.35);border-radius:8px;padding:8px 12px;}
+.fp-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fp-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.fp-col{display:flex;flex-direction:column;gap:10px;min-width:0;}
+.fp-meta{display:flex;flex-direction:column;gap:6px;}
+.fp-meta-row{display:grid;grid-template-columns:130px 1fr;gap:6px;}
+.fp-slot-lbl{font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;}
+.fp-slot-box{cursor:pointer;display:block;border:1px dashed var(--border2);border-radius:8px;overflow:hidden;background:#fff;}
+.fp-slot-box img{width:100%;height:100%;object-fit:contain;}
+.fp-slot-ph{height:100%;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--text3);background:var(--surface);}
+.fp-slot-x{background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;padding:4px 0;}
+.fp-ia{border:1px solid rgba(2,178,193,0.45);border-radius:10px;padding:12px;background:rgba(2,178,193,0.05);display:flex;flex-direction:column;gap:8px;}
+.fp-ia-tit{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#0097a7;}
+.fp-ia-btn{background:linear-gradient(135deg,#02b2c1,#0097a7);color:#fff;border:none;border-radius:8px;padding:11px 16px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;}
+.fp-ia-prompts>summary{cursor:pointer;font-size:10px;color:var(--text3);}
+.fp-ia-prompt{display:grid;grid-template-columns:90px 1fr auto;gap:6px;align-items:center;margin-top:6px;}
+.fp-ia-prompt textarea{font-size:10px;line-height:1.4;resize:vertical;}
 .fp-ia-row{display:flex;gap:12px;align-items:flex-start;}
 /* ── Facturas cliente: estilos base ──────────────────────────── */
 .fac-kpi-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
@@ -1608,9 +1632,8 @@ tr:hover td{background:rgba(255,255,255,0.02)!important;}
   .modal-footer{padding:10px 14px;flex-wrap:wrap;position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border2);}
   .modal-footer .btn{flex:1 1 auto;min-width:100px;justify-content:center;}
   /* Ficha Propuesta: collapse grids on mobile */
-  .fp-top-grid,.fp-fields-grid{grid-template-columns:1fr!important;}
-  .fp-span-2{grid-column:1!important;}
-  .fp-views-grid{grid-template-columns:1fr 1fr!important;}
+  .fp-grid2,.fp-meta-row,.fp-ia-prompt{grid-template-columns:1fr!important;}
+  .fp-grid3{grid-template-columns:1fr 1fr!important;}
   .fp-ia-row{flex-direction:column!important;}
   .fp-ia-row>div{width:100%!important;padding-top:0!important;}
   .fp-ia-row [id^="fpGenBtn-"]{width:100%!important;}

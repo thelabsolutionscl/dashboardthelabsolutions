@@ -317,11 +317,303 @@ function descargarFichaTecnica(pedidoId){
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
-// ── FICHA PROPUESTA AL CLIENTE ────────────────────────────────
+// ── FICHA TÉCNICA TLS: PLANTILLA OFICIAL (A4 vertical, 2 páginas) ──────
+// Réplica de ~/.claude/skills/ficha-tecnica-tls/render.mjs. La fuente de verdad
+// visual es el PDF del trofeo Hospital Militar del Norte (02-11-2026): mismas
+// medidas, Lato, negro #0D0D0E + cian #02B2C1 y el mismo pie. Tamaños y
+// márgenes calibrados contra ese PDF (hecho con WeasyPrint) midiendo cada línea
+// con pdftotext -bbox: en Chrome calzan a ±1,2 pt. Si cambia la skill, cambia
+// aquí también.
+// En "Ficha Propuesta" (Cotizaciones) se guarda el JSON de la skill sin imágenes:
+//   {v:2, fichas:[{encabezado,pagina1,pagina2}], logoCliente, updatedAt}
+// Una ficha (2 páginas) por producto. Las imágenes no caben en la celda de
+// Airtable (100.000 caracteres): viven en el caché local del navegador.
+// La ficha antigua {numFicha,nombreProyecto,items:[...]} se sigue leyendo.
+const FT_PIE=['The Lab Solutions · Fabricación personalizada para marcas','thelab.solutions · hola@thelab.solutions · +56 9 2878 5039'];
+const FT_IMG_SLOTS=['foto','foto2','frontal','lateral','plano','detalle'];
+
+function _ftBase(){try{if(/^https?:/.test(location.origin)) return location.origin;}catch(e){}return 'https://dashboard.thelab.solutions';}
+// Fecha de hoy en Chile (dd-mm-aaaa). hoyCL vive en index.html; sin él, la fecha local, nunca la UTC.
+function _ftHoy(){
+  if(typeof hoyCL==='function') return hoyCL().split('-').reverse().join('-');
+  const d=new Date();return [d.getDate(),d.getMonth()+1].map(n=>String(n).padStart(2,'0')).join('-')+'-'+d.getFullYear();
+}
+function _ftIsoADmy(s){const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}-${m[2]}-${m[1]}`:'';}
+
+function ftNuevaFicha(ctx={}){
+  return {
+    encabezado:{tipo:ctx.producto||'',tipo_corto:'',destacado:ctx.cliente||'',
+      meta:[['Cliente',ctx.cliente||''],['Producto',ctx.producto||''],['Línea',''],['Cantidad',ctx.cantidad||''],['Fecha',ctx.fecha||_ftHoy()]]},
+    pagina1:{fotos:[{fondo:'gris',ajuste:'contain'},{fondo:'',ajuste:'cover'}],foto_nota:'Imagen referencial.',
+      en_simple:['',''],chips:['','',''],resumen_medidas:'',especificaciones:[],
+      medidas:{alto:'',ancho:'',fondo:'',nota:'Medidas en cm. Ambas vistas a la misma escala.'}},
+    pagina2:{componentes:{titulo:'Componentes del producto',items:[],nota:''},detalle:{titulo:'Detalle',nota:''},
+      pasos:{titulo:'Cómo se arma',items:[],nota:''},glosario:[],cuidados:[]}
+  };
+}
+// Rellena lo que falte (fichas a medio llenar o JSON pegado desde la skill) y
+// deja solo encabezado/pagina1/pagina2: es también lo que se guarda.
+function ftCompletar(f){
+  const b=ftNuevaFicha(),o=(f&&typeof f==='object')?f:{},arr=(v,d)=>Array.isArray(v)?v:d;
+  const e={...b.encabezado,...(o.encabezado||{})},p1={...b.pagina1,...(o.pagina1||{})},p2={...b.pagina2,...(o.pagina2||{})};
+  p1.medidas={...b.pagina1.medidas,...(p1.medidas||{})};
+  ['componentes','detalle','pasos'].forEach(k=>{p2[k]={...b.pagina2[k],...(p2[k]||{})};});
+  e.meta=arr(e.meta,[]);
+  ['fotos','en_simple','chips','especificaciones'].forEach(k=>{p1[k]=arr(p1[k],b.pagina1[k]);});
+  p2.componentes.items=arr(p2.componentes.items,[]);p2.pasos.items=arr(p2.pasos.items,[]);
+  p2.glosario=arr(p2.glosario,[]);p2.cuidados=arr(p2.cuidados,[]);
+  return {encabezado:e,pagina1:p1,pagina2:p2};
+}
+function ftParaGuardar(it){return JSON.parse(JSON.stringify(ftCompletar(it)));}
+// Ficha antigua (una "muestra" por producto): sus textos pasan a Especificaciones.
+function _ftDesdeV1(it,d,ctx){
+  const f=ftNuevaFicha({cliente:ctx.cliente,producto:it.nombre||'',fecha:_ftIsoADmy(d.updatedAt)||undefined});
+  if(d.nombreProyecto) f.encabezado.meta[2]=['Proyecto',d.nombreProyecto];
+  const specs=f.pagina1.especificaciones;
+  const par=l=>{const i=l.indexOf(':');return i>0?[l.slice(0,i).trim(),l.slice(i+1).trim()]:['Material',l.trim()];};
+  if(it.tipo) specs.push(['Técnica',it.tipo]);
+  String(it.material||'').split('\n').filter(s=>s.trim()).forEach(l=>specs.push(par(l)));
+  const alt=[it.optLabel,...String(it.optMaterial||'').split('\n')].map(s=>String(s||'').trim()).filter(Boolean);
+  if(alt.length) specs.push(['Opción 2',alt.join(' · ')]);
+  if(it.dims){specs.push(['Medida total',it.dims]);f.pagina1.resumen_medidas='Medidas: '+it.dims;}
+  return f;
+}
+function ftNormalizar(d,ctx={}){
+  const logo=(d&&typeof d.logoCliente==='string')?d.logoCliente:'';
+  if(d&&Array.isArray(d.fichas)&&d.fichas.length) return {fichas:d.fichas.map(ftCompletar),logoCliente:logo,v1:false};
+  if(d&&Array.isArray(d.items)&&d.items.length) return {fichas:d.items.map(it=>_ftDesdeV1(it||{},d,ctx)),logoCliente:logo,v1:true};
+  return {fichas:[ftNuevaFicha(ctx)],logoCliente:logo,v1:false};
+}
+// Lo que la cotización ya sabe: cliente, primer producto y su cantidad. Nada más
+// (la skill prohíbe inventar datos técnicos).
+function ftCtxCotizacion(f){
+  f=f||{};
+  const cli=(typeof resolveClienteName==='function')?resolveClienteName(f['Cliente']):'';
+  const linea=String(f['Detalle productos']||'').split('\n').filter(s=>s.trim())[0]||'';
+  const p=linea.split('|').map(s=>s.trim());
+  const n=parseFloat(String(p[1]||'').replace(',','.').replace(/[^\d.]/g,''));
+  return {cliente:cli&&cli!=='—'?cli:'',producto:p[0]||'',cantidad:n>0?`${String(n).replace('.',',')} ${n===1?'unidad':'unidades'}`:''};
+}
+
+// Dibujo de MEDIDAS: vista frontal y lateral A LA MISMA ESCALA, cotas en cian y
+// texto en cm (mismo trazo que el SVG del ejemplo de la skill). Sin alto y
+// ancho no hay dibujo. Las imágenes, si hay, van dentro de cada vista.
+function ftMedidasSvg(m,imgF,imgL){
+  const num=v=>{const x=parseFloat(String(v??'').replace(',','.'));return x>0?x:0;};
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const H=num(m&&m.alto),W=num(m&&m.ancho),D=num(m&&m.fondo);
+  if(!H||!W) return '';
+  const cm=v=>esc(String(v).trim().replace(/\s*cm$/i,'').replace('.',','))+' cm',r=n=>Math.round(n*10)/10;
+  const L=66,R=700,T=48,MAXH=350;
+  let gap=D?80:0,s,w,h,d;
+  // Los títulos miden ~190 u: las vistas se separan lo justo para que no se
+  // pisen, y el centro de la lateral no pasa de x=625 para que su título no se corte.
+  for(let k=0;k<4;k++){
+    s=Math.min(MAXH/H,(R-L-gap)/(W+D),D?(620-L-gap)/(W+D/2):Infinity);w=W*s;h=H*s;d=D?Math.max(D*s,4):0;
+    if(!D||w/2+gap+d/2>=190) break;
+    gap=190-w/2-d/2;
+  }
+  const x0=L+Math.max(0,Math.min((R-L-(w+gap+d))/2,D?625-(L+w+gap+d/2):Infinity)),yb=T+h,x1=x0+w+gap,yc=yb+26;
+  const vista=(src,x,wd)=>src
+    ?`<image href="${esc(src)}" x="${r(x)}" y="${T}" width="${r(wd)}" height="${r(h)}" preserveAspectRatio="xMidYMid meet"/>`
+    :`<rect x="${r(x)}" y="${T}" width="${r(wd)}" height="${r(h)}" fill="#e6e8ea" stroke="#9aa0a6" stroke-width="1.6"/>`;
+  const horiz=(xa,xb)=>`<line x1="${r(xa)}" y1="${r(yc)}" x2="${r(xb)}" y2="${r(yc)}"/><line x1="${r(xa)}" y1="${r(yc-8)}" x2="${r(xa)}" y2="${r(yc+8)}"/><line x1="${r(xb)}" y1="${r(yc-8)}" x2="${r(xb)}" y2="${r(yc+8)}"/>`;
+  const xv=x0-26;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 ${r(yb+70)}" font-family="Lato, Helvetica, Arial, sans-serif">
+<g font-size="20" letter-spacing="2.6" fill="#5b5f63" text-anchor="middle"><text x="${r(x0+w/2)}" y="26">VISTA FRONTAL</text>${D?`<text x="${r(x1+d/2)}" y="26">VISTA LATERAL</text>`:''}</g>
+${vista(imgF,x0,w)}${D?vista(imgL,x1,d):''}
+<g stroke="#02b2c1" stroke-width="1.8" fill="none"><line x1="${r(xv)}" y1="${T}" x2="${r(xv)}" y2="${r(yb)}"/><line x1="${r(xv-8)}" y1="${T}" x2="${r(xv+8)}" y2="${T}"/><line x1="${r(xv-8)}" y1="${r(yb)}" x2="${r(xv+8)}" y2="${r(yb)}"/>${horiz(x0,x0+w)}${D?horiz(x1,x1+d):''}</g>
+<g font-size="20" fill="#3c4044" text-anchor="middle"><text x="${r(x0+w/2)}" y="${r(yb+58)}">${cm(m.ancho)}</text>${D?`<text x="${r(x1+d/2)}" y="${r(yb+58)}">${cm(m.fondo)}</text>`:''}<text transform="translate(${r(xv-16)} ${r(T+h/2)}) rotate(-90)">${cm(m.alto)}</text></g>
+</svg>`;
+}
+function _ftResumenAuto(m){
+  const v=x=>String(x??'').trim().replace(/\s*cm$/i,'').replace('.',',');
+  return [['Alto',m&&m.alto],['Ancho',m&&m.ancho],['Fondo',m&&m.fondo]].filter(([,x])=>v(x)).map(([k,x])=>`${k}: ${v(x)} cm`).join(' · ');
+}
+
+// HTML de la plantilla (un documento con 2 páginas por ficha). o.imgs[i] trae
+// las imágenes de la ficha i: {foto, foto2, frontal, lateral, plano, detalle}.
+function fichaTLSHtml(fichas,o={}){
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const txt=x=>String(x??'').trim();
+  const lleno=a=>(Array.isArray(a)?a:[]).filter(x=>x&&typeof x==='object'?Object.values(x).some(txt):txt(x));
+  const base=o.base||_ftBase(),logoTLS=esc(base+'/logo-thelab.png');
+  const label=t=>`<div class="sec"><i></i>${esc(t)}</div>`;
+  const footer=`<footer><span>${esc(FT_PIE[0])}</span><span>${esc(FT_PIE[1])}</span></footer>`;
+  const marca=o.logoCliente?`<img class="logo-marca" src="${esc(o.logoCliente)}" alt="">`:'';
+  const paginas=(fichas||[]).map((fi,idx)=>{
+    const F=ftCompletar(fi),e=F.encabezado,p1=F.pagina1,p2=F.pagina2,img=(o.imgs&&o.imgs[idx])||{};
+    const meta=e.meta.filter(r=>Array.isArray(r)&&txt(r[1])).slice(0,5);
+    const fotos=[img.foto,img.foto2].map((src,i)=>({...(p1.fotos[i]||{}),src})).filter(x=>x.src);
+    const fotoHtml=!fotos.length?'':`<figure class="foto">${fotos.map(x=>`<div class="foto-img${x.fondo==='gris'||x.fondo==='oscuro'?' '+x.fondo:''}" style="flex:${+x.alto>0?+x.alto:1}"><img src="${esc(x.src)}" style="object-fit:${x.ajuste==='cover'?'cover':'contain'};object-position:${/^[\w%. -]+$/.test(x.posicion||'')?x.posicion:'center'}" alt=""></div>`).join('')}<figcaption>${esc(txt(p1.foto_nota)||'Imagen referencial.')}</figcaption></figure>`;
+    const parrafos=lleno(p1.en_simple),chips=lleno(p1.chips).slice(0,3);
+    const resumen=txt(p1.resumen_medidas)||_ftResumenAuto(p1.medidas);
+    const simple=!(parrafos.length||chips.length||resumen)?'':`<div class="simple">
+        ${parrafos.length?label('En simple'):''}
+        ${parrafos.map(t=>`<p>${esc(t)}</p>`).join('')}
+        ${chips.length?`<div class="chips">${chips.map(c=>`<div>${esc(c)}</div>`).join('')}</div>`:''}
+        ${resumen?`<div class="resumen">${esc(resumen)}</div>`:''}
+      </div>`;
+    const specs=lleno(p1.especificaciones).filter(r=>Array.isArray(r));
+    const dibujo=img.plano?`<img src="${esc(img.plano)}" alt="">`:ftMedidasSvg(p1.medidas,img.frontal,img.lateral);
+    const pagina1=`<section class="pagina">
+  <header class="h1">
+    <div class="h1-top"><img class="logo" src="${logoTLS}" alt="The Lab Solutions"><div class="sello">Ficha técnica</div></div>
+    <div class="titulo-row"><h1>${esc(e.tipo)}<span>${esc(e.destacado)}</span></h1>${marca}</div>
+    ${meta.length?`<div class="meta">${meta.map(([k,v])=>`<div><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}</div>`:''}
+  </header>
+  <div class="cuerpo">
+    ${fotoHtml||simple?`<div class="intro">${fotoHtml}${simple}</div>`:''}
+    ${specs.length||dibujo?`<div class="dos">
+      ${specs.length?`<div class="specs">${label('Especificaciones')}
+        <table>${specs.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
+      </div>`:''}
+      ${dibujo?`<div class="medidas">${label('Medidas')}
+        <div class="caja">${dibujo}<div class="nota-caja">${esc(p1.medidas.nota)}</div></div>
+      </div>`:''}
+    </div>`:''}
+  </div>
+  ${footer}
+</section>`;
+    const comps=lleno(p2.componentes.items).filter(c=>c&&typeof c==='object'&&!Array.isArray(c));
+    const pasos=lleno(p2.pasos.items),glos=lleno(p2.glosario).filter(g=>typeof g==='object'),cuid=lleno(p2.cuidados);
+    const det=img.detalle?`<div class="det">${label(txt(p2.detalle.titulo)||'Detalle')}<div class="caja"><img src="${esc(img.detalle)}" alt=""><div class="nota-caja">${esc(p2.detalle.nota)}</div></div></div>`:'';
+    const pas=pasos.length?`<div class="pasos">${label(txt(p2.pasos.titulo)||'Cómo se arma')}<ol>${pasos.map((t,i)=>`<li><b>${i+1}</b><span>${esc(t)}</span></li>`).join('')}</ol>${txt(p2.pasos.nota)?`<div class="destacado">${esc(p2.pasos.nota)}</div>`:''}</div>`:'';
+    if(!(comps.length||det||pas||glos.length||cuid.length)) return pagina1;
+    return pagina1+`<section class="pagina">
+  <header class="h2"><img class="logo" src="${logoTLS}" alt="The Lab Solutions"><div>Ficha técnica · ${esc(txt(e.tipo_corto)||e.tipo)} <span>${esc(e.destacado)}</span> · 2/2</div></header>
+  <div class="cuerpo">
+    ${comps.length?`${label(txt(p2.componentes.titulo)||'Componentes')}
+    <div class="comps">${comps.map((c,i)=>`<div class="comp"><div class="n">${String(i+1).padStart(2,'0')}</div><div class="nom">${esc(c.nombre)}</div><p>${esc(c.desc)}</p>${txt(c.chip)?`<div class="chip">${esc(c.chip)}</div>`:''}</div>`).join('')}</div>
+    ${txt(p2.componentes.nota)?`<div class="nota">${esc(p2.componentes.nota)}</div>`:''}`:''}
+    ${det||pas?`<div class="dos d2">${det}${pas}</div>`:''}
+    ${glos.length?`${label('Glosario para entender la ficha')}<div class="glos">${glos.map(g=>`<div><h3>${esc(g.termino)}</h3><p>${esc(g.def)}</p></div>`).join('')}</div>`:''}
+    ${cuid.length?`${label('Cuidados')}<ul class="cuid">${cuid.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>`:''}
+  </div>
+  ${footer}
+</section>`;
+  }).join('\n');
+  const font=w=>`@font-face{font-family:'Lato';font-style:normal;font-weight:${w};src:url(${base}/assets/fonts/Lato-${w}.woff2) format('woff2');}`;
+  // Las variables van en .ft y no en :root, la vista previa cuelga de
+  // body.ft-preview, el aviso se oculta por CSS (no con [hidden], que el escudo
+  // all:revert anula) y el salto de página va solo en @media print (html2pdf lo
+  // convierte en una hoja en blanco): así el PDF de Drive (_fichaHTMLtoPdfBlob)
+  // conserva los colores y no suma márgenes, barras ni páginas vacías.
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${esc(o.titulo||'Ficha técnica')}</title>
+<link rel="icon" href="${esc(base)}/isotipo-thelab.png">
+<style>
+${font(400)}${font(700)}${font(900)}
+@page{size:A4 portrait;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#fff}
+.ft{--ink:#0d0d0e;--cian:#02b2c1;--g1:#f6f7f7;--g2:#eef0f1;--linea:#cfd2d5;--txt:#1d1d1f;--gris:#5b5f63;font-family:'Lato',Helvetica,Arial,sans-serif;color:var(--txt);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pagina{width:210mm;height:297mm;position:relative;overflow:hidden;background:#fff}
+.logo{display:block;height:auto}
+.h1{background:var(--ink);color:#fff;padding:11.3mm 14mm 1mm;border-bottom:1.7mm solid var(--cian)}
+.h1-top{display:flex;justify-content:space-between;align-items:flex-start}
+.h1 .logo{width:70mm;margin-top:0}
+.sello{border:.4mm solid var(--cian);color:var(--cian);font-weight:700;font-size:7.4pt;letter-spacing:.42em;text-transform:uppercase;width:54mm;height:9.5mm;display:flex;align-items:center;justify-content:center;padding-left:.42em;margin-top:.7mm}
+.titulo-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:4.6mm}
+h1{font-weight:900;font-size:19.5pt;line-height:1.16;letter-spacing:-.005em}
+h1 span{display:block;color:var(--cian);text-transform:uppercase}
+.logo-marca{max-height:15mm;max-width:45mm;object-fit:contain}
+.meta{display:flex;gap:9mm;margin-top:4.6mm}
+.meta b{display:block;color:var(--cian);font-weight:700;font-size:6.4pt;letter-spacing:.14em;text-transform:uppercase;margin-bottom:1.2mm}
+.meta span{font-size:9.4pt;white-space:nowrap}
+.cuerpo{padding:7mm 14mm 0}
+.cuerpo>:first-child{margin-top:0}
+.sec{display:flex;align-items:center;gap:3.1mm;color:var(--cian);font-weight:700;font-size:7.4pt;letter-spacing:.42em;text-transform:uppercase}
+.sec i{display:block;width:2.4mm;height:2.4mm;background:var(--cian)}
+.intro{display:flex;gap:8.6mm;align-items:flex-start}
+.foto{width:50mm;height:88.5mm;border:.35mm solid #d6d8da;display:flex;flex-direction:column;flex:none;background:#fff}
+.foto-img{min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff}
+.foto-img.gris{background:linear-gradient(160deg,#f4f5f6,#e3e6e8)}
+.foto-img.oscuro{background:linear-gradient(160deg,#5d5f62,#2a2b2d)}
+.foto-img img{width:100%;height:100%;display:block}
+.foto figcaption{font-size:6.8pt;color:var(--gris);padding:2.3mm 2.4mm;border-top:.35mm solid #e2e4e6;flex:none}
+.simple{flex:1;padding-top:.5mm}
+.simple p{font-size:9.8pt;line-height:1.56;margin-top:2.6mm}
+.simple .sec+p{margin-top:4.4mm}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:2mm;margin-top:3mm}
+.chips div{background:var(--g2);border-left:1.4mm solid var(--cian);font-weight:900;font-size:7.6pt;padding:0 3.2mm;height:10.4mm;display:flex;align-items:center}
+.resumen{background:var(--g2);font-size:8.9pt;padding:0 3.6mm;height:11.5mm;display:flex;align-items:center;margin-top:1.9mm}
+.dos{display:flex;gap:8mm;margin-top:7.7mm}
+.specs{width:95mm;flex:none}
+.medidas{flex:1}
+.specs table{width:100%;border-collapse:collapse;margin-top:4.5mm}
+.specs td{font-size:8.3pt;padding:1.9mm 0;border-bottom:.35mm solid var(--linea);vertical-align:top;line-height:1.3}
+.specs td:first-child{color:var(--gris);width:29mm}
+.specs td:last-child{font-weight:700}
+.caja{border:.35mm solid #d0d3d6;background:var(--g1);margin-top:4.5mm;padding:3.6mm 3.4mm 3mm}
+.caja svg,.caja img{display:block;width:100%;height:auto}
+.nota-caja{font-size:6.6pt;color:var(--gris);text-align:center;margin-top:1.6mm}
+footer{position:absolute;left:0;right:0;bottom:0;height:14mm;background:var(--ink);color:#fff;font-size:7.6pt;display:flex;justify-content:space-between;align-items:center;padding:0 14mm}
+.h2{background:var(--ink);color:#fff;height:20.3mm;border-bottom:1.7mm solid var(--cian);display:flex;justify-content:space-between;align-items:center;padding:2.3mm 14mm 0;font-size:8.9pt}
+.h2 .logo{width:61mm}
+.h2 span{color:var(--cian);text-transform:uppercase}
+.pagina .h2+.cuerpo{padding-top:9.6mm}
+.comps{display:grid;grid-template-columns:repeat(3,1fr);gap:2.6mm 3mm;margin-top:4.6mm}
+.comp{background:var(--g2);border-top:1.2mm solid var(--cian);padding:3mm 3mm 2.5mm}
+.comp .n{color:var(--cian);font-weight:900;font-size:12.5pt;line-height:1}
+.comp .nom{font-weight:900;font-size:8.8pt;margin-top:1.6mm}
+.comp p{font-size:7.6pt;color:#55595d;line-height:1.42;margin-top:1.2mm}
+.comp .chip{display:inline-block;background:#fff;font-weight:900;font-size:7pt;padding:1.6mm 2mm;margin-top:1.8mm}
+.nota{font-size:6.8pt;color:var(--gris);margin-top:3.2mm}
+.d2{margin-top:7.1mm;gap:8mm}
+.det{width:72mm;flex:none}
+.pasos{flex:1}
+.pasos ol{list-style:none;margin-top:4.4mm}
+.pasos li{display:flex;gap:3.6mm;align-items:flex-start;font-size:8.7pt;line-height:1.42;margin-bottom:2.2mm}
+.pasos li b{flex:none;width:4.6mm;height:4.6mm;background:var(--ink);color:#fff;font-size:7pt;display:flex;align-items:center;justify-content:center;margin-top:.27mm}
+.destacado{background:var(--g2);font-size:8.5pt;line-height:1.5;padding:3mm;margin-top:2.6mm}
+.glos{display:grid;grid-template-columns:repeat(3,1fr);gap:7mm;margin-top:4.5mm;margin-bottom:6.4mm}
+.glos div{border-top:.6mm solid var(--ink);padding-top:3.1mm}
+.glos h3{font-weight:900;font-size:9.4pt}
+.glos p{font-size:8.3pt;line-height:1.5;margin-top:1.6mm}
+.det+.pasos,.pasos:only-child{min-width:0}
+.d2+.sec,.nota+.dos{margin-top:6.7mm}
+.dos.d2+.sec{margin-top:6.5mm}
+.comps+.sec,.nota+.sec{margin-top:6.7mm}
+.cuid{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:2.4mm 14mm;margin-top:4.5mm}
+.cuid li{position:relative;padding-left:5.6mm;font-size:8.6pt;line-height:1.5}
+.cuid li::before{content:'';position:absolute;left:0;top:1mm;width:2.6mm;height:2.6mm;background:var(--cian)}
+body.ft-preview{background:#d9dcdf}
+body.ft-preview .pagina{margin:6mm auto;box-shadow:0 2px 14px rgba(0,0,0,.18)}
+.ft-aviso{display:none;position:sticky;top:0;z-index:5;background:#fff3cd;color:#664d03;font:600 13px/1.45 Helvetica,Arial,sans-serif;padding:10px 16px;text-align:center;border-bottom:1px solid #e6c766}
+.ft-aviso.on{display:block}
+.ft-aviso button{margin-left:12px;font:700 12px Helvetica,Arial,sans-serif;padding:4px 10px;cursor:pointer}
+@media print{body.ft-preview{background:#fff}body.ft-preview .pagina{margin:0;box-shadow:none}.ft-aviso{display:none!important}
+.pagina{page-break-after:always;break-after:page}.pagina:last-child{page-break-after:auto;break-after:auto}}
+</style></head><body class="ft-preview">
+<div class="ft-aviso" id="ftAviso"></div>
+<div class="ft">
+${paginas}
+</div>
+<script>
+// Cada página es una hoja A4 fija: si el texto no cabe, se monta sobre el pie
+// (o se corta). Mismo control que render.mjs, avisado en pantalla.
+window.ftRevisar=function(){
+  var malas=[];
+  document.querySelectorAll('.ft .pagina').forEach(function(pg,i){
+    var pie=pg.querySelector('footer'),hijos=pg.querySelectorAll('.cuerpo > *'),ult=hijos[hijos.length-1];
+    if(pie&&ult&&ult.getBoundingClientRect().bottom>pie.getBoundingClientRect().top-2) malas.push(i+1);
+  });
+  var av=document.getElementById('ftAviso');
+  if(av&&malas.length){av.classList.add('on');av.textContent='⚠ El contenido se monta sobre el pie en la(s) página(s) '+malas.join(', ')+'. Acorta textos o filas en la ficha antes de enviarla.';}
+  return malas;
+};
+(document.fonts?document.fonts.ready:Promise.resolve()).then(function(){window.ftRevisar();});
+<\/script>
+</body></html>`;
+}
+
+// ── FICHA PROPUESTA AL CLIENTE (modal) ────────────────────────
 let _fpCotId='';
-let _fpItems=[];
+let _fpItems=[];       // una ficha por producto + img/prompts de la sesión (no se guardan en Airtable)
+let _fpIdx=0;          // producto que se está editando
 let _fpLogoCliente='';
 let _fpRawImages={};
+const _fpAbiertas=new Set(['enc']);
 
 function parseFichaPropData(s){try{return s?JSON.parse(s):null;}catch(e){return null;}}
 const _fpImgCompress=async(dataUrl,maxPx=700)=>{
@@ -331,14 +623,17 @@ const _fpImgCompress=async(dataUrl,maxPx=700)=>{
   const scale=Math.min(1,maxPx/Math.max(img.naturalWidth||maxPx,img.naturalHeight||maxPx));
   const w=Math.round((img.naturalWidth||maxPx)*scale),h=Math.round((img.naturalHeight||maxPx)*scale);
   const c=document.createElement('canvas');c.width=w;c.height=h;
-  c.getContext('2d').drawImage(img,0,0,w,h);
+  const ctx=c.getContext('2d');
+  // JPEG no tiene transparencia: sin fondo blanco, un PNG recortado sale negro.
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);
+  ctx.drawImage(img,0,0,w,h);
   return c.toDataURL('image/jpeg',0.78);
 };
 async function saveFPImgCache(cotId){
-  const campos=['imgFrontal','imgIsometrica','imgAerea'];
   const cache={};
   for(let i=0;i<_fpItems.length;i++){
-    for(const c of campos){if(_fpItems[i][c]){try{cache[i+'_'+c]=await _fpImgCompress(_fpItems[i][c]);}catch(e){}}}
+    const img=_fpItems[i].img||{};
+    for(const c of FT_IMG_SLOTS){if(img[c]){try{cache[i+'_'+c]=await _fpImgCompress(img[c],c==='foto'||c==='foto2'?900:700);}catch(e){}}}
     if(_fpRawImages[i]?.dataUrl){try{cache[i+'_raw']=await _fpImgCompress(_fpRawImages[i].dataUrl,400);}catch(e){}}
   }
   // Estas imágenes se generaron con IA y cada una se cobra. Si no caben en el
@@ -350,31 +645,37 @@ async function saveFPImgCache(cotId){
     try{toast('⚠ No se pudieron guardar las imágenes de la propuesta en este navegador (espacio lleno). Si recargas hay que volver a generarlas, y eso se cobra: descarga el PDF antes de salir.','error');}catch(_){}
   }
 }
+// Lee el caché local de imágenes de una cotización. Entiende las claves de la
+// ficha antigua (imgFrontal/imgIsometrica/imgAerea) para no perder fotos ya pagadas.
+function _fpLeerImgCache(cotId){
+  let cache={};try{cache=JSON.parse(localStorage.getItem('fp_imgs_'+cotId)||'{}')||{};}catch(e){}
+  const viejas={imgIsometrica:'foto',imgFrontal:'frontal',imgAerea:'lateral'},imgs=[],raw={};
+  Object.keys(cache).forEach(k=>{
+    const m=k.match(/^(\d+)_(\w+)$/);if(!m||!cache[k]) return;
+    const i=+m[1],c=viejas[m[2]]||m[2];
+    if(c==='raw'){raw[i]={dataUrl:cache[k]};return;}
+    if(!FT_IMG_SLOTS.includes(c)) return;
+    (imgs[i]=imgs[i]||{})[c]=cache[k];
+    // En la ficha antigua la portada usaba la frontal si no había isométrica.
+    if(m[2]==='imgFrontal'&&!cache[i+'_imgIsometrica']) imgs[i].foto=cache[k];
+  });
+  return {imgs,raw};
+}
 function loadFPImgCache(cotId){
-  try{
-    const cache=JSON.parse(localStorage.getItem('fp_imgs_'+cotId)||'{}');
-    _fpItems.forEach((item,i)=>{
-      ['imgFrontal','imgIsometrica','imgAerea'].forEach(c=>{if(cache[i+'_'+c]) item[c]=cache[i+'_'+c];});
-      if(cache[i+'_raw']) _fpRawImages[i]={dataUrl:cache[i+'_raw']};
-    });
-  }catch(e){}
+  const {imgs,raw}=_fpLeerImgCache(cotId);
+  _fpItems.forEach((item,i)=>{item.img={...(imgs[i]||{}),...(item.img||{})};});
+  _fpRawImages={...raw,..._fpRawImages};
 }
 
 function openFichaPropModal(cotId){
   const cot=state.cotizacionesById[cotId];if(!cot) return;
   _fpCotId=cotId;
   const f=cot.fields;
-  const saved=parseFichaPropData(f['Ficha Propuesta'])||{};
-  document.getElementById('fpNumFicha').value=saved.numFicha||'';
-  document.getElementById('fpNombreProyecto').value=saved.nombreProyecto||'';
-  if(saved.items?.length){
-    _fpItems=saved.items.map(it=>({nombre:it.nombre||'',tipo:it.tipo||'',material:it.material||'',optLabel:it.optLabel||'',optMaterial:it.optMaterial||'',dims:it.dims||'',imgFrontal:'',imgIsometrica:'',imgAerea:''}));
-  } else {
-    const lineas=(f['Detalle productos']||'').split('\n').filter(Boolean);
-    _fpItems=lineas.map(l=>{const p=l.split('|').map(s=>s.trim());return{nombre:p[0]||'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''};});
-    if(!_fpItems.length) _fpItems=[{nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''}];
-  }
-  _fpLogoCliente=saved.logoCliente||'';
+  const data=ftNormalizar(parseFichaPropData(f['Ficha Propuesta']),ftCtxCotizacion(f));
+  _fpItems=data.fichas.map(fi=>({...fi,img:{}}));
+  _fpIdx=0;
+  const av=document.getElementById('fpV1Aviso');if(av) av.style.display=data.v1?'block':'none';
+  _fpLogoCliente=data.logoCliente||'';
   _fpRawImages={};
   loadFPImgCache(cotId);
   const lp=document.getElementById('fpLogoPrev'),lph=document.getElementById('fpLogoPh');
@@ -496,13 +797,14 @@ function _openaiFetch(path,{method='POST',body=null,isForm=false}={}){
 }
 function _openaiAvailable(){return !!(typeof _proxyCfg==='function'&&_proxyCfg());}
 
-// Config de las 3 vistas: el prompt es EDITABLE por muestra (si una sale mal se
+// Config de las 3 vistas: el prompt es EDITABLE por producto (si una sale mal se
 // puede afinar y regenerar solo esa). El default está aquí; el editado se guarda
-// en _fpItems[idx].prompts[campo].
+// en _fpItems[idx].prompts[campo]. Cada vista llena una imagen de la ficha: la
+// isométrica es la foto principal y la frontal/lateral van dentro del dibujo de medidas.
 const FP_VIEWS=[
-  {campo:'imgFrontal',label:'FRONTAL',prompt:'front view centered eye level'},
-  {campo:'imgIsometrica',label:'ISOMÉTRICA',prompt:'isometric 45-degree angle view'},
-  {campo:'imgAerea',label:'LATERAL',prompt:'side profile view, 90-degree lateral angle from the right side, camera at eye level showing the full side of the product'}
+  {campo:'frontal',label:'FRONTAL',prompt:'front view centered eye level'},
+  {campo:'foto',label:'ISOMÉTRICA',prompt:'isometric 45-degree angle view'},
+  {campo:'lateral',label:'LATERAL',prompt:'side profile view, 90-degree lateral angle from the right side, camera at eye level showing the full side of the product'}
 ];
 function _fpDefaultPrompt(campo){const v=FP_VIEWS.find(x=>x.campo===campo);return v?v.prompt:'';}
 function _fpGetPrompt(idx,campo){return (_fpItems[idx]&&_fpItems[idx].prompts&&_fpItems[idx].prompts[campo])||_fpDefaultPrompt(campo);}
@@ -540,17 +842,16 @@ async function _fpRemoveBg(dataUrl){
   }catch(e){console.warn('[_fpRemoveBg]',e);return dataUrl;}
 }
 
-// Limpia el fondo liso de todas las fotos de las muestras (frontal/iso/lateral)
-// ya cargadas en _fpItems. Se llama al abrir/descargar la ficha para que las
+// Aplana sobre blanco las imágenes con transparencia de todas las fichas ya
+// cargadas en _fpItems. Se llama al abrir/descargar la ficha para que las
 // fotos subidas antes de este arreglo también salgan sin fondo negro.
 async function _fpNormalizeImages(){
-  const campos=['imgFrontal','imgIsometrica','imgAerea'];
   for(const it of (_fpItems||[])){
-    if(!it) continue;
-    for(const campo of campos){
-      const v=it[campo];
+    if(!it||!it.img) continue;
+    for(const campo of FT_IMG_SLOTS){
+      const v=it.img[campo];
       if(v&&typeof v==='string'&&v.indexOf('data:image')===0){
-        try{ it[campo]=await _fpRemoveBg(v); }catch(_){}
+        try{ it.img[campo]=await _fpRemoveBg(v); }catch(_){}
       }
     }
   }
@@ -564,7 +865,7 @@ async function generarVistasIA(idx, onlyCampo){
   const statusEl=document.getElementById('fpAiStatus-'+idx);
   const setStatus=msg=>{if(statusEl){statusEl.style.display='block';statusEl.innerHTML=msg;}};
   const btn=document.getElementById(onlyCampo?('fpRegenBtn-'+idx+'-'+onlyCampo):('fpGenBtn-'+idx));
-  const _btnOrig=onlyCampo?'🔄 Regenerar':'✨ Generar 3 vistas';
+  const _btnOrig=btn?btn.textContent:(onlyCampo?'🔄 Regenerar':'✨ Generar 3 vistas');
   if(btn){btn.disabled=true;btn.textContent='Generando...';}
   try{
     // Descripción del producto (para el fallback de texto): se cachea por muestra,
@@ -584,8 +885,8 @@ async function generarVistasIA(idx, onlyCampo){
       }catch(ve){setStatus('⚠️ Visión: '+ve.message);}
     }
     if(!descripcion){
-      const item=_fpItems[idx];
-      descripcion=(item.nombre||'product')+(item.tipo?' '+item.tipo:'');
+      const enc=(_fpItems[idx]&&_fpItems[idx].encabezado)||{};
+      descripcion=(enc.tipo||'product')+(enc.destacado?' '+enc.destacado:'');
     }
     descripcion=descripcion.slice(0,150);
     if(_fpItems[idx]) _fpItems[idx]._descripcion=descripcion;   // cache
@@ -690,8 +991,8 @@ async function generarVistasIA(idx, onlyCampo){
         try{setStatus('✂️ '+v.label+': eliminando fondo...');imgData=await removeBackground(imgData);}
         catch(rbErr){console.warn('[removeBackground]',rbErr);}
       }
-      if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.nombre||descripcion);
-      _fpItems[idx][v.campo]=imgData;
+      if(!imgData) imgData=genImgCanvas(v.label,_fpItems[idx]?.encabezado?.tipo||descripcion);
+      if(_fpItems[idx]) (_fpItems[idx].img=_fpItems[idx].img||{})[v.campo]=imgData;
       const prev=document.getElementById('fpi-'+idx+'-'+v.campo);
       if(prev){prev.src=imgData;prev.style.display='block';prev.classList.remove('fp-img-done');void prev.offsetWidth;prev.classList.add('fp-img-done');}
       const ph=document.getElementById('fpp-'+idx+'-'+v.campo);
@@ -713,113 +1014,183 @@ async function generarVistasIA(idx, onlyCampo){
   }
 }
 
+function _fpCtx(){const cot=state.cotizacionesById[_fpCotId];return cot?ftCtxCotizacion(cot.fields):{};}
 function addFPItem(){
-  _fpItems.push({nombre:'',tipo:'',material:'',optLabel:'',optMaterial:'',dims:'',imgFrontal:'',imgIsometrica:'',imgAerea:''});
+  const nueva=ftNuevaFicha({cliente:_fpCtx().cliente});
+  // Mismo cliente o marca destacada que el primer producto.
+  if(_fpItems[0]) nueva.encabezado.destacado=_fpItems[0].encabezado.destacado;
+  _fpItems.push({...nueva,img:{}});
+  _fpIdx=_fpItems.length-1;
   renderFPItems();
 }
 
 function removeFPItem(idx){
+  if(_fpItems.length<=1||!confirm('¿Quitar este producto de la ficha?')) return;
   _fpItems.splice(idx,1);
+  // La foto de referencia de la IA va por índice: se corre junto con las fichas.
+  const raw={};
+  Object.keys(_fpRawImages).forEach(k=>{const i=+k;if(i<idx) raw[i]=_fpRawImages[k];else if(i>idx) raw[i-1]=_fpRawImages[k];});
+  _fpRawImages=raw;
+  _fpIdx=Math.min(_fpIdx,_fpItems.length-1);
   renderFPItems();
 }
+function _fpIrA(i){_fpIdx=i;renderFPItems();}
 
 function handleFPImage(evt,idx,campo){
   const file=evt.target.files[0];if(!file) return;
   const reader=new FileReader();
   reader.onload=async e=>{
-    const data=e.target.result;
-    const prev=document.getElementById(`fpi-${idx}-${campo}`);
-    const ph=document.getElementById(`fpp-${idx}-${campo}`);
-    // Mostrar de inmediato
-    _fpItems[idx][campo]=data;
-    if(prev){prev.src=data;prev.style.display='block';}
-    if(ph) ph.style.display='none';
-    // Quitar el fondo liso (negro/blanco) para que no salga con recuadro en la ficha
-    try{
-      const cleaned=await _fpRemoveBg(data);
-      if(cleaned&&cleaned!==data){_fpItems[idx][campo]=cleaned;if(prev)prev.src=cleaned;}
-    }catch(_){}
+    const it=_fpItems[idx];if(!it) return;
+    it.img=it.img||{};
+    // Aplana la transparencia sobre blanco para que no salga un recuadro negro en la ficha
+    try{it.img[campo]=(await _fpRemoveBg(e.target.result))||e.target.result;}catch(_){it.img[campo]=e.target.result;}
+    renderFPItems();
   };
   reader.readAsDataURL(file);
 }
+function _fpQuitarImg(idx,campo){if(_fpItems[idx]&&_fpItems[idx].img){delete _fpItems[idx].img[campo];renderFPItems();}}
 
-function renderFPItems(){
-  const container=document.getElementById('fpItemsList');if(!container) return;
-  if(!_fpItems.length){container.innerHTML='<div style="text-align:center;color:var(--text3);padding:24px;font-size:12px">Sin muestras — agrega la primera ↑</div>';return;}
-  container.innerHTML=_fpItems.map((item,idx)=>`
-    <div style="border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border2)">
-        <span style="font-size:11px;font-weight:700;color:#00d4cc;letter-spacing:.5px">MUESTRA ${idx+1}</span>
-        <button class="btn btn-danger btn-sm" style="padding:4px 8px" onclick="removeFPItem(${idx})">✕ Eliminar</button>
+// Edición: cada campo escribe en la ficha abierta por su ruta ("pagina1.medidas.alto").
+function _fpGet(o,path){return path.split('.').reduce((a,k)=>a==null?a:a[k],o);}
+function _fpSet(path,val){
+  const ks=path.split('.');let o=_fpItems[_fpIdx];if(!o) return;
+  for(let i=0;i<ks.length-1;i++){if(o[ks[i]]==null||typeof o[ks[i]]!=='object') o[ks[i]]=/^\d+$/.test(ks[i+1])?[]:{};o=o[ks[i]];}
+  o[ks[ks.length-1]]=val;
+}
+// Listas que se editan como texto, una entrada por línea.
+const _fpLineas=t=>String(t||'').split('\n').map(s=>s.trim()).filter(Boolean);
+const _fpPar=l=>{const i=l.indexOf(':');return i<0?[l,'']:[l.slice(0,i).trim(),l.slice(i+1).trim()];};
+const FP_LISTAS={
+  lineas:{parse:_fpLineas,txt:a=>(a||[]).join('\n')},
+  pares:{parse:t=>_fpLineas(t).map(_fpPar),txt:a=>(a||[]).map(r=>Array.isArray(r)?(r[1]?r[0]+': '+r[1]:r[0]):String(r)).join('\n')},
+  comps:{parse:t=>_fpLineas(t).map(l=>{const p=l.split('|').map(s=>s.trim());return {nombre:p[0]||'',desc:p[1]||'',chip:p.slice(2).join(' | ')};}),
+    txt:a=>(a||[]).map(c=>[c.nombre,c.desc,c.chip].filter((x,i)=>i<2||x).join(' | ')).join('\n')},
+  glos:{parse:t=>_fpLineas(t).map(l=>{const [termino,def]=_fpPar(l);return {termino,def};}),txt:a=>(a||[]).map(g=>g.def?g.termino+': '+g.def:g.termino).join('\n')}
+};
+function _fpSetLista(path,tipo,t){_fpSet(path,FP_LISTAS[tipo].parse(t));}
+function _fpTabNombre(x){const e=(x&&x.encabezado)||{};return String(e.tipo_corto||e.tipo||'Producto').slice(0,26);}
+function _fpSyncTab(){const b=document.querySelector('#fpItemsList .fp-tab.on');if(b) b.textContent=(_fpIdx+1)+' · '+_fpTabNombre(_fpItems[_fpIdx]);}
+
+function _fpSlot(idx,c,lbl,alto){
+  const src=((_fpItems[idx]||{}).img||{})[c]||'';
+  return `<div><div class="fp-slot-lbl">${lbl}</div>
+    <label class="fp-slot-box" style="height:${alto||110}px">
+      <img id="fpi-${idx}-${c}" src="${src}" alt="" style="display:${src?'block':'none'}">
+      <div id="fpp-${idx}-${c}" class="fp-slot-ph" style="display:${src?'none':'flex'}"><span style="font-size:18px">📷</span><span style="font-size:9px">Subir imagen</span></div>
+      <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
+    </label>
+    ${src?`<button type="button" class="fp-slot-x" onclick="_fpQuitarImg(${idx},'${c}')">✕ Quitar</button>`:''}
+  </div>`;
+}
+function _fpIABlock(idx){
+  const raw=_fpRawImages[idx];
+  return `<div class="fp-ia">
+    <div class="fp-ia-tit">✨ Vistas con IA <span class="fp-opt">(opcional · cada vista se cobra)</span></div>
+    <div class="fp-ia-row">
+      <div style="flex:1;min-width:0">
+        <label class="fp-slot-box" style="height:90px;border-color:#02b2c1">
+          <img id="fpRaw-${idx}" src="${raw?.dataUrl||''}" alt="" style="display:${raw?'block':'none'}">
+          <div id="fpRawPh-${idx}" class="fp-slot-ph" style="display:${raw?'none':'flex'}"><svg class="dashboard-icon" width="22" height="22" stroke-width="1.5"><use href="#icon-camera"/></svg><span style="font-size:9px;font-weight:700">Foto de referencia del producto</span></div>
+          <input type="file" accept="image/*" style="display:none" onchange="handleFPRawImage(event,${idx})">
+        </label>
       </div>
-      <div style="padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:12px">
-        <div class="fp-fields-grid">
-          <div class="field-group">
-            <label class="field-label">Nombre del producto</label>
-            <input class="field-input" placeholder="ej. CARTEL ILUMINADO NEGRO" value="${escapeHtml(item.nombre||'')}" oninput="_fpItems[${idx}].nombre=this.value">
-          </div>
-          <div class="field-group">
-            <label class="field-label">Tipo de muestra</label>
-            <input class="field-input" placeholder="ej. 3D Y ACRÍLICO" value="${escapeHtml(item.tipo||'')}" oninput="_fpItems[${idx}].tipo=this.value">
-          </div>
-          <div class="field-group fp-span-2">
-            <label class="field-label">Material principal</label>
-            <textarea class="field-input" rows="2" placeholder="ej. 3D: PLA Terminación blanca&#10;ACRÍLICO: Transparente 2mm" oninput="_fpItems[${idx}].material=this.value">${escapeHtml(item.material||'')}</textarea>
-          </div>
-          <div class="field-group">
-            <label class="field-label">Opción alternativa</label>
-            <input class="field-input" placeholder="ej. 3D Y LAMINADO MIC" value="${escapeHtml(item.optLabel||'')}" oninput="_fpItems[${idx}].optLabel=this.value">
-          </div>
-          <div class="field-group">
-            <label class="field-label">Material opción alt.</label>
-            <textarea class="field-input" rows="2" placeholder="ej. GRÁFICA: Laminado MIC 240." oninput="_fpItems[${idx}].optMaterial=this.value">${escapeHtml(item.optMaterial||'')}</textarea>
-          </div>
-          <div class="field-group fp-span-2">
-            <label class="field-label">Dimensiones</label>
-            <input class="field-input" placeholder="ej. 40 × 35 × 8 cm" value="${escapeHtml(item.dims||'')}" oninput="_fpItems[${idx}].dims=this.value">
-          </div>
-        </div>
-        <div style="border:1px solid #00c8cc;border-radius:10px;padding:14px;background:linear-gradient(135deg,rgba(0,200,204,0.06),rgba(0,151,167,0.04))">
-          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0097a7;margin-bottom:12px">✨ Generar vistas con IA</div>
-          <div class="fp-ia-row">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:9px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Foto de referencia del producto</div>
-              <label style="cursor:pointer;display:block;border:2px dashed #00c8cc;border-radius:8px;overflow:hidden;background:var(--surface)">
-                <img loading="lazy" decoding="async" id="fpRaw-${idx}" src="${_fpRawImages[idx]?.dataUrl||''}" style="width:100%;height:100px;object-fit:contain;display:${_fpRawImages[idx]?'block':'none'}">
-                <div id="fpRawPh-${idx}" style="display:${_fpRawImages[idx]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100px;gap:6px;color:#0097a7">
-                  <svg class="dashboard-icon" width="28" height="28" stroke-width="1.5"><use href="#icon-camera"/></svg>
-                  <span style="font-size:9px;font-weight:700">Subir foto del producto</span>
-                </div>
-                <input type="file" accept="image/*" style="display:none" onchange="handleFPRawImage(event,${idx})">
-              </label>
-            </div>
-            <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;flex-shrink:0">
-              <button id="fpGenBtn-${idx}" onclick="generarVistasIA(${idx})" style="background:linear-gradient(135deg,#00c8cc,#0097a7);color:#fff;border:none;border-radius:8px;padding:11px 16px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap">✨ Generar 3 vistas</button>
-              <div id="fpAiStatus-${idx}" style="font-size:9px;color:#0097a7;text-align:center;display:none;max-width:160px;line-height:1.5"></div>
-            </div>
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:10px">Fotos del producto</div>
-          <div class="fp-views-grid">
-            ${[{c:'imgFrontal',l:'Vista Frontal'},{c:'imgIsometrica',l:'Vista Isométrica'},{c:'imgAerea',l:'Vista Lateral'}].map(({c,l})=>`
-              <div>
-                <div style="background:linear-gradient(135deg,#00d4cc,#0097a7);color:#fff;text-align:center;padding:6px 4px;border-radius:8px 8px 0 0;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase">${l}</div>
-                <label style="cursor:pointer;display:block;border:2px solid #00d4cc;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--surface);aspect-ratio:1/1">
-                  <img loading="lazy" decoding="async" id="fpi-${idx}-${c}" src="${item[c]||''}" style="width:100%;height:100%;object-fit:contain;background:#fff;display:${item[c]?'block':'none'}">
-                  <div id="fpp-${idx}-${c}" style="display:${item[c]?'none':'flex'};flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:var(--text3)">
-                    <span style="font-size:22px">📷</span>
-                    <span style="font-size:9px;font-weight:600">Subir foto</span>
-                  </div>
-                  <input type="file" accept="image/*" style="display:none" onchange="handleFPImage(event,${idx},'${c}')">
-                </label>
-                <textarea class="field-input" rows="2" title="Prompt de la IA para esta vista — edítalo si la vista sale mal y regenera solo esta" placeholder="Prompt de esta vista (ángulo/indicaciones para la IA)" oninput="_fpSetPrompt(${idx},'${c}',this.value)" style="width:100%;font-size:9px;margin-top:6px;resize:vertical;line-height:1.4">${escapeHtml(_fpGetPrompt(idx,c))}</textarea>
-                <button class="btn btn-ghost btn-sm" id="fpRegenBtn-${idx}-${c}" onclick="generarVistasIA(${idx},'${c}')" style="width:100%;margin-top:4px;font-size:10px;padding:6px" title="Regenerar solo esta vista con el prompt de arriba">🔄 Regenerar</button>
-              </div>`).join('')}
-          </div>
-          <div style="font-size:9px;color:var(--text3);margin-top:6px">Las fotos se guardan localmente en este navegador al guardar la ficha.</div>
-        </div>
+      <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;flex-shrink:0">
+        <button type="button" id="fpGenBtn-${idx}" class="fp-ia-btn" onclick="generarVistasIA(${idx})">✨ Generar 3 vistas</button>
+        <div id="fpAiStatus-${idx}" style="font-size:9px;color:#0097a7;text-align:center;display:none;max-width:170px;line-height:1.5"></div>
       </div>
     </div>
-  `).join('');
+    <div class="fp-hint">La isométrica queda como foto principal; la frontal y la lateral van dentro del dibujo de medidas.</div>
+    <details class="fp-ia-prompts"><summary>Regenerar una vista o ajustar sus indicaciones</summary>
+      ${FP_VIEWS.map(fv=>`<div class="fp-ia-prompt"><div class="fp-slot-lbl">${fv.label}</div><textarea class="field-input" rows="2" title="Indicaciones de la IA para esta vista: edítalas si sale mal y regenera solo esta" oninput="_fpSetPrompt(${idx},'${fv.campo}',this.value)">${escapeHtml(_fpGetPrompt(idx,fv.campo))}</textarea><button type="button" class="btn btn-ghost btn-sm" id="fpRegenBtn-${idx}-${fv.campo}" onclick="generarVistasIA(${idx},'${fv.campo}')">🔄 Regenerar ${fv.label.toLowerCase()}</button></div>`).join('')}
+    </details>
+  </div>`;
+}
+
+// Editor de la ficha abierta (una pestaña por producto). Las secciones siguen
+// el orden de la plantilla: encabezado, fotos, en simple, especificaciones,
+// medidas, y en la página 2 componentes, detalle + pasos, glosario y cuidados.
+function renderFPItems(){
+  const container=document.getElementById('fpItemsList');if(!container) return;
+  if(!_fpItems.length) _fpItems=[{...ftNuevaFicha(_fpCtx()),img:{}}];
+  _fpIdx=Math.max(0,Math.min(_fpIdx,_fpItems.length-1));
+  const idx=_fpIdx,it=_fpItems[idx];
+  Object.assign(it,ftCompletar(it));   // asegura todas las secciones (fichas antiguas o a medio llenar)
+  while(it.encabezado.meta.length<5) it.encabezado.meta.push(['','']);
+  const v=s=>escapeHtml(s==null?'':String(s)),g=p=>_fpGet(it,p);
+  const inp=(p,ph,extra='')=>`<input class="field-input" value="${v(g(p))}" placeholder="${v(ph)}" oninput="_fpSet('${p}',this.value)${extra}">`;
+  const area=(p,ph,rows)=>`<textarea class="field-input" rows="${rows||2}" placeholder="${v(ph)}" oninput="_fpSet('${p}',this.value)">${v(g(p))}</textarea>`;
+  const lista=(p,tipo,ph,rows)=>`<textarea class="field-input" rows="${rows||4}" placeholder="${v(ph)}" oninput="_fpSetLista('${p}','${tipo}',this.value)">${v(FP_LISTAS[tipo].txt(g(p)))}</textarea>`;
+  const sel=(p,ops)=>`<select class="field-input" onchange="_fpSet('${p}',this.value)">${ops.map(([val,t])=>`<option value="${val}"${(g(p)||'')===val?' selected':''}>${t}</option>`).join('')}</select>`;
+  const fld=(lbl,html)=>`<div class="field-group"><label class="field-label">${lbl}</label>${html}</div>`;
+  const hint=t=>`<div class="fp-hint">${t}</div>`;
+  const opt=t=>` <span class="fp-opt">${t}</span>`;
+  const sec=(k,titulo,html)=>`<details class="fp-sec"${_fpAbiertas.has(k)?' open':''} ontoggle="_fpAbiertas[this.open?'add':'delete']('${k}')"><summary>${titulo}</summary><div class="fp-sec-body">${html}</div></details>`;
+  const tabs=`<div class="fp-tabs">${_fpItems.map((x,i)=>`<button type="button" class="fp-tab${i===idx?' on':''}" onclick="_fpIrA(${i})">${i+1} · ${v(_fpTabNombre(x))}</button>`).join('')}<button type="button" class="fp-tab fp-tab-add" onclick="addFPItem()">+ Producto</button></div>`;
+  const metaPh=['Cliente','Producto o marca','ej. Impresión 3D · Trofeos','ej. 6 unidades','dd-mm-aaaa'];
+  const meta=it.encabezado.meta.slice(0,5).map((r,i)=>`<div class="fp-meta-row"><input class="field-input" value="${v(r[0])}" placeholder="Dato" oninput="_fpSet('encabezado.meta.${i}.0',this.value)"><input class="field-input" value="${v(r[1])}" placeholder="${v(metaPh[i])}" oninput="_fpSet('encabezado.meta.${i}.1',this.value)"></div>`).join('');
+  const fondo=[['','Fondo blanco'],['gris','Fondo gris'],['oscuro','Fondo oscuro']],ajuste=[['contain','Imagen completa'],['cover','Rellenar (recorta)']];
+  const fotoCfg=i=>`<div class="fp-grid2" style="margin-top:6px">${sel(`pagina1.fotos.${i}.fondo`,fondo)}${sel(`pagina1.fotos.${i}.ajuste`,ajuste)}</div>`;
+  container.innerHTML=tabs
+  +sec('enc','Encabezado',`
+    <div class="fp-grid2">
+      ${fld('Tipo de producto',inp('encabezado.tipo','ej. Trofeo institucional',';_fpSyncTab()'))}
+      ${fld('Destacado'+opt('(cliente o marca, en cian)'),inp('encabezado.destacado','ej. Hospital Militar del Norte'))}
+    </div>
+    ${fld('Tipo corto'+opt('(encabezado de la página 2)'),inp('encabezado.tipo_corto','ej. Trofeo',';_fpSyncTab()'))}
+    ${fld('Fila de datos'+opt('(máx. 5; las vacías no salen)'),`<div class="fp-meta">${meta}</div>`)}
+    ${_fpItems.length>1?`<button type="button" class="btn btn-danger btn-sm" style="align-self:flex-start" onclick="removeFPItem(${idx})">✕ Quitar este producto</button>`:''}`)
+  +sec('fotos','Fotos',`
+    <div class="fp-grid2">
+      <div>${_fpSlot(idx,'foto','Foto principal',150)}${fotoCfg(0)}</div>
+      <div>${_fpSlot(idx,'foto2','Segunda foto (opcional, va debajo)',150)}${fotoCfg(1)}</div>
+    </div>
+    ${fld('Nota bajo la foto',inp('pagina1.foto_nota','Imagen referencial.'))}
+    ${_fpIABlock(idx)}
+    ${hint('Las imágenes se guardan solo en este navegador (no caben en Airtable).')}`)
+  +sec('simple','En simple',`
+    ${fld('Párrafo 1',area('pagina1.en_simple.0','Qué es, de qué está hecho y cómo se ve, en palabras simples.',3))}
+    ${fld('Párrafo 2',area('pagina1.en_simple.1','La base, la placa, cómo se arma o qué incluye.',3))}
+    ${fld('3 palabras clave'+opt('(materiales o técnicas)'),`<div class="fp-grid3">${[0,1,2].map(i=>inp(`pagina1.chips.${i}`,['PLA MATE 3D','PLACA GRAVOPLY','ENCASTRES'][i])).join('')}</div>`)}
+    ${fld('Barra de medidas',inp('pagina1.resumen_medidas','Vacía = se arma con las medidas ('+(_ftResumenAuto(it.pagina1.medidas)||'Alto: 15 cm · Ancho: 12,8 cm')+')'))}
+    ${hint('Dos párrafos que se entiendan sin saber de fabricación. Frases cortas, sin relleno comercial.')}`)
+  +sec('specs','Especificaciones',`
+    ${lista('pagina1.especificaciones','pares','Producto: Trofeo con marquesina y placa grabada\nMaterial: PLA mate, impresión 3D FDM\nMedida total: Alto 15 · ancho 12,8 · fondo 10,6 cm\nPeso: ≈280 g por unidad',9)}
+    ${hint('Una fila por línea: «Etiqueta: valor». Lo ideal son 10 a 12 filas. Si un dato no está confirmado, pon «A confirmar» u omítelo: no se inventan datos técnicos.')}`)
+  +sec('medidas','Medidas',`
+    <div class="fp-grid3">
+      ${fld('Alto (cm)',inp('pagina1.medidas.alto','15'))}
+      ${fld('Ancho (cm)',inp('pagina1.medidas.ancho','12,8'))}
+      ${fld('Fondo (cm)',inp('pagina1.medidas.fondo','10,6'))}
+    </div>
+    ${fld('Nota bajo el dibujo',inp('pagina1.medidas.nota','Medidas en cm. Ambas vistas a la misma escala.'))}
+    <div class="fp-grid3">
+      ${_fpSlot(idx,'frontal','Imagen vista frontal')}
+      ${_fpSlot(idx,'lateral','Imagen vista lateral')}
+      ${_fpSlot(idx,'plano','Plano propio (reemplaza el dibujo)')}
+    </div>
+    ${hint('Con alto y ancho se dibujan la vista frontal y la lateral a la misma escala, con cotas en cian. Recorta las imágenes al borde del producto para que calcen con las cotas.')}`)
+  +sec('comps','Componentes'+opt('· página 2'),`
+    ${fld('Título',inp('pagina2.componentes.titulo','Componentes del trofeo'))}
+    ${lista('pagina2.componentes.items','comps','Base | Cilindro con escalón, ranuras para laterales y soporte | PLA negro mate · 3D\nLaterales × 2 | Cuñas de dos planos con lengüeta inclinada | PLA piedra · 3D',6)}
+    ${hint('Una pieza por línea: «Nombre | descripción corta | material». Van de a 3 por fila (lo ideal: 3 o 6).')}
+    ${fld('Nota bajo las piezas',inp('pagina2.componentes.nota','ej. El texto final de la placa se confirma con el cliente antes del grabado.'))}`)
+  +sec('pasos','Detalle y pasos'+opt('· página 2'),`
+    <div class="fp-grid2">
+      <div class="fp-col">
+        ${fld('Título del detalle',inp('pagina2.detalle.titulo','ej. Placa Gravoply'))}
+        ${_fpSlot(idx,'detalle','Imagen del detalle (placa, dorso, ubicación…)',130)}
+        ${fld('Nota del detalle',inp('pagina2.detalle.nota','ej. Grabado láser: el texto queda en el color del núcleo.'))}
+      </div>
+      <div class="fp-col">
+        ${fld('Título de los pasos',`<input class="field-input" list="fpPasosTit" value="${v(g('pagina2.pasos.titulo'))}" placeholder="Cómo se arma" oninput="_fpSet('pagina2.pasos.titulo',this.value)"><datalist id="fpPasosTit"><option value="Cómo se arma"><option value="Cómo se usa"><option value="Cómo se trabaja"></datalist>`)}
+        ${lista('pagina2.pasos.items','lineas','Encastra el soporte central en la ranura trasera de la base.\nColoca los laterales: la lengüeta entra en la base.',6)}
+        ${hint('Un paso por línea, en orden.')}
+        ${fld('Nota en caja gris',area('pagina2.pasos.nota','ej. Se entrega armado y pegado.',2))}
+      </div>
+    </div>`)
+  +sec('glos','Glosario y cuidados'+opt('· página 2'),`
+    ${fld('Glosario',lista('pagina2.glosario','glos','PLA mate: Plástico de impresión 3D de origen vegetal con terminación sin brillo.\nEncastre: Unión en que una pieza entra en el calce de otra.',4))}
+    ${hint('3 términos, uno por línea: «Término: definición».')}
+    ${fld('Cuidados',lista('pagina2.cuidados','lineas','Calor: no dejar al sol directo ni cerca de fuentes de calor.\nLimpieza: plumero o paño seco.',4))}
+    ${hint('4 viñetas cortas, una por línea: «Tema: indicación.»')}`);
 }
